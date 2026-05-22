@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock
 } from 'lucide-react';
 import Papa from 'papaparse';
 
@@ -83,6 +83,7 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<any[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -655,19 +656,18 @@ export default function App() {
                  <span className="text-[10px] sm:text-xs text-gray-700 font-medium leading-[1.2] mb-1 w-full">
                    מחיר מומלץ לצרכן ₪{product.retailPrice} <span className="block sm:inline text-[9px] sm:text-[10px]">(כולל מע"מ)</span>
                  </span>
-                 <span className="text-lg sm:text-lg font-bold text-[#f7941d] leading-none">₪{product.price} <span className="text-[10px] sm:text-[10px] text-[#0c2d57] font-normal">למתקין</span></span>
+                 <span className="text-lg sm:text-lg font-bold text-[#f7941d] leading-none">₪{product.price} <span className="text-[10px] sm:text-[10px] text-[#0c2d57] font-normal">מומלץ למתקין</span></span>
               </div>
             ) : (
-              <div className="text-lg sm:text-lg font-bold text-[#f7941d] mb-2 mt-auto">₪{product.price} <span className="text-[10px] sm:text-[10px] text-[#0c2d57] font-normal">למתקין</span></div>
+              <div className="text-lg sm:text-lg font-bold text-[#f7941d] mb-2 mt-auto">₪{product.price} <span className="text-[10px] sm:text-[10px] text-[#0c2d57] font-normal">מחיר מומלץ למתקין</span></div>
             )}
             
             <button 
-              onClick={(e) => { e.stopPropagation(); if (product.price > 0) addToCart(product); }}
-              disabled={product.price === 0}
-              className={`w-full flex justify-center items-center gap-1.5 py-2 px-2 sm:px-4 transition-colors ${product.price === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : theme.button}`}
+              onClick={(e) => { e.stopPropagation(); addToCart(product); }}
+              className={`w-full flex justify-center items-center gap-1.5 py-2 px-2 sm:px-4 transition-colors hover:opacity-90 ${theme.button}`}
             >
               <ShoppingCart size={16} className="w-4 h-4 sm:w-4 sm:h-4" />
-              <span className="text-xs sm:text-sm font-bold">{product.price === 0 ? 'בקרוב' : 'הוספה'}</span>
+              <span className="text-xs sm:text-sm font-bold">הוספה</span>
             </button>
           </div>
         </div>
@@ -868,7 +868,7 @@ export default function App() {
                    )}
                    <div className="text-2xl sm:text-3xl font-bold text-[#f7941d]">
                       ₪{selectedProduct.price} 
-                      <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">למתקין <span className="hidden sm:inline">(ללא מע"מ)</span></span>
+                      <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">מחיר מומלץ למתקין <span className="hidden sm:inline">(ללא מע"מ)</span></span>
                    </div>
                 </div>
                 <button 
@@ -876,18 +876,151 @@ export default function App() {
                   className={`w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base ${theme.button}`}
                 >
                   <ShoppingCart size={18} className="sm:w-5 sm:h-5" />
-                  הוסף לעגלת B2B
+                  הוסף להזמנה
                 </button>
               </div>
             </div>
           </div>
         </div>
+
+        {/* SIMILAR PRODUCTS */}
+        {(() => {
+          const similar = catalogData.filter(p => p.subcategory === selectedProduct.subcategory && p.id !== selectedProduct.id && p.active !== 'FALSE').slice(0, 4);
+          if (similar.length === 0) return null;
+          return (
+            <div className="mt-12 mb-8">
+              <h3 className="text-xl font-bold text-[#0c2d57] mb-6 border-b border-gray-200 pb-2">מוצרים משלימים ומקבילים</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6">
+                {similar.map(product => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
       </div>
     );
   };
 
   const CheckoutView = () => {
     const [orderPlaced, setOrderPlaced] = useState(false);
+    const [companyName, setCompanyName] = useState('');
+    const [companyId, setCompanyId] = useState('');
+    const [contactName, setContactName] = useState('');
+    const [phonePrefix, setPhonePrefix] = useState('050');
+    const [phone, setPhone] = useState('');
+    const [secondaryPhone, setSecondaryPhone] = useState('');
+    const [customerEmail, setCustomerEmail] = useState('');
+    const [address, setAddress] = useState('');
+    const [notes, setNotes] = useState('');
+    const [selectedAgent, setSelectedAgent] = useState('');
+    const [errors, setErrors] = useState<any>({});
+
+    const agents = [
+      { name: 'בחר/י סוכן מהרשימה', email: '', phone: '' },
+      { name: 'משרד - נירית', email: 'nirit@rbs-telecom.com', phone: '972545241480' },
+      { name: 'מיכה', email: 'micha@rbs-telecom.com', phone: '972503332497' },
+      { name: 'ניר', email: 'nir@rbs-telecom.com', phone: '972503332116' },
+      { name: 'אברהם', email: 'avraham@rbs-telecom.com', phone: '972503332254' },
+      { name: 'מוטי', email: 'moti@rbs-telecom.com', phone: '972503334259' },
+      { name: 'מאיר', email: 'meir@rbs-telecom.com', phone: '972504530996' }
+    ];
+
+    const phonePrefixes = [
+      '050', '052', '053', '054', '055', '058',
+      '02', '03', '04', '08', '09',
+      '072', '073', '074', '076', '077', '079'
+    ];
+
+    const validateForm = () => {
+        const newErrors: any = {};
+        
+        if (companyId && !/^\d{9}$/.test(companyId.trim().replace(/\D/g, ''))) {
+            newErrors.companyId = 'ח.פ חייב להכיל 9 ספרות';
+        }
+        
+        if (phone && !/^\d{7}$/.test(phone.trim())) {
+            newErrors.phone = 'מספר טלפון חייב להכיל 7 ספרות';
+        }
+        
+        if (!phone && !customerEmail) {
+            newErrors.contact = 'יש להזין לפחות דואר אלקטרוני או מספר טלפון ראשי';
+        }
+
+        if (!companyName) {
+            newErrors.companyName = 'יש להזין שם חברה';
+        }
+
+        if (!selectedAgent) {
+            newErrors.selectedAgent = 'יש לבחור סוכן מטפל';
+        }
+        
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const buildOrderDetailsText = () => {
+      let orderDetails = `הזמנה חדשה מקטלוג B2B\n`;
+      orderDetails += `---------------------------------\n`;
+      orderDetails += `שם חברה/לקוח: ${companyName}\n`;
+      if (companyId) orderDetails += `ח.פ/עוסק מורשה: ${companyId}\n`;
+      if (contactName) orderDetails += `איש קשר: ${contactName}\n`;
+      if (phone) orderDetails += `טלפון: ${phonePrefix}-${phone}\n`;
+      if (secondaryPhone) orderDetails += `טלפון נוסף: ${secondaryPhone}\n`;
+      if (customerEmail) orderDetails += `מייל לקוח: ${customerEmail}\n`;
+      if (address) orderDetails += `כתובת אספקה: ${address}\n`;
+      if (notes) orderDetails += `הערות: ${notes}\n`;
+      orderDetails += `---------------------------------\n\n`;
+      orderDetails += `פריטים:\n\n`;
+      
+      cart.forEach((item, idx) => {
+         orderDetails += `${idx + 1}. ${item.name}\n`;
+         orderDetails += `   מק"ט: ${item.sku}\n`;
+         orderDetails += `   כמות: ${item.quantity}\n\n`;
+      });
+      
+      orderDetails += `---------------------------------\n`;
+      orderDetails += `סה"כ כמות פריטים: ${cart.reduce((acc, item) => acc + item.quantity, 0)}\n`;
+
+      return orderDetails;
+    };
+
+    const handleSendEmail = () => {
+      if (!validateForm()) return;
+
+      const agentEmail = agents.find(a => a.name === selectedAgent)?.email;
+      if (!agentEmail) return;
+
+      const orderDetails = buildOrderDetailsText();
+      const subject = encodeURIComponent(`הזמנה חדשה (B2B): ${companyName || 'לקוח מזדמן'}`);
+      const body = encodeURIComponent(orderDetails);
+      
+      let mailtoLink = `mailto:${agentEmail}?subject=${subject}&body=${body}`;
+      if (customerEmail) {
+          mailtoLink += `&cc=${customerEmail}`;
+      }
+      
+      window.location.href = mailtoLink;
+      
+      setOrderPlaced(true);
+      setCart([]);
+    };
+
+    const handleSendWhatsApp = () => {
+      if (!validateForm()) return;
+      
+      const agentPhone = agents.find(a => a.name === selectedAgent)?.phone;
+      if (!agentPhone) return;
+
+      const orderDetails = buildOrderDetailsText();
+      const text = encodeURIComponent(orderDetails);
+      
+      window.open(`https://wa.me/${agentPhone}?text=${text}`, '_blank');
+      
+      setOrderPlaced(true);
+      setCart([]);
+    };
 
     if (orderPlaced) {
       return (
@@ -895,8 +1028,8 @@ export default function App() {
           <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle size={40} />
           </div>
-          <h2 className="text-3xl font-bold text-[#0c2d57] mb-4">ההזמנה נוצרה בהצלחה!</h2>
-          <p className="text-gray-600 mb-8">נציג מטעמנו ייצור קשר לאישור ההזמנה וזמני אספקה.</p>
+          <h2 className="text-3xl font-bold text-[#0c2d57] mb-4">הבקשה להזמנה הוכנה!</h2>
+          <p className="text-gray-600 mb-8">אפליקציית השליחה (מייל/ווצאפ) שלך אמורה להיפתח כדי לסיים את השליחה לסוכן.</p>
           <button 
             onClick={navigateHome}
             className="bg-[#004387] text-white px-8 py-3 rounded-none font-bold hover:bg-[#fe8d00] transition-colors"
@@ -908,12 +1041,17 @@ export default function App() {
     }
 
     return (
-      <div className="max-w-4xl mx-auto mt-6">
-        <h2 className="text-2xl font-bold text-[#0c2d57] mb-6">סיכום עגלת B2B</h2>
+      <div className="max-w-5xl mx-auto mt-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-[#0c2d57]">סיכום הזמנה ושליחה לסוכן</h2>
+          <button onClick={navigateHome} className="flex items-center gap-2 text-[#004387] font-semibold hover:text-[#fe8d00] transition-colors">
+            המשך קניות <ChevronLeft size={18} />
+          </button>
+        </div>
         <div className="bg-white rounded-none shadow-[0_5px_15px_rgba(0,0,0,0.05)] border border-gray-100 overflow-hidden flex flex-col md:flex-row">
           
-          <div className="w-full md:w-2/3 p-6 border-b md:border-b-0 md:border-l border-gray-100">
-            <h3 className="text-lg font-bold mb-4 text-[#0c2d57]">פריטים בעגלה</h3>
+          <div className="w-full md:w-1/2 lg:w-3/5 p-6 border-b md:border-b-0 md:border-l border-gray-100">
+            <h3 className="text-lg font-bold mb-4 text-[#0c2d57]">פריטים בעגלה ({cart.length})</h3>
             {cart.length === 0 ? (
               <p className="text-gray-500">העגלה ריקה.</p>
             ) : (
@@ -923,11 +1061,17 @@ export default function App() {
                     <img src={item.images[0]} alt={item.name} className="w-16 h-16 object-contain bg-[#f2f2f2] p-1" />
                     <div className="flex-grow">
                       <div className="font-semibold text-[#0c2d57]">{item.name}</div>
-                      <div className="text-xs text-gray-500">מק"ט: {item.sku}</div>
-                    </div>
-                    <div className="text-left font-bold w-24 text-[#f7941d]">
-                      ₪{item.price * item.quantity}
-                      <div className="text-xs text-gray-400 font-normal">({item.quantity} יח')</div>
+                      <div className="text-xs text-gray-500 mb-2">מק"ט: {item.sku}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center bg-[#f2f2f2] border border-gray-200 overflow-hidden rounded-md">
+                          <button onClick={() => updateCartQuantity(item.id, -1)} className="p-1 px-3 hover:bg-white text-gray-600 transition-colors" aria-label="הפחת כמות"><Minus size={14}/></button>
+                          <span className="w-8 text-center text-sm font-bold">{item.quantity}</span>
+                          <button onClick={() => updateCartQuantity(item.id, 1)} className="p-1 px-3 hover:bg-white text-gray-600 transition-colors" aria-label="הוסף כמות"><Plus size={14}/></button>
+                        </div>
+                        <button onClick={() => removeFromCart(item.id)} className="text-red-500 hover:text-red-600 transition-colors p-2 bg-red-50 hover:bg-red-100 rounded-md" aria-label="הסר מוצר מחשבון">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -935,34 +1079,89 @@ export default function App() {
             )}
           </div>
 
-          <div className="w-full md:w-1/3 p-6 bg-[#f2f2f2] flex flex-col">
-            <h3 className="text-lg font-bold mb-4 text-[#0c2d57]">פרטי חברה / מתקין</h3>
+          <div className="w-full md:w-1/2 lg:w-2/5 p-6 bg-[#f2f2f2] flex flex-col">
+            <h3 className="text-lg font-bold mb-4 text-[#0c2d57]">פרטי חברה / לקוח</h3>
             <div className="space-y-3 mb-6">
-              <input type="text" placeholder="שם חברה / עסק" className="w-full px-3 py-3 border-none bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm" />
-              <input type="text" placeholder="ח.פ / עוסק מורשה" className="w-full px-3 py-3 border-none bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm" />
-              <input type="text" placeholder="איש קשר" className="w-full px-3 py-3 border-none bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm" />
-              <input type="tel" placeholder="טלפון" className="w-full px-3 py-3 border-none bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm" />
+              
+              <div>
+                <input type="text" placeholder="שם חברה / עסק (חובה)" value={companyName} onChange={e => {setCompanyName(e.target.value); setErrors({...errors, companyName: null})}} className={`w-full px-3 py-3 border ${errors.companyName ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm`} />
+                {errors.companyName && <p className="text-red-500 text-xs mt-1">{errors.companyName}</p>}
+              </div>
+
+              <div>
+                <input type="text" placeholder="ח.פ / עוסק מורשה" value={companyId} onChange={e => {setCompanyId(e.target.value); setErrors({...errors, companyId: null})}} className={`w-full px-3 py-3 border ${errors.companyId ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm`} />
+                {errors.companyId && <p className="text-red-500 text-xs mt-1">{errors.companyId}</p>}
+              </div>
+
+              <input type="text" placeholder="איש קשר" value={contactName} onChange={e => setContactName(e.target.value)} className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm" />
+              
+              <div className="flex gap-2 relative">
+                <select 
+                  value={phonePrefix} 
+                  onChange={e => setPhonePrefix(e.target.value)}
+                  className="w-24 px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm font-medium"
+                >
+                  {phonePrefixes.map(prefix => (
+                    <option key={prefix} value={prefix}>{prefix}</option>
+                  ))}
+                </select>
+                <input type="tel" placeholder="טלפון ראשי (7 ספרות)" value={phone} onChange={e => {setPhone(e.target.value.replace(/\D/g, '')); setErrors({...errors, contact: null, phone: null})}} maxLength={7} className={`flex-grow px-3 py-3 border ${errors.phone || errors.contact ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm`} />
+              </div>
+              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+
+              <input type="tel" placeholder="טלפון נוסף" value={secondaryPhone} onChange={e => setSecondaryPhone(e.target.value)} className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm" />
+
+              <div>
+                <input type="email" placeholder="דואר אלקטרוני (לחובה עבור העתק הזמנה)" value={customerEmail} onChange={e => {setCustomerEmail(e.target.value); setErrors({...errors, contact: null})}} className={`w-full px-3 py-3 border ${errors.contact ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm`} />
+                {errors.contact && <p className="text-red-500 text-xs mt-1">{errors.contact}</p>}
+                <p className="text-xs text-gray-500 mt-1">כתובת המייל אליה יישלח אישור/העתק כשתשתמשו בשליחה דרך המייל.</p>
+              </div>
+
+              <input type="text" placeholder="כתובת אספקה" value={address} onChange={e => setAddress(e.target.value)} className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm" />
+
+              <textarea placeholder="הערות למשלוח / הזמנה" value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm resize-none"></textarea>
+              
+              <div className="pt-3 border-t border-gray-300 mt-3">
+                <label className="block text-sm font-semibold text-[#0c2d57] mb-2">בחירת סוכן מטפל להזמנה <span className="text-red-500">*</span>:</label>
+                <select 
+                  value={selectedAgent} 
+                  onChange={e => {setSelectedAgent(e.target.value); setErrors({...errors, selectedAgent: null})}}
+                  className={`w-full px-3 py-3 border ${errors.selectedAgent ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm font-medium`}
+                >
+                  {agents.map((agent, i) => (
+                     <option key={i} value={agent.name === 'בחר/י סוכן מהרשימה' ? '' : agent.name} disabled={i === 0}>
+                        {agent.name}
+                     </option>
+                  ))}
+                </select>
+                {errors.selectedAgent && <p className="text-red-500 text-xs mt-1">{errors.selectedAgent}</p>}
+              </div>
+
             </div>
 
             <div className="mt-auto">
-              <div className="flex justify-between items-center text-xl font-bold mb-2 text-[#0c2d57]">
-                <span>סה"כ לפני מע"מ:</span>
-                <span className="text-[#f7941d]">₪{cartTotal.toFixed(2)}</span>
+              <div className="flex justify-between items-center text-lg font-bold mb-6 text-[#0c2d57] border-t border-gray-300 pt-4">
+                <span>סה"כ כמות פריטים:</span>
+                <span className="text-[#f7941d]">{cart.reduce((sum, item) => sum + item.quantity, 0)}</span>
               </div>
-              <div className="flex justify-between items-center text-sm font-medium mb-6 text-gray-500 border-t border-gray-300 pt-2">
-                <span>סה"כ כולל מע"מ (18%):</span>
-                <span>₪{cartTotalWithVat.toFixed(2)}</span>
+              
+              <div className="flex flex-col gap-3">
+                 <button 
+                   disabled={cart.length === 0}
+                   onClick={handleSendEmail}
+                   className="w-full bg-[#004387] hover:bg-blue-800 text-white font-bold py-3 rounded-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm border-none"
+                 >
+                   שדר הצעת מחיר במייל
+                 </button>
+                 
+                 <button 
+                   disabled={cart.length === 0}
+                   onClick={handleSendWhatsApp}
+                   className="w-full bg-[#25D366] hover:bg-[#1ebd5a] text-white font-bold py-3 rounded-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm border-none flex items-center justify-center gap-2"
+                 >
+                   שדר בקשה כהודעת WhatsApp
+                 </button>
               </div>
-              <button 
-                disabled={cart.length === 0}
-                onClick={() => {
-                  setOrderPlaced(true);
-                  setCart([]);
-                }}
-                className="w-full bg-[#004387] hover:bg-[#fe8d00] text-white font-bold py-3 rounded-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                שדר הצעת מחיר
-              </button>
             </div>
           </div>
         </div>
@@ -970,7 +1169,55 @@ export default function App() {
     );
   };
 
+  const LoginView = () => {
+    const [password, setPassword] = useState('');
+    const [errorMsg, setErrorMsg] = useState('');
+
+    const handleLogin = (e: React.FormEvent) => {
+      e.preventDefault();
+      // "1234" is a simple fallback if you don't use environment variables
+      if (password === '1234') {
+        setIsAuthenticated(true);
+      } else {
+        setErrorMsg('סיסמה שגויה. אנא השתמש בקוד הגישה שקיבלת מהחברה.');
+      }
+    };
+
+    return (
+      <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white p-8 shadow-xl max-w-sm w-full text-center border-t-4 border-[#004387]">
+          {/* Default icon or user's logo could go here */}
+          <div className="w-16 h-16 bg-[#004387] text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-md">
+             <Lock size={32} />
+          </div>
+          <h2 className="text-2xl font-bold text-[#0c2d57] mb-2">כניסה לקטלוג B2B</h2>
+          <p className="text-gray-500 mb-8 text-sm">הקטלוג מיועד ללקוחות עסקיים ומורשים בלבד. הקש סיסמה לכניסה. (1234)</p>
+          
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div>
+               <input 
+                 type="password" 
+                 placeholder="הזן קוד גישה" 
+                 value={password}
+                 onChange={(e) => setPassword(e.target.value)}
+                 className="w-full p-4 border border-gray-300 focus:border-[#004387] focus:ring-1 focus:ring-[#004387] outline-none text-center text-lg tracking-[0.25em]"
+               />
+            </div>
+            {errorMsg && <p className="text-red-500 text-sm font-medium">{errorMsg}</p>}
+            <button type="submit" className="w-full bg-[#f7941d] hover:bg-[#e0861a] text-white font-bold py-3 transition-colors text-lg flex items-center justify-center gap-2">
+              היכנס למערכת <ChevronLeft size={18} />
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
   // --- MAIN LAYOUT ---
+  if (!isAuthenticated) {
+     return <LoginView />;
+  }
+
   if (isLoading) {
      return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-[#0c2d57]">
@@ -1057,11 +1304,11 @@ export default function App() {
               <button 
                 className="relative flex flex-row items-center justify-center gap-2 !p-2 !px-3 !m-0 h-[40px] text-[#004387] bg-white border border-[#004387] hover:bg-[#004387] hover:text-white transition-colors whitespace-nowrap !rounded-none box-border"
                 onClick={() => setIsCartOpen(true)}
-                aria-label="פתח עגלת מתקין"
+                aria-label="פתח עגלת הזמנה"
                 style={{ margin: 0, padding: '8px 12px' }}
               >
                 <ShoppingCart size={20} className="flex-shrink-0" />
-                <span className="text-sm font-bold hidden sm:block whitespace-nowrap">עגלת מתקין</span>
+                <span className="text-sm font-bold hidden sm:block whitespace-nowrap">עגלת הזמנה</span>
                 {cart.length > 0 && (
                   <span className="absolute -top-2 -right-2 bg-[#f7941d] text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
                     {cart.reduce((sum, item) => sum + item.quantity, 0)}
@@ -1259,7 +1506,7 @@ export default function App() {
             
             <div className="p-5 border-b flex justify-between items-center bg-[#f2f2f2]">
               <h2 className="text-xl font-bold flex items-center gap-2 text-[#0c2d57]">
-                <ShoppingCart size={22} className="text-[#004387]" /> עגלת מתקין B2B
+                <ShoppingCart size={22} className="text-[#004387]" /> עגלת הזמנה מסחרית
               </h2>
               <button onClick={() => setIsCartOpen(false)} className="p-2 bg-white hover:bg-[#004387] hover:text-white transition-colors text-gray-500" aria-label="סגור עגלה">
                 <X size={20} />
@@ -1282,8 +1529,7 @@ export default function App() {
                       <div className="flex-col flex flex-grow">
                         <div className="font-semibold text-sm text-[#0c2d57] line-clamp-2">{item.name}</div>
                         <div className="text-xs text-gray-500 mt-1">מק"ט: <span className="font-mono">{item.sku}</span></div>
-                        <div className="mt-auto pt-2 flex items-center justify-between">
-                          <div className="font-bold text-[#f7941d]">₪{item.price * item.quantity}</div>
+                        <div className="mt-auto pt-2 flex items-end justify-end">
                           
                           <div className="flex items-center bg-[#f2f2f2] border border-gray-200 overflow-hidden">
                             <button onClick={() => updateCartQuantity(item.id, -1)} className="p-1 px-2 hover:bg-white text-gray-600 transition-colors" aria-label="הפחת כמות"><Minus size={14}/></button>
@@ -1303,13 +1549,9 @@ export default function App() {
 
             {cart.length > 0 && (
               <div className="border-t border-gray-200 p-5 bg-[#f2f2f2] shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.02)]">
-                <div className="flex justify-between items-center mb-1 text-lg font-bold text-[#0c2d57]">
-                  <span>סה"כ ביניים (לפני מע"מ):</span>
-                  <span className="text-2xl text-[#f7941d]">₪{cartTotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm font-medium mb-4 text-gray-500">
-                  <span>כולל מע"מ (18%):</span>
-                  <span>₪{cartTotalWithVat.toFixed(2)}</span>
+                <div className="flex justify-between items-center mb-4 text-lg font-bold text-[#0c2d57]">
+                  <span>סה"כ כמות פריטים:</span>
+                  <span className="text-2xl text-[#f7941d]">{cart.reduce((sum, item) => sum + item.quantity, 0)}</span>
                 </div>
                 <button 
                   onClick={handleCheckout}
