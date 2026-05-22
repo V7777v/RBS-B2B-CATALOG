@@ -588,8 +588,8 @@ export default function App() {
       onClick={() => navigateToCatalog(catalog.name)}
       className="group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100"
     >
-      <div className="aspect-square relative border-b border-gray-100 bg-white flex items-center justify-center p-6">
-        <img src={catalog.image} alt={catalog.name} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300" />
+      <div className="aspect-square relative border-b border-gray-100 bg-white flex items-center justify-center p-3 sm:p-6 overflow-hidden">
+        <img src={catalog.image} alt={catalog.name} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300" />
       </div>
       <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right">
         <h3 className="font-semibold text-[#0c2d57] text-sm sm:text-lg mb-1 sm:mb-2 line-clamp-2 leading-tight min-h-[2.5rem] sm:min-h-0 flex items-center justify-center sm:justify-start">{catalog.name}</h3>
@@ -608,9 +608,9 @@ export default function App() {
       onClick={() => navigateToSubcategory(sub.name)}
       className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 border border-gray-100"
     >
-      <div className="relative aspect-square p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100">
+      <div className="relative aspect-square p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
         {sub.image ? (
-          <img src={sub.image} alt={sub.name} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500" />
+          <img src={sub.image} alt={sub.name} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500" />
         ) : (
           <FolderOpen className="text-gray-300 w-10 h-10 sm:w-12 sm:h-12" />
         )}
@@ -636,8 +636,8 @@ export default function App() {
         onClick={() => navigateToProduct(product)}
         className={`group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100`}
       >
-        <div className={`p-6 bg-white flex justify-center items-center aspect-square relative border-b border-gray-100`}>
-          <img src={product.images[0]} alt={product.name} loading="lazy" decoding="async" className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
+        <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square relative border-b border-gray-100 overflow-hidden`}>
+          <img src={product.images[0]} alt={product.name} loading="lazy" decoding="async" className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm" />
           
           <div className={`absolute top-2 right-2 text-[10px] sm:text-xs font-bold px-2 py-1 rounded-none border ${theme.badge} z-10`}>
             {product.brand}
