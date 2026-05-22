@@ -164,10 +164,10 @@ export default function App() {
         setCatalogFolders(parsedCatalogs.filter(c => c.active !== false));
         setSubcategoriesGlobalData((subcategoriesCsv || []).map((row: any) => {
            let subImage = transformImageLink(row.image);
-           
-           if (row.name && (row.name.includes("סלולריים") || row.name.toLowerCase().includes("cellular"))) {
+
+           if (row.subcategory && (row.subcategory.includes("סלולריים") || row.subcategory.toLowerCase().includes("cellular"))) {
               subImage = "https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg";
-           } else if (row.name && row.name.includes("POE")) {
+           } else if (row.subcategory && row.subcategory.includes("POE")) {
               subImage = transformImageLink("https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link");
            }
 
@@ -226,6 +226,10 @@ export default function App() {
       if (!customImage) {
         if (subName === 'מצלמות חשמל WIFI') {
           customImage = 'https://mfs.ezvizlife.com/4e9fac2ad37406b726b02b2134a523ae.jpg?ver=8805128955';
+        } else if (subName && (subName.includes('סלולריים') || subName.toLowerCase().includes('cellular'))) {
+          customImage = 'https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg';
+        } else if (subName && subName.includes('POE')) {
+          customImage = transformImageLink('https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link');
         } else if (subName === 'מצלמות חשמל 4G') {
           customImage = 'https://mfs.ezvizlife.com/a5d3dd662095b4ba85c52509ea16c499.png';
         } else if (subName === 'מצלמות סוללה עצמאיות') {
@@ -587,13 +591,13 @@ export default function App() {
       <div className="aspect-square relative border-b border-gray-100 bg-white flex items-center justify-center p-6">
         <img src={catalog.image} alt={catalog.name} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300" />
       </div>
-      <div className="p-2 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right">
-        <h3 className="font-semibold text-[#0c2d57] text-[12px] sm:text-lg mb-1 sm:mb-2 line-clamp-2 leading-tight min-h-[2rem] sm:min-h-0 flex items-center justify-center sm:justify-start">{catalog.name}</h3>
+      <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right">
+        <h3 className="font-semibold text-[#0c2d57] text-sm sm:text-lg mb-1 sm:mb-2 line-clamp-2 leading-tight min-h-[2.5rem] sm:min-h-0 flex items-center justify-center sm:justify-start">{catalog.name}</h3>
         <p className="text-gray-600 text-xs sm:text-sm leading-relaxed mb-2 sm:mb-4 line-clamp-2 hidden sm:block">{catalog.desc}</p>
-        <div className="mt-auto pt-2 border-t border-gray-50 sm:border-none flex justify-center sm:justify-between items-center text-[#f7941d] font-bold text-[10px] sm:text-sm">
+        <div className="mt-auto pt-2 border-t border-gray-50 sm:border-none flex justify-center sm:justify-between items-center text-[#f7941d] font-bold text-xs sm:text-sm">
           <span className="hidden sm:inline">פתח מחירון</span>
           <span className="sm:hidden">פתח</span>
-          <ChevronLeft size={16} className="w-3.5 h-3.5 sm:w-5 sm:h-5 ml-1 sm:ml-0" />
+          <ChevronLeft size={16} className="w-4 h-4 sm:w-5 sm:h-5 ml-1 sm:ml-0" />
         </div>
       </div>
     </div>
@@ -602,24 +606,24 @@ export default function App() {
   const SubcategoryCard = ({ sub }: { sub: any }) => (
     <div 
       onClick={() => navigateToSubcategory(sub.name)}
-      className="group flex flex-col h-full min-h-[9rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 border border-gray-100"
+      className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 border border-gray-100"
     >
       <div className="relative aspect-square p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100">
         {sub.image ? (
           <img src={sub.image} alt={sub.name} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500" />
         ) : (
-          <FolderOpen className="text-gray-300 w-8 h-8 sm:w-12 sm:h-12" />
+          <FolderOpen className="text-gray-300 w-10 h-10 sm:w-12 sm:h-12" />
         )}
       </div>
       
-      <div className="p-2 sm:p-5 flex flex-col flex-grow bg-white text-center justify-between">
+      <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white text-center justify-between">
         <div>
-           <h3 className="font-semibold text-[#0c2d57] text-[11px] sm:text-lg leading-tight mb-1 sm:mb-2 line-clamp-2">{sub.name}</h3>
-           <p className="text-gray-500 text-[9px] sm:text-sm mb-1 sm:mb-4 font-medium">{sub.count} מוצרים</p>
+           <h3 className="font-semibold text-[#0c2d57] text-xs sm:text-lg leading-tight mb-1 sm:mb-2 line-clamp-2">{sub.name}</h3>
+           <p className="text-gray-500 text-[11px] sm:text-sm mb-1 sm:mb-4 font-medium">{sub.count} מוצרים</p>
         </div>
-        <div className="mt-auto flex justify-center items-center gap-1 text-[#f7941d] font-bold text-[10px] sm:text-sm opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity pt-1 border-t border-gray-50 sm:border-none">
+        <div className="mt-auto flex justify-center items-center gap-1 text-[#f7941d] font-bold text-xs sm:text-sm opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity pt-1 border-t border-gray-50 sm:border-none">
           <span className="hidden sm:inline">הצג</span>
-          <ChevronLeft size={14} className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          <ChevronLeft size={14} className="w-4 h-4 sm:w-4 sm:h-4" />
         </div>
       </div>
     </div>
@@ -635,35 +639,35 @@ export default function App() {
         <div className={`p-6 bg-white flex justify-center items-center aspect-square relative border-b border-gray-100`}>
           <img src={product.images[0]} alt={product.name} loading="lazy" decoding="async" className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
           
-          <div className={`absolute top-2 right-2 text-[8px] sm:text-xs font-bold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-none border ${theme.badge} z-10`}>
+          <div className={`absolute top-2 right-2 text-[10px] sm:text-xs font-bold px-2 py-1 rounded-none border ${theme.badge} z-10`}>
             {product.brand}
           </div>
         </div>
-        <div className="p-2 sm:p-4 flex flex-col flex-grow text-center">
-          <div className="text-[8px] sm:text-xs text-gray-400 mb-1 line-clamp-1">{product.sku}</div>
-          <h3 className="text-[#0c2d57] text-[10px] sm:text-base font-semibold mb-2 line-clamp-2 leading-tight min-h-[1.75rem] sm:min-h-[2.5rem] flex items-start justify-center">{product.name}</h3>
+        <div className="p-3 sm:p-4 flex flex-col flex-grow text-center">
+          <div className="text-[10px] sm:text-xs text-gray-400 mb-1 line-clamp-1">{product.sku}</div>
+          <h3 className="text-[#0c2d57] text-xs sm:text-base font-semibold mb-2 line-clamp-2 leading-tight min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center">{product.name}</h3>
           
-          <div className="mt-auto pt-1 sm:pt-2 flex flex-col items-center w-full">
+          <div className="mt-auto pt-2 sm:pt-2 flex flex-col items-center w-full">
             {product.price === 0 ? (
-              <div className="text-[10px] sm:text-sm font-bold text-gray-600 mb-2 mt-auto">צור קשר</div>
+              <div className="text-xs sm:text-sm font-bold text-gray-600 mb-2 mt-auto">צור קשר</div>
             ) : product.retailPrice ? (
               <div className="flex flex-col items-center leading-tight mb-2 w-full">
-                 <span className="text-[9px] sm:text-xs text-gray-700 font-medium leading-[1.1] mb-1 w-full">
-                   מחיר מומלץ לצרכן ₪{product.retailPrice} <span className="block sm:inline text-[8px] sm:text-[10px]">(כולל מע"מ)</span>
+                 <span className="text-[10px] sm:text-xs text-gray-700 font-medium leading-[1.2] mb-1 w-full">
+                   מחיר מומלץ לצרכן ₪{product.retailPrice} <span className="block sm:inline text-[9px] sm:text-[10px]">(כולל מע"מ)</span>
                  </span>
-                 <span className="text-sm sm:text-lg font-bold text-[#f7941d] leading-none">₪{product.price} <span className="text-[8px] sm:text-[10px] text-[#0c2d57] font-normal">למתקין</span></span>
+                 <span className="text-lg sm:text-lg font-bold text-[#f7941d] leading-none">₪{product.price} <span className="text-[10px] sm:text-[10px] text-[#0c2d57] font-normal">למתקין</span></span>
               </div>
             ) : (
-              <div className="text-sm sm:text-lg font-bold text-[#f7941d] mb-2 mt-auto">₪{product.price} <span className="text-[8px] sm:text-[10px] text-[#0c2d57] font-normal">למתקין</span></div>
+              <div className="text-lg sm:text-lg font-bold text-[#f7941d] mb-2 mt-auto">₪{product.price} <span className="text-[10px] sm:text-[10px] text-[#0c2d57] font-normal">למתקין</span></div>
             )}
             
             <button 
               onClick={(e) => { e.stopPropagation(); if (product.price > 0) addToCart(product); }}
               disabled={product.price === 0}
-              className={`w-full flex justify-center items-center gap-1 py-1.5 sm:py-2 px-1 sm:px-4 transition-colors ${product.price === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : theme.button}`}
+              className={`w-full flex justify-center items-center gap-1.5 py-2 px-2 sm:px-4 transition-colors ${product.price === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : theme.button}`}
             >
-              <ShoppingCart size={14} className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="text-[10px] sm:text-sm font-bold">{product.price === 0 ? 'בקרוב' : 'הוספה'}</span>
+              <ShoppingCart size={16} className="w-4 h-4 sm:w-4 sm:h-4" />
+              <span className="text-xs sm:text-sm font-bold">{product.price === 0 ? 'בקרוב' : 'הוספה'}</span>
             </button>
           </div>
         </div>
