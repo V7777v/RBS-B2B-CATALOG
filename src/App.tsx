@@ -170,6 +170,18 @@ export default function App() {
               subImage = "https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg";
            } else if (row.subcategory && row.subcategory.includes("POE")) {
               subImage = transformImageLink("https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link");
+           } else if (row.subcategory && (row.subcategory === 'מצלמות חשמל WIFI' || row.subcategory === 'מצלמות WIFI חשמל')) {
+              subImage = transformImageLink('https://drive.google.com/file/d/1EQnAA-b_ez8dHTDbfcb5dETBnHSF5HeO/view?usp=drive_link');
+           } else if (row.subcategory && (row.subcategory === 'מצלמות חשמל 4G' || row.subcategory === 'מצלמות 4G חשמל')) {
+              subImage = transformImageLink('https://drive.google.com/file/d/1vMM8K41UALo7f9WLeRGHtt8l9XfjctmA/view?usp=drive_link');
+           } else if (row.subcategory && row.subcategory.includes('סוללה עצמאיות')) {
+              subImage = transformImageLink('https://drive.google.com/file/d/13d3JVC3H7T-dCGbImrrRm-05pGFqrOkN/view?usp=drive_link');
+           } else if (row.subcategory && row.subcategory === 'אינטרקומים') {
+              subImage = transformImageLink('https://drive.google.com/file/d/1_e67NvLTFI8hiisTJHgLerRkLD33jak4/view?usp=drive_link');
+           } else if (row.subcategory && row.subcategory === 'מנעולים חכמים') {
+              subImage = transformImageLink('https://drive.google.com/file/d/1uo_Vnq_Vei1oRhLw02h2TQEaylApQiQW/view?usp=drive_link');
+           } else if (row.subcategory && row.subcategory.includes('שואבים שוטפים')) {
+              subImage = transformImageLink('https://drive.google.com/file/d/1kOd6VCtpXz3Im-_hCQFRGRDrT0ucD_xh/view?usp=drive_link');
            }
 
            return {
@@ -225,22 +237,22 @@ export default function App() {
       
       // Fallback to hardcoded images if no image exists in the sheet
       if (!customImage) {
-        if (subName === 'מצלמות חשמל WIFI') {
-          customImage = 'https://mfs.ezvizlife.com/4e9fac2ad37406b726b02b2134a523ae.jpg?ver=8805128955';
+        if (subName === 'מצלמות חשמל WIFI' || subName === 'מצלמות WIFI חשמל') {
+          customImage = transformImageLink('https://drive.google.com/file/d/1EQnAA-b_ez8dHTDbfcb5dETBnHSF5HeO/view?usp=drive_link');
         } else if (subName && (subName.includes('סלולריים') || subName.toLowerCase().includes('cellular'))) {
           customImage = 'https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg';
         } else if (subName && subName.includes('POE')) {
           customImage = transformImageLink('https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link');
-        } else if (subName === 'מצלמות חשמל 4G') {
-          customImage = 'https://mfs.ezvizlife.com/a5d3dd662095b4ba85c52509ea16c499.png';
+        } else if (subName === 'מצלמות חשמל 4G' || subName === 'מצלמות 4G חשמל') {
+          customImage = transformImageLink('https://drive.google.com/file/d/1vMM8K41UALo7f9WLeRGHtt8l9XfjctmA/view?usp=drive_link');
         } else if (subName === 'מצלמות סוללה עצמאיות') {
-          customImage = 'https://mfs.ezvizlife.com/f78adba6be9890ca141255cc6240bf18.png';
+          customImage = transformImageLink('https://drive.google.com/file/d/13d3JVC3H7T-dCGbImrrRm-05pGFqrOkN/view?usp=drive_link');
         } else if (subName === 'אינטרקומים') {
-          customImage = 'https://mfs.ezvizlife.com/8e245875e82f5bef6e683dbb1b5b2aca.jpg?ver=8805128955';
+          customImage = transformImageLink('https://drive.google.com/file/d/1_e67NvLTFI8hiisTJHgLerRkLD33jak4/view?usp=drive_link');
         } else if (subName === 'מנעולים חכמים') {
-          customImage = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSgEgwSk3JePQk8tXu95bWqJMK2uLSb1pX15g&s';
-        } else if (subName === 'שואבים שוטפים רובוטיים') {
-          customImage = 'https://mfs.ezvizlife.com/4c021a7d7805356aeac87e4ef6e49726.jpg?ver=1253480526';
+          customImage = transformImageLink('https://drive.google.com/file/d/1uo_Vnq_Vei1oRhLw02h2TQEaylApQiQW/view?usp=drive_link');
+        } else if (subName === 'שואבים שוטפים רובוטיים' || subName.includes('שואבים שוטפים')) {
+          customImage = transformImageLink('https://drive.google.com/file/d/1kOd6VCtpXz3Im-_hCQFRGRDrT0ucD_xh/view?usp=drive_link');
         } else if (subName === 'מתגי ליבה ורשת מנוהלים') {
           customImage = 'https://assets.hikvision.com/prd/normal/all/image/m000113563/DS-3E2736-HI-24F8T4X_F_202309.jpg?eo-img.format=webp';
         } else if (subName === 'מתגי רשת גיגה לא מנוהלים') {
