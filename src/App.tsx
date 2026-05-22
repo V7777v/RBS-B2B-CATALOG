@@ -141,14 +141,30 @@ export default function App() {
           };
         });
 
-        const parsedCatalogs = catalogsCsv.map((row: any) => ({
-           name: row.name,
-           desc: row.desc,
-           image: transformImageLink(row.image),
-           brand: row.brand,
-           sortOrder: Number(row.sortOrder) || 999,
-           active: row.active === 'TRUE' || row.active === 'true'
-        })).sort((a,b) => a.sortOrder - b.sortOrder);
+        const parsedCatalogs = catalogsCsv.map((row: any) => {
+           let catImage = transformImageLink(row.image);
+           
+           if (row.name && row.name.includes("סלולריים")) {
+              const r1520 = parsedProducts.find((p: any) => p.name && p.name.includes("R1520"));
+              if (r1520 && r1520.images && r1520.images.length > 0) {
+                 catImage = r1520.images[0];
+              }
+           } else if (row.name && row.name.includes("POE")) {
+              const poeSwitch = parsedProducts.find((p: any) => p.sku === "701106" || (p.name && p.name.includes("701106")));
+              if (poeSwitch && poeSwitch.images && poeSwitch.images.length > 0) {
+                 catImage = poeSwitch.images[0];
+              }
+           }
+
+           return {
+             name: row.name,
+             desc: row.desc,
+             image: catImage,
+             brand: row.brand,
+             sortOrder: Number(row.sortOrder) || 999,
+             active: row.active === 'TRUE' || row.active === 'true'
+           };
+        }).sort((a,b) => a.sortOrder - b.sortOrder);
 
         setCatalogData(parsedProducts);
         setCatalogFolders(parsedCatalogs.filter(c => c.active !== false));
