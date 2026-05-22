@@ -144,16 +144,10 @@ export default function App() {
         const parsedCatalogs = catalogsCsv.map((row: any) => {
            let catImage = transformImageLink(row.image);
            
-           if (row.name && row.name.includes("סלולריים")) {
-              const r1520 = parsedProducts.find((p: any) => p.name && p.name.includes("R1520"));
-              if (r1520 && r1520.images && r1520.images.length > 0) {
-                 catImage = r1520.images[0];
-              }
+           if (row.name && (row.name.includes("סלולריים") || row.name.toLowerCase().includes("cellular"))) {
+              catImage = "https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg";
            } else if (row.name && row.name.includes("POE")) {
-              const poeSwitch = parsedProducts.find((p: any) => p.sku === "701106" || (p.name && p.name.includes("701106")));
-              if (poeSwitch && poeSwitch.images && poeSwitch.images.length > 0) {
-                 catImage = poeSwitch.images[0];
-              }
+              catImage = transformImageLink("https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link");
            }
 
            return {
@@ -168,10 +162,20 @@ export default function App() {
 
         setCatalogData(parsedProducts);
         setCatalogFolders(parsedCatalogs.filter(c => c.active !== false));
-        setSubcategoriesGlobalData((subcategoriesCsv || []).map((row: any) => ({
-           ...row,
-           image: transformImageLink(row.image)
-        })));
+        setSubcategoriesGlobalData((subcategoriesCsv || []).map((row: any) => {
+           let subImage = transformImageLink(row.image);
+           
+           if (row.name && (row.name.includes("סלולריים") || row.name.toLowerCase().includes("cellular"))) {
+              subImage = "https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg";
+           } else if (row.name && row.name.includes("POE")) {
+              subImage = transformImageLink("https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link");
+           }
+
+           return {
+             ...row,
+             image: subImage
+           };
+        }));
       } catch (err) {
         console.error("Error loading data:", err);
         setError("שגיאה בטעינת הנתונים. אנא ודא שהמסמך פומבי ונגיש.");
