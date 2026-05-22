@@ -164,9 +164,11 @@ export default function App() {
         setCatalogData(parsedProducts);
         setCatalogFolders(parsedCatalogs.filter(c => c.active !== false));
         setSubcategoriesGlobalData((subcategoriesCsv || []).map((row: any) => {
-           let subImage = transformImageLink(row.image);
-
-           if (row.subcategory && (row.subcategory.includes("סלולריים") || row.subcategory.toLowerCase().includes("cellular"))) {
+           let providedImage = row.IMAGE || row.Image || row.image || row['תמונה'];
+           let subImage = providedImage ? transformImageLink(providedImage) : null;
+           
+           if (!subImage) {
+              if (row.subcategory && (row.subcategory.includes("סלולריים") || row.subcategory.toLowerCase().includes("cellular"))) {
               subImage = "https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg";
            } else if (row.subcategory && row.subcategory.includes("POE")) {
               subImage = transformImageLink("https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link");
@@ -182,6 +184,19 @@ export default function App() {
               subImage = transformImageLink('https://drive.google.com/file/d/1uo_Vnq_Vei1oRhLw02h2TQEaylApQiQW/view?usp=drive_link');
            } else if (row.subcategory && row.subcategory.includes('שואבים שוטפים')) {
               subImage = transformImageLink('https://drive.google.com/file/d/1kOd6VCtpXz3Im-_hCQFRGRDrT0ucD_xh/view?usp=drive_link');
+           } else if (row.subcategory && row.subcategory === 'רמקולים שקועים') {
+              subImage = transformImageLink('https://drive.google.com/file/d/1PhQwKX-PPEDkI86oJYx8_Oxcy8D1JoNo/view?usp=drive_link');
+           } else if (row.subcategory && row.subcategory === 'רמקולים חיצוניים') {
+              subImage = transformImageLink('https://drive.google.com/file/d/13DphjTY4N3ZUBusc9fPflH5i2XxejnvO/view?usp=drive_link');
+           } else if (row.subcategory && row.subcategory === 'מגברים') {
+              subImage = transformImageLink('https://drive.google.com/file/d/1WVwyorSCDVSFH8tVhbTkrdCMgAbCpRna/view?usp=drive_link');
+           } else if (row.subcategory && row.subcategory === 'אביזרים משלימים') {
+              subImage = transformImageLink('https://drive.google.com/file/d/1ANu1sSxiv6prXWdBCSkg6EDMWNktYHeg/view?usp=drive_link');
+           } else if (row.subcategory && row.subcategory.includes('בידוריות')) {
+              subImage = transformImageLink('https://drive.google.com/file/d/1uWWpTJTAATxeUecKLrAcsYv-UuYJmQ16/view?usp=drive_link');
+           } else if (row.subcategory && (row.subcategory === 'מיקסרים ומקרופונים' || row.subcategory === 'מיקסרים ומיקרופונים')) {
+              subImage = transformImageLink('https://drive.google.com/file/d/1GtUymZdOSaALtyMVJ_znxYjlxwIE-PRb/view?usp=drive_link');
+           }
            }
 
            return {
@@ -320,17 +335,17 @@ export default function App() {
         } else if (subName === 'כלי עבודה וציוד בדיקה') {
           customImage = 'https://placehold.co/600x400/f3e8ff/4c1d95?text=Tools+%26+Testers';
         } else if (subName === 'רמקולים שקועים') {
-          customImage = 'https://polman-audio.com/wp-content/uploads/2025/02/SLIDER-SMART-825.jpg';
+          customImage = transformImageLink('https://drive.google.com/file/d/1PhQwKX-PPEDkI86oJYx8_Oxcy8D1JoNo/view?usp=drive_link');
         } else if (subName === 'רמקולים חיצוניים') {
-          customImage = 'https://polman-audio.com/wp-content/uploads/2025/02/RIFF-W4-100x100.jpg';
+          customImage = transformImageLink('https://drive.google.com/file/d/13DphjTY4N3ZUBusc9fPflH5i2XxejnvO/view?usp=drive_link');
         } else if (subName === 'מגברים') {
-          customImage = 'https://aiwaeurope.com/wp-content/uploads/2024/08/AMU-120_5.jpg';
+          customImage = transformImageLink('https://drive.google.com/file/d/1WVwyorSCDVSFH8tVhbTkrdCMgAbCpRna/view?usp=drive_link');
         } else if (subName === 'אביזרים משלימים') {
-          customImage = 'https://polman-audio.com/wp-content/uploads/2025/06/418FvVlIQEL._SL1500_-2-300x246.jpg';
-        } else if (subName === 'בידוריות') {
-          customImage = 'https://d3m9l0v76dty0.cloudfront.net/system/photos/16009443/large/6263763cbd09808786ae515e992153ba.jpg';
-        } else if (subName === 'מיקסרים ומקרופונים') {
-          customImage = 'https://idansound.co.il/wp-content/uploads/2025/02/2.webp';
+          customImage = transformImageLink('https://drive.google.com/file/d/1ANu1sSxiv6prXWdBCSkg6EDMWNktYHeg/view?usp=drive_link');
+        } else if (subName && subName.includes('בידוריות')) {
+          customImage = transformImageLink('https://drive.google.com/file/d/1uWWpTJTAATxeUecKLrAcsYv-UuYJmQ16/view?usp=drive_link');
+        } else if (subName === 'מיקסרים ומקרופונים' || subName === 'מיקסרים ומיקרופונים') {
+          customImage = transformImageLink('https://drive.google.com/file/d/1GtUymZdOSaALtyMVJ_znxYjlxwIE-PRb/view?usp=drive_link');
         } else if (subName === 'נתבים סלולריים תעשייתיים') {
           customImage = 'https://placehold.co/600x400/f1f5f9/334155?text=Cellular+Routers';
         } else if (subName === 'מתגי POE - BoostLink') {
