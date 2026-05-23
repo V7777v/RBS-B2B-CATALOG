@@ -408,8 +408,6 @@ export default function App() {
     // אילו תתי קטגוריות להציג על פי תיקיית האם שנבחרה
     if (selectedSubcategory === 'מתגי ליבה ורשת מנוהלים') {
       nestedNames = ['מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)', 'מתגי ליבה אופטי - Access Switches L3'];
-    } else if (selectedSubcategory === 'Inginium Full Channel') {
-      nestedNames = ['Inginium - גלילים CAT7', 'Inginium - מגשרי CAT6A'];
     }
 
     return nestedNames.map(name => {
@@ -424,7 +422,7 @@ export default function App() {
         if (name === 'מתגי ליבה אופטי - Access Switches L3') {
           image = 'https://assets.hikvision.com/prd/normal/all/image/m000113563/DS-3E2736-HI-24F8T4X_F_202309.jpg?eo-img.format=webp';
         } else if (name === 'מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)') {
-          image = 'https://assets.hikvision.com/prd/normal/all/image/m000034944/1516.png?eo-img.format=webp';
+          image = 'https://assets.hikvision.com/prd/normal/all/image/m000034943/1524.png?eo-img.format=webp';
         } else if (name === 'Inginium - גלילים CAT7') {
           image = 'https://placehold.co/600x400/e0e7ff/0369a1?text=CAT7+Rolls';
         } else if (name === 'Inginium - מגשרי CAT6A') {
@@ -472,7 +470,15 @@ export default function App() {
 
     // Filter by catalog and subcategory
     if (selectedCatalog && currentView === 'products') {
-      filtered = filtered.filter(item => item.category === selectedCatalog && item.subcategory === selectedSubcategory && item.name !== 'מוצר הדגמה' && item.name !== 'קטגוריית אם');
+      filtered = filtered.filter(item => {
+        if (item.category !== selectedCatalog || item.name === 'מוצר הדגמה' || item.name === 'קטגוריית אם') return false;
+        
+        if (selectedSubcategory === 'Inginium Full Channel') {
+          return item.subcategory === 'Inginium Full Channel' || (item.subcategory && item.subcategory.startsWith('Inginium - '));
+        }
+        
+        return item.subcategory === selectedSubcategory;
+      });
     }
     
     return filtered;
@@ -529,11 +535,6 @@ export default function App() {
           setCurrentView('nested_subs');
           setSelectedSubcategory('מתגי ליבה ורשת מנוהלים');
         } 
-        // בדיקה האם המוצר הגיע מתיקייה פנימית של Inginium
-        else if (selectedSubcategory && selectedSubcategory.startsWith('Inginium - ')) {
-          setCurrentView('nested_subs');
-          setSelectedSubcategory('Inginium Full Channel');
-        } 
         // רמה רגילה
         else {
           setCurrentView('catalog_subs');
@@ -568,7 +569,7 @@ export default function App() {
   const navigateToSubcategory = (subName: string | null) => {
     setSelectedSubcategory(subName);
     // ניווט מותאם לתיקיות אם המכילות תתי-תיקיות
-    if (subName === 'מתגי ליבה ורשת מנוהלים' || subName === 'Inginium Full Channel') {
+    if (subName === 'מתגי ליבה ורשת מנוהלים') {
       setCurrentView('nested_subs');
     } else {
       setCurrentView('products');
