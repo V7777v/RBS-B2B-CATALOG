@@ -11,6 +11,11 @@ const CATALOGS_GID = '1781083359';
 const SUBCATEGORIES_GID = '1626175369';
 
 // --- HELPER ---
+const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+  e.currentTarget.onerror = null;
+  e.currentTarget.src = 'https://placehold.co/600x400/f3f4f6/a3a3a3?text=RBS+Telecom';
+};
+
 const transformImageLink = (url: string) => {
   if (!url) return url;
   try {
@@ -493,7 +498,9 @@ export default function App() {
       }
       return [...prev, { ...product, quantity }];
     });
-    setIsCartOpen(true);
+    if (window.innerWidth >= 768) {
+      setIsCartOpen(true);
+    }
   };
 
   const updateCartQuantity = (id: string, delta: number) => {
@@ -620,7 +627,7 @@ export default function App() {
       className="group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100"
     >
       <div className="aspect-square relative border-b border-gray-100 bg-white flex items-center justify-center p-3 sm:p-6 overflow-hidden">
-        <img src={catalog.image} alt={catalog.name} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300" />
+        <img src={catalog.image} alt={catalog.name} onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300" />
       </div>
       <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right">
         <h3 className="font-semibold text-[#0c2d57] text-sm sm:text-lg mb-1 sm:mb-2 line-clamp-2 leading-tight min-h-[2.5rem] sm:min-h-0 flex items-center justify-center sm:justify-start">{catalog.name}</h3>
@@ -641,7 +648,7 @@ export default function App() {
     >
       <div className="relative aspect-square p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
         {sub.image ? (
-          <img src={sub.image} alt={sub.name} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500" />
+          <img src={sub.image} alt={sub.name} onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500" />
         ) : (
           <FolderOpen className="text-gray-300 w-10 h-10 sm:w-12 sm:h-12" />
         )}
@@ -662,13 +669,22 @@ export default function App() {
 
   const ProductCard: React.FC<{ product: any }> = ({ product }) => {
     const theme = getBrandTheme(product.brand);
+    const [isAdded, setIsAdded] = useState(false);
+
+    const handleAddClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      addToCart(product);
+      setIsAdded(true);
+      setTimeout(() => setIsAdded(false), 1500);
+    };
+
     return (
       <div 
         onClick={() => navigateToProduct(product)}
         className={`group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100`}
       >
         <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square relative border-b border-gray-100 overflow-hidden`}>
-          <img src={product.images[0]} alt={product.name} loading="lazy" decoding="async" className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm" />
+          <img src={product.images[0]} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm" />
           
           <div className={`absolute top-2 right-2 text-[10px] sm:text-xs font-bold px-2 py-1 rounded-none border ${theme.badge} z-10`}>
             {product.brand}
@@ -683,21 +699,27 @@ export default function App() {
               <div className="text-xs sm:text-sm font-bold text-gray-600 mb-2 mt-auto">צור קשר</div>
             ) : product.retailPrice ? (
               <div className="flex flex-col items-center leading-tight mb-2 w-full">
-                 <span className="text-[10px] sm:text-xs text-gray-700 font-medium leading-[1.2] mb-1 w-full">
-                   מחיר מומלץ לצרכן ₪{product.retailPrice} <span className="block sm:inline text-[9px] sm:text-[10px]">(כולל מע"מ)</span>
+                 <span className="text-[9px] sm:text-xs text-gray-600 font-medium leading-[1.2] mb-1 w-full block">
+                   צרכן: ₪{product.retailPrice} <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block">(כולל מע"מ)</span>
                  </span>
-                 <span className="text-lg sm:text-lg font-bold text-[#f7941d] leading-none">₪{product.price} <span className="text-[10px] sm:text-[10px] text-[#0c2d57] font-normal">מומלץ למתקין</span></span>
+                 <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none block">
+                   ₪{product.price} 
+                   <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">מחיר מומלץ למתקין</span>
+                 </span>
               </div>
             ) : (
-              <div className="text-lg sm:text-lg font-bold text-[#f7941d] mb-2 mt-auto">₪{product.price} <span className="text-[10px] sm:text-[10px] text-[#0c2d57] font-normal">מחיר מומלץ למתקין</span></div>
+              <div className="mb-2 mt-auto flex flex-col items-center leading-none">
+                <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none">₪{product.price}</span>
+                <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">מחיר מומלץ למתקין</span>
+              </div>
             )}
             
             <button 
-              onClick={(e) => { e.stopPropagation(); addToCart(product); }}
-              className={`w-full flex justify-center items-center gap-1.5 py-2 px-2 sm:px-4 transition-colors hover:opacity-90 ${theme.button}`}
+              onClick={handleAddClick}
+              className={`w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 transition-all duration-300 ${isAdded ? 'bg-green-600 text-white rounded-none hover:bg-green-600' : theme.button}`}
             >
-              <ShoppingCart size={16} className="w-4 h-4 sm:w-4 sm:h-4" />
-              <span className="text-xs sm:text-sm font-bold">הוספה</span>
+              <ShoppingCart size={15} className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isAdded ? 'animate-bounce' : ''}`} />
+              <span className="text-xs sm:text-sm font-bold">{isAdded ? 'נוסף! ✓' : 'הוספה'}</span>
             </button>
           </div>
         </div>
@@ -708,10 +730,12 @@ export default function App() {
   const ProductDetailsView = () => {
     const [mainImage, setMainImage] = useState(selectedProduct?.images[0]);
     const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
+    const [isAdded, setIsAdded] = useState(false);
     const [isVideoHovered, setIsVideoHovered] = useState(false);
     const [isSpecsHovered, setIsSpecsHovered] = useState(false);
     const [isManualHovered, setIsManualHovered] = useState(false);
     const theme = getBrandTheme(selectedProduct?.brand);
+    const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 1024;
 
     useEffect(() => {
       if (selectedProduct) {
@@ -767,13 +791,13 @@ export default function App() {
               <div 
                 className={`aspect-square rounded-none border border-gray-100 ${theme.bg} p-2 sm:p-4 flex items-center justify-center relative overflow-hidden cursor-crosshair group`}
                 onMouseMove={handleMouseMove}
-                onTouchMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
               >
                 <img 
                   src={mainImage} 
                   alt={selectedProduct.name} 
-                  className="w-full h-full object-contain mix-blend-multiply transition-transform duration-200 ease-out group-hover:scale-[2.5]"
+                  onError={handleImageError}
+                  className="w-full h-full object-contain mix-blend-multiply transition-transform duration-200 ease-out lg:group-hover:scale-[2.5]"
                   style={{ transformOrigin: `${zoomPos.x}% ${zoomPos.y}%` }}
                 />
               </div>
@@ -786,7 +810,7 @@ export default function App() {
                       onClick={() => setMainImage(img)}
                       className={`w-16 h-16 sm:w-20 sm:h-20 bg-white p-1 rounded-none border-2 overflow-hidden flex-shrink-0 ${mainImage === img ? 'border-[#004387]' : 'border-transparent'}`}
                     >
-                      <img src={img} alt="thumbnail" className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
+                      <img src={img} alt="thumbnail" onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
                     </button>
                   ))}
                 </div>
@@ -819,7 +843,7 @@ export default function App() {
                         </a>
 
                         {/* Specs Preview Popup */}
-                        {isSpecsHovered && getPdfPreviewUrl(selectedProduct.specsLink) && (
+                        {isSpecsHovered && !isMobileDevice && getPdfPreviewUrl(selectedProduct.specsLink) && (
                           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-72 sm:w-80 aspect-[1/1.4] bg-white z-50 rounded-lg overflow-hidden shadow-2xl border border-gray-200 pointer-events-none animate-in fade-in zoom-in-95 duration-200">
                             <iframe 
                               width="100%" 
@@ -845,7 +869,7 @@ export default function App() {
                         </a>
 
                         {/* Manual Preview Popup */}
-                        {isManualHovered && getPdfPreviewUrl(selectedProduct.manualLink) && (
+                        {isManualHovered && !isMobileDevice && getPdfPreviewUrl(selectedProduct.manualLink) && (
                           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-72 sm:w-80 aspect-[1/1.4] bg-white z-50 rounded-lg overflow-hidden shadow-2xl border border-gray-200 pointer-events-none animate-in fade-in zoom-in-95 duration-200">
                             <iframe 
                               width="100%" 
@@ -871,7 +895,7 @@ export default function App() {
                         </a>
                         
                         {/* Video Preview Popup */}
-                        {isVideoHovered && getYouTubeEmbedUrl(selectedProduct.videoLink) && (
+                        {isVideoHovered && !isMobileDevice && getYouTubeEmbedUrl(selectedProduct.videoLink) && (
                           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-72 sm:w-80 aspect-video bg-black z-50 rounded-lg overflow-hidden shadow-2xl border border-gray-200 pointer-events-none animate-in fade-in zoom-in-95 duration-200">
                             <iframe 
                               width="100%" 
@@ -902,11 +926,15 @@ export default function App() {
                    </div>
                 </div>
                 <button 
-                  onClick={() => addToCart(selectedProduct)}
-                  className={`w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base ${theme.button}`}
+                  onClick={() => {
+                    addToCart(selectedProduct);
+                    setIsAdded(true);
+                    setTimeout(() => setIsAdded(false), 1500);
+                  }}
+                  className={`w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base ${isAdded ? 'bg-green-600 hover:bg-green-600 text-white' : theme.button}`}
                 >
-                  <ShoppingCart size={18} className="sm:w-5 sm:h-5" />
-                  הוסף להזמנה
+                  <ShoppingCart size={18} className={`sm:w-5 sm:h-5 ${isAdded ? 'animate-bounce' : ''}`} />
+                  {isAdded ? 'נוסף לעגלה! ✓' : 'הוסף להזמנה'}
                 </button>
               </div>
             </div>
@@ -1088,7 +1116,7 @@ export default function App() {
               <div className="space-y-4">
                 {cart.map(item => (
                   <div key={item.id} className="flex gap-4 items-center border-b border-gray-100 pb-4 last:border-0">
-                    <img src={item.images[0]} alt={item.name} className="w-16 h-16 object-contain bg-[#f2f2f2] p-1" />
+                    <img src={item.images[0]} alt={item.name} onError={handleImageError} className="w-16 h-16 object-contain bg-[#f2f2f2] p-1" />
                     <div className="flex-grow">
                       <div className="font-semibold text-[#0c2d57]">{item.name}</div>
                       <div className="text-xs text-gray-500 mb-2">מק"ט: {item.sku}</div>
@@ -1554,7 +1582,7 @@ export default function App() {
                   {cart.map(item => (
                     <div key={item.id} className="flex gap-4 border-b border-gray-100 pb-4">
                       <div className="w-20 h-20 bg-[#f2f2f2] p-1 flex-shrink-0 border border-gray-200">
-                        <img src={item.images[0]} alt={item.name} className="w-full h-full object-contain mix-blend-multiply" />
+                        <img src={item.images[0]} alt={item.name} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply" />
                       </div>
                       <div className="flex-col flex flex-grow">
                         <div className="font-semibold text-sm text-[#0c2d57] line-clamp-2">{item.name}</div>

@@ -6,9 +6,18 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
   const [progress, setProgress] = useState(0);
   const intervalRef = useRef<number | null>(null);
 
-  const startPress = (e: React.PointerEvent | React.MouseEvent | React.TouchEvent) => {
+  const startPress = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (isVerified) return;
-    e.preventDefault();
+    if (e.cancelable) {
+      e.preventDefault();
+    }
+    
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (err) {
+      // ignore browser support edge cases
+    }
+
     if (intervalRef.current) clearInterval(intervalRef.current);
     
     intervalRef.current = window.setInterval(() => {
@@ -24,7 +33,12 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
     }, 20);
   };
 
-  const endPress = () => {
+  const endPress = (e: React.PointerEvent<HTMLButtonElement>) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch (err) {
+      // ignore
+    }
     if (!isVerified) {
       if (intervalRef.current) clearInterval(intervalRef.current);
       setProgress(0);
