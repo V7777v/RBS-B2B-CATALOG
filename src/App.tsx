@@ -3,6 +3,7 @@ import {
   ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock
 } from 'lucide-react';
 import Papa from 'papaparse';
+import { HumanVerification } from './components/HumanVerification';
 
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
 const PRODUCTS_GID = '0';
@@ -84,6 +85,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<any[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -226,7 +228,7 @@ export default function App() {
   const activeSubcategories = useMemo(() => {
     if (!selectedCatalog) return [];
     const productsInCat = catalogData.filter(item => item.category === selectedCatalog && item.active !== 'FALSE');
-    let subs = [...new Set(productsInCat.map(item => item.subcategory).filter(Boolean))];
+    let subs = [...new Set(productsInCat.map(item => item.subcategory).filter(Boolean))] as string[];
     
     // הסתרת תתי-הקטגוריות הפנימיות מהרשימה הראשית (Hikvision + Inginium)
     const hiddenNestedSubs = [
@@ -611,7 +613,7 @@ export default function App() {
 
   // --- COMPONENTS ---
 
-  const CatalogCard = ({ catalog }: { catalog: any }) => (
+  const CatalogCard: React.FC<{ catalog: any }> = ({ catalog }) => (
     <div 
       onClick={() => navigateToCatalog(catalog.name)}
       className="group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100"
@@ -631,7 +633,7 @@ export default function App() {
     </div>
   );
 
-  const SubcategoryCard = ({ sub }: { sub: any }) => (
+  const SubcategoryCard: React.FC<{ sub: any }> = ({ sub }) => (
     <div 
       onClick={() => navigateToSubcategory(sub.name)}
       className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 border border-gray-100"
@@ -657,7 +659,7 @@ export default function App() {
     </div>
   );
 
-  const ProductCard = ({ product }: { product: any }) => {
+  const ProductCard: React.FC<{ product: any }> = ({ product }) => {
     const theme = getBrandTheme(product.brand);
     return (
       <div 
@@ -1592,6 +1594,7 @@ export default function App() {
         </div>
       )}
 
+      {!isHumanVerified && <HumanVerification onVerified={() => setIsHumanVerified(true)} />}
     </div>
   );
 }
