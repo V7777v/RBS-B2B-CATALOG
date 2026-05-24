@@ -241,13 +241,21 @@ export default function App() {
       'מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)', 
       'מתגי ליבה אופטי - Access Switches L3',
       'Inginium - גלילים CAT7',
-      'Inginium - מגשרי CAT6A'
+      'Inginium - מגשרי CAT6A',
+      'ספקי כוח',
+      'ספקים מזוודים'
     ];
-    
+
     // אם יש מוצרים מהמשפחות הפנימיות של אינג'יניום, נוסיף באופן יזום את קטגוריית האם שלהם
     const hasInginium = productsInCat.some(p => p.subcategory && p.subcategory.startsWith('Inginium - '));
     if (hasInginium && !subs.includes('Inginium Full Channel')) {
       subs.push('Inginium Full Channel');
+    }
+    
+    // אם יש מוצרים מקולקציית ספקי כוח נוסיף יזום את קטגוריית האם
+    const hasPowerSupplies = productsInCat.some(p => p.subcategory === 'ספקי כוח' || p.subcategory === 'ספקים מזוודים');
+    if (hasPowerSupplies && !subs.includes('ספקי כוח ומתח')) {
+      subs.push('ספקי כוח ומתח');
     }
 
     subs = subs.filter(sub => !hiddenNestedSubs.includes(sub));
@@ -398,6 +406,8 @@ export default function App() {
          count = productsInCat.filter(p => (p.subcategory === 'מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)' || p.subcategory === 'מתגי ליבה אופטי - Access Switches L3') && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם').length;
       } else if (subName === 'Inginium Full Channel') {
          count = productsInCat.filter(p => p.subcategory && p.subcategory.startsWith('Inginium - ') && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם').length;
+      } else if (subName === 'ספקי כוח ומתח') {
+         count = productsInCat.filter(p => (p.subcategory === 'ספקי כוח' || p.subcategory === 'ספקים מזוודים' || p.subcategory === 'ספקי כוח ומתח') && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם').length;
       }
       
       return {
@@ -414,6 +424,8 @@ export default function App() {
     // אילו תתי קטגוריות להציג על פי תיקיית האם שנבחרה
     if (selectedSubcategory === 'מתגי ליבה ורשת מנוהלים') {
       nestedNames = ['מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)', 'מתגי ליבה אופטי - Access Switches L3'];
+    } else if (selectedSubcategory === 'ספקי כוח ומתח') {
+      nestedNames = ['ספקי כוח', 'ספקים מזוודים'];
     }
 
     return nestedNames.map(name => {
@@ -429,6 +441,10 @@ export default function App() {
           image = 'https://assets.hikvision.com/prd/normal/all/image/m000113563/DS-3E2736-HI-24F8T4X_F_202309.jpg?eo-img.format=webp';
         } else if (name === 'מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)') {
           image = 'https://assets.hikvision.com/prd/normal/all/image/m000034943/1524.png?eo-img.format=webp';
+        } else if (name === 'ספקי כוח') {
+          image = 'https://placehold.co/600x400/f3f4f6/000000?text=ספקי+כוח';
+        } else if (name === 'ספקים מזוודים') {
+          image = 'https://placehold.co/600x400/f3f4f6/000000?text=ספקים+מזוודים';
         } else if (name === 'Inginium - גלילים CAT7') {
           image = 'https://placehold.co/600x400/e0e7ff/0369a1?text=CAT7+Rolls';
         } else if (name === 'Inginium - מגשרי CAT6A') {
@@ -542,6 +558,9 @@ export default function App() {
         if (selectedSubcategory === 'מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)' || selectedSubcategory === 'מתגי ליבה אופטי - Access Switches L3') {
           setCurrentView('nested_subs');
           setSelectedSubcategory('מתגי ליבה ורשת מנוהלים');
+        } else if (selectedSubcategory === 'ספקי כוח' || selectedSubcategory === 'ספקים מזוודים') {
+          setCurrentView('nested_subs');
+          setSelectedSubcategory('ספקי כוח ומתח');
         } 
         // רמה רגילה
         else {
@@ -577,7 +596,7 @@ export default function App() {
   const navigateToSubcategory = (subName: string | null) => {
     setSelectedSubcategory(subName);
     // ניווט מותאם לתיקיות אם המכילות תתי-תיקיות
-    if (subName === 'מתגי ליבה ורשת מנוהלים') {
+    if (subName === 'מתגי ליבה ורשת מנוהלים' || subName === 'ספקי כוח ומתח') {
       setCurrentView('nested_subs');
     } else {
       setCurrentView('products');
