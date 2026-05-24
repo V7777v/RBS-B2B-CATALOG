@@ -7,7 +7,7 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { HumanVerification } from './components/HumanVerification';
 
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
-const PRODUCTS_GID = '0';
+const PRODUCTS_GID = '1506812668';
 const CATALOGS_GID = '1781083359';
 const SUBCATEGORIES_GID = '1626175369';
 
@@ -84,9 +84,10 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [currentView, setCurrentView] = useState('home'); // 'home', 'catalog_subs', 'products', 'product', 'checkout'
+  const [currentView, setCurrentView] = useState('home'); // 'home', 'catalog_subs', 'nested_subs', 'products', 'product', 'checkout'
   const [selectedCatalog, setSelectedCatalog] = useState<string | null>(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  const [selectedNestedSubcategory, setSelectedNestedSubcategory] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<any[]>([]);
@@ -105,7 +106,16 @@ export default function App() {
               download: true,
               header: true,
               skipEmptyLines: true,
-              complete: (results) => resolve(results.data),
+              complete: (results) => {
+                const normalizedData = results.data.map(row => {
+                  const newRow: any = {};
+                  for (const key in row as object) {
+                    newRow[key.trim()] = (row as any)[key];
+                  }
+                  return newRow;
+                });
+                resolve(normalizedData);
+              },
               error: (error: any) => reject(error)
             });
           });
@@ -144,6 +154,7 @@ export default function App() {
           }
           return {
             ...row,
+            nestedSubcategory: row['Nested subcategory'] || null,
             price: Number(row.price) || 0,
             retailPrice: row.retailPrice ? Number(row.retailPrice) : null,
             images: itemImages.map(transformImageLink)
@@ -151,64 +162,42 @@ export default function App() {
         });
 
         const parsedCatalogs = catalogsCsv.map((row: any) => {
-           let catImage = transformImageLink(row.image);
+           let rawImage = row.IMAGE || row.Image || row.image || row['תמונה'] || row.imageURL;
+           let catImage = rawImage ? transformImageLink(rawImage) : null;
            
-           if (row.name && (row.name.includes("סלולריים") || row.name.toLowerCase().includes("cellular"))) {
-              catImage = "https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg";
-           } else if (row.name && row.name.includes("POE")) {
-              catImage = transformImageLink("https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link");
+           if (!catImage) {
+             if (row.name && (row.name.includes("סלולריים") || row.name.toLowerCase().includes("cellular"))) {
+                catImage = "https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg";
+             } else if (row.name && row.name.includes("POE")) {
+                catImage = transformImageLink("https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link");
+             } else {
+                catImage = 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(row.name || 'Category');
+             }
            }
 
            return {
-             name: row.name,
-             desc: row.desc,
+             name: row.name || row['שם'] || row.Name,
+             desc: row.desc || row.description || row['תיאור'],
              image: catImage,
-             brand: row.brand,
-             sortOrder: Number(row.sortOrder) || 999,
-             active: row.active === 'TRUE' || row.active === 'true'
+             brand: row.brand || row['מותג'],
+             sortOrder: Number(row.sortOrder || row['סדר'] || 999),
+             active: (row.active || row['פעיל']) === 'TRUE' || (row.active || row['פעיל']) === 'true' || row.active === 'כן'
            };
         }).sort((a,b) => a.sortOrder - b.sortOrder);
 
         setCatalogData(parsedProducts);
         setCatalogFolders(parsedCatalogs.filter(c => c.active !== false));
         setSubcategoriesGlobalData((subcategoriesCsv || []).map((row: any) => {
-           let providedImage = row.IMAGE || row.Image || row.image || row['תמונה'];
+           let providedImage = row.IMAGE || row.Image || row.image || row['תמונה'] || row.imageURL;
            let subImage = providedImage ? transformImageLink(providedImage) : null;
            
-           if (!subImage) {
-              if (row.subcategory && (row.subcategory.includes("סלולריים") || row.subcategory.toLowerCase().includes("cellular"))) {
-              subImage = "https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg";
-           } else if (row.subcategory && row.subcategory.includes("POE")) {
-              subImage = transformImageLink("https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link");
-           } else if (row.subcategory && (row.subcategory === 'מצלמות חשמל WIFI' || row.subcategory === 'מצלמות WIFI חשמל')) {
-              subImage = transformImageLink('https://drive.google.com/file/d/1EQnAA-b_ez8dHTDbfcb5dETBnHSF5HeO/view?usp=drive_link');
-           } else if (row.subcategory && (row.subcategory === 'מצלמות חשמל 4G' || row.subcategory === 'מצלמות 4G חשמל')) {
-              subImage = transformImageLink('https://drive.google.com/file/d/1vMM8K41UALo7f9WLeRGHtt8l9XfjctmA/view?usp=drive_link');
-           } else if (row.subcategory && row.subcategory.includes('סוללה עצמאיות')) {
-              subImage = transformImageLink('https://drive.google.com/file/d/13d3JVC3H7T-dCGbImrrRm-05pGFqrOkN/view?usp=drive_link');
-           } else if (row.subcategory && row.subcategory === 'אינטרקומים') {
-              subImage = transformImageLink('https://drive.google.com/file/d/1_e67NvLTFI8hiisTJHgLerRkLD33jak4/view?usp=drive_link');
-           } else if (row.subcategory && row.subcategory === 'מנעולים חכמים') {
-              subImage = transformImageLink('https://drive.google.com/file/d/1uo_Vnq_Vei1oRhLw02h2TQEaylApQiQW/view?usp=drive_link');
-           } else if (row.subcategory && row.subcategory.includes('שואבים שוטפים')) {
-              subImage = transformImageLink('https://drive.google.com/file/d/1kOd6VCtpXz3Im-_hCQFRGRDrT0ucD_xh/view?usp=drive_link');
-           } else if (row.subcategory && row.subcategory === 'רמקולים שקועים') {
-              subImage = transformImageLink('https://drive.google.com/file/d/1PhQwKX-PPEDkI86oJYx8_Oxcy8D1JoNo/view?usp=drive_link');
-           } else if (row.subcategory && row.subcategory === 'רמקולים חיצוניים') {
-              subImage = transformImageLink('https://drive.google.com/file/d/13DphjTY4N3ZUBusc9fPflH5i2XxejnvO/view?usp=drive_link');
-           } else if (row.subcategory && row.subcategory === 'מגברים') {
-              subImage = transformImageLink('https://drive.google.com/file/d/1WVwyorSCDVSFH8tVhbTkrdCMgAbCpRna/view?usp=drive_link');
-           } else if (row.subcategory && row.subcategory === 'אביזרים משלימים') {
-              subImage = transformImageLink('https://drive.google.com/file/d/1ANu1sSxiv6prXWdBCSkg6EDMWNktYHeg/view?usp=drive_link');
-           } else if (row.subcategory && row.subcategory.includes('בידוריות')) {
-              subImage = transformImageLink('https://drive.google.com/file/d/1uWWpTJTAATxeUecKLrAcsYv-UuYJmQ16/view?usp=drive_link');
-           } else if (row.subcategory && (row.subcategory === 'מיקסרים ומקרופונים' || row.subcategory === 'מיקסרים ומיקרופונים')) {
-              subImage = transformImageLink('https://drive.google.com/file/d/1GtUymZdOSaALtyMVJ_znxYjlxwIE-PRb/view?usp=drive_link');
-           }
-           }
-
+           let subcategoryName = row.subcategory || row.Subcategory || row['תת קטגוריה'] || row.subCategory || row[' Subcategory'] || '';
+           let categoryName = row.category || row.Category || row['קטגוריה'] || '';
+           
            return {
              ...row,
+             category: categoryName,
+             subcategory: subcategoryName,
              image: subImage
            };
         }));
@@ -236,228 +225,50 @@ export default function App() {
     const productsInCat = catalogData.filter(item => item.category === selectedCatalog && item.active !== 'FALSE');
     let subs = [...new Set(productsInCat.map(item => item.subcategory).filter(Boolean))] as string[];
     
-    // הסתרת תתי-הקטגוריות הפנימיות מהרשימה הראשית (Hikvision + Inginium)
-    const hiddenNestedSubs = [
-      'מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)', 
-      'מתגי ליבה אופטי - Access Switches L3',
-      'Inginium - גלילים CAT7',
-      'Inginium - מגשרי CAT6A',
-      'ספקי כוח',
-      'ספקים מזוודים'
-    ];
-
-    // אם יש מוצרים מהמשפחות הפנימיות של אינג'יניום, נוסיף באופן יזום את קטגוריית האם שלהם
-    const hasInginium = productsInCat.some(p => p.subcategory && p.subcategory.startsWith('Inginium - '));
-    if (hasInginium && !subs.includes('Inginium Full Channel')) {
-      subs.push('Inginium Full Channel');
-    }
-    
-    // אם יש מוצרים מקולקציית ספקי כוח נוסיף יזום את קטגוריית האם
-    const hasPowerSupplies = productsInCat.some(p => p.subcategory === 'ספקי כוח' || p.subcategory === 'ספקים מזוודים');
-    if (hasPowerSupplies && !subs.includes('ספקי כוח ומתח')) {
-      subs.push('ספקי כוח ומתח');
-    }
-
-    subs = subs.filter(sub => !hiddenNestedSubs.includes(sub));
-
     // Create an array of objects with counts for UI
     return subs.map(subName => {
       // Find matching subcategory from Google Sheets (by subcategory name and parent category)
       const sheetSub = subcategoriesGlobalData.find(s => s.category === selectedCatalog && s.subcategory === subName);
       let customImage = sheetSub?.image || null;
-      
-      // Fallback to hardcoded images if no image exists in the sheet
-      if (!customImage) {
-        if (subName === 'מצלמות חשמל WIFI' || subName === 'מצלמות WIFI חשמל') {
-          customImage = transformImageLink('https://drive.google.com/file/d/1EQnAA-b_ez8dHTDbfcb5dETBnHSF5HeO/view?usp=drive_link');
-        } else if (subName && (subName.includes('סלולריים') || subName.toLowerCase().includes('cellular'))) {
-          customImage = 'https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg';
-        } else if (subName && subName.includes('POE')) {
-          customImage = transformImageLink('https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link');
-        } else if (subName === 'מצלמות חשמל 4G' || subName === 'מצלמות 4G חשמל') {
-          customImage = transformImageLink('https://drive.google.com/file/d/1vMM8K41UALo7f9WLeRGHtt8l9XfjctmA/view?usp=drive_link');
-        } else if (subName === 'מצלמות סוללה עצמאיות') {
-          customImage = transformImageLink('https://drive.google.com/file/d/13d3JVC3H7T-dCGbImrrRm-05pGFqrOkN/view?usp=drive_link');
-        } else if (subName === 'אינטרקומים') {
-          customImage = transformImageLink('https://drive.google.com/file/d/1_e67NvLTFI8hiisTJHgLerRkLD33jak4/view?usp=drive_link');
-        } else if (subName === 'מנעולים חכמים') {
-          customImage = transformImageLink('https://drive.google.com/file/d/1uo_Vnq_Vei1oRhLw02h2TQEaylApQiQW/view?usp=drive_link');
-        } else if (subName === 'שואבים שוטפים רובוטיים' || subName.includes('שואבים שוטפים')) {
-          customImage = transformImageLink('https://drive.google.com/file/d/1kOd6VCtpXz3Im-_hCQFRGRDrT0ucD_xh/view?usp=drive_link');
-        } else if (subName === 'מתגי ליבה ורשת מנוהלים') {
-          customImage = 'https://assets.hikvision.com/prd/normal/all/image/m000113563/DS-3E2736-HI-24F8T4X_F_202309.jpg?eo-img.format=webp';
-        } else if (subName === 'מתגי רשת גיגה לא מנוהלים') {
-          customImage = 'https://assets.hikvision.com/prd/normal/all/image/m000073645/8%E5%8F%A3%E5%B7%A645%E4%BF%AF%E8%A7%86---%E5%89%AF%E6%9C%AC.png?eo-img.format=webp';
-        } else if (subName === 'מתגי גיגה תעשייתיים') {
-          customImage = 'https://assets.hikvision.com/prd/normal/all/image/m000138688/12.png?eo-img.format=webp';
-        } else if (subName === 'מפצלי POE') {
-          customImage = 'https://assets.hikvision.com/prd/public/all/image/m000131322/DSC09357.png?eo-img.format=webp';
-        } else if (subName === 'אקסס פוינטים - AP') {
-          customImage = 'https://assets.hikvision.com/prd/normal/all/image/m000113057/%E6%AD%A3%E8%A7%86%E5%9B%BE.png?eo-img.format=webp';
-        } else if (subName === 'לינקים אלחוטיים') {
-          customImage = 'https://assets.hikvision.com/prd/normal/all/image/m000152562/11-1.png?eo-img.format=webp';
-        } else if (subName === 'נתבים אלחוטיים ביתי-משרדי') {
-          customImage = 'https://assets.hikvision.com/prd/normal/all/image/m000133680/%E7%BA%BF%E4%B8%8B%E6%AC%BE1.png?eo-img.format=webp';
-        } else if (subName === 'מגדילי טווח ויחידות MESH') {
-          customImage = 'https://assets.hikvision.com/prd/public/all/image/m000156931/%E4%B8%AD%E7%BB%A7%E5%99%A8.png?eo-img.format=webp';
-        } else if (subName === 'VPN Professional Router') {
-          customImage = 'https://assets.hikvision.com/prd/public/all/image/m000113061/DS-3WG507G-SI_F_202309.jpg?eo-img.format=webp';
-        } else if (subName === 'אל פסק - UPS') {
-          customImage = 'https://assets.hikvision.com/prd/public/all/image/m000086221/%E5%9B%BE%E7%89%87.jpg?eo-img.format=webp';
-        } else if (subName === 'אל פסק אונליין RM') {
-          customImage = 'https://assets.hikvision.com/prd/normal/all/image/m000172008/%E5%B7%A6%E5%89%8D%E4%BE%A7-LOGO.png?eo-img.format=webp';
-        } else if (subName === 'אל פסק אונליין Tower') {
-          customImage = 'https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcQ7QJg4nHgNAgQ2E8vZ4Kqtt-pCWsi8eyLVxCIARB7_HCTqSzBn-TiKsWBYn4mn-dnHo4yfRy2MxOB02yDbX6QmZIM3eujkj2fh4T5V4EYiD0vSfQSAsdF_tnQZwbrFlocNutsK0bu_dWk&usqp=CAc';
-        } else if (subName === 'טלפוניה IP') {
-          customImage = 'https://assets.hikvision.com/prd/normal/all/image/m000062901/KP9301%E4%B8%BB%E8%A7%86%E5%9B%BE_20220822.png?eo-img.format=webp';
-        } else if (subName === 'כבלים ואביזרים') {
-          customImage = 'https://assets.hikvision.com/prd/normal/all/image/m000001449/%E8%B6%85%E4%BA%94%E7%B1%BB2.png?eo-img.format=webp';
-        } else if (subName === 'מצלמות לרכב') {
-          customImage = 'https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcTOxMM3c1rVlvshWHjGeqk4BFeF5B2KA5HnKvA2uP3Zv546YfeY7A8DlFJhcz9x1ByVXPrFIed1YamY4h9MuBXuhQ8b_m_hX8S1nnbVq-bPHj6DBG00YQw5T2s4O1Zpag&usqp=CAc';
-        } else if (subName === 'Msolutions HDBaseT Extenders') {
-          customImage = 'https://placehold.co/600x400/e0f2fe/0369a1?text=Msolutions+Extenders';
-        } else if (subName === 'Msolutions Tester') {
-          customImage = 'https://placehold.co/600x400/e0f2fe/0369a1?text=Msolutions+Tester';
-        } else if (subName === 'Tesla Smart') {
-          customImage = 'https://placehold.co/600x400/dcfce7/166534?text=Tesla+Smart';
-        } else if (subName === 'Boost-Connect') {
-          customImage = 'https://placehold.co/600x400/fef3c7/b45309?text=Boost+Connect';
-        } else if (subName === 'Inginium Full Channel') {
-          customImage = 'https://placehold.co/600x400/e0e7ff/0369a1?text=Inginium+Full+Channel';
-        } else if (subName === 'כבלי תקשורת Recber') {
-          customImage = 'https://www.recber.com.tr/wp-content/uploads/2018/12/banner4.jpg';
-        } else if (subName === 'ארונות תקשורת ואביזרים') {
-          customImage = 'https://rbs-telecom.com/wp-content/uploads/קטלוג-פסי-שקעים-scaled.png';
-        } else if (subName === 'פסי שקעים PDU') {
-          customImage = 'https://rbs-telecom.com/wp-content/uploads/5cd9dbb9-8411-455d-8eed-9f1194971df8.png';
-        } else if (subName === 'כבלי פיקוד, רמקולים וכריזה') {
-          customImage = 'https://placehold.co/600x400/dcfce7/166534?text=Audio+Cables';
-        } else if (subName === 'מגשרי רשת CAT6') {
-          customImage = 'https://placehold.co/600x400/e0e7ff/3730a3?text=CAT6+Patch+Cords';
-        } else if (subName === 'מגשרי רשת CAT7 / CAT8') {
-          customImage = 'https://placehold.co/600x400/e0e7ff/4338ca?text=CAT7/8+Patch+Cords';
-        } else if (subName === 'שקעי רשת, תקעים ואביזרים') {
-          customImage = 'https://placehold.co/600x400/f3f4f6/374151?text=Keystones+%26+Plugs';
-        } else if (subName === 'כבלי רשת LAN גלילים') {
-          customImage = 'https://placehold.co/600x400/ffedd5/92400e?text=LAN+Cables';
-        } else if (subName === 'טלפוניה ואביזרים') {
-          customImage = 'https://placehold.co/600x400/fce7f3/9d174d?text=Telephony';
-        } else if (subName === 'כבלי קואקס') {
-          customImage = 'https://placehold.co/600x400/e2e8f0/1e293b?text=Coax+Cables';
-        } else if (subName === 'כבלי HDMI') {
-          customImage = 'https://placehold.co/600x400/fef08a/b45309?text=HDMI+Cables';
-        } else if (subName === 'ספקי כוח ומתח') {
-          customImage = 'https://placehold.co/600x400/dbeafe/1e40af?text=Power+Supplies';
-        } else if (subName === 'כלי עבודה וציוד בדיקה') {
-          customImage = 'https://placehold.co/600x400/f3e8ff/4c1d95?text=Tools+%26+Testers';
-        } else if (subName === 'רמקולים שקועים') {
-          customImage = transformImageLink('https://drive.google.com/file/d/1PhQwKX-PPEDkI86oJYx8_Oxcy8D1JoNo/view?usp=drive_link');
-        } else if (subName === 'רמקולים חיצוניים') {
-          customImage = transformImageLink('https://drive.google.com/file/d/13DphjTY4N3ZUBusc9fPflH5i2XxejnvO/view?usp=drive_link');
-        } else if (subName === 'מגברים') {
-          customImage = transformImageLink('https://drive.google.com/file/d/1WVwyorSCDVSFH8tVhbTkrdCMgAbCpRna/view?usp=drive_link');
-        } else if (subName === 'אביזרים משלימים') {
-          customImage = transformImageLink('https://drive.google.com/file/d/1ANu1sSxiv6prXWdBCSkg6EDMWNktYHeg/view?usp=drive_link');
-        } else if (subName && subName.includes('בידוריות')) {
-          customImage = transformImageLink('https://drive.google.com/file/d/1uWWpTJTAATxeUecKLrAcsYv-UuYJmQ16/view?usp=drive_link');
-        } else if (subName === 'מיקסרים ומקרופונים' || subName === 'מיקסרים ומיקרופונים') {
-          customImage = transformImageLink('https://drive.google.com/file/d/1GtUymZdOSaALtyMVJ_znxYjlxwIE-PRb/view?usp=drive_link');
-        } else if (subName === 'נתבים סלולריים תעשייתיים') {
-          customImage = 'https://placehold.co/600x400/f1f5f9/334155?text=Cellular+Routers';
-        } else if (subName === 'מתגי POE - BoostLink') {
-          customImage = 'https://placehold.co/600x400/f1f5f9/334155?text=BoostLink+Switches';
-        } else if (subName === 'Teltonika - מתגים ואביזרים') {
-          customImage = 'https://placehold.co/600x400/f1f5f9/334155?text=Teltonika+Network';
-        } else if (subName === 'Teltonika - חיישני IoT') {
-          customImage = 'https://placehold.co/600x400/f1f5f9/334155?text=Teltonika+Sensors';
-        } else if (subName === 'בקרות כניסה וקודנים') {
-          customImage = 'https://placehold.co/600x400/f1f5f9/334155?text=Access+Control';
-        } else if (subName === 'כבלים אופטיים מוכנים') {
-          customImage = 'https://placehold.co/600x400/f8fafc/0f172a?text=Pre-made+Optical+Cables';
-        } else if (subName === 'מגשרים אופטיים') {
-          customImage = 'https://placehold.co/600x400/f8fafc/0f172a?text=Optical+Patch+Cords';
-        } else if (subName === 'פיגטיילים') {
-          customImage = 'https://placehold.co/600x400/f8fafc/0f172a?text=Optical+Pigtails';
-        } else if (subName === "פאץ' פאנלים") {
-          customImage = 'https://placehold.co/600x400/f8fafc/0f172a?text=Patch+Panels';
-        } else if (subName === 'שקעים אופטיים') {
-          customImage = 'https://placehold.co/600x400/f8fafc/0f172a?text=Optical+Outlets';
-        } else if (subName === 'מתאמים אופטיים') {
-          customImage = 'https://placehold.co/600x400/f8fafc/0f172a?text=Optical+Adapters';
-        } else if (subName === 'מחבר מהיר') {
-          customImage = 'https://placehold.co/600x400/f8fafc/0f172a?text=Fast+Connectors';
-        } else if (subName === 'ארונות וארונות הסתעפות') {
-          customImage = 'https://placehold.co/600x400/f8fafc/0f172a?text=Optical+Cabinets';
-        } else if (subName === 'ציודי בדיקה') {
-          customImage = 'https://placehold.co/600x400/f8fafc/0f172a?text=Testing+Equipment';
-        } else if (subName === "מיני ג'יביקים") {
-          customImage = 'https://placehold.co/600x400/f8fafc/0f172a?text=SFP+Modules';
-        } else if (subName === 'ממירים אופטיים') {
-          customImage = 'https://placehold.co/600x400/f8fafc/0f172a?text=Media+Converters';
-        } else if (subName === 'כלי עבודה') {
-          customImage = 'https://placehold.co/600x400/f8fafc/0f172a?text=Optical+Tools';
-        }
-      }
+      let firstProductImage = productsInCat.find(p => p.subcategory === subName)?.images[0];
       
       let count = productsInCat.filter(p => p.subcategory === subName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם').length;
-      
-      // ספירת סך כל המוצרים גם בתת-הקטגוריות עבור תיקיות האם (היקויז'ן ואינג'יניום)
-      if (subName === 'מתגי ליבה ורשת מנוהלים') {
-         count = productsInCat.filter(p => (p.subcategory === 'מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)' || p.subcategory === 'מתגי ליבה אופטי - Access Switches L3') && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם').length;
-      } else if (subName === 'Inginium Full Channel') {
-         count = productsInCat.filter(p => p.subcategory && p.subcategory.startsWith('Inginium - ') && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם').length;
-      } else if (subName === 'ספקי כוח ומתח') {
-         count = productsInCat.filter(p => (p.subcategory === 'ספקי כוח' || p.subcategory === 'ספקים מזוודים' || p.subcategory === 'ספקי כוח ומתח') && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם').length;
-      }
       
       return {
         name: subName,
         count: count,
-        image: customImage || productsInCat.find(p => p.subcategory === subName)?.images[0]
+        image: customImage || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(subName)
       };
     });
   }, [selectedCatalog, catalogData]);
 
   const nestedSubcategoriesData = useMemo(() => {
-    let nestedNames: string[] = [];
+    if (!selectedSubcategory || !selectedCatalog) return [];
     
-    // אילו תתי קטגוריות להציג על פי תיקיית האם שנבחרה
-    if (selectedSubcategory === 'מתגי ליבה ורשת מנוהלים') {
-      nestedNames = ['מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)', 'מתגי ליבה אופטי - Access Switches L3'];
-    } else if (selectedSubcategory === 'ספקי כוח ומתח') {
-      nestedNames = ['ספקי כוח', 'ספקים מזוודים'];
-    }
+    // Get all products in the current subcategory
+    const productsInSubcat = catalogData.filter(p => 
+      p.category === selectedCatalog && 
+      p.subcategory === selectedSubcategory && 
+      p.active !== 'FALSE' &&
+      p.nestedSubcategory
+    );
+    
+    // Get unique nested subcategories
+    const nestedNames = [...new Set(productsInSubcat.map(p => p.nestedSubcategory).filter(Boolean))] as string[];
 
     return nestedNames.map(name => {
-      const count = catalogData.filter(p => p.subcategory === name && p.active !== 'FALSE').length;
-      let defaultImage = 'https://placehold.co/600x400/f3f4f6/000000?text=Category';
+      const count = productsInSubcat.filter(p => p.nestedSubcategory === name && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם').length;
+      let defaultImage = `https://placehold.co/600x400/f3f4f6/000000?text=${encodeURIComponent(name || 'Category')}`;
+      
       const sheetSub = subcategoriesGlobalData.find(s => s.category === selectedCatalog && s.subcategory === name);
 
       let image = sheetSub?.image || null;
-      
-      if (!image) {
-        // תמונות מותאמות אישית לתתי-הקטגוריות הפנימיות
-        if (name === 'מתגי ליבה אופטי - Access Switches L3') {
-          image = 'https://assets.hikvision.com/prd/normal/all/image/m000113563/DS-3E2736-HI-24F8T4X_F_202309.jpg?eo-img.format=webp';
-        } else if (name === 'מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)') {
-          image = 'https://assets.hikvision.com/prd/normal/all/image/m000034943/1524.png?eo-img.format=webp';
-        } else if (name === 'ספקי כוח') {
-          image = 'https://placehold.co/600x400/f3f4f6/000000?text=ספקי+כוח';
-        } else if (name === 'ספקים מזוודים') {
-          image = 'https://placehold.co/600x400/f3f4f6/000000?text=ספקים+מזוודים';
-        } else if (name === 'Inginium - גלילים CAT7') {
-          image = 'https://placehold.co/600x400/e0e7ff/0369a1?text=CAT7+Rolls';
-        } else if (name === 'Inginium - מגשרי CAT6A') {
-          image = 'https://placehold.co/600x400/e0e7ff/0369a1?text=CAT6A+Patch+Cords';
-        } else {
-          image = defaultImage;
-        }
-      }
+      let firstProductImage = productsInSubcat.find(p => p.nestedSubcategory === name)?.images[0];
       
       return {
         name: name,
         count: count,
-        image: image
+        image: image || firstProductImage || defaultImage
       };
     });
   }, [selectedSubcategory, selectedCatalog, catalogData, subcategoriesGlobalData]);
@@ -495,8 +306,8 @@ export default function App() {
       filtered = filtered.filter(item => {
         if (item.category !== selectedCatalog || item.name === 'מוצר הדגמה' || item.name === 'קטגוריית אם') return false;
         
-        if (selectedSubcategory === 'Inginium Full Channel') {
-          return item.subcategory === 'Inginium Full Channel' || (item.subcategory && item.subcategory.startsWith('Inginium - '));
+        if (selectedNestedSubcategory) {
+          return item.subcategory === selectedSubcategory && item.nestedSubcategory === selectedNestedSubcategory;
         }
         
         return item.subcategory === selectedSubcategory;
@@ -504,7 +315,7 @@ export default function App() {
     }
     
     return filtered;
-  }, [selectedCatalog, selectedSubcategory, currentView, searchQuery, catalogData]);
+  }, [selectedCatalog, selectedSubcategory, selectedNestedSubcategory, currentView, searchQuery, catalogData]);
 
   // --- CART FUNCTIONS ---
   const addToCart = (product: any, quantity = 1) => {
@@ -554,16 +365,10 @@ export default function App() {
         setSelectedProduct(null);
         break;
       case 'products':
-        // בדיקה האם המוצר הגיע מתיקייה פנימית של HIKVISION
-        if (selectedSubcategory === 'מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)' || selectedSubcategory === 'מתגי ליבה אופטי - Access Switches L3') {
+        if (selectedNestedSubcategory) {
           setCurrentView('nested_subs');
-          setSelectedSubcategory('מתגי ליבה ורשת מנוהלים');
-        } else if (selectedSubcategory === 'ספקי כוח' || selectedSubcategory === 'ספקים מזוודים') {
-          setCurrentView('nested_subs');
-          setSelectedSubcategory('ספקי כוח ומתח');
-        } 
-        // רמה רגילה
-        else {
+          setSelectedNestedSubcategory(null);
+        } else {
           setCurrentView('catalog_subs');
           setSelectedSubcategory(null);
         }
@@ -595,12 +400,22 @@ export default function App() {
 
   const navigateToSubcategory = (subName: string | null) => {
     setSelectedSubcategory(subName);
-    // ניווט מותאם לתיקיות אם המכילות תתי-תיקיות
-    if (subName === 'מתגי ליבה ורשת מנוהלים' || subName === 'ספקי כוח ומתח') {
+    setSelectedNestedSubcategory(null);
+    
+    // Check if this subcategory has any nested subcategories
+    const hasNested = catalogData.some(p => p.category === selectedCatalog && p.subcategory === subName && !!p.nestedSubcategory);
+    
+    if (hasNested) {
       setCurrentView('nested_subs');
     } else {
       setCurrentView('products');
     }
+    setSearchQuery('');
+  };
+
+  const navigateToNestedSubcategory = (nestedName: string | null) => {
+    setSelectedNestedSubcategory(nestedName);
+    setCurrentView('products');
     setSearchQuery('');
   };
 
@@ -661,9 +476,9 @@ export default function App() {
     </div>
   );
 
-  const SubcategoryCard: React.FC<{ sub: any }> = ({ sub }) => (
+  const SubcategoryCard: React.FC<{ sub: any, onClick?: () => void }> = ({ sub, onClick }) => (
     <div 
-      onClick={() => navigateToSubcategory(sub.name)}
+      onClick={onClick || (() => navigateToSubcategory(sub.name))}
       className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 border border-gray-100"
     >
       <div className="relative aspect-square p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
@@ -1589,7 +1404,7 @@ export default function App() {
                 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-6 max-w-4xl mx-auto">
                   {nestedSubcategoriesData.map((sub, idx) => (
-                    <SubcategoryCard key={idx} sub={sub} />
+                    <SubcategoryCard key={idx} sub={sub} onClick={() => navigateToNestedSubcategory(sub.name)} />
                   ))}
                 </div>
               </>
