@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "RBS Catalog Portal",
+  "description": "קטלוג B2B מקצועי עבור מוצרי תקשורת, קואקס, אופטיקה, סאונד ובידוריות לרשת RBS Telecom",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -5,6 +5,7 @@ import {
 import Papa from 'papaparse';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { HumanVerification } from './components/HumanVerification';
+import InstallBanner from './components/InstallBanner';
 
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
 const PRODUCTS_GID = '1506812668';
@@ -20,17 +21,18 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
 const transformImageLink = (url: string) => {
   if (!url) return url;
   try {
-    if (url.includes('drive.google.com/file/d/')) {
-      const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    const trimmedUrl = url.trim();
+    if (trimmedUrl.includes('drive.google.com/file/d/')) {
+      const match = trimmedUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
       if (match && match[1]) {
-        return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1500-h1500`;
+        return `https://lh3.googleusercontent.com/d/${match[1]}`;
       }
-    } else if (url.includes('drive.google.com/open?id=')) {
-      const match = url.match(/id=([a-zA-Z0-9_-]+)/);
+    } else if (trimmedUrl.includes('id=')) {
+      const match = trimmedUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
       if (match && match[1]) {
-        return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1500-h1500`;
+        return `https://lh3.googleusercontent.com/d/${match[1]}`;
       }
-    } else if (url.includes('drive.google.com/drive/folders/')) {
+    } else if (trimmedUrl.includes('drive.google.com/drive/folders/')) {
       return 'https://placehold.co/600x400/f3f4f6/000000?text=Drive+Folder';
     }
   } catch(e) { /* ignore */ }
@@ -218,15 +220,22 @@ export default function App() {
           }
           
           if (!itemImages || itemImages.length === 0) {
-             if (row.imageURL && row.imageURL.trim().startsWith('http')) {
-                itemImages = [row.imageURL.trim()];
-             } else {
-                itemImages = ['https://placehold.co/600x400/f3f4f6/000000?text=No+Image'];
-             }
+              if (row.imageURL && row.imageURL.trim().startsWith('http')) {
+                 itemImages = [row.imageURL.trim()];
+              } else {
+                 itemImages = ['https://placehold.co/600x400/f3f4f6/000000?text=No+Image'];
+              }
           }
+
+          const categoryName = typeof row.category === 'string' ? row.category.trim() : (row.category || '');
+          const subcategoryName = typeof row.subcategory === 'string' ? row.subcategory.trim() : (row.subcategory || '');
+          const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
+
           return {
             ...row,
-            nestedSubcategory: row['Nested subcategory'] || null,
+            category: categoryName,
+            subcategory: subcategoryName,
+            nestedSubcategory: nestedSubcategoryName,
             price: Number(row.price) || 0,
             retailPrice: row.retailPrice ? Number(row.retailPrice) : null,
             images: itemImages.map(transformImageLink)
@@ -237,21 +246,23 @@ export default function App() {
            let rawImage = row.IMAGE || row.Image || row.image || row['תמונה'] || row.imageURL;
            let catImage = rawImage ? transformImageLink(rawImage) : null;
            
+           const catName = typeof (row.name || row['שם'] || row.Name) === 'string' ? String(row.name || row['שם'] || row.Name).trim() : '';
+           
            if (!catImage) {
-             if (row.name && (row.name.includes("סלולריים") || row.name.toLowerCase().includes("cellular"))) {
+             if (catName && (catName.includes("סלולריים") || catName.toLowerCase().includes("cellular"))) {
                 catImage = "https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg";
-             } else if (row.name && row.name.includes("POE")) {
+             } else if (catName && catName.includes("POE")) {
                 catImage = transformImageLink("https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link");
              } else {
-                catImage = 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(row.name || 'Category');
+                catImage = 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(catName || 'Category');
              }
            }
 
            return {
-             name: row.name || row['שם'] || row.Name,
-             desc: row.desc || row.description || row['תיאור'],
+             name: catName,
+             desc: (row.desc || row.description || row['תיאור'] || '').trim(),
              image: catImage,
-             brand: row.brand || row['מותג'],
+             brand: (row.brand || row['מותג'] || '').trim(),
              sortOrder: Number(row.sortOrder || row['סדר'] || 999),
              active: (row.active || row['פעיל']) === 'TRUE' || (row.active || row['פעיל']) === 'true' || row.active === 'כן'
            };
@@ -264,17 +275,31 @@ export default function App() {
            let subImage = providedImage ? transformImageLink(providedImage) : null;
            
            let subcategoryName = row.subcategory || row.Subcategory || row['תת קטגוריה'] || row.subCategory || row[' Subcategory'] || '';
+           subcategoryName = typeof subcategoryName === 'string' ? subcategoryName.trim() : subcategoryName;
+           
            let categoryName = row.category || row.Category || row['קטגוריה'] || '';
+           categoryName = typeof categoryName === 'string' ? categoryName.trim() : categoryName;
            
            // Normalize parent subcategory matching the exact weird header the user added
            let parentSubcategory = row.parentSubcategory || row['Parent  Subcategory'] || row['Parent Subcategory'] || row['\tParent  Subcategory'] || '';
+           parentSubcategory = typeof parentSubcategory === 'string' ? parentSubcategory.trim() : parentSubcategory;
+           
+           // Normalize active to boolean robustly:
+           let isActive = true;
+           if (row.active !== undefined && row.active !== null) {
+              const actVal = String(row.active).toUpperCase().trim();
+              if (actVal === 'FALSE' || actVal === '0') {
+                 isActive = false;
+              }
+           }
            
            return {
              ...row,
              category: categoryName,
              subcategory: subcategoryName,
              parentSubcategory: parentSubcategory,
-             image: subImage
+             image: subImage,
+             active: isActive
            };
         }));
       } catch (err) {
@@ -368,7 +393,7 @@ export default function App() {
       const sheetSub = subcategoriesGlobalData.find(s => s.category === selectedCatalog && s.subcategory === subName && !s.parentSubcategory);
       
       let customImage = sheetSub?.image || null;
-      let firstProductImage = productsInCat.find(p => p.subcategory === subName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם' && p.images[0] && !p.images[0].includes('No+Image'))?.images[0];
+      let firstProductImage = productsInCat.find(p => p.subcategory === subName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם' && p.images[0] && !p.images[0].includes('No+Image') && !p.images[0].includes('no+image') && !p.images[0].includes('placehold.co'))?.images[0];
       
       let count = productsInCat.filter(p => p.subcategory === subName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם').length;
       
@@ -409,7 +434,7 @@ export default function App() {
     if (!selectedSubcategory || !selectedCatalog) return [];
     
     const productsInCat = catalogData.filter(item => item.category === selectedCatalog && item.active !== 'FALSE');
-    let nestedSubs: string[] = [];
+    let nestedSubs: any[] = [];
     
     // Grouping specific logic based on user's structure
     if (selectedSubcategory === 'Inginium Full Channel') {
@@ -443,16 +468,16 @@ export default function App() {
          // for these, the nested name is actually the subcategory name in products
          const prods = productsInCat.filter(p => p.subcategory === nestedName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם');
          count = prods.length;
-         firstProductImage = prods.find(p => p.images[0] && !p.images[0].includes('No+Image'))?.images[0];
+         firstProductImage = prods.find(p => p.images[0] && !p.images[0].includes('No+Image') && !p.images[0].includes('no+image') && !p.images[0].includes('placehold.co'))?.images[0];
       } else {
          const prods = productsInCat.filter(p => p.subcategory === selectedSubcategory && p.nestedSubcategory === nestedName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם');
          count = prods.length;
-         firstProductImage = prods.find(p => p.images[0] && !p.images[0].includes('No+Image'))?.images[0];
+         firstProductImage = prods.find(p => p.images[0] && !p.images[0].includes('No+Image') && !p.images[0].includes('no+image') && !p.images[0].includes('placehold.co'))?.images[0];
          // Fallback if they are directly subcategories instead of nested
          if (count === 0 && (nestedName === 'ספקי כוח' || nestedName === 'ספקים מזוודים' || nestedName === 'ספקים מזוודים ')) {
             const fbProds = productsInCat.filter(p => (p.subcategory === nestedName || (p.subcategory === 'ספקי כוח ומתח' && p.nestedSubcategory === nestedName)) && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם');
             count = fbProds.length;
-            firstProductImage = fbProds.find(p => p.images[0] && !p.images[0].includes('No+Image'))?.images[0];
+            firstProductImage = fbProds.find(p => p.images[0] && !p.images[0].includes('No+Image') && !p.images[0].includes('no+image') && !p.images[0].includes('placehold.co'))?.images[0];
          }
       }
       
@@ -1740,6 +1765,7 @@ export default function App() {
       )}
 
       {!isHumanVerified && <HumanVerification onVerified={() => setIsHumanVerified(true)} />}
+      <InstallBanner />
     </div>
   );
 }
