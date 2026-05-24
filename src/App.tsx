@@ -194,10 +194,14 @@ export default function App() {
            let subcategoryName = row.subcategory || row.Subcategory || row['תת קטגוריה'] || row.subCategory || row[' Subcategory'] || '';
            let categoryName = row.category || row.Category || row['קטגוריה'] || '';
            
+           // Normalize parent subcategory matching the exact weird header the user added
+           let parentSubcategory = row.parentSubcategory || row['Parent  Subcategory'] || row['Parent Subcategory'] || row['\tParent  Subcategory'] || '';
+           
            return {
              ...row,
              category: categoryName,
              subcategory: subcategoryName,
+             parentSubcategory: parentSubcategory,
              image: subImage
            };
         }));
@@ -217,60 +221,162 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [currentView, selectedProduct]);
 
+  const getFallbackImage = (subName: string): string | null => {
+    if (!subName) return null;
+    if (subName === 'מצלמות חשמל WIFI' || subName === 'מצלמות WIFI חשמל') return transformImageLink('https://drive.google.com/file/d/1EQnAA-b_ez8dHTDbfcb5dETBnHSF5HeO/view?usp=drive_link');
+    if (subName.includes('סלולריים') || subName.toLowerCase().includes('cellular')) return 'https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg';
+    if (subName.includes('POE')) return transformImageLink('https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link');
+    if (subName === 'מצלמות חשמל 4G' || subName === 'מצלמות 4G חשמל') return transformImageLink('https://drive.google.com/file/d/1vMM8K41UALo7f9WLeRGHtt8l9XfjctmA/view?usp=drive_link');
+    if (subName.includes('סוללה עצמאיות')) return transformImageLink('https://drive.google.com/file/d/13d3JVC3H7T-dCGbImrrRm-05pGFqrOkN/view?usp=drive_link');
+    if (subName === 'אינטרקומים') return transformImageLink('https://drive.google.com/file/d/1_e67NvLTFI8hiisTJHgLerRkLD33jak4/view?usp=drive_link');
+    if (subName === 'מנעולים חכמים') return transformImageLink('https://drive.google.com/file/d/1uo_Vnq_Vei1oRhLw02h2TQEaylApQiQW/view?usp=drive_link');
+    if (subName === 'שואבים שוטפים רובוטיים' || subName.includes('שואבים שוטפים')) return transformImageLink('https://drive.google.com/file/d/1kOd6VCtpXz3Im-_hCQFRGRDrT0ucD_xh/view?usp=drive_link');
+    if (subName === 'מתגי ליבה ורשת מנוהלים') return 'https://assets.hikvision.com/prd/normal/all/image/m000113563/DS-3E2736-HI-24F8T4X_F_202309.jpg?eo-img.format=webp';
+    if (subName === 'מתגי רשת גיגה לא מנוהלים') return 'https://assets.hikvision.com/prd/normal/all/image/m000073645/8%E5%8F%A3%E5%B7%A645%E4%BF%AF%E8%A7%86---%E5%89%AF%E6%9C%AC.png?eo-img.format=webp';
+    if (subName === 'מתגי גיגה תעשייתיים') return 'https://assets.hikvision.com/prd/normal/all/image/m000138688/12.png?eo-img.format=webp';
+    if (subName === 'מפצלי POE') return 'https://assets.hikvision.com/prd/public/all/image/m000131322/DSC09357.png?eo-img.format=webp';
+    if (subName === 'אקסס פוינטים - AP') return 'https://assets.hikvision.com/prd/normal/all/image/m000113057/%E6%AD%A3%E8%A7%86%E5%9B%BE.png?eo-img.format=webp';
+    if (subName === 'לינקים אלחוטיים') return 'https://assets.hikvision.com/prd/normal/all/image/m000152562/11-1.png?eo-img.format=webp';
+    if (subName === 'נתבים אלחוטיים ביתי-משרדי') return 'https://assets.hikvision.com/prd/normal/all/image/m000133680/%E7%BA%BF%E4%B8%8B%E6%AC%BE1.png?eo-img.format=webp';
+    if (subName === 'מגדילי טווח ויחידות MESH') return 'https://assets.hikvision.com/prd/public/all/image/m000156931/%E4%B8%AD%E7%BB%A7%E5%99%A8.png?eo-img.format=webp';
+    if (subName === 'VPN Professional Router') return 'https://assets.hikvision.com/prd/public/all/image/m000113061/DS-3WG507G-SI_F_202309.jpg?eo-img.format=webp';
+    if (subName === 'אל פסק - UPS') return 'https://assets.hikvision.com/prd/public/all/image/m000086221/%E5%9B%BE%E7%89%87.jpg?eo-img.format=webp';
+    if (subName === 'אל פסק אונליין RM') return 'https://assets.hikvision.com/prd/normal/all/image/m000172008/%E5%B7%A6%E5%89%8D%E4%BE%A7-LOGO.png?eo-img.format=webp';
+    if (subName === 'אל פסק אונליין Tower') return 'https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcQ7QJg4nHgNAgQ2E8vZ4Kqtt-pCWsi8eyLVxCIARB7_HCTqSzBn-TiKsWBYn4mn-dnHo4yfRy2MxOB02yDbX6QmZIM3eujkj2fh4T5V4EYiD0vSfQSAsdF_tnQZwbrFlocNutsK0bu_dWk&usqp=CAc';
+    if (subName === 'טלפוניה IP') return 'https://assets.hikvision.com/prd/normal/all/image/m000062901/KP9301%E4%B8%BB%E8%A7%86%E5%9B%BE_20220822.png?eo-img.format=webp';
+    if (subName === 'כבלים ואביזרים') return 'https://assets.hikvision.com/prd/normal/all/image/m000001449/%E8%B6%85%E4%BA%94%E7%B1%BB2.png?eo-img.format=webp';
+    if (subName === 'מצלמות לרכב') return 'https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcTOxMM3c1rVlvshWHjGeqk4BFeF5B2KA5HnKvA2uP3Zv546YfeY7A8DlFJhcz9x1ByVXPrFIed1YamY4h9MuBXuhQ8b_m_hX8S1nnbVq-bPHj6DBG00YQw5T2s4O1Zpag&usqp=CAc';
+    if (subName === 'כבלי תקשורת Recber') return 'https://www.recber.com.tr/wp-content/uploads/2018/12/banner4.jpg';
+    if (subName === 'ארונות תקשורת ואביזרים') return 'https://rbs-telecom.com/wp-content/uploads/קטלוג-פסי-שקעים-scaled.png';
+    if (subName === 'פסי שקעים PDU') return 'https://rbs-telecom.com/wp-content/uploads/5cd9dbb9-8411-455d-8eed-9f1194971df8.png';
+    if (subName === 'רמקולים שקועים') return transformImageLink('https://drive.google.com/file/d/1PhQwKX-PPEDkI86oJYx8_Oxcy8D1JoNo/view?usp=drive_link');
+    if (subName === 'רמקולים חיצוניים') return transformImageLink('https://drive.google.com/file/d/13DphjTY4N3ZUBusc9fPflH5i2XxejnvO/view?usp=drive_link');
+    if (subName === 'מגברים') return transformImageLink('https://drive.google.com/file/d/1WVwyorSCDVSFH8tVhbTkrdCMgAbCpRna/view?usp=drive_link');
+    if (subName === 'אביזרים משלימים') return transformImageLink('https://drive.google.com/file/d/1ANu1sSxiv6prXWdBCSkg6EDMWNktYHeg/view?usp=drive_link');
+    if (subName.includes('בידוריות')) return transformImageLink('https://drive.google.com/file/d/1uWWpTJTAATxeUecKLrAcsYv-UuYJmQ16/view?usp=drive_link');
+    if (subName === 'מיקסרים ומקרופונים' || subName === 'מיקסרים ומיקרופונים') return transformImageLink('https://drive.google.com/file/d/1GtUymZdOSaALtyMVJ_znxYjlxwIE-PRb/view?usp=drive_link');
+    return null;
+  };
+
   // --- DERIVED DATA ---
   
   // Get all unique subcategories (sheets) for the selected catalog
   const activeSubcategories = useMemo(() => {
     if (!selectedCatalog) return [];
-    const productsInCat = catalogData.filter(item => item.category === selectedCatalog && item.active !== 'FALSE');
-    let subs = [...new Set(productsInCat.map(item => item.subcategory).filter(Boolean))] as string[];
     
+    // First get all subcategories defined in the Subcategories global tab for this catalog
+    const definedSubs = subcategoriesGlobalData.filter(s => s.category === selectedCatalog && s.active !== false && !s.parentSubcategory);
+    
+    const productsInCat = catalogData.filter(item => item.category === selectedCatalog && item.active !== 'FALSE');
+    let productSubs = [...new Set(productsInCat.map(item => item.subcategory).filter(Boolean))] as string[];
+    
+    // Merge both: we want to show things explicitly defined, plus things that have products but maybe weren't explicitly defined
+    let allSubNames = [...new Set([...definedSubs.map(s => s.subcategory), ...productSubs])];
+
+    const hasInginium = productSubs.some(p => p && p.startsWith('Inginium - '));
+    if (hasInginium && !allSubNames.includes('Inginium Full Channel')) {
+      allSubNames.push('Inginium Full Channel');
+    }
+
+    // Hide nested ones from main list if we know them
+    const hiddenNestedSubs = [
+      'מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)', 
+      'מתגי ליבה אופטי - Access Switches L3',
+      'Inginium - גלילים CAT7',
+      'Inginium - מגשרי CAT6A',
+      'ספקי כוח',
+      'ספקים מזוודים'
+    ];
+
+    allSubNames = allSubNames.filter(name => !hiddenNestedSubs.includes(name));
+
     // Create an array of objects with counts for UI
-    return subs.map(subName => {
+    return allSubNames.map(subName => {
       // Find matching subcategory from Google Sheets (by subcategory name and parent category)
-      const sheetSub = subcategoriesGlobalData.find(s => s.category === selectedCatalog && s.subcategory === subName);
+      const sheetSub = subcategoriesGlobalData.find(s => s.category === selectedCatalog && s.subcategory === subName && !s.parentSubcategory);
+      
       let customImage = sheetSub?.image || null;
-      let firstProductImage = productsInCat.find(p => p.subcategory === subName)?.images[0];
+      let firstProductImage = productsInCat.find(p => p.subcategory === subName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם' && p.images[0] && !p.images[0].includes('No+Image'))?.images[0];
       
       let count = productsInCat.filter(p => p.subcategory === subName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם').length;
+      
+      // If it's a grouped umbrella category, sum its nested products
+      if (subName === 'Inginium Full Channel') {
+         count = productsInCat.filter(p => p.subcategory && p.subcategory.startsWith('Inginium - ')).length;
+      }
+      if (subName === 'מתגי ליבה ורשת מנוהלים') {
+         count += productsInCat.filter(p => p.subcategory === 'מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)' || p.subcategory === 'מתגי ליבה אופטי - Access Switches L3').length;
+      }
+      if (subName === 'ספקי כוח ומתח') {
+         const extra = productsInCat.filter(p => (p.subcategory === 'ספקי כוח' || p.subcategory === 'ספקים מזוודים') && p.subcategory !== 'ספקי כוח ומתח');
+         count += extra.length;
+      }
       
       return {
         name: subName,
         count: count,
-        image: customImage || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(subName)
+        image: customImage || getFallbackImage(subName) || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(subName)
       };
-    });
-  }, [selectedCatalog, catalogData]);
+    }).sort((a, b) => b.count - a.count); // Show categories with more products first
+  }, [selectedCatalog, catalogData, subcategoriesGlobalData]);
 
   const nestedSubcategoriesData = useMemo(() => {
     if (!selectedSubcategory || !selectedCatalog) return [];
     
-    // Get all products in the current subcategory
-    const productsInSubcat = catalogData.filter(p => 
-      p.category === selectedCatalog && 
-      p.subcategory === selectedSubcategory && 
-      p.active !== 'FALSE' &&
-      p.nestedSubcategory
-    );
+    const productsInCat = catalogData.filter(item => item.category === selectedCatalog && item.active !== 'FALSE');
+    let nestedSubs: string[] = [];
     
-    // Get unique nested subcategories
-    const nestedNames = [...new Set(productsInSubcat.map(p => p.nestedSubcategory).filter(Boolean))] as string[];
-
-    return nestedNames.map(name => {
-      const count = productsInSubcat.filter(p => p.nestedSubcategory === name && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם').length;
-      let defaultImage = `https://placehold.co/600x400/f3f4f6/000000?text=${encodeURIComponent(name || 'Category')}`;
+    // Grouping specific logic based on user's structure
+    if (selectedSubcategory === 'Inginium Full Channel') {
+      nestedSubs = [...new Set(productsInCat.filter(p => p.subcategory && p.subcategory.startsWith('Inginium - ')).map(p => p.subcategory))];
+    } else if (selectedSubcategory === 'מתגי ליבה ורשת מנוהלים') {
+      const explicitSubs = productsInCat.filter(p => p.subcategory === 'מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)' || p.subcategory === 'מתגי ליבה אופטי - Access Switches L3').map(p => p.subcategory);
+      nestedSubs = [...new Set(explicitSubs)];
+    } else if (selectedSubcategory === 'ספקי כוח ומתח') {
+      const explicitSubs = productsInCat.filter(p => p.subcategory === 'ספקי כוח ומתח' && p.nestedSubcategory).map(p => p.nestedSubcategory);
+      // Fallback if they were somehow moved to subcategory
+      const explicitSubs2 = productsInCat.filter(p => p.subcategory === 'ספקי כוח' || p.subcategory === 'ספקים מזוודים').map(p => p.subcategory);
       
-      const sheetSub = subcategoriesGlobalData.find(s => s.category === selectedCatalog && s.subcategory === name);
-
-      let image = sheetSub?.image || null;
-      let firstProductImage = productsInSubcat.find(p => p.nestedSubcategory === name)?.images[0];
+      const mappedFromSheet = subcategoriesGlobalData.filter(s => s.category === selectedCatalog && s.subcategory === 'ספקי כוח ומתח' && s.parentSubcategory).map(s => s.parentSubcategory);
+      
+      nestedSubs = [...new Set([...explicitSubs, ...explicitSubs2, ...mappedFromSheet])];
+    } else {
+      // Find all products in the selected subcategory that have a nested subcategory
+      const productsInSub = productsInCat.filter(item => item.subcategory === selectedSubcategory);
+      nestedSubs = [...new Set(productsInSub.map(item => item.nestedSubcategory).filter(Boolean))] as string[];
+    }
+    
+    return nestedSubs.map(nestedName => {
+      // Try to find image in global data, matching by either subcategory name or nested name if mapped that way
+      const sheetSub = subcategoriesGlobalData.find(s => s.category === selectedCatalog && (s.subcategory === nestedName || s.parentSubcategory === nestedName));
+      
+      let customImage = sheetSub?.image || null;
+      let count = 0;
+      let firstProductImage = null;
+      
+      if (selectedSubcategory === 'Inginium Full Channel' || selectedSubcategory === 'מתגי ליבה ורשת מנוהלים') {
+         // for these, the nested name is actually the subcategory name in products
+         const prods = productsInCat.filter(p => p.subcategory === nestedName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם');
+         count = prods.length;
+         firstProductImage = prods.find(p => p.images[0] && !p.images[0].includes('No+Image'))?.images[0];
+      } else {
+         const prods = productsInCat.filter(p => p.subcategory === selectedSubcategory && p.nestedSubcategory === nestedName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם');
+         count = prods.length;
+         firstProductImage = prods.find(p => p.images[0] && !p.images[0].includes('No+Image'))?.images[0];
+         // Fallback if they are directly subcategories instead of nested
+         if (count === 0 && (nestedName === 'ספקי כוח' || nestedName === 'ספקים מזוודים' || nestedName === 'ספקים מזוודים ')) {
+            const fbProds = productsInCat.filter(p => (p.subcategory === nestedName || (p.subcategory === 'ספקי כוח ומתח' && p.nestedSubcategory === nestedName)) && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם');
+            count = fbProds.length;
+            firstProductImage = fbProds.find(p => p.images[0] && !p.images[0].includes('No+Image'))?.images[0];
+         }
+      }
       
       return {
-        name: name,
+        name: nestedName,
         count: count,
-        image: image || firstProductImage || defaultImage
+        image: customImage || getFallbackImage(nestedName) || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(nestedName)
       };
-    });
+    }).filter(sub => sub.count > 0).sort((a,b) => b.count - a.count);
   }, [selectedSubcategory, selectedCatalog, catalogData, subcategoriesGlobalData]);
 
   const filteredProducts = useMemo(() => {
@@ -307,7 +413,23 @@ export default function App() {
         if (item.category !== selectedCatalog || item.name === 'מוצר הדגמה' || item.name === 'קטגוריית אם') return false;
         
         if (selectedNestedSubcategory) {
+          if (selectedSubcategory === 'Inginium Full Channel' || selectedSubcategory === 'מתגי ליבה ורשת מנוהלים') {
+             return item.subcategory === selectedNestedSubcategory;
+          }
+          if (selectedSubcategory === 'ספקי כוח ומתח') {
+             return item.nestedSubcategory === selectedNestedSubcategory || item.subcategory === selectedNestedSubcategory;
+          }
           return item.subcategory === selectedSubcategory && item.nestedSubcategory === selectedNestedSubcategory;
+        }
+        
+        if (selectedSubcategory === 'Inginium Full Channel') {
+           return item.subcategory && item.subcategory.startsWith('Inginium - ');
+        }
+        if (selectedSubcategory === 'מתגי ליבה ורשת מנוהלים') {
+           return item.subcategory === 'מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)' || item.subcategory === 'מתגי ליבה אופטי - Access Switches L3';
+        }
+        if (selectedSubcategory === 'ספקי כוח ומתח') {
+           return item.subcategory === 'ספקי כוח ומתח' || item.subcategory === 'ספקי כוח' || item.subcategory === 'ספקים מזוודים';
         }
         
         return item.subcategory === selectedSubcategory;
@@ -403,7 +525,11 @@ export default function App() {
     setSelectedNestedSubcategory(null);
     
     // Check if this subcategory has any nested subcategories
-    const hasNested = catalogData.some(p => p.category === selectedCatalog && p.subcategory === subName && !!p.nestedSubcategory);
+    let hasNested = catalogData.some(p => p.category === selectedCatalog && p.subcategory === subName && !!p.nestedSubcategory);
+    
+    if (subName === 'Inginium Full Channel' || subName === 'מתגי ליבה ורשת מנוהלים' || subName === 'ספקי כוח ומתח') {
+       hasNested = true;
+    }
     
     if (hasNested) {
       setCurrentView('nested_subs');
