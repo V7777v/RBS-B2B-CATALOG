@@ -3,6 +3,7 @@ import {
   ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock
 } from 'lucide-react';
 import Papa from 'papaparse';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { HumanVerification } from './components/HumanVerification';
 
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
@@ -686,8 +687,18 @@ export default function App() {
         <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square relative border-b border-gray-100 overflow-hidden`}>
           <img src={product.images[0]} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm" />
           
-          <div className={`absolute top-2 right-2 text-[10px] sm:text-xs font-bold px-2 py-1 rounded-none border ${theme.badge} z-10`}>
-            {product.brand}
+          <div className={`absolute top-2 right-2 z-10`}>
+            {(product.brand && product.brand.toUpperCase() === 'EZVIZ') ? (
+              <img src="https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh" alt="EZVIZ" className="h-8 sm:h-12 object-contain drop-shadow-sm" />
+            ) : (product.brand && product.brand.toUpperCase() === 'HIKVISION') ? (
+              <img src="https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M" alt="HIKVISION" className="h-8 sm:h-12 object-contain drop-shadow-sm" />
+            ) : (product.brand && product.brand.toUpperCase() === 'POLMAN') ? (
+              <img src="https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU" alt="POLMAN" className="h-10 sm:h-14 object-contain drop-shadow-sm bg-white/80 rounded-full px-1" />
+            ) : (
+              <span className={`text-[10px] sm:text-xs font-bold px-2 py-1 rounded-none border inline-block ${theme.badge}`}>
+                {product.brand}
+              </span>
+            )}
           </div>
         </div>
         <div className="p-3 sm:p-4 flex flex-col flex-grow text-center">
@@ -734,6 +745,7 @@ export default function App() {
     const [isVideoHovered, setIsVideoHovered] = useState(false);
     const [isSpecsHovered, setIsSpecsHovered] = useState(false);
     const [isManualHovered, setIsManualHovered] = useState(false);
+    const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
     const theme = getBrandTheme(selectedProduct?.brand);
     const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 1024;
 
@@ -778,20 +790,27 @@ export default function App() {
         </div>
 
         <div className="bg-white rounded-none shadow-sm border border-gray-100 mt-2 sm:mt-4">
-          {(selectedProduct.brand === 'EZVIZ' || selectedProduct.brand === 'HIKVISION') && (
-            <div className="w-full py-1.5 px-4 sm:py-2 sm:px-6 font-bold text-sm sm:text-lg text-white text-center tracking-widest bg-[#004387]">
-              {selectedProduct.brand}
+          {((selectedProduct.brand === 'EZVIZ') || (selectedProduct.brand === 'HIKVISION') || (selectedProduct.brand === 'POLMAN')) ? (
+            <div className="w-full py-4 px-4 sm:py-6 sm:px-6 bg-[#004387] flex justify-center items-center">
+               {selectedProduct.brand === 'EZVIZ' ? (
+                 <img src="https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh" alt="EZVIZ" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
+               ) : selectedProduct.brand === 'HIKVISION' ? (
+                 <img src="https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M" alt="HIKVISION" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
+               ) : selectedProduct.brand === 'POLMAN' ? (
+                 <img src="https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU" alt="POLMAN" className="h-56 sm:h-80 object-contain drop-shadow-md bg-white rounded-3xl px-6 py-2" />
+               ) : null}
             </div>
-          )}
+          ) : null}
 
           <div className="p-4 sm:p-6 md:p-8 flex flex-col lg:flex-row gap-6 sm:gap-8">
             
             <div className="w-full lg:w-5/12 flex flex-col gap-3 sm:gap-4">
               {/* ZOOMABLE IMAGE CONTAINER */}
               <div 
-                className={`aspect-square rounded-none border border-gray-100 ${theme.bg} p-2 sm:p-4 flex items-center justify-center relative overflow-hidden cursor-crosshair group`}
-                onMouseMove={handleMouseMove}
-                onMouseLeave={handleMouseLeave}
+                className={`aspect-square rounded-none border border-gray-100 ${theme.bg} p-2 sm:p-4 flex items-center justify-center relative overflow-hidden cursor-crosshair group ${isMobileDevice ? '!cursor-zoom-in' : ''}`}
+                onMouseMove={isMobileDevice ? undefined : handleMouseMove}
+                onMouseLeave={isMobileDevice ? undefined : handleMouseLeave}
+                onClick={isMobileDevice ? () => setIsMobileModalOpen(true) : undefined}
               >
                 <img 
                   src={mainImage} 
@@ -940,6 +959,44 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {/* MOBILE FULL SCREEN IMAGE MODAL */}
+        {isMobileModalOpen && (
+          <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-0 m-0">
+            <button 
+              onClick={() => setIsMobileModalOpen(false)}
+              className="absolute top-4 right-4 z-[110] bg-white text-black p-2 rounded-full shadow-lg"
+            >
+              <X size={24} />
+            </button>
+            <div className="w-full h-full relative flex flex-col items-center justify-center overflow-auto p-4 max-h-screen">
+              <TransformWrapper
+                initialScale={1}
+                minScale={1}
+                maxScale={4}
+                centerOnInit={true}
+              >
+                {({ zoomIn, zoomOut, resetTransform }) => (
+                  <React.Fragment>
+                    <TransformComponent wrapperClass="!w-full !flex !items-center !justify-center" contentClass="!w-full !flex !items-center !justify-center">
+                      <img 
+                        src={mainImage} 
+                        alt={selectedProduct.name} 
+                        onError={handleImageError}
+                        className="w-full h-auto max-h-[80vh] object-contain"
+                      />
+                    </TransformComponent>
+                    <div className="mt-6 text-white/70 text-sm flex gap-4 items-center bg-black/50 px-4 py-2 rounded-full backdrop-blur-md">
+                      <button onClick={() => zoomOut()} className="p-2 hover:bg-white/20 rounded-full"><Minus size={18} /></button>
+                      <button onClick={() => resetTransform()} className="p-2 hover:bg-white/20 rounded-full"><Search size={16} /></button>
+                      <button onClick={() => zoomIn()} className="p-2 hover:bg-white/20 rounded-full"><Plus size={18} /></button>
+                    </div>
+                  </React.Fragment>
+                )}
+              </TransformWrapper>
+            </div>
+          </div>
+        )}
 
         {/* SIMILAR PRODUCTS */}
         {(() => {
@@ -1338,8 +1395,9 @@ export default function App() {
               )}
               
               {/* Breadcrumb style path indicator */}
-              <div className="hidden sm:flex items-center text-sm text-[#0c2d57] opacity-80 whitespace-nowrap">
-                <span className="font-semibold px-2">B2B Portal</span>
+              <div className="hidden sm:flex items-center text-sm text-[#0c2d57] opacity-80 whitespace-nowrap gap-3">
+                <img src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" alt="RBS Logo" className="h-8 object-contain" />
+                <span className="font-semibold px-2 border-r border-[#0c2d57]/20">B2B Portal</span>
               </div>
             </div>
 
