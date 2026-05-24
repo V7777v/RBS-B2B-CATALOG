@@ -64,6 +64,7 @@ function InstallBannerInner() {
         setTimeout(() => setShow(true), 1500);
       } else if (isAndroid) {
         setPlatform('android');
+        setTimeout(() => setShow(true), 2500);
       } else {
         setPlatform('desktop');
       }
@@ -143,8 +144,13 @@ function InstallBannerInner() {
       <h3 style={titleStyle}>📲 התקן את קטלוג RBS למסך הבית</h3>
       {platform === 'ios' ? (
         <p style={textStyle}>
-          כדי להוסיף את הקטלוג למסך הבית: לחץ על כפתור השיתוף ⬆️ בתחתית הדפנפן,
+          כדי להוסיף את הקטלוג למסך הבית: לחץ על כפתור השיתוף ⬆️ בתחתית הדפדפן,
           ואז בחר "הוסף למסך הבית" (Add to Home Screen).
+        </p>
+      ) : platform === 'android' && !deferredPrompt ? (
+        <p style={textStyle}>
+          כדי להוסיף את הקטלוג למסך הבית: פתח את תפריט הדפדפן (שלוש נקודות למעלה)
+          ובחר "הוסף למסך הבית" (Add to Home Screen) או "התקן אפליקציה".
         </p>
       ) : (
         <p style={textStyle}>
