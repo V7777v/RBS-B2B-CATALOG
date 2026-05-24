@@ -76,6 +76,78 @@ const getPdfPreviewUrl = (url: string) => {
   return null;
 };
 
+const SUBCATEGORIES_ORDER: Record<string, string[]> = {
+  'מחירון EZVIZ 2026': [
+    'מצלמות חשמל WIFI',
+    'מצלמות חשמל 4G',
+    'מצלמות עצמאיות סוללה',
+    'אינטרקומים',
+    'מנעולים חכמים',
+    'שואבים שוטפים רובוטיים'
+  ],
+  'מחירון אופטיקה 2026': [
+    'כבלים אופטיים מוכנים',
+    'מגשרים אופטיים',
+    'פיגטיילים',
+    "פאץ' פאנלים",
+    'שקעים אופטיים',
+    'מתאמים אופטיים',
+    'מחבר מהיר',
+    'ארונות וארונות הסתעפות',
+    'ציודי בדיקה',
+    "מיני ג'יביקים",
+    'ממירים אופטיים',
+    'כלי עבודה'
+  ],
+  'מחירון תקשורת HIKVISION': [
+    'מתגי POE מנוהלים בענן',
+    'מתגי ליבה ורשת מנוהלים',
+    'מתגי רשת גיגה לא מנוהלים',
+    'מתגי גיגה תעשייתיים',
+    'מפצלי POE',
+    'אקסס פוינטים',
+    'לינקים אלחוטיים',
+    'נתבים אלחוטיים ביתי-משרדי',
+    'מגדילי טווח ויחידות MESH',
+    'VPN Professional Router',
+    'אל פסק',
+    'אל פסק אונליין Tower',
+    'אל פסק אונליין RM',
+    'טלפוניה IP',
+    'כבלים ואביזרים',
+    'מצלמות לרכב'
+  ],
+  'מחירון סאונד Polman': [
+    'רמקולים שקועים',
+    'רמקולים חיצוניים',
+    'מגברים',
+    'מיקסרים ומקרופונים',
+    'מיקסרים ומיקרופונים',
+    'בידוריות',
+    'אביזרים משלימים'
+  ],
+  'מחירון תשתיות': [
+    'Inginium Full Channel',
+    'Recber',
+    'ארונות תקשורת',
+    'פסי שקעים',
+    'פיקוד, רמקולים וכריזה',
+    'CAT6',
+    'CAT7',
+    'CAT8',
+    'שקעים ותקעים',
+    'כבלי רשת',
+    'טלפוניה',
+    'קואקס',
+    'HDMI',
+    'ספקי כח',
+    'ספקי כוח',
+    'כלי עבודה-ציוד שחור',
+    'כלי עבודה',
+    'ציוד עבודה'
+  ]
+};
+
 export default function App() {
   // --- STATE ---
   const [catalogFolders, setCatalogFolders] = useState<any[]>([]);
@@ -317,7 +389,20 @@ export default function App() {
         count: count,
         image: customImage || getFallbackImage(subName) || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(subName)
       };
-    }).sort((a, b) => b.count - a.count); // Show categories with more products first
+    }).filter(sub => sub.count > 0).sort((a, b) => {
+       const orderList = SUBCATEGORIES_ORDER[selectedCatalog] || [];
+       let aIndex = orderList.findIndex(item => a.name.includes(item) || item.includes(a.name));
+       let bIndex = orderList.findIndex(item => b.name.includes(item) || item.includes(b.name));
+       if (aIndex === -1 && a.name === 'מצלמות WIFI חשמל') aIndex = orderList.findIndex(item => item.includes('מצלמות חשמל WIFI'));
+       if (bIndex === -1 && b.name === 'מצלמות WIFI חשמל') bIndex = orderList.findIndex(item => item.includes('מצלמות חשמל WIFI'));
+       if (aIndex === -1 && a.name === 'מצלמות 4G חשמל') aIndex = orderList.findIndex(item => item.includes('מצלמות חשמל 4G'));
+       if (bIndex === -1 && b.name === 'מצלמות 4G חשמל') bIndex = orderList.findIndex(item => item.includes('מצלמות חשמל 4G'));
+
+       if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+       if (aIndex !== -1) return -1;
+       if (bIndex !== -1) return 1;
+       return b.count - a.count;
+    });
   }, [selectedCatalog, catalogData, subcategoriesGlobalData]);
 
   const nestedSubcategoriesData = useMemo(() => {
@@ -376,7 +461,20 @@ export default function App() {
         count: count,
         image: customImage || getFallbackImage(nestedName) || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(nestedName)
       };
-    }).filter(sub => sub.count > 0).sort((a,b) => b.count - a.count);
+    }).filter(sub => sub.count > 0).sort((a,b) => {
+       const orderList = SUBCATEGORIES_ORDER[selectedCatalog] || [];
+       let aIndex = orderList.findIndex(item => a.name.includes(item) || item.includes(a.name));
+       let bIndex = orderList.findIndex(item => b.name.includes(item) || item.includes(b.name));
+       if (aIndex === -1 && a.name === 'מצלמות WIFI חשמל') aIndex = orderList.findIndex(item => item.includes('מצלמות חשמל WIFI'));
+       if (bIndex === -1 && b.name === 'מצלמות WIFI חשמל') bIndex = orderList.findIndex(item => item.includes('מצלמות חשמל WIFI'));
+       if (aIndex === -1 && a.name === 'מצלמות 4G חשמל') aIndex = orderList.findIndex(item => item.includes('מצלמות חשמל 4G'));
+       if (bIndex === -1 && b.name === 'מצלמות 4G חשמל') bIndex = orderList.findIndex(item => item.includes('מצלמות חשמל 4G'));
+
+       if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+       if (aIndex !== -1) return -1;
+       if (bIndex !== -1) return 1;
+       return b.count - a.count;
+    });
   }, [selectedSubcategory, selectedCatalog, catalogData, subcategoriesGlobalData]);
 
   const filteredProducts = useMemo(() => {
