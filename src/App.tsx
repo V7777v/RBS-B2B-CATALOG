@@ -594,87 +594,118 @@ export default function App() {
   const cartTotalWithVat = cartTotal * 1.18; // חישוב מע"מ סטנדרטי (18% נכון ל-2025)
 
   // --- NAVIGATION ---
+  useEffect(() => {
+    if (!window.history.state) {
+      window.history.replaceState({
+        currentView: 'home',
+        selectedCatalog: null,
+        selectedSubcategory: null,
+        selectedNestedSubcategory: null,
+        selectedProduct: null
+      }, '');
+    }
+
+    const handlePopState = (e: PopStateEvent) => {
+      if (e.state) {
+        setCurrentView(e.state.currentView || 'home');
+        setSelectedCatalog(e.state.selectedCatalog || null);
+        setSelectedSubcategory(e.state.selectedSubcategory || null);
+        setSelectedNestedSubcategory(e.state.selectedNestedSubcategory || null);
+        setSelectedProduct(e.state.selectedProduct || null);
+      } else {
+        setCurrentView('home');
+      }
+    };
+    
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateForward = (updates: any) => {
+    const nextState = {
+      currentView,
+      selectedCatalog,
+      selectedSubcategory,
+      selectedNestedSubcategory,
+      selectedProduct,
+      ...updates
+    };
+    window.history.pushState(nextState, '');
+    setCurrentView(nextState.currentView);
+    if (updates.selectedCatalog !== undefined) setSelectedCatalog(nextState.selectedCatalog);
+    if (updates.selectedSubcategory !== undefined) setSelectedSubcategory(nextState.selectedSubcategory);
+    if (updates.selectedNestedSubcategory !== undefined) setSelectedNestedSubcategory(nextState.selectedNestedSubcategory);
+    if (updates.selectedProduct !== undefined) setSelectedProduct(nextState.selectedProduct);
+  };
+
   const navigateHome = () => {
-    setCurrentView('home');
-    setSelectedCatalog(null);
-    setSelectedSubcategory(null);
+    navigateForward({
+      currentView: 'home',
+      selectedCatalog: null,
+      selectedSubcategory: null,
+      selectedNestedSubcategory: null,
+      selectedProduct: null
+    });
     setSearchQuery('');
     setMobileMenuOpen(false);
   };
 
-  // מנגנון חזרה חדש - חכם וזוכר הסטוריה
   const goBack = () => {
-    switch(currentView) {
-      case 'product':
-        setCurrentView('products');
-        setSelectedProduct(null);
-        break;
-      case 'products':
-        if (selectedNestedSubcategory) {
-          setCurrentView('nested_subs');
-          setSelectedNestedSubcategory(null);
-        } else {
-          setCurrentView('catalog_subs');
-          setSelectedSubcategory(null);
-        }
-        break;
-      case 'nested_subs':
-        setCurrentView('catalog_subs');
-        setSelectedSubcategory(null);
-        break;
-      case 'catalog_subs':
-        setCurrentView('home');
-        setSelectedCatalog(null);
-        break;
-      case 'checkout':
-        setCurrentView('home');
-        setSearchQuery('');
-        break;
-      default:
-        setCurrentView('home');
-        setSearchQuery('');
+    if (window.history.state && window.history.length > 1) {
+       window.history.back();
+    } else {
+       navigateHome();
     }
   };
 
   const navigateToCatalog = (catalogName: string | null) => {
-    setSelectedCatalog(catalogName);
-    setCurrentView('catalog_subs');
+    navigateForward({
+      currentView: 'catalog_subs',
+      selectedCatalog: catalogName,
+      selectedSubcategory: null,
+      selectedNestedSubcategory: null,
+      selectedProduct: null
+    });
     setSearchQuery('');
     setMobileMenuOpen(false);
   };
 
   const navigateToSubcategory = (subName: string | null) => {
-    setSelectedSubcategory(subName);
-    setSelectedNestedSubcategory(null);
-    
-    // Check if this subcategory has any nested subcategories
     let hasNested = catalogData.some(p => p.category === selectedCatalog && p.subcategory === subName && !!p.nestedSubcategory);
     
     if (subName === 'Inginium Full Channel' || subName === 'מתגי ליבה ורשת מנוהלים' || subName === 'ספקי כוח ומתח') {
        hasNested = true;
     }
     
-    if (hasNested) {
-      setCurrentView('nested_subs');
-    } else {
-      setCurrentView('products');
-    }
+    navigateForward({
+      currentView: hasNested ? 'nested_subs' : 'products',
+      selectedSubcategory: subName,
+      selectedNestedSubcategory: null,
+      selectedProduct: null
+    });
     setSearchQuery('');
   };
 
   const navigateToNestedSubcategory = (nestedName: string | null) => {
-    setSelectedNestedSubcategory(nestedName);
-    setCurrentView('products');
+    navigateForward({
+      currentView: 'products',
+      selectedNestedSubcategory: nestedName,
+      selectedProduct: null
+    });
     setSearchQuery('');
   };
 
   const navigateToProduct = (product: any) => {
-    setSelectedProduct(product);
-    setCurrentView('product');
+    navigateForward({
+      currentView: 'product',
+      selectedProduct: product
+    });
   };
 
   const handleCheckout = () => {
-    setCurrentView('checkout');
+    navigateForward({
+       currentView: 'checkout'
+    });
     setIsCartOpen(false);
   };
 
@@ -1294,16 +1325,17 @@ export default function App() {
               <input type="text" placeholder="איש קשר" value={contactName} onChange={e => setContactName(e.target.value)} className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm" />
               
               <div className="flex gap-2 relative">
+                <input type="tel" placeholder="טלפון ראשי (7 ספרות)" value={phone} onChange={e => {setPhone(e.target.value.replace(/\D/g, '')); setErrors({...errors, contact: null, phone: null})}} maxLength={7} className={`flex-grow px-3 py-3 border ${errors.phone || errors.contact ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm`} />
                 <select 
                   value={phonePrefix} 
                   onChange={e => setPhonePrefix(e.target.value)}
                   className="w-24 px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm font-medium"
+                  dir="ltr"
                 >
                   {phonePrefixes.map(prefix => (
                     <option key={prefix} value={prefix}>{prefix}</option>
                   ))}
                 </select>
-                <input type="tel" placeholder="טלפון ראשי (7 ספרות)" value={phone} onChange={e => {setPhone(e.target.value.replace(/\D/g, '')); setErrors({...errors, contact: null, phone: null})}} maxLength={7} className={`flex-grow px-3 py-3 border ${errors.phone || errors.contact ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm`} />
               </div>
               {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
 
@@ -1389,7 +1421,7 @@ export default function App() {
              <Lock size={32} />
           </div>
           <h2 className="text-2xl font-bold text-[#0c2d57] mb-2">כניסה לקטלוג B2B</h2>
-          <p className="text-gray-500 mb-8 text-sm">הקטלוג מיועד ללקוחות עסקיים ומורשים בלבד. הקש סיסמה לכניסה. (1234)</p>
+          <p className="text-gray-500 mb-8 text-sm">הקטלוג מיועד ללקוחות עסקיים ומורשים בלבד. הקש סיסמה לכניסה.</p>
           
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
@@ -1561,7 +1593,7 @@ export default function App() {
           )}
 
           {/* MAIN CONTENT AREA */}
-          <main className="w-full pb-20">
+          <main className="w-full pb-32 md:pb-20">
             
             {searchQuery ? (
                // SEARCH RESULTS
