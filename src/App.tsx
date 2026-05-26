@@ -6,6 +6,7 @@ import Papa from 'papaparse';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { HumanVerification } from './components/HumanVerification';
 import InstallBanner from './components/InstallBanner';
+import { CabinetConfigurator } from './components/CabinetConfigurator';
 
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
 const PRODUCTS_GID = '1506812668';
@@ -1110,6 +1111,11 @@ export default function App() {
               </TransformWrapper>
             </div>
           </div>
+        )}
+
+        {/* SPECIFIC CONFIGURATORS */}
+        {selectedProduct.category === 'ארונות תקשורת' && (
+          <CabinetConfigurator product={selectedProduct} />
         )}
 
         {/* SIMILAR PRODUCTS */}

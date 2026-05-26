@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import Papa from 'papaparse';
 import { AlertCircle, CheckCircle, Plus, X, Server, Download, Box, AlertTriangle } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface Accessory {
   pn: string;
@@ -9,6 +9,7 @@ interface Accessory {
 }
 
 interface CabinetData {
+  pn: string;
   u: string;
   fans: string;
   wheels: string;
@@ -26,7 +27,6 @@ interface CabinetConfiguratorProps {
 export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ product }) => {
   const [loading, setLoading] = useState(true);
   const [cabinetData, setCabinetData] = useState<CabinetData | null>(null);
-  const [accessoriesDb, setAccessoriesDb] = useState<any[]>([]);
   
   const [totalU, setTotalU] = useState<number>(0);
   const [availableU, setAvailableU] = useState<number>(0);
@@ -38,83 +38,100 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [warningModalOpen, setWarningModalOpen] = useState(false);
   const [pendingAccessory, setPendingAccessory] = useState<Accessory | null>(null);
 
-  // Constants for Data Fetching
-  const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1pQdm3zM96oexFtATifE1wSBnIcJhIUcfCu-hbB8gslE/gviz/tq?tqx=out:csv';
-  // TODO: Update these GIDs to the correct ones for your specific sheet tabs.
-  const CABINETS_GID = 'YOUR_CABINETS_GID'; // e.g., '123456789'
-  const ACCESSORIES_GID = '0'; // Assuming Accessories is the first sheet
+  const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1pQdm3zM96oexFtATifE1wSBnIcJhIUcfCu-hbB8gslE/export?format=xlsx';
 
   useEffect(() => {
     const fetchAndParse = async () => {
       try {
         setLoading(true);
 
-        // Fetch Accessories Table
-        const accRes = await fetch(`${SHEET_URL}&gid=${ACCESSORIES_GID}`);
-        const accText = await accRes.text();
-        const accData = Papa.parse(accText, { header: true }).data as any[];
-        setAccessoriesDb(accData);
+        const res = await fetch(SHEET_URL);
+        const buffer = await res.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: 'buffer' });
 
-        // Fetch Cabinets Table
-        // Note: For demonstration, if we cannot fetch the Cabinets GID, we will map 
-        // the global product data assuming it has these fields, or simulate it.
-        // If your original product object already contains these CSV columns, we use that directly:
-        const cabData: CabinetData = {
-          u: product['U'] || product['u'] || '0U',
-          fans: product['Fans'] || '0',
-          wheels: product['Wheels'] || 'No',
-          levelingFeet: product['Leveling Feets'] || 'No',
-          shelvesQty: product['Shelves'] || '0',
-          suitableStandard: product['Suitable Shelves Standard'] || product['Suitable Shelves'] || '',
-          suitableHanging: product['Suitable Shelves Hanging'] || '',
-          suitableSliding: product['Suitable Shelves Sliding'] || ''
+        // 1. Fetch Accessories Table ('מדפים ואביזרים')
+        // Data starts at row 5 (index 4 in 0-based header=1)
+        const accRows = XLSX.utils.sheet_to_json(wb.Sheets['מדפים ואביזרים'], { header: 1 }) as any[][];
+        const accData: Accessory[] = [];
+        for (let i = 4; i < accRows.length; i++) {
+            const row = accRows[i];
+            if (!row || row.length === 0) continue;
+            const pn = row[0]?.toString() || '';
+            const desc = row[1]?.toString() || '';
+            
+            if (pn && desc) {
+                accData.push({
+                   pn: pn,
+                   description: desc,
+                   uSize: 1 // default 1U size for shelves/accessories unless specified
+                });
+            }
+        }
+
+        // 2. Fetch Cabinets Table ('טבלת ארונות מעודכנת')
+        const cabRows = XLSX.utils.sheet_to_json(wb.Sheets['טבלת ארונות מעודכנת'], { header: 1 }) as any[][];
+        
+        let cabRow: any[] | null = null;
+        for (let i = 2; i < cabRows.length; i++) {
+           if (cabRows[i] && cabRows[i][0] && cabRows[i][0].toString() === product.sku?.toString()) {
+               cabRow = cabRows[i];
+               break;
+           }
+        }
+
+        if (!cabRow) {
+           console.warn("Cabinet not found in external configurator sheet for SKU:", product.sku);
+           setLoading(false);
+           return;
+        }
+
+        const data: CabinetData = {
+           pn: cabRow[0]?.toString() || '',
+           u: cabRow[2]?.toString() || '0U',
+           fans: cabRow[8]?.toString() || 'X',
+           wheels: cabRow[9]?.toString() || 'X',
+           levelingFeet: cabRow[10]?.toString() || 'X',
+           shelvesQty: cabRow[11]?.toString() || 'X',
+           suitableStandard: cabRow[12]?.toString() || '',
+           suitableHanging: cabRow[13]?.toString() || '',
+           suitableSliding: cabRow[14]?.toString() || ''
         };
 
-        setCabinetData(cabData);
+        setCabinetData(data);
 
-        // 1. Calculate U Capacity
-        const uMatch = cabData.u.match(/(\d+)/);
+        // Calculate U Capacity
+        const uMatch = data.u.match(/(\d+)/);
         const parsedTotalU = uMatch ? parseInt(uMatch[1]) : 0;
         setTotalU(parsedTotalU);
 
         // Calculate used U from included items
-        const shelvesQty = parseInt(cabData.shelvesQty) || 0;
+        const shelvesQty = parseInt(data.shelvesQty) || 0;
         const initialUsedU = shelvesQty * 1; // Assuming each shelf is 1U
         setAvailableU(parsedTotalU - initialUsedU);
 
-        // 2. Determine "What's in the Box" (Included Accessories)
+        // Determine "What's in the Box" (Included Accessories)
         const included: string[] = [];
-        if (cabData.fans && cabData.fans.toLowerCase() !== 'no' && cabData.fans !== '0' && cabData.fans !== '') included.push(`מאווררים: ${cabData.fans}`);
-        if (cabData.wheels && cabData.wheels.toLowerCase() !== 'no' && cabData.wheels !== '') included.push('גלגלים');
-        if (cabData.levelingFeet && cabData.levelingFeet.toLowerCase() !== 'no' && cabData.levelingFeet !== '') included.push('רגליות פילוס');
+        if (data.fans && data.fans.toLowerCase() !== 'x' && data.fans !== '0' && data.fans !== '') included.push(`מאווררים: ${data.fans}`);
+        if (data.wheels && data.wheels.toLowerCase() !== 'x' && data.wheels !== '') included.push('גלגלים');
+        if (data.levelingFeet && data.levelingFeet.toLowerCase() !== 'x' && data.levelingFeet !== '') included.push('רגליות פילוס');
         if (shelvesQty > 0) included.push(`מדפים: ${shelvesQty}`);
         setIncludedItems(included);
 
         // 3. Strict Compatibility & EXCLUSION Filtering
         const allowedPNs = [
-           ...cabData.suitableStandard.split(',').map(s => s.trim()),
-           ...cabData.suitableHanging.split(',').map(s => s.trim()),
-           ...cabData.suitableSliding.split(',').map(s => s.trim())
+           ...data.suitableStandard.split(',').map((s: string) => s.trim()),
+           ...data.suitableHanging.split(',').map((s: string) => s.trim()),
+           ...data.suitableSliding.split(',').map((s: string) => s.trim())
         ].filter(Boolean);
 
-        // Convert the fetched accessories DB into compatible typed objects
         const filteredAccs = accData
-          .filter(row => allowedPNs.includes(row['Shelves information P/N'] || row['P/N']))
-          .map(row => ({
-            pn: row['Shelves information P/N'] || row['P/N'] || '',
-            description: row['Description'] || '',
-            uSize: 1 // Default accessory U size. Can be mapped from a column if exists.
-          }))
+          .filter(acc => allowedPNs.includes(acc.pn))
           .filter(acc => {
             // EXCLUSION RULE: DO NOT offer things already included.
             const desc = acc.description.toLowerCase();
-            // If the accessory is a Wheel and we already have Wheels
             if (desc.includes('wheel') && included.some(i => i.includes('גלגלים'))) return false;
-            // If the accessory is a Fan and we already have Fans
             if (desc.includes('fan') && included.some(i => i.includes('מאוורר'))) return false;
-            // If the accessory is a Feet and we already have Feet
             if ((desc.includes('feet') || desc.includes('leveling')) && included.some(i => i.includes('רגליות'))) return false;
-            
             return true;
           });
 
@@ -127,7 +144,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       }
     };
 
-    if (product) fetchAndParse();
+    if (product) {
+      // Clear previous states
+      setSelectedOptionals([]);
+      // Fetch new configuration
+      fetchAndParse();
+    }
   }, [product]);
 
   const handleAddOptional = (acc: Accessory) => {
@@ -156,7 +178,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     setPendingAccessory(null);
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-500">טוען קונפיגורטור ארון...</div>;
+  if (loading) return <div className="p-8 mt-8 bg-gray-50 text-center text-gray-500 border border-gray-200">טוען קונפיגורטור ארון מותאם אישית...</div>;
+  if (!cabinetData) return null; // If sku not matched
 
   return (
     <div className="mt-8 bg-white border-2 border-[#004387] shadow-sm relative overflow-hidden" dir="rtl">
@@ -199,24 +222,21 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
            <h3 className="text-lg font-bold text-[#0c2d57] mb-4 border-b border-gray-200 pb-2">➕ שדרוגים ואביזרים תואמים</h3>
            {compatibleAccessories.length > 0 ? (
              <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
-               {compatibleAccessories.map((acc, idx) => {
-                 const isAdded = selectedOptionals.includes(acc);
-                 return (
-                   <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 border border-gray-100 hover:border-[#004387] transition-colors group">
-                     <div>
-                       <p className="font-semibold text-sm text-gray-800">{acc.pn}</p>
-                       <p className="text-xs text-gray-500 truncate max-w-[200px]">{acc.description}</p>
-                     </div>
-                     <button 
-                       onClick={() => handleAddOptional(acc)}
-                       className="bg-[#004387] text-white p-2 rounded-full hover:bg-[#fe8d00] transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#004387]"
-                       aria-label="Add Accessory"
-                     >
-                       <Plus size={16} />
-                     </button>
+               {compatibleAccessories.map((acc, idx) => (
+                 <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 border border-gray-100 hover:border-[#004387] transition-colors group">
+                   <div>
+                     <p className="font-semibold text-sm text-gray-800">{acc.pn}</p>
+                     <p className="text-xs text-gray-500 truncate max-w-[200px]" title={acc.description}>{acc.description}</p>
                    </div>
-                 );
-               })}
+                   <button 
+                     onClick={() => handleAddOptional(acc)}
+                     className="bg-[#004387] text-white p-2 rounded-full hover:bg-[#fe8d00] transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#004387]"
+                     aria-label="Add Accessory"
+                   >
+                     <Plus size={16} />
+                   </button>
+                 </div>
+               ))}
              </div>
            ) : (
              <div className="text-center p-6 bg-gray-50 text-gray-500 text-sm">
@@ -246,7 +266,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
       {/* WARNING MODAL (Rule 3) */}
       {warningModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white max-w-md w-full p-6 text-center shadow-xl animate-in fade-in zoom-in-95 duration-200 border-t-4 border-red-500">
             <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertTriangle size={32} />
@@ -268,7 +288,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 onClick={forceAddPending}
                 className="px-5 py-2 bg-red-500 text-white hover:bg-red-600 font-semibold transition-colors shadow-sm"
               >
-                הוסף בכל זאת (חריגה)
+                הוסף בכל זאת
               </button>
             </div>
           </div>
@@ -278,4 +298,5 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     </div>
   );
 };
+
 
