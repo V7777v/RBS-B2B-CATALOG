@@ -132,6 +132,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             if (desc.includes('wheel') && included.some(i => i.includes('גלגלים'))) return false;
             if (desc.includes('fan') && included.some(i => i.includes('מאוורר'))) return false;
             if ((desc.includes('feet') || desc.includes('leveling')) && included.some(i => i.includes('רגליות'))) return false;
+            
+            // Exclude the standard shelf if it's already provided built-in
+            if (shelvesQty > 0 && acc.pn === data.suitableStandard) return false;
+            
             return true;
           });
 

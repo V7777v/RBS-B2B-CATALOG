@@ -1114,7 +1114,7 @@ export default function App() {
         )}
 
         {/* SPECIFIC CONFIGURATORS */}
-        {selectedProduct.category === 'ארונות תקשורת' && (
+        {(selectedProduct.subcategory === 'ארונות תקשורת ואביזרים' || selectedProduct.subcategory === 'ארונות וארונות הסתעפות') && (
           <CabinetConfigurator product={selectedProduct} />
         )}
 
