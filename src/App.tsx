@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock
 } from 'lucide-react';
@@ -164,6 +164,13 @@ export default function App() {
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [selectedNestedSubcategory, setSelectedNestedSubcategory] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [currentOptionals, setCurrentOptionals] = useState<any[]>([]);
+  const handleOptionalsChange = useCallback((newOptionals: any[]) => {
+    setCurrentOptionals(prev => {
+      if (JSON.stringify(prev) === JSON.stringify(newOptionals)) return prev;
+      return newOptionals;
+    });
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<any[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -237,8 +244,8 @@ export default function App() {
             category: categoryName,
             subcategory: subcategoryName,
             nestedSubcategory: nestedSubcategoryName,
-            price: Number(row.price) || 0,
-            retailPrice: row.retailPrice ? Number(row.retailPrice) : null,
+            price: row.price ? Number(row.price.toString().replace(/,/g, '')) || 0 : 0,
+            retailPrice: row.retailPrice ? Number(row.retailPrice.toString().replace(/,/g, '')) : null,
             images: itemImages.map(transformImageLink)
           };
         });
@@ -564,13 +571,17 @@ export default function App() {
   }, [selectedCatalog, selectedSubcategory, selectedNestedSubcategory, currentView, searchQuery, catalogData]);
 
   // --- CART FUNCTIONS ---
-  const addToCart = (product: any, quantity = 1) => {
+  const addToCart = (product: any, quantity = 1, optionals: any[] = []) => {
     setCart(prev => {
-      const existing = prev.find(item => item.id === product.id);
+      // Find matching item (same ID and same optionals configuration)
+      const existing = prev.find(item => 
+        item.id === product.id && 
+        JSON.stringify(item.optionals || []) === JSON.stringify(optionals || [])
+      );
       if (existing) {
-        return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + quantity } : item);
+        return prev.map(item => item === existing ? { ...item, quantity: item.quantity + quantity } : item);
       }
-      return [...prev, { ...product, quantity }];
+      return [...prev, { ...product, quantity, optionals }];
     });
     if (window.innerWidth >= 768) {
       setIsCartOpen(true);
@@ -591,7 +602,18 @@ export default function App() {
     setCart(prev => prev.filter(item => item.id !== id));
   };
 
-  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const cartTotal = cart.reduce((sum, item) => {
+    let itemTotal = item.price * item.quantity;
+    if (item.optionals && item.optionals.length > 0) {
+      item.optionals.forEach((opt: any) => {
+        const accCatalogItem = catalogData.find(p => p.sku === opt.pn);
+        if (accCatalogItem) {
+          itemTotal += (accCatalogItem.price || 0) * item.quantity;
+        }
+      });
+    }
+    return sum + itemTotal;
+  }, 0);
   const cartTotalWithVat = cartTotal * 1.18; // חישוב מע"מ סטנדרטי (18% נכון ל-2025)
 
   // --- NAVIGATION ---
@@ -697,6 +719,7 @@ export default function App() {
   };
 
   const navigateToProduct = (product: any) => {
+    setCurrentOptionals([]);
     navigateForward({
       currentView: 'product',
       selectedProduct: product
@@ -826,16 +849,16 @@ export default function App() {
             ) : product.retailPrice ? (
               <div className="flex flex-col items-center leading-tight mb-2 w-full">
                  <span className="text-[9px] sm:text-xs text-gray-600 font-medium leading-[1.2] mb-1 w-full block">
-                   צרכן: ₪{product.retailPrice} <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block">(כולל מע"מ)</span>
+                   צרכן: ₪{product.retailPrice.toLocaleString('he-IL', {maximumFractionDigits: 2})} <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block">(כולל מע"מ)</span>
                  </span>
                  <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none block">
-                   ₪{product.price} 
+                   ₪{product.price.toLocaleString('he-IL', {maximumFractionDigits: 2})} 
                    <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">מחיר מומלץ למתקין</span>
                  </span>
               </div>
             ) : (
               <div className="mb-2 mt-auto flex flex-col items-center leading-none">
-                <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none">₪{product.price}</span>
+                <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none">₪{product.price.toLocaleString('he-IL', {maximumFractionDigits: 2})}</span>
                 <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">מחיר מומלץ למתקין</span>
               </div>
             )}
@@ -1051,17 +1074,17 @@ export default function App() {
                 <div className="flex flex-col w-full sm:w-auto text-center sm:text-right">
                    {selectedProduct.retailPrice && (
                       <span className="text-sm sm:text-base text-gray-800 font-medium mb-1">
-                        מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
+                        מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', {maximumFractionDigits: 2})} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
                       </span>
                    )}
                    <div className="text-2xl sm:text-3xl font-bold text-[#f7941d]">
-                      ₪{selectedProduct.price} 
+                      ₪{selectedProduct.price.toLocaleString('he-IL', {maximumFractionDigits: 2})} 
                       <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">מחיר מומלץ למתקין <span className="hidden sm:inline">(ללא מע"מ)</span></span>
                    </div>
                 </div>
                 <button 
                   onClick={() => {
-                    addToCart(selectedProduct);
+                    addToCart(selectedProduct, 1, currentOptionals);
                     setIsAdded(true);
                     setTimeout(() => setIsAdded(false), 1500);
                   }}
@@ -1115,7 +1138,7 @@ export default function App() {
 
         {/* SPECIFIC CONFIGURATORS */}
         {(selectedProduct.subcategory === 'ארונות תקשורת ואביזרים' || selectedProduct.subcategory === 'ארונות וארונות הסתעפות') && (
-          <CabinetConfigurator product={selectedProduct} />
+          <CabinetConfigurator product={selectedProduct} onOptionalsChange={handleOptionalsChange} />
         )}
 
         {/* SIMILAR PRODUCTS */}
@@ -1140,6 +1163,7 @@ export default function App() {
 
   const CheckoutView = () => {
     const [orderPlaced, setOrderPlaced] = useState(false);
+    const [lastSentMethod, setLastSentMethod] = useState<'email' | 'whatsapp' | null>(null);
     const [companyName, setCompanyName] = useState('');
     const [companyId, setCompanyId] = useState('');
     const [contactName, setContactName] = useState('');
@@ -1212,7 +1236,14 @@ export default function App() {
       cart.forEach((item, idx) => {
          orderDetails += `${idx + 1}. ${item.name}\n`;
          orderDetails += `   מק"ט: ${item.sku}\n`;
-         orderDetails += `   כמות: ${item.quantity}\n\n`;
+         orderDetails += `   כמות: ${item.quantity}\n`;
+         if (item.optionals && item.optionals.length > 0) {
+           orderDetails += `   תוספות בארון:\n`;
+           item.optionals.forEach((opt: any) => {
+             orderDetails += `     - ${opt.pn} | ${opt.description}\n`;
+           });
+         }
+         orderDetails += `\n`;
       });
       
       orderDetails += `---------------------------------\n`;
@@ -1238,8 +1269,8 @@ export default function App() {
       
       window.location.href = mailtoLink;
       
+      setLastSentMethod('email');
       setOrderPlaced(true);
-      setCart([]);
     };
 
     const handleSendWhatsApp = () => {
@@ -1253,24 +1284,70 @@ export default function App() {
       
       window.open(`https://wa.me/${agentPhone}?text=${text}`, '_blank');
       
+      setLastSentMethod('whatsapp');
       setOrderPlaced(true);
+    };
+
+    const handleBackToSite = () => {
+      navigateHome();
+    };
+
+    const handleLogout = () => {
       setCart([]);
+      setIsAuthenticated(false);
+      navigateHome();
     };
 
     if (orderPlaced) {
       return (
-        <div className="bg-white rounded-none shadow-sm border border-gray-100 p-12 text-center max-w-2xl mx-auto mt-10">
+        <div className="bg-white rounded-none shadow-sm border border-gray-100 p-8 sm:p-12 text-center max-w-2xl mx-auto mt-10">
           <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle size={40} />
           </div>
-          <h2 className="text-3xl font-bold text-[#0c2d57] mb-4">הבקשה להזמנה הוכנה!</h2>
-          <p className="text-gray-600 mb-8">אפליקציית השליחה (מייל/ווצאפ) שלך אמורה להיפתח כדי לסיים את השליחה לסוכן.</p>
-          <button 
-            onClick={navigateHome}
-            className="bg-[#004387] text-white px-8 py-3 rounded-none font-bold hover:bg-[#fe8d00] transition-colors"
-          >
-            חזרה לדף הבית
-          </button>
+          <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-4">הבקשה נוסחה והועברה לאפליקציה שבחרת!</h2>
+          <p className="text-gray-600 mb-8 px-4">שים לב: הודעת המייל או הווצאפ נפתחה במכשירך להשלמת השליחה.</p>
+          
+          <div className="border-t border-gray-200 pt-6 mt-4">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">
+              {lastSentMethod === 'email' ? 'מומלץ לשלוח גיבוי גם בוואטסאפ:' : 'מומלץ לשלוח גיבוי גם במייל:'}
+            </h3>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+               {lastSentMethod !== 'email' && (
+                 <button 
+                    onClick={() => handleSendEmail()}
+                    className="bg-white text-[#004387] border border-[#004387] px-6 py-2 font-bold hover:bg-[#004387] hover:text-white transition-colors"
+                 >
+                    שליחת גיבוי ב-Email
+                 </button>
+               )}
+               {lastSentMethod !== 'whatsapp' && (
+                 <button 
+                    onClick={() => handleSendWhatsApp()}
+                    className="bg-green-500 text-white border border-green-500 px-6 py-2 font-bold hover:bg-green-600 transition-colors"
+                 >
+                    שליחת גיבוי ב-WhatsApp
+                 </button>
+               )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 pt-6 bg-gray-50 -mx-8 sm:-mx-12 -mb-8 sm:-mb-12 p-8 sm:p-12 mt-4">
+             <h3 className="text-lg font-bold text-gray-800 mb-4">מה תרצה לעשות עכשיו?</h3>
+             <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <button 
+                  onClick={handleBackToSite}
+                  className="bg-[#004387] text-white px-8 py-3 font-bold hover:bg-[#fe8d00] transition-colors shadow-sm"
+                >
+                  המשך לאתר (שמור על העגלה)
+                </button>
+                <button 
+                  onClick={handleLogout}
+                  className="bg-gray-200 text-gray-800 px-8 py-3 font-bold hover:bg-red-500 hover:text-white transition-colors shadow-sm"
+                >
+                  יציאה מהמערכת (התנתק)
+                </button>
+             </div>
+          </div>
         </div>
       );
     }
@@ -1297,6 +1374,19 @@ export default function App() {
                     <div className="flex-grow">
                       <div className="font-semibold text-[#0c2d57]">{item.name}</div>
                       <div className="text-xs text-gray-500 mb-2">מק"ט: {item.sku}</div>
+                      {item.optionals && item.optionals.length > 0 && (
+                        <div className="text-xs text-gray-600 mb-2 bg-gray-50 border border-gray-200 p-2 rounded">
+                          <strong className="block mb-1">תוספות מצורפות לארון:</strong>
+                          <ul className="list-disc pl-4 pr-1">
+                            {item.optionals.map((opt: any, i: number) => {
+                              const accCatalogItem = catalogData.find(p => p.sku === opt.pn);
+                              return (
+                                <li key={i}>{opt.pn} - {opt.description} {accCatalogItem ? `(₪${accCatalogItem.price.toLocaleString('he-IL', {maximumFractionDigits: 2})})` : ''}</li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2">
                         <div className="flex items-center bg-[#f2f2f2] border border-gray-200 overflow-hidden rounded-md">
                           <button onClick={() => updateCartQuantity(item.id, -1)} className="p-1 px-3 hover:bg-white text-gray-600 transition-colors" aria-label="הפחת כמות"><Minus size={14}/></button>
@@ -1766,6 +1856,21 @@ export default function App() {
                       <div className="flex-col flex flex-grow">
                         <div className="font-semibold text-sm text-[#0c2d57] line-clamp-2">{item.name}</div>
                         <div className="text-xs text-gray-500 mt-1">מק"ט: <span className="font-mono">{item.sku}</span></div>
+                        
+                        {item.optionals && item.optionals.length > 0 && (
+                          <div className="text-[10px] text-gray-600 mt-2 bg-gray-50 p-1.5 border border-gray-100 rounded">
+                            <strong className="block mb-0.5">תוספות:</strong>
+                            <ul className="pl-3 pr-1 list-disc">
+                              {item.optionals.map((opt: any, i: number) => {
+                                const accCatalogItem = catalogData.find(p => p.sku === opt.pn);
+                                return (
+                                  <li key={i}>{opt.pn} {accCatalogItem ? `(₪${accCatalogItem.price.toLocaleString('he-IL', {maximumFractionDigits: 2})})` : ''}</li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        )}
+
                         <div className="mt-auto pt-2 flex items-end justify-end">
                           
                           <div className="flex items-center bg-[#f2f2f2] border border-gray-200 overflow-hidden">

@@ -22,9 +22,10 @@ interface CabinetData {
 
 interface CabinetConfiguratorProps {
   product: any;
+  onOptionalsChange?: (optionals: Accessory[]) => void;
 }
 
-export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ product }) => {
+export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ product, onOptionalsChange }) => {
   const [loading, setLoading] = useState(true);
   const [cabinetData, setCabinetData] = useState<CabinetData | null>(null);
   
@@ -47,7 +48,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
         const res = await fetch(SHEET_URL);
         const buffer = await res.arrayBuffer();
-        const wb = XLSX.read(buffer, { type: 'buffer' });
+        const wb = XLSX.read(buffer, { type: 'array' });
 
         // 1. Fetch Accessories Table ('מדפים ואביזרים')
         // Data starts at row 5 (index 4 in 0-based header=1)
@@ -155,6 +156,13 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       fetchAndParse();
     }
   }, [product]);
+
+  // Fire onOptionalsChange
+  useEffect(() => {
+    if (onOptionalsChange) {
+      onOptionalsChange(selectedOptionals);
+    }
+  }, [selectedOptionals, onOptionalsChange]);
 
   const handleAddOptional = (acc: Accessory) => {
     if (availableU - acc.uSize < 0) {
