@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { HumanVerification } from './components/HumanVerification';
 import InstallBanner from './components/InstallBanner';
 import { CabinetConfigurator } from './components/CabinetConfigurator';
+import { AccessoryCabinets } from './components/AccessoryCabinets';
 
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
 const PRODUCTS_GID = '1506812668';
@@ -177,6 +178,12 @@ export default function App() {
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(24);
+
+  // Reset pagination on view/filter change
+  useEffect(() => {
+    setVisibleCount(24);
+  }, [currentView, selectedCatalog, selectedSubcategory, selectedNestedSubcategory, searchQuery]);
 
   // --- DATA FETCHING ---
   useEffect(() => {
@@ -1070,6 +1077,20 @@ export default function App() {
                 </div>
               )}
 
+              {/* SPECIFIC CONFIGURATORS (Only for Cabinets, not accessories) */}
+              {((selectedProduct.subcategory === 'ארונות תקשורת ואביזרים' || selectedProduct.subcategory === 'ארונות וארונות הסתעפות') && 
+                !selectedProduct['Nested subcategory']?.includes('אביזרים') && 
+                /ארון|מסד|מארז/i.test(selectedProduct.name)) && (
+                <div className="mb-6">
+                  <CabinetConfigurator product={selectedProduct} catalogData={catalogData} onOptionalsChange={handleOptionalsChange} />
+                </div>
+              )}
+
+              {/* COMPATIBLE CABINETS (If this is an accessory) */}
+              {((selectedProduct['Nested subcategory']?.includes('אביזרים') || selectedProduct.subcategory?.includes('אביזרים למסדים') || /מדף|פנל|מאוורר|ברגים|אביזר|KVM/i.test(selectedProduct.name)) && !(/ארון|מסד|מארז/i.test(selectedProduct.name))) && (
+                <AccessoryCabinets product={selectedProduct} catalogData={catalogData} ProductCard={ProductCard} />
+              )}
+
               <div className="mt-auto border-t border-gray-200 pt-4 sm:pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex flex-col w-full sm:w-auto text-center sm:text-right">
                    {selectedProduct.retailPrice && (
@@ -1134,11 +1155,6 @@ export default function App() {
               </TransformWrapper>
             </div>
           </div>
-        )}
-
-        {/* SPECIFIC CONFIGURATORS */}
-        {(selectedProduct.subcategory === 'ארונות תקשורת ואביזרים' || selectedProduct.subcategory === 'ארונות וארונות הסתעפות') && (
-          <CabinetConfigurator product={selectedProduct} onOptionalsChange={handleOptionalsChange} />
         )}
 
         {/* SIMILAR PRODUCTS */}
@@ -1706,11 +1722,23 @@ export default function App() {
                     <p className="text-gray-500 mt-2">נסה לשנות את מילות החיפוש.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
-                    {filteredProducts.map(product => (
-                      <ProductCard key={product.id} product={product} />
-                    ))}
-                  </div>
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
+                      {filteredProducts.slice(0, visibleCount).map(product => (
+                        <ProductCard key={product.id} product={product} />
+                      ))}
+                    </div>
+                    {visibleCount < filteredProducts.length && (
+                      <div className="flex justify-center mt-8">
+                        <button 
+                          onClick={() => setVisibleCount(prev => prev + 24)}
+                          className="bg-[#004387] text-white px-8 py-3 rounded shadow hover:bg-[#fe8d00] transition-colors"
+                        >
+                          הצג עוד מוצרים
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
                </>
 
@@ -1810,10 +1838,20 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
-                  {filteredProducts.map(product => (
+                  {filteredProducts.slice(0, visibleCount).map(product => (
                     <ProductCard key={product.id} product={product} />
                   ))}
                 </div>
+                {visibleCount < filteredProducts.length && (
+                  <div className="flex justify-center mt-8">
+                    <button 
+                      onClick={() => setVisibleCount(prev => prev + 24)}
+                      className="bg-[#004387] text-white px-8 py-3 rounded shadow hover:bg-[#fe8d00] transition-colors"
+                    >
+                      הצג עוד מוצרים
+                    </button>
+                  </div>
+                )}
               </>
             ) : currentView === 'product' && selectedProduct ? (
               <ProductDetailsView />

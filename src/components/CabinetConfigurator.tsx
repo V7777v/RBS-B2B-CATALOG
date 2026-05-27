@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, CheckCircle, Plus, X, Server, Download, Box, AlertTriangle } from 'lucide-react';
+import { AlertCircle, CheckCircle, Plus, Minus, X, Server, Download, Box, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface Accessory {
@@ -22,10 +22,11 @@ interface CabinetData {
 
 interface CabinetConfiguratorProps {
   product: any;
+  catalogData: any[];
   onOptionalsChange?: (optionals: Accessory[]) => void;
 }
 
-export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ product, onOptionalsChange }) => {
+export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ product, catalogData, onOptionalsChange }) => {
   const [loading, setLoading] = useState(true);
   const [cabinetData, setCabinetData] = useState<CabinetData | null>(null);
   
@@ -34,27 +35,60 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   
   const [includedItems, setIncludedItems] = useState<string[]>([]);
   const [compatibleAccessories, setCompatibleAccessories] = useState<Accessory[]>([]);
-  const [selectedOptionals, setSelectedOptionals] = useState<Accessory[]>([]);
+  const [selectedOptionals, setSelectedOptionals] = useState<(Accessory & { quantity: number; id: string })[]>([]);
   
   const [warningModalOpen, setWarningModalOpen] = useState(false);
   const [pendingAccessory, setPendingAccessory] = useState<Accessory | null>(null);
+  const [addedIdx, setAddedIdx] = useState<number | null>(null);
 
-  const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1pQdm3zM96oexFtATifE1wSBnIcJhIUcfCu-hbB8gslE/export?format=xlsx';
+  const handleIncrementQuantity = (index: number) => {
+    const item = selectedOptionals[index];
+    if (!item) return;
+    if (availableU - item.uSize < 0) {
+      setPendingAccessory(item);
+      setWarningModalOpen(true);
+      return;
+    }
+    setSelectedOptionals(prev => {
+      const newArr = [...prev];
+      newArr[index].quantity += 1;
+      return newArr;
+    });
+    setAvailableU(prev => prev - item.uSize);
+  };
 
   useEffect(() => {
     const fetchAndParse = async () => {
       try {
         setLoading(true);
 
-        const res = await fetch(SHEET_URL);
+        const MAIN_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs/export?format=xlsx';
+        const res = await fetch(MAIN_SHEET_URL);
         const buffer = await res.arrayBuffer();
         const wb = XLSX.read(buffer, { type: 'array' });
 
+        console.log('[CabinetConfigurator] Available sheets in workbook:', wb.SheetNames);
+
+        const cabinetsSheetName = wb.SheetNames.find(n => n.includes('ארונות')) || 'טבלת ארונות מעודכנת';
+        const accessoriesSheetName = wb.SheetNames.find(n => n.includes('מדפים')) || 'מדפים ואביזרים';
+
+        console.log('[CabinetConfigurator] Using sheets:', { cabinetsSheetName, accessoriesSheetName });
+
+        if (!wb.Sheets[cabinetsSheetName] || !wb.Sheets[accessoriesSheetName]) {
+           console.error('[CabinetConfigurator] CRITICAL: Required sheets not found. Looking for:', 
+              `'טבלת ארונות מעודכנת'`, 'and', `'מדפים ואביזרים'`, 
+              'but found:', wb.SheetNames);
+           setLoading(false);
+           return;
+        }
+
+        const normalizeSku = (val: any): string => String(val ?? '').trim().toUpperCase();
+        const productSkuNorm = normalizeSku(product.sku);
+
         // 1. Fetch Accessories Table ('מדפים ואביזרים')
-        // Data starts at row 5 (index 4 in 0-based header=1)
-        const accRows = XLSX.utils.sheet_to_json(wb.Sheets['מדפים ואביזרים'], { header: 1 }) as any[][];
+        const accRows = XLSX.utils.sheet_to_json(wb.Sheets[accessoriesSheetName], { header: 1 }) as any[][];
         const accData: Accessory[] = [];
-        for (let i = 4; i < accRows.length; i++) {
+        for (let i = 3; i < accRows.length; i++) {
             const row = accRows[i];
             if (!row || row.length === 0) continue;
             const pn = row[0]?.toString() || '';
@@ -70,18 +104,27 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         }
 
         // 2. Fetch Cabinets Table ('טבלת ארונות מעודכנת')
-        const cabRows = XLSX.utils.sheet_to_json(wb.Sheets['טבלת ארונות מעודכנת'], { header: 1 }) as any[][];
+        const cabRows = XLSX.utils.sheet_to_json(wb.Sheets[cabinetsSheetName], { header: 1 }) as any[][];
         
         let cabRow: any[] | null = null;
         for (let i = 2; i < cabRows.length; i++) {
-           if (cabRows[i] && cabRows[i][0] && cabRows[i][0].toString() === product.sku?.toString()) {
-               cabRow = cabRows[i];
-               break;
+           if (cabRows[i] && cabRows[i][0] !== undefined && cabRows[i][0] !== null) {
+               if (normalizeSku(cabRows[i][0]) === productSkuNorm) {
+                   cabRow = cabRows[i];
+                   break;
+               }
            }
         }
 
         if (!cabRow) {
            console.warn("Cabinet not found in external configurator sheet for SKU:", product.sku);
+           // Fallback mode if the cabinet is not in the updated list
+           const uMatch = product.name?.match(/(\d+)U/i) || product.description?.match(/(\d+)U/i);
+           const parsedTotalU = uMatch ? parseInt(uMatch[1]) : 42; // default to 42 if not found
+           setTotalU(parsedTotalU);
+           setAvailableU(parsedTotalU);
+           setIncludedItems([]);
+           setCompatibleAccessories([]);
            setLoading(false);
            return;
         }
@@ -120,13 +163,15 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
         // 3. Strict Compatibility & EXCLUSION Filtering
         const allowedPNs = [
-           ...data.suitableStandard.split(',').map((s: string) => s.trim()),
-           ...data.suitableHanging.split(',').map((s: string) => s.trim()),
-           ...data.suitableSliding.split(',').map((s: string) => s.trim())
-        ].filter(Boolean);
+           ...data.suitableStandard.split(','),
+           ...data.suitableHanging.split(','),
+           ...data.suitableSliding.split(',')
+        ]
+        .map((s: string) => normalizeSku(s))
+        .filter(s => s && s !== 'X');
 
         const filteredAccs = accData
-          .filter(acc => allowedPNs.includes(acc.pn))
+          .filter(acc => allowedPNs.includes(normalizeSku(acc.pn)))
           .filter(acc => {
             // EXCLUSION RULE: DO NOT offer things already included.
             const desc = acc.description.toLowerCase();
@@ -164,26 +209,55 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     }
   }, [selectedOptionals, onOptionalsChange]);
 
-  const handleAddOptional = (acc: Accessory) => {
+  const handleAddOptional = (acc: Accessory, idx: number) => {
     if (availableU - acc.uSize < 0) {
       setPendingAccessory(acc);
       setWarningModalOpen(true);
       return;
     }
     
-    setSelectedOptionals(prev => [...prev, acc]);
+    setSelectedOptionals(prev => {
+      const existingIdx = prev.findIndex(item => item.pn === acc.pn);
+      if (existingIdx >= 0) {
+        const newArr = [...prev];
+        newArr[existingIdx].quantity += 1;
+        return newArr;
+      }
+      return [...prev, { ...acc, quantity: 1, id: Math.random().toString() }];
+    });
     setAvailableU(prev => prev - acc.uSize);
+    setAddedIdx(idx);
+    setTimeout(() => setAddedIdx(null), 1000);
   };
 
-  const handleRemoveOptional = (index: number) => {
+  const handleRemoveOptional = (index: number, fullyRemove = false) => {
     const item = selectedOptionals[index];
-    setSelectedOptionals(prev => prev.filter((_, i) => i !== index));
-    setAvailableU(prev => prev + item.uSize);
+    if (!item) return;
+
+    if (fullyRemove || item.quantity === 1) {
+      setSelectedOptionals(prev => prev.filter((_, i) => i !== index));
+      setAvailableU(prev => prev + (item.uSize * item.quantity));
+    } else {
+      setSelectedOptionals(prev => {
+         const newArr = [...prev];
+         newArr[index].quantity -= 1;
+         return newArr;
+      });
+      setAvailableU(prev => prev + item.uSize);
+    }
   };
 
   const forceAddPending = () => {
     if (pendingAccessory) {
-      setSelectedOptionals(prev => [...prev, pendingAccessory]);
+      setSelectedOptionals(prev => {
+        const existingIdx = prev.findIndex(item => item.pn === pendingAccessory.pn);
+        if (existingIdx >= 0) {
+          const newArr = [...prev];
+          newArr[existingIdx].quantity += 1;
+          return newArr;
+        }
+        return [...prev, { ...pendingAccessory, quantity: 1, id: Math.random().toString() }];
+      });
       setAvailableU(prev => prev - pendingAccessory.uSize);
     }
     setWarningModalOpen(false);
@@ -191,7 +265,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   };
 
   if (loading) return <div className="p-8 mt-8 bg-gray-50 text-center text-gray-500 border border-gray-200">טוען קונפיגורטור ארון מותאם אישית...</div>;
-  if (!cabinetData) return null; // If sku not matched
 
   return (
     <div className="mt-8 bg-white border-2 border-[#004387] shadow-sm relative overflow-hidden" dir="rtl">
@@ -212,20 +285,49 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
       <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
         
-        {/* RULE 1: Included Accessories */}
-        <div className="bg-gray-50 p-5 border border-gray-200">
-          <h3 className="text-lg font-bold text-[#0c2d57] mb-4 border-b border-gray-200 pb-2">📦 כלול במארז (What's in the Box)</h3>
-          {includedItems.length > 0 ? (
-            <ul className="space-y-3">
-              {includedItems.map((item, idx) => (
-                <li key={idx} className="flex items-center gap-3 text-gray-700">
-                  <CheckCircle size={18} className="text-green-500" />
-                  <span className="font-medium">{item}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-gray-500 italic">אין פריטים נלווים מוגדרים לארון זה.</p>
+        {/* Left Column - Included & Selected Optionals */}
+        <div className="space-y-6">
+          {/* RULE 1: Included Accessories */}
+          <div className="bg-gray-50 p-5 border border-gray-200">
+            <h3 className="text-lg font-bold text-[#0c2d57] mb-4 border-b border-gray-200 pb-2">📦 כלול במארז (What's in the Box)</h3>
+            {includedItems.length > 0 ? (
+              <ul className="space-y-3">
+                {includedItems.map((item, idx) => (
+                  <li key={idx} className="flex items-center gap-3 text-gray-700">
+                    <CheckCircle size={18} className="text-green-500" />
+                    <span className="font-medium">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-500 italic">אין פריטים נלווים מוגדרים לארון זה.</p>
+            )}
+          </div>
+
+          {/* Selected Optionals Review Area (Moved up for better mobile visibility) */}
+          {selectedOptionals.length > 0 && (
+            <div className="bg-[#e6f0fa]/30 border border-[#b3d4f5] p-5 shadow-sm">
+              <h4 className="text-[15px] font-bold text-[#004387] mb-4 uppercase tracking-wider flex items-center justify-between">
+                <span>תוספות שנבחרו</span>
+                <span className="bg-[#004387] text-white text-xs px-2 py-0.5 rounded-full">{selectedOptionals.reduce((acc, curr) => acc + curr.quantity, 0)} פריטים</span>
+              </h4>
+              <div className="flex flex-col gap-2">
+                 {selectedOptionals.map((item, idx) => (
+                   <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-[#b3d4f5] px-3 py-2 rounded text-sm font-medium animate-in zoom-in duration-200 shadow-sm gap-2">
+                     <span className="text-gray-800 truncate leading-tight" title={item.description}>
+                        <span className="font-bold flex items-center gap-1.5"><span className="bg-[#004387] text-white rounded text-xs px-1.5 py-0.5">{item.quantity}x</span>{item.pn}</span>
+                        <span className="text-gray-500 font-normal text-xs block mt-1">({item.uSize * item.quantity}U) {item.description}</span>
+                     </span>
+                     <div className="flex bg-gray-50 border border-gray-200 rounded self-start sm:self-auto flex-shrink-0 relative top-1">
+                       <button onClick={() => handleIncrementQuantity(idx)} className="p-1.5 hover:bg-gray-200 hover:text-[#004387] transition-colors"><Plus size={14} /></button>
+                       <span className="w-8 flex items-center justify-center border-x border-gray-200 text-xs font-bold">{item.quantity}</span>
+                       <button onClick={() => handleRemoveOptional(idx)} className="p-1.5 hover:bg-gray-200 hover:text-red-500 transition-colors"><Minus size={14} /></button>
+                       <button onClick={() => handleRemoveOptional(idx, true)} className="ml-1 px-1.5 border-l border-gray-200 hover:bg-red-50 hover:text-red-500 transition-colors text-gray-400" title="הסר הכל"><X size={14} /></button>
+                     </div>
+                   </div>
+                 ))}
+              </div>
+            </div>
           )}
         </div>
 
@@ -241,11 +343,15 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                      <p className="text-xs text-gray-500 truncate max-w-[200px]" title={acc.description}>{acc.description}</p>
                    </div>
                    <button 
-                     onClick={() => handleAddOptional(acc)}
-                     className="bg-[#004387] text-white p-2 rounded-full hover:bg-[#fe8d00] transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#004387]"
+                     onClick={() => handleAddOptional(acc, idx)}
+                     className={`p-3 sm:p-2 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 flex-shrink-0 touch-manipulation z-10
+                       ${addedIdx === idx 
+                         ? 'bg-green-500 text-white hover:bg-green-600 focus:ring-green-500' 
+                         : 'bg-[#004387] text-white hover:bg-[#fe8d00] focus:ring-[#004387]'
+                       }`}
                      aria-label="Add Accessory"
                    >
-                     <Plus size={16} />
+                     {addedIdx === idx ? <CheckCircle size={18} className="sm:w-4 sm:h-4" /> : <Plus size={18} className="sm:w-4 sm:h-4" />}
                    </button>
                  </div>
                ))}
@@ -258,23 +364,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         </div>
 
       </div>
-
-      {/* Selected Optionals Review Area */}
-      {selectedOptionals.length > 0 && (
-        <div className="px-6 pb-6 mt-2">
-          <h4 className="text-sm font-bold text-gray-600 mb-3 uppercase tracking-wider">תוספות שנבחרו:</h4>
-          <div className="flex flex-wrap gap-2">
-             {selectedOptionals.map((item, idx) => (
-               <div key={idx} className="flex items-center gap-2 bg-[#e6f0fa] text-[#004387] border border-[#b3d4f5] px-3 py-1.5 rounded text-sm font-medium animate-in zoom-in duration-200">
-                 <span>{item.pn} ({item.uSize}U)</span>
-                 <button onClick={() => handleRemoveOptional(idx)} className="text-[#004387] hover:text-red-500 ml-2">
-                   <X size={14} />
-                 </button>
-               </div>
-             ))}
-          </div>
-        </div>
-      )}
 
       {/* WARNING MODAL (Rule 3) */}
       {warningModalOpen && (
