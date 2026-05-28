@@ -6,6 +6,9 @@ interface Accessory {
   pn: string;
   description: string;
   uSize: number;
+  sku?: string;
+  name?: string;
+  price?: number;
 }
 
 interface CabinetData {
@@ -103,6 +106,28 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             }
         }
 
+        // Enrich accessories with catalog data (sku, name, price) for cart integration
+        const enrichedAccData: Accessory[] = accData.map(acc => {
+          const accSkuNorm = normalizeSku(acc.pn);
+          const catalogMatch = catalogData.find(p => normalizeSku(p.sku) === accSkuNorm);
+          if (catalogMatch) {
+            return {
+              ...acc,
+              pn: catalogMatch.sku, // Force exact match for App.tsx
+              sku: catalogMatch.sku,
+              name: catalogMatch.name,
+              price: catalogMatch.price
+            };
+          }
+          // If not in catalog, still keep the accessory but with PN as fallback identifiers
+          return {
+            ...acc,
+            sku: acc.pn,
+            name: acc.description,
+            price: 0
+          };
+        });
+
         // 2. Fetch Cabinets Table ('טבלת ארונות מעודכנת')
         const cabRows = XLSX.utils.sheet_to_json(wb.Sheets[cabinetsSheetName], { header: 1 }) as any[][];
         
@@ -170,7 +195,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         .map((s: string) => normalizeSku(s))
         .filter(s => s && s !== 'X');
 
-        const filteredAccs = accData
+        const filteredAccs = enrichedAccData
           .filter(acc => allowedPNs.includes(normalizeSku(acc.pn)))
           .filter(acc => {
             // EXCLUSION RULE: DO NOT offer things already included.
@@ -205,7 +230,14 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   // Fire onOptionalsChange
   useEffect(() => {
     if (onOptionalsChange) {
-      onOptionalsChange(selectedOptionals);
+      const flattened: Accessory[] = [];
+      selectedOptionals.forEach(item => {
+        const qty = item.quantity || 1;
+        for (let i = 0; i < qty; i++) {
+          flattened.push(item);
+        }
+      });
+      onOptionalsChange(flattened);
     }
   }, [selectedOptionals, onOptionalsChange]);
 

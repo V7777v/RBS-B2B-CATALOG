@@ -1091,30 +1091,75 @@ export default function App() {
                 <AccessoryCabinets product={selectedProduct} catalogData={catalogData} ProductCard={ProductCard} />
               )}
 
-              <div className="mt-auto border-t border-gray-200 pt-4 sm:pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex flex-col w-full sm:w-auto text-center sm:text-right">
-                   {selectedProduct.retailPrice && (
-                      <span className="text-sm sm:text-base text-gray-800 font-medium mb-1">
-                        מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', {maximumFractionDigits: 2})} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
-                      </span>
-                   )}
-                   <div className="text-2xl sm:text-3xl font-bold text-[#f7941d]">
-                      ₪{selectedProduct.price.toLocaleString('he-IL', {maximumFractionDigits: 2})} 
-                      <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">מחיר מומלץ למתקין <span className="hidden sm:inline">(ללא מע"מ)</span></span>
-                   </div>
-                </div>
-                <button 
-                  onClick={() => {
-                    addToCart(selectedProduct, 1, currentOptionals);
-                    setIsAdded(true);
-                    setTimeout(() => setIsAdded(false), 1500);
-                  }}
+              <div className="mt-auto border-t border-gray-200 pt-4 sm:pt-6">
+                {/* OPTIONALS BREAKDOWN */}
+                {currentOptionals.length > 0 && (
+                  <div className="mb-4 bg-gray-50 border border-gray-200 rounded p-4 animate-in fade-in slide-in-from-bottom-2 duration-300 shadow-sm">
+                    <h4 className="text-sm font-bold text-[#0c2d57] mb-3 border-b border-gray-200/60 pb-2">פירוט פריטים (ארון + תוספות שבחרת):</h4>
+                    
+                    <div className="flex justify-between items-center text-sm py-1.5">
+                      <span className="font-semibold text-gray-800 flex-1 pl-2">{selectedProduct.name}</span>
+                      <span className="font-bold whitespace-nowrap text-gray-900">₪{selectedProduct.price.toLocaleString('he-IL')}</span>
+                    </div>
+                    
+                    {currentOptionals.map((opt, i) => {
+                       const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
+                       const optPrice = catItem ? catItem.price : (opt.price || 0);
+                       return (
+                         <div key={i} className="flex justify-between items-center text-sm py-1.5 text-[#004387]">
+                           <span className="flex-1 pl-2 truncate relative pl-4 after:content-['+'] after:absolute after:right-0 after:top-0 after:font-bold after:mr-[-10px]">+ {opt.name || opt.description || opt.pn}</span>
+                           <span className="font-semibold whitespace-nowrap">₪{optPrice.toLocaleString('he-IL')}</span>
+                         </div>
+                       );
+                    })}
+                    
+                    <div className="flex justify-between items-center text-lg lg:text-xl font-bold text-[#f7941d] pt-3 mt-2 border-t border-gray-200/60 bg-white -mx-4 -mb-4 p-4 rounded-b">
+                      <span>סה"כ לתשלום:</span>
+                      <span>₪{(selectedProduct.price + currentOptionals.reduce((acc, opt) => {
+                         const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
+                         return acc + (catItem ? catItem.price : (opt.price || 0));
+                      }, 0)).toLocaleString('he-IL', {maximumFractionDigits: 2})}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
+                  <div className="flex flex-col w-full sm:w-auto text-center sm:text-right">
+                     {selectedProduct.retailPrice && currentOptionals.length === 0 && (
+                        <span className="text-sm sm:text-base text-gray-800 font-medium mb-1">
+                          מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', {maximumFractionDigits: 2})} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
+                        </span>
+                     )}
+                     {currentOptionals.length === 0 && (
+                       <div className="text-2xl sm:text-3xl font-bold text-[#f7941d]">
+                          ₪{selectedProduct.price.toLocaleString('he-IL', {maximumFractionDigits: 2})} 
+                          <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">מחיר מומלץ למתקין <span className="hidden sm:inline">(ללא מע"מ)</span></span>
+                       </div>
+                     )}
+                  </div>
+                  <button 
+                    onClick={() => {
+                      if (currentOptionals.length > 0) {
+                         addToCart(selectedProduct, 1, []);
+                         currentOptionals.forEach((opt: any) => {
+                            const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
+                            if (catItem) {
+                               addToCart(catItem, 1, []);
+                            }
+                         });
+                      } else {
+                         addToCart(selectedProduct, 1, []);
+                      }
+                      setIsAdded(true);
+                      setTimeout(() => setIsAdded(false), 1500);
+                    }}
                   className={`w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base ${isAdded ? 'bg-green-600 hover:bg-green-600 text-white' : theme.button}`}
                 >
                   <ShoppingCart size={18} className={`sm:w-5 sm:h-5 ${isAdded ? 'animate-bounce' : ''}`} />
                   {isAdded ? 'נוסף לעגלה! ✓' : 'הוסף להזמנה'}
                 </button>
               </div>
+            </div>
             </div>
           </div>
         </div>
