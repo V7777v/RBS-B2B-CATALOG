@@ -14,7 +14,34 @@ const PRODUCTS_GID = '1506812668';
 const CATALOGS_GID = '1781083359';
 const SUBCATEGORIES_GID = '1626175369';
 
-// --- HELPER ---
+// --- HELPER FUNCTIONS ---
+const parsePrice = (priceVal: any): number => {
+  if (priceVal === undefined || priceVal === null || priceVal === '') return 0;
+  if (typeof priceVal === 'number') return priceVal;
+  
+  let s = String(priceVal).trim();
+  s = s.replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+
+  if (s.includes(',') && s.includes('.')) {
+    s = s.replace(/,/g, '');
+  } else if (s.includes(',')) {
+    if (s.split(',').length > 2) {
+      s = s.replace(/,/g, '');
+    } else {
+      const parts = s.split(',');
+      if (parts[1].length === 3) {
+        s = s.replace(',', '');
+      } else {
+        s = s.replace(',', '.');
+      }
+    }
+  }
+  
+  const num = parseFloat(s);
+  return isNaN(num) ? 0 : num;
+};
+
 const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
   e.currentTarget.onerror = null;
   e.currentTarget.src = 'https://placehold.co/600x400/f3f4f6/a3a3a3?text=RBS+Telecom';
@@ -335,8 +362,8 @@ export default function App() {
             subcategory: subcategoryName,
             nestedSubcategory: nestedSubcategoryName,
             isComingSoon: isComingSoon,
-            price: row.price ? Number(row.price.toString().replace(/,/g, '')) || 0 : 0,
-            retailPrice: row.retailPrice ? Number(row.retailPrice.toString().replace(/,/g, '')) : null,
+            price: parsePrice(row.price),
+            retailPrice: row.retailPrice ? parsePrice(row.retailPrice) : null,
             images: itemImages.map(transformImageLink)
           };
         });
@@ -822,7 +849,7 @@ export default function App() {
       className="group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100"
     >
       <div className="aspect-square relative border-b border-gray-100 bg-white flex items-center justify-center p-3 sm:p-6 overflow-hidden">
-        <img src={transformImageLink(catalog.image, 400)} alt={catalog.name} onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300" />
+        <img src={transformImageLink(catalog.image, 400)} alt={catalog.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300" />
       </div>
       <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right">
         <h3 className="font-semibold text-[#0c2d57] text-sm sm:text-lg mb-1 sm:mb-2 line-clamp-2 leading-tight min-h-[2.5rem] sm:min-h-0 flex items-center justify-center sm:justify-start">{catalog.name}</h3>
@@ -848,7 +875,7 @@ export default function App() {
       )}
       <div className="relative aspect-square p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
         {sub.image ? (
-          <img src={transformImageLink(sub.image, 400)} alt={sub.name} onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500" />
+          <img src={transformImageLink(sub.image, 400)} alt={sub.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500" />
         ) : (
           <FolderOpen className="text-gray-300 w-10 h-10 sm:w-12 sm:h-12" />
         )}
@@ -915,16 +942,16 @@ export default function App() {
             ) : product.retailPrice ? (
               <div className="flex flex-col items-center leading-tight mb-2 w-full text-center">
                  <span className="text-[9px] sm:text-xs text-gray-600 font-medium leading-[1.2] mb-1 w-full block">
-                   צרכן: ₪{product.retailPrice.toLocaleString('he-IL', {maximumFractionDigits: 2})} <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block">(כולל מע"מ)</span>
+                   צרכן: ₪{product.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block">(כולל מע"מ)</span>
                  </span>
                  <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none block">
-                   ₪{product.price.toLocaleString('he-IL', {maximumFractionDigits: 2})} 
+                   ₪{product.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
                    <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">מחיר מומלץ למתקין</span>
                  </span>
               </div>
             ) : (
               <div className="mb-2 mt-auto flex flex-col items-center leading-none text-center">
-                <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none">₪{product.price.toLocaleString('he-IL', {maximumFractionDigits: 2})}</span>
+                <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none">₪{product.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">מחיר מומלץ למתקין</span>
               </div>
             )}
@@ -1003,11 +1030,11 @@ export default function App() {
           {((selectedProduct.brand === 'EZVIZ') || (selectedProduct.brand === 'HIKVISION') || (selectedProduct.brand === 'POLMAN')) ? (
             <div className="w-full py-4 px-4 sm:py-6 sm:px-6 bg-[#004387] flex justify-center items-center">
                {selectedProduct.brand === 'EZVIZ' ? (
-                 <img src="https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh" alt="EZVIZ" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
+                 <img src="https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh" alt="EZVIZ" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
                ) : selectedProduct.brand === 'HIKVISION' ? (
-                 <img src="https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M" alt="HIKVISION" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
+                 <img src="https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M" alt="HIKVISION" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
                ) : selectedProduct.brand === 'POLMAN' ? (
-                 <img src="https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU" alt="POLMAN" className="h-56 sm:h-80 object-contain drop-shadow-md bg-white rounded-3xl px-6 py-2" />
+                 <img src="https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU" alt="POLMAN" loading="eager" className="h-56 sm:h-80 object-contain drop-shadow-md bg-white rounded-3xl px-6 py-2" />
                ) : null}
             </div>
           ) : null}
@@ -1164,7 +1191,7 @@ export default function App() {
                     
                     <div className="flex justify-between items-center text-sm py-1.5">
                       <span className="font-semibold text-gray-800 flex-1 pl-2">{selectedProduct.name}</span>
-                      <span className="font-bold whitespace-nowrap text-gray-900">₪{selectedProduct.price.toLocaleString('he-IL')}</span>
+                      <span className="font-bold whitespace-nowrap text-gray-900">₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     
                     {currentOptionals.map((opt, i) => {
@@ -1173,7 +1200,7 @@ export default function App() {
                        return (
                          <div key={i} className="flex justify-between items-center text-sm py-1.5 text-[#004387]">
                            <span className="flex-1 pl-2 truncate relative pl-4 after:content-['+'] after:absolute after:right-0 after:top-0 after:font-bold after:mr-[-10px]">+ {opt.name || opt.description || opt.pn}</span>
-                           <span className="font-semibold whitespace-nowrap">₪{optPrice.toLocaleString('he-IL')}</span>
+                           <span className="font-semibold whitespace-nowrap">₪{optPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                          </div>
                        );
                     })}
@@ -1183,7 +1210,7 @@ export default function App() {
                       <span>₪{(selectedProduct.price + currentOptionals.reduce((acc, opt) => {
                          const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
                          return acc + (catItem ? catItem.price : (opt.price || 0));
-                      }, 0)).toLocaleString('he-IL', {maximumFractionDigits: 2})}</span>
+                      }, 0)).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                   </div>
                 )}
@@ -1192,12 +1219,12 @@ export default function App() {
                   <div className="flex flex-col w-full sm:w-auto text-center sm:text-right">
                      {selectedProduct.retailPrice && currentOptionals.length === 0 && (
                         <span className="text-sm sm:text-base text-gray-800 font-medium mb-1">
-                          מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', {maximumFractionDigits: 2})} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
+                          מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
                         </span>
                      )}
                      {currentOptionals.length === 0 && (
                        <div className="text-2xl sm:text-3xl font-bold text-[#f7941d]">
-                          ₪{selectedProduct.price.toLocaleString('he-IL', {maximumFractionDigits: 2})} 
+                          ₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
                           <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">מחיר מומלץ למתקין <span className="hidden sm:inline">(ללא מע"מ)</span></span>
                        </div>
                      )}
@@ -1513,7 +1540,7 @@ export default function App() {
                             {item.optionals.map((opt: any, i: number) => {
                               const accCatalogItem = catalogData.find(p => p.sku === opt.pn);
                               return (
-                                <li key={i}>{opt.pn} - {opt.description} {accCatalogItem ? `(₪${accCatalogItem.price.toLocaleString('he-IL', {maximumFractionDigits: 2})})` : ''}</li>
+                                <li key={i}>{opt.pn} - {opt.description} {accCatalogItem ? `(₪${accCatalogItem.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ''}</li>
                               );
                             })}
                           </ul>
@@ -2059,7 +2086,7 @@ export default function App() {
                               {item.optionals.map((opt: any, i: number) => {
                                 const accCatalogItem = catalogData.find(p => p.sku === opt.pn);
                                 return (
-                                  <li key={i}>{opt.pn} {accCatalogItem ? `(₪${accCatalogItem.price.toLocaleString('he-IL', {maximumFractionDigits: 2})})` : ''}</li>
+                                  <li key={i}>{opt.pn} {accCatalogItem ? `(₪${accCatalogItem.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ''}</li>
                                 );
                               })}
                             </ul>
