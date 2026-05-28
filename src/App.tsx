@@ -248,12 +248,14 @@ export default function App() {
           const categoryName = typeof row.category === 'string' ? row.category.trim() : (row.category || '');
           const subcategoryName = typeof row.subcategory === 'string' ? row.subcategory.trim() : (row.subcategory || '');
           const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
+          const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
 
           return {
             ...row,
             category: categoryName,
             subcategory: subcategoryName,
             nestedSubcategory: nestedSubcategoryName,
+            isComingSoon: isComingSoon,
             price: row.price ? Number(row.price.toString().replace(/,/g, '')) || 0 : 0,
             retailPrice: row.retailPrice ? Number(row.retailPrice.toString().replace(/,/g, '')) : null,
             images: itemImages.map(transformImageLink)
@@ -302,6 +304,8 @@ export default function App() {
            let parentSubcategory = row.parentSubcategory || row['Parent  Subcategory'] || row['Parent Subcategory'] || row['\tParent  Subcategory'] || '';
            parentSubcategory = typeof parentSubcategory === 'string' ? parentSubcategory.trim() : parentSubcategory;
            
+           const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
+
            // Normalize active to boolean robustly:
            let isActive = true;
            if (row.active !== undefined && row.active !== null) {
@@ -316,6 +320,7 @@ export default function App() {
              category: categoryName,
              subcategory: subcategoryName,
              parentSubcategory: parentSubcategory,
+             isComingSoon: isComingSoon,
              image: subImage,
              active: isActive
            };
@@ -447,6 +452,7 @@ export default function App() {
       return {
         name: subName,
         count: count,
+        isComingSoon: sheetSub?.isComingSoon === true,
         image: customImage || getFallbackImage(subName) || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(subName)
       };
     }).filter(sub => sub.count > 0).sort((a, b) => {
@@ -519,6 +525,7 @@ export default function App() {
       return {
         name: nestedName,
         count: count,
+        isComingSoon: sheetSub?.isComingSoon === true,
         image: customImage || getFallbackImage(nestedName) || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(nestedName)
       };
     }).filter(sub => sub.count > 0).sort((a,b) => {
@@ -810,8 +817,13 @@ export default function App() {
   const SubcategoryCard: React.FC<{ sub: any, onClick?: () => void }> = ({ sub, onClick }) => (
     <div 
       onClick={onClick || (() => navigateToSubcategory(sub.name))}
-      className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 border border-gray-100"
+      className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 relative border border-gray-100"
     >
+      {sub.isComingSoon && (
+        <div className="absolute top-2 left-[-30px] z-10 w-32 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50">
+          בקרוב!
+        </div>
+      )}
       <div className="relative aspect-square p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
         {sub.image ? (
           <img src={sub.image} alt={sub.name} onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500" />
@@ -847,10 +859,15 @@ export default function App() {
     return (
       <div 
         onClick={() => navigateToProduct(product)}
-        className={`group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100`}
+        className={`group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}
       >
+        {product.isComingSoon && (
+          <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50">
+            בקרוב!
+          </div>
+        )}
         <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square relative border-b border-gray-100 overflow-hidden`}>
-          <img src={product.images[0]} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm" />
+          <img src={product.images[0]} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm ${product.isComingSoon ? 'opacity-70' : ''}`} />
           
           <div className={`absolute top-2 right-2 z-10`}>
             {(product.brand && product.brand.toUpperCase() === 'EZVIZ') ? (
@@ -868,13 +885,13 @@ export default function App() {
         </div>
         <div className="p-3 sm:p-4 flex flex-col flex-grow text-center">
           <div className="text-[10px] sm:text-xs text-gray-400 mb-1 line-clamp-1">{product.sku}</div>
-          <h3 className="text-[#0c2d57] text-xs sm:text-base font-semibold mb-2 line-clamp-2 leading-tight min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center">{product.name}</h3>
+          <h3 className="text-[#0c2d57] text-xs sm:text-base font-semibold mb-2 line-clamp-2 leading-tight min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center text-center">{product.name}</h3>
           
           <div className="mt-auto pt-2 sm:pt-2 flex flex-col items-center w-full">
             {product.price === 0 ? (
               <div className="text-xs sm:text-sm font-bold text-gray-600 mb-2 mt-auto">צור קשר</div>
             ) : product.retailPrice ? (
-              <div className="flex flex-col items-center leading-tight mb-2 w-full">
+              <div className="flex flex-col items-center leading-tight mb-2 w-full text-center">
                  <span className="text-[9px] sm:text-xs text-gray-600 font-medium leading-[1.2] mb-1 w-full block">
                    צרכן: ₪{product.retailPrice.toLocaleString('he-IL', {maximumFractionDigits: 2})} <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block">(כולל מע"מ)</span>
                  </span>
@@ -884,19 +901,25 @@ export default function App() {
                  </span>
               </div>
             ) : (
-              <div className="mb-2 mt-auto flex flex-col items-center leading-none">
+              <div className="mb-2 mt-auto flex flex-col items-center leading-none text-center">
                 <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none">₪{product.price.toLocaleString('he-IL', {maximumFractionDigits: 2})}</span>
                 <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">מחיר מומלץ למתקין</span>
               </div>
             )}
             
-            <button 
-              onClick={handleAddClick}
-              className={`w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 transition-all duration-300 ${isAdded ? 'bg-green-600 text-white rounded-none hover:bg-green-600' : theme.button}`}
-            >
-              <ShoppingCart size={15} className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isAdded ? 'animate-bounce' : ''}`} />
-              <span className="text-xs sm:text-sm font-bold">{isAdded ? 'נוסף! ✓' : 'הוספה'}</span>
-            </button>
+            {product.isComingSoon ? (
+               <div className="w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200">
+                 <span className="text-xs sm:text-sm font-bold">בקרוב</span>
+               </div>
+            ) : (
+              <button 
+                onClick={handleAddClick}
+                className={`w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 transition-all duration-300 ${isAdded ? 'bg-green-600 text-white rounded-none hover:bg-green-600' : theme.button}`}
+              >
+                <ShoppingCart size={15} className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isAdded ? 'animate-bounce' : ''}`} />
+                <span className="text-xs sm:text-sm font-bold">{isAdded ? 'נוסף! ✓' : 'הוספה'}</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1157,27 +1180,33 @@ export default function App() {
                        </div>
                      )}
                   </div>
-                  <button 
-                    onClick={() => {
-                      if (currentOptionals.length > 0) {
-                         addToCart(selectedProduct, 1, []);
-                         currentOptionals.forEach((opt: any) => {
-                            const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
-                            if (catItem) {
-                               addToCart(catItem, 1, []);
-                            }
-                         });
-                      } else {
-                         addToCart(selectedProduct, 1, []);
-                      }
-                      setIsAdded(true);
-                      setTimeout(() => setIsAdded(false), 1500);
-                    }}
-                  className={`w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base ${isAdded ? 'bg-green-600 hover:bg-green-600 text-white' : theme.button}`}
-                >
-                  <ShoppingCart size={18} className={`sm:w-5 sm:h-5 ${isAdded ? 'animate-bounce' : ''}`} />
-                  {isAdded ? 'נוסף לעגלה! ✓' : 'הוסף להזמנה'}
-                </button>
+                  {selectedProduct.isComingSoon ? (
+                    <div className="w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md text-sm sm:text-base bg-gray-200 text-gray-600 cursor-not-allowed">
+                       <span className="animate-pulse">בקרוב!</span>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => {
+                        if (currentOptionals.length > 0) {
+                           addToCart(selectedProduct, 1, []);
+                           currentOptionals.forEach((opt: any) => {
+                              const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
+                              if (catItem) {
+                                 addToCart(catItem, 1, []);
+                              }
+                           });
+                        } else {
+                           addToCart(selectedProduct, 1, []);
+                        }
+                        setIsAdded(true);
+                        setTimeout(() => setIsAdded(false), 1500);
+                      }}
+                    className={`w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base ${isAdded ? 'bg-green-600 hover:bg-green-600 text-white' : theme.button}`}
+                  >
+                    <ShoppingCart size={18} className={`sm:w-5 sm:h-5 ${isAdded ? 'animate-bounce' : ''}`} />
+                    {isAdded ? 'נוסף לעגלה! ✓' : 'הוסף להזמנה'}
+                  </button>
+                  )}
               </div>
             </div>
             </div>
