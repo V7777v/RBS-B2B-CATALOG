@@ -165,6 +165,7 @@ export default function App() {
   const [subcategoriesGlobalData, setSubcategoriesGlobalData] = useState<any[]>([]);
   const [catalogData, setCatalogData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProductsLoading, setIsProductsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [currentView, setCurrentView] = useState('home'); // 'home', 'catalog_subs', 'nested_subs', 'products', 'product', 'checkout'
@@ -220,12 +221,83 @@ export default function App() {
         });
       };
 
-      const [productsCsv, catalogsCsv, subcategoriesCsv] = await Promise.all([
-        fetchCSV(PRODUCTS_GID),
+      // 1. Fetch metadata sheets (catalogs and subcategories are tiny, taking negligible time)
+      const [catalogsCsv, subcategoriesCsv] = await Promise.all([
         fetchCSV(CATALOGS_GID),
         fetchCSV(SUBCATEGORIES_GID)
       ]);
 
+      const parsedCatalogs = catalogsCsv.map((row: any) => {
+         let rawImage = row.IMAGE || row.Image || row.image || row['תמונה'] || row.imageURL;
+         let catImage = rawImage ? transformImageLink(rawImage) : null;
+         
+         const catName = typeof (row.name || row['שם'] || row.Name) === 'string' ? String(row.name || row['שם'] || row.Name).trim() : '';
+         
+         if (!catImage) {
+           if (catName && (catName.includes("סלולריים") || catName.toLowerCase().includes("cellular"))) {
+              catImage = "https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg";
+           } else if (catName && catName.includes("POE")) {
+              catImage = transformImageLink("https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link");
+           } else {
+              catImage = 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(catName || 'Category');
+           }
+         }
+
+         return {
+           name: catName,
+           desc: (row.desc || row.description || row['תיאור'] || '').trim(),
+           image: catImage,
+           brand: (row.brand || row['מותג'] || '').trim(),
+           sortOrder: Number(row.sortOrder || row['סדר'] || 999),
+           active: (row.active || row['פעיל']) === 'TRUE' || (row.active || row['פעיל']) === 'true' || row.active === 'כן'
+         };
+      }).sort((a,b) => a.sortOrder - b.sortOrder);
+
+      const parsedSubcategories = (subcategoriesCsv || []).map((row: any) => {
+         let providedImage = row.IMAGE || row.Image || row.image || row['תמונה'] || row.imageURL;
+         let subImage = providedImage ? transformImageLink(providedImage) : null;
+         
+         let subcategoryName = row.subcategory || row.Subcategory || row['תת קטגוריה'] || row.subCategory || row[' Subcategory'] || '';
+         subcategoryName = typeof subcategoryName === 'string' ? subcategoryName.trim() : subcategoryName;
+         
+         let categoryName = row.category || row.Category || row['קטגוריה'] || '';
+         categoryName = typeof categoryName === 'string' ? categoryName.trim() : categoryName;
+         
+         // Normalize parent subcategory matching the exact weird header the user added
+         let parentSubcategory = row.parentSubcategory || row['Parent  Subcategory'] || row['Parent Subcategory'] || row['\tParent  Subcategory'] || '';
+         parentSubcategory = typeof parentSubcategory === 'string' ? parentSubcategory.trim() : parentSubcategory;
+         
+         const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
+
+         // Normalize active to boolean robustly:
+         let isActive = true;
+         if (row.active !== undefined && row.active !== null) {
+            const actVal = String(row.active).toUpperCase().trim();
+            if (actVal === 'FALSE' || actVal === '0') {
+               isActive = false;
+            }
+         }
+         
+         return {
+           ...row,
+           category: categoryName,
+           subcategory: subcategoryName,
+           parentSubcategory: parentSubcategory,
+           isComingSoon: isComingSoon,
+           image: subImage,
+           active: isActive
+         };
+      });
+
+      setCatalogFolders(parsedCatalogs.filter(c => c.active !== false));
+      setSubcategoriesGlobalData(parsedSubcategories);
+      
+      // Stop the main block immediately, allowing the system to display the Home Page INSTANTLY!
+      if (!silent) setIsLoading(false);
+
+      // 2. Fetch products asynchronously (the heavy GID sheet) in the background
+      setIsProductsLoading(true);
+      fetchCSV(PRODUCTS_GID).then((productsCsv) => {
         const parsedProducts = productsCsv.map((row: any) => {
           let itemImages = [];
           if (row.imagesJSON) {
@@ -269,78 +341,21 @@ export default function App() {
           };
         });
 
-        const parsedCatalogs = catalogsCsv.map((row: any) => {
-           let rawImage = row.IMAGE || row.Image || row.image || row['תמונה'] || row.imageURL;
-           let catImage = rawImage ? transformImageLink(rawImage) : null;
-           
-           const catName = typeof (row.name || row['שם'] || row.Name) === 'string' ? String(row.name || row['שם'] || row.Name).trim() : '';
-           
-           if (!catImage) {
-             if (catName && (catName.includes("סלולריים") || catName.toLowerCase().includes("cellular"))) {
-                catImage = "https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg";
-             } else if (catName && catName.includes("POE")) {
-                catImage = transformImageLink("https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link");
-             } else {
-                catImage = 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(catName || 'Category');
-             }
-           }
-
-           return {
-             name: catName,
-             desc: (row.desc || row.description || row['תיאור'] || '').trim(),
-             image: catImage,
-             brand: (row.brand || row['מותג'] || '').trim(),
-             sortOrder: Number(row.sortOrder || row['סדר'] || 999),
-             active: (row.active || row['פעיל']) === 'TRUE' || (row.active || row['פעיל']) === 'true' || row.active === 'כן'
-           };
-        }).sort((a,b) => a.sortOrder - b.sortOrder);
-
         setCatalogData(parsedProducts);
-        setCatalogFolders(parsedCatalogs.filter(c => c.active !== false));
-        setSubcategoriesGlobalData((subcategoriesCsv || []).map((row: any) => {
-           let providedImage = row.IMAGE || row.Image || row.image || row['תמונה'] || row.imageURL;
-           let subImage = providedImage ? transformImageLink(providedImage) : null;
-           
-           let subcategoryName = row.subcategory || row.Subcategory || row['תת קטגוריה'] || row.subCategory || row[' Subcategory'] || '';
-           subcategoryName = typeof subcategoryName === 'string' ? subcategoryName.trim() : subcategoryName;
-           
-           let categoryName = row.category || row.Category || row['קטגוריה'] || '';
-           categoryName = typeof categoryName === 'string' ? categoryName.trim() : categoryName;
-           
-           // Normalize parent subcategory matching the exact weird header the user added
-           let parentSubcategory = row.parentSubcategory || row['Parent  Subcategory'] || row['Parent Subcategory'] || row['\tParent  Subcategory'] || '';
-           parentSubcategory = typeof parentSubcategory === 'string' ? parentSubcategory.trim() : parentSubcategory;
-           
-           const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
-
-           // Normalize active to boolean robustly:
-           let isActive = true;
-           if (row.active !== undefined && row.active !== null) {
-              const actVal = String(row.active).toUpperCase().trim();
-              if (actVal === 'FALSE' || actVal === '0') {
-                 isActive = false;
-              }
-           }
-           
-           return {
-             ...row,
-             category: categoryName,
-             subcategory: subcategoryName,
-             parentSubcategory: parentSubcategory,
-             isComingSoon: isComingSoon,
-             image: subImage,
-             active: isActive
-           };
-        }));
-        
+        setIsProductsLoading(false);
         lastFetchTimeRef.current = Date.now();
-      } catch (err) {
-        console.error("Error loading data:", err);
-        setError("שגיאה בטעינת הנתונים. אנא ודא שהמסמך פומבי ונגיש.");
-      } finally {
-        if (!silent) setIsLoading(false);
-      }
-    }, []);
+      }).catch(err => {
+         console.error("Error loading background products:", err);
+         setIsProductsLoading(false);
+      });
+
+    } catch (err) {
+      console.error("Error loading data:", err);
+      setError("שגיאה בטעינת הנתונים. אנא ודא שהמסמך פומבי ונגיש.");
+    } finally {
+      if (!silent) setIsLoading(false);
+    }
+  }, []);
 
   // Initial load
   useEffect(() => {
@@ -1816,7 +1831,13 @@ export default function App() {
                     <ChevronLeft size={16} />
                     <span>תוצאות חיפוש ל: <strong className="text-[#0c2d57]">{searchQuery}</strong></span>
                 </div>
-                {filteredProducts.length === 0 ? (
+                {isProductsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center animate-in fade-in duration-300">
+                    <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
+                    <h3 className="text-xl font-bold text-[#0c2d57]">מבצע חיפוש...</h3>
+                    <p className="text-gray-500 mt-2 text-sm leading-relaxed">אנו טוענים את כל המוצרים והמפרטים מהמערכת, זה ייקח רק כמה שניות.</p>
+                  </div>
+                ) : filteredProducts.length === 0 ? (
                   <div className="text-center py-20 bg-white border border-gray-100">
                     <div className="text-gray-300 mb-4 flex justify-center"><Search size={48} /></div>
                     <h3 className="text-xl font-bold text-[#0c2d57]">לא נמצאו מוצרים</h3>
@@ -1877,17 +1898,25 @@ export default function App() {
 
                 <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-4 sm:mb-6 text-center w-full block">בחר קטגוריה</h2>
                 
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
-                  {activeSubcategories.length === 0 ? (
-                    <div className="col-span-full text-center py-10 text-gray-500 bg-white border border-gray-100">
-                      לא נמצאו קטגוריות או מוצרים במחירון זה.
-                    </div>
-                  ) : (
-                    activeSubcategories.map((sub, idx) => (
-                      <SubcategoryCard key={idx} sub={sub} />
-                    ))
-                  )}
-                </div>
+                {isProductsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center animate-in fade-in duration-300">
+                    <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
+                    <h3 className="text-xl font-bold text-[#0c2d57]">טוען קטגוריות ומוצרים...</h3>
+                    <p className="text-gray-500 mt-2 text-sm leading-relaxed">מכין את קטלוג {selectedCatalog} בשבילך, רק רגע...</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
+                    {activeSubcategories.length === 0 ? (
+                      <div className="col-span-full text-center py-10 text-gray-500 bg-white border border-gray-100">
+                        לא נמצאו קטגוריות או מוצרים במחירון זה.
+                      </div>
+                    ) : (
+                      activeSubcategories.map((sub, idx) => (
+                        <SubcategoryCard key={idx} sub={sub} />
+                      ))
+                    )}
+                  </div>
+                )}
               </>
 
             ) : currentView === 'nested_subs' ? (
@@ -1908,11 +1937,19 @@ export default function App() {
 
                 <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-4 sm:mb-6 text-center w-full">בחר תת-קטגוריה</h2>
                 
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-6 max-w-4xl mx-auto">
-                  {nestedSubcategoriesData.map((sub, idx) => (
-                    <SubcategoryCard key={idx} sub={sub} onClick={() => navigateToNestedSubcategory(sub.name)} />
-                  ))}
-                </div>
+                {isProductsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center animate-in fade-in duration-300">
+                    <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
+                    <h3 className="text-xl font-bold text-[#0c2d57]">טוען תת-קטגוריות...</h3>
+                    <p className="text-gray-500 mt-2 text-sm leading-relaxed">אנו טוענים את כל הנתונים, זה ייקח רק פעימה אחת.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-6 max-w-4xl mx-auto">
+                    {nestedSubcategoriesData.map((sub, idx) => (
+                      <SubcategoryCard key={idx} sub={sub} onClick={() => navigateToNestedSubcategory(sub.name)} />
+                    ))}
+                  </div>
+                )}
               </>
 
             ) : currentView === 'products' ? (
@@ -1933,29 +1970,48 @@ export default function App() {
 
                 <div className="mb-6 sm:mb-8 text-center relative">
                    <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] inline-block w-full sm:w-auto px-4">{selectedSubcategory}</h2>
-                   <div className="mt-3 sm:mt-0 sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2 flex items-center justify-center">
-                     <span className="text-gray-600 bg-[#f2f2f2] px-3 py-1 rounded-none text-xs sm:text-sm font-medium whitespace-nowrap border border-gray-100 shadow-sm">{filteredProducts.length} מוצרים</span>
-                   </div>
+                   {!isProductsLoading && (
+                     <div className="mt-3 sm:mt-0 sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2 flex items-center justify-center">
+                       <span className="text-gray-600 bg-[#f2f2f2] px-3 py-1 rounded-none text-xs sm:text-sm font-medium whitespace-nowrap border border-gray-100 shadow-sm">{filteredProducts.length} מוצרים</span>
+                     </div>
+                   )}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
-                  {filteredProducts.slice(0, visibleCount).map(product => (
-                    <ProductCard key={product.id} product={product} />
-                  ))}
-                </div>
-                {visibleCount < filteredProducts.length && (
-                  <div className="flex justify-center mt-8">
-                    <button 
-                      onClick={() => setVisibleCount(prev => prev + 24)}
-                      className="bg-[#004387] text-white px-8 py-3 rounded shadow hover:bg-[#fe8d00] transition-colors"
-                    >
-                      הצג עוד מוצרים
-                    </button>
+                {isProductsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center animate-in fade-in duration-300">
+                    <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
+                    <h3 className="text-xl font-bold text-[#0c2d57]">טוען מוצרים...</h3>
+                    <p className="text-gray-500 mt-2 text-sm leading-relaxed">אנחנו מחברים בינך לבין רשימת המוצרים והמחירים העדכניים.</p>
                   </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
+                      {filteredProducts.slice(0, visibleCount).map(product => (
+                        <ProductCard key={product.id} product={product} />
+                      ))}
+                    </div>
+                    {visibleCount < filteredProducts.length && (
+                      <div className="flex justify-center mt-8">
+                        <button 
+                          onClick={() => setVisibleCount(prev => prev + 24)}
+                          className="bg-[#004387] text-white px-8 py-3 rounded shadow hover:bg-[#fe8d00] transition-colors"
+                        >
+                          הצג עוד מוצרים
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             ) : currentView === 'product' && selectedProduct ? (
-              <ProductDetailsView />
+              isProductsLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center animate-in fade-in duration-300">
+                  <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
+                  <h3 className="text-xl font-bold text-[#0c2d57]">טוען את פרטי המוצר...</h3>
+                </div>
+              ) : (
+                <ProductDetailsView />
+              )
             ) : currentView === 'checkout' ? (
                <CheckoutView />
             ) : null}
