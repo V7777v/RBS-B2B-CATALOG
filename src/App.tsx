@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
   ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server
 } from 'lucide-react';
@@ -186,35 +186,38 @@ export default function App() {
   }, [currentView, selectedCatalog, selectedSubcategory, selectedNestedSubcategory, searchQuery]);
 
   // --- DATA FETCHING ---
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const fetchCSV = (gid: string) => {
-          return new Promise<any[]>((resolve, reject) => {
-            Papa.parse(`${SHEET_URL}/gviz/tq?tqx=out:csv&gid=${gid}&_=${Date.now()}`, {
-              download: true,
-              header: true,
-              skipEmptyLines: true,
-              complete: (results) => {
-                const normalizedData = results.data.map(row => {
-                  const newRow: any = {};
-                  for (const key in row as object) {
-                    newRow[key.trim()] = (row as any)[key];
-                  }
-                  return newRow;
-                });
-                resolve(normalizedData);
-              },
-              error: (error: any) => reject(error)
-            });
-          });
-        };
+  const lastFetchTimeRef = useRef(0);
 
-        const [productsCsv, catalogsCsv, subcategoriesCsv] = await Promise.all([
-          fetchCSV(PRODUCTS_GID),
-          fetchCSV(CATALOGS_GID),
-          fetchCSV(SUBCATEGORIES_GID)
-        ]);
+  const loadData = useCallback(async (silent = false) => {
+    try {
+      if (!silent) setIsLoading(true);
+      
+      const fetchCSV = (gid: string) => {
+        return new Promise<any[]>((resolve, reject) => {
+          Papa.parse(`${SHEET_URL}/gviz/tq?tqx=out:csv&gid=${gid}&_=${Date.now()}`, {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+              const normalizedData = results.data.map(row => {
+                const newRow: any = {};
+                for (const key in row as object) {
+                  newRow[key.trim()] = (row as any)[key];
+                }
+                return newRow;
+              });
+              resolve(normalizedData);
+            },
+            error: (error: any) => reject(error)
+          });
+        });
+      };
+
+      const [productsCsv, catalogsCsv, subcategoriesCsv] = await Promise.all([
+        fetchCSV(PRODUCTS_GID),
+        fetchCSV(CATALOGS_GID),
+        fetchCSV(SUBCATEGORIES_GID)
+      ]);
 
         const parsedProducts = productsCsv.map((row: any) => {
           let itemImages = [];
@@ -317,16 +320,33 @@ export default function App() {
              active: isActive
            };
         }));
+        
+        lastFetchTimeRef.current = Date.now();
       } catch (err) {
         console.error("Error loading data:", err);
         setError("שגיאה בטעינת הנתונים. אנא ודא שהמסמך פומבי ונגיש.");
       } finally {
-        setIsLoading(false);
+        if (!silent) setIsLoading(false);
+      }
+    }, []);
+
+  // Initial load
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+  
+  // Smart auto-refresh on focus
+  useEffect(() => {
+    const handleFocus = () => {
+      // If data is older than 2 minutes, refresh it smartly in background
+      if (Date.now() - lastFetchTimeRef.current > 1000 * 120) {
+        loadData(true);
       }
     };
-
-    loadData();
-  }, []);
+    
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadData]);
 
   // Scroll to top on every view change
   useEffect(() => {
