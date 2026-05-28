@@ -20,23 +20,30 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
   e.currentTarget.src = 'https://placehold.co/600x400/f3f4f6/a3a3a3?text=RBS+Telecom';
 };
 
-const transformImageLink = (url: string) => {
+const transformImageLink = (url: string, size?: number) => {
   if (!url) return url;
   try {
     const trimmedUrl = url.trim();
+    let result = trimmedUrl;
     if (trimmedUrl.includes('drive.google.com/file/d/')) {
       const match = trimmedUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
       if (match && match[1]) {
-        return `https://lh3.googleusercontent.com/d/${match[1]}`;
+        result = `https://lh3.googleusercontent.com/d/${match[1]}`;
       }
     } else if (trimmedUrl.includes('id=')) {
       const match = trimmedUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
       if (match && match[1]) {
-        return `https://lh3.googleusercontent.com/d/${match[1]}`;
+        result = `https://lh3.googleusercontent.com/d/${match[1]}`;
       }
     } else if (trimmedUrl.includes('drive.google.com/drive/folders/')) {
       return 'https://placehold.co/600x400/f3f4f6/000000?text=Drive+Folder';
     }
+
+    if (size && result.includes('lh3.googleusercontent.com/d/')) {
+      const base = result.split('=')[0];
+      return `${base}=s${size}`;
+    }
+    return result;
   } catch(e) { /* ignore */ }
   return url;
 };
@@ -800,7 +807,7 @@ export default function App() {
       className="group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100"
     >
       <div className="aspect-square relative border-b border-gray-100 bg-white flex items-center justify-center p-3 sm:p-6 overflow-hidden">
-        <img src={catalog.image} alt={catalog.name} onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300" />
+        <img src={transformImageLink(catalog.image, 400)} alt={catalog.name} onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300" />
       </div>
       <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right">
         <h3 className="font-semibold text-[#0c2d57] text-sm sm:text-lg mb-1 sm:mb-2 line-clamp-2 leading-tight min-h-[2.5rem] sm:min-h-0 flex items-center justify-center sm:justify-start">{catalog.name}</h3>
@@ -826,7 +833,7 @@ export default function App() {
       )}
       <div className="relative aspect-square p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
         {sub.image ? (
-          <img src={sub.image} alt={sub.name} onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500" />
+          <img src={transformImageLink(sub.image, 400)} alt={sub.name} onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500" />
         ) : (
           <FolderOpen className="text-gray-300 w-10 h-10 sm:w-12 sm:h-12" />
         )}
@@ -867,15 +874,15 @@ export default function App() {
           </div>
         )}
         <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square relative border-b border-gray-100 overflow-hidden`}>
-          <img src={product.images[0]} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm ${product.isComingSoon ? 'opacity-70' : ''}`} />
+          <img src={transformImageLink(product.images[0], 350)} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm ${product.isComingSoon ? 'opacity-70' : ''}`} />
           
           <div className={`absolute top-2 right-2 z-10`}>
             {(product.brand && product.brand.toUpperCase() === 'EZVIZ') ? (
-              <img src="https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh" alt="EZVIZ" className="h-8 sm:h-12 object-contain drop-shadow-sm" />
+              <img src={transformImageLink("https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh", 120)} alt="EZVIZ" className="h-8 sm:h-12 object-contain drop-shadow-sm" />
             ) : (product.brand && product.brand.toUpperCase() === 'HIKVISION') ? (
-              <img src="https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M" alt="HIKVISION" className="h-8 sm:h-12 object-contain drop-shadow-sm" />
+              <img src={transformImageLink("https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M", 120)} alt="HIKVISION" className="h-8 sm:h-12 object-contain drop-shadow-sm" />
             ) : (product.brand && product.brand.toUpperCase() === 'POLMAN') ? (
-              <img src="https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU" alt="POLMAN" className="h-10 sm:h-14 object-contain drop-shadow-sm bg-white/80 rounded-full px-1" />
+              <img src={transformImageLink("https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU", 120)} alt="POLMAN" className="h-10 sm:h-14 object-contain drop-shadow-sm bg-white/80 rounded-full px-1" />
             ) : (
               <span className={`text-[10px] sm:text-xs font-bold px-2 py-1 rounded-none border inline-block ${theme.badge}`}>
                 {product.brand}
@@ -1001,7 +1008,7 @@ export default function App() {
                 onClick={isMobileDevice ? () => setIsMobileModalOpen(true) : undefined}
               >
                 <img 
-                  src={mainImage} 
+                  src={transformImageLink(mainImage, 800)} 
                   alt={selectedProduct.name} 
                   onError={handleImageError}
                   className="w-full h-full object-contain mix-blend-multiply transition-transform duration-200 ease-out lg:group-hover:scale-[2.5]"
@@ -1017,7 +1024,7 @@ export default function App() {
                       onClick={() => setMainImage(img)}
                       className={`w-16 h-16 sm:w-20 sm:h-20 bg-white p-1 rounded-none border-2 overflow-hidden flex-shrink-0 ${mainImage === img ? 'border-[#004387]' : 'border-transparent'}`}
                     >
-                      <img src={img} alt="thumbnail" onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
+                      <img src={transformImageLink(img, 150)} alt="thumbnail" onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
                     </button>
                   ))}
                 </div>
@@ -1233,7 +1240,7 @@ export default function App() {
                   <React.Fragment>
                     <TransformComponent wrapperClass="!w-full !flex !items-center !justify-center" contentClass="!w-full !flex !items-center !justify-center">
                       <img 
-                        src={mainImage} 
+                        src={transformImageLink(mainImage, 1200)} 
                         alt={selectedProduct.name} 
                         onError={handleImageError}
                         className="w-full h-auto max-h-[80vh] object-contain"
@@ -1480,7 +1487,7 @@ export default function App() {
               <div className="space-y-4">
                 {cart.map(item => (
                   <div key={item.id} className="flex gap-4 items-center border-b border-gray-100 pb-4 last:border-0">
-                    <img src={item.images[0]} alt={item.name} onError={handleImageError} className="w-16 h-16 object-contain bg-[#f2f2f2] p-1" />
+                    <img src={transformImageLink(item.images[0], 120)} alt={item.name} onError={handleImageError} className="w-16 h-16 object-contain bg-[#f2f2f2] p-1" />
                     <div className="flex-grow">
                       <div className="font-semibold text-[#0c2d57]">{item.name}</div>
                       <div className="text-xs text-gray-500 mb-2">מק"ט: {item.sku}</div>
@@ -1983,7 +1990,7 @@ export default function App() {
                   {cart.map(item => (
                     <div key={item.id} className="flex gap-4 border-b border-gray-100 pb-4">
                       <div className="w-20 h-20 bg-[#f2f2f2] p-1 flex-shrink-0 border border-gray-200">
-                        <img src={item.images[0]} alt={item.name} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply" />
+                        <img src={transformImageLink(item.images[0], 150)} alt={item.name} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply" />
                       </div>
                       <div className="flex-col flex flex-grow">
                         <div className="font-semibold text-sm text-[#0c2d57] line-clamp-2">{item.name}</div>
