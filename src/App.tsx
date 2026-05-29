@@ -925,11 +925,13 @@ export default function App() {
               <img src={transformImageLink("https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M", 120)} alt="HIKVISION" className="h-8 sm:h-12 object-contain drop-shadow-sm" />
             ) : (product.brand && product.brand.toUpperCase() === 'POLMAN') ? (
               <img src={transformImageLink("https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU", 120)} alt="POLMAN" className="h-10 sm:h-14 object-contain drop-shadow-sm bg-white/80 rounded-full px-1" />
-            ) : (
+            ) : (product.brand && product.brand.startsWith('http')) ? (
+              <img src={transformImageLink(product.brand, 120)} alt="Brand Logo" className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/80 rounded-md px-1" />
+            ) : product.brand ? (
               <span className={`text-[10px] sm:text-xs font-bold px-2 py-1 rounded-none border inline-block ${theme.badge}`}>
                 {product.brand}
               </span>
-            )}
+            ) : null}
           </div>
         </div>
         <div className="p-3 sm:p-4 flex flex-col flex-grow text-center">
@@ -1027,7 +1029,7 @@ export default function App() {
         </div>
 
         <div className="bg-white rounded-none shadow-sm border border-gray-100 mt-2 sm:mt-4">
-          {((selectedProduct.brand === 'EZVIZ') || (selectedProduct.brand === 'HIKVISION') || (selectedProduct.brand === 'POLMAN')) ? (
+          {((selectedProduct.brand === 'EZVIZ') || (selectedProduct.brand === 'HIKVISION') || (selectedProduct.brand === 'POLMAN') || (selectedProduct.brand && selectedProduct.brand.startsWith('http'))) ? (
             <div className="w-full py-4 px-4 sm:py-6 sm:px-6 bg-[#004387] flex justify-center items-center">
                {selectedProduct.brand === 'EZVIZ' ? (
                  <img src="https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh" alt="EZVIZ" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
@@ -1035,6 +1037,8 @@ export default function App() {
                  <img src="https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M" alt="HIKVISION" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
                ) : selectedProduct.brand === 'POLMAN' ? (
                  <img src="https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU" alt="POLMAN" loading="eager" className="h-56 sm:h-80 object-contain drop-shadow-md bg-white rounded-3xl px-6 py-2" />
+               ) : (selectedProduct.brand && selectedProduct.brand.startsWith('http')) ? (
+                 <img src={transformImageLink(selectedProduct.brand, 400)} alt="Brand Logo" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md" />
                ) : null}
             </div>
           ) : null}
@@ -1076,7 +1080,12 @@ export default function App() {
             <div className="w-full lg:w-7/12 flex flex-col">
               <div className={`text-xs sm:text-sm font-semibold mb-1 sm:mb-2 ${theme.accent}`}>{selectedProduct.category} | {selectedProduct.subcategory}</div>
               <h1 className="text-xl sm:text-2xl md:text-3xl font-normal text-[#0c2d57] mb-2 leading-tight">{selectedProduct.name}</h1>
-              <div className="text-gray-500 mb-4 sm:mb-6 text-xs sm:text-sm">מק"ט: <span className="font-mono text-gray-800">{selectedProduct.sku}</span> | מותג: <span className="font-bold">{selectedProduct.brand}</span></div>
+              <div className="text-gray-500 mb-4 sm:mb-6 text-xs sm:text-sm">
+                מק"ט: <span className="font-mono text-gray-800">{selectedProduct.sku}</span>
+                {selectedProduct.brand && !selectedProduct.brand.startsWith('http') && (
+                  <> | מותג: <span className="font-bold">{selectedProduct.brand}</span></>
+                )}
+              </div>
               
               <p className="text-gray-700 mb-6 sm:mb-8 leading-relaxed bg-[#f2f2f2] p-3 sm:p-4 text-sm sm:text-base rounded-none border-none whitespace-pre-line">
                 {selectedProduct.description}
