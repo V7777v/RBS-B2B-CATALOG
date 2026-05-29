@@ -329,18 +329,20 @@ export default function App() {
       setIsProductsLoading(true);
       fetchCSV(PRODUCTS_GID).then((productsCsv) => {
         const parsedProducts = productsCsv.map((row: any) => {
-          let itemImages = [];
-          if (row.imagesJSON) {
+          let itemImages: string[] = [];
+          
+          const rawImagesField = row.imagesJSON || row[''] || row.images || row['תמונות'] || '';
+          if (rawImagesField) {
             try {
-               itemImages = JSON.parse(row.imagesJSON);
+               itemImages = JSON.parse(rawImagesField);
                if(!Array.isArray(itemImages)) {
                   itemImages = [itemImages];
                }
             } catch(e) {
-               if (typeof row.imagesJSON === 'string') {
-                  const cleaned = row.imagesJSON.trim();
+               if (typeof rawImagesField === 'string') {
+                  const cleaned = rawImagesField.trim();
                   if (cleaned.startsWith('http')) {
-                     itemImages = cleaned.split(',').map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
+                     itemImages = cleaned.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
                   }
                }
             }
@@ -348,8 +350,9 @@ export default function App() {
           
           if (!itemImages || itemImages.length === 0) {
               if (row.imageURL && row.imageURL.trim().startsWith('http')) {
-                 itemImages = [row.imageURL.trim()];
-              } else {
+                 itemImages = row.imageURL.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
+              }
+              if (!itemImages || itemImages.length === 0) {
                  itemImages = ['https://placehold.co/600x400/f3f4f6/000000?text=No+Image'];
               }
           }
@@ -847,24 +850,55 @@ export default function App() {
   };
 
   const BrandBadge: React.FC<{ brand: string }> = ({ brand }) => {
+    const [imgFailed, setImgFailed] = useState(false);
     if (!brand) return null;
-    const theme = getBrandTheme(brand);
     
-    if (brand.toUpperCase() === 'EZVIZ') {
-      return <img src={transformImageLink("https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh", 120)} alt="EZVIZ" className="h-8 sm:h-12 object-contain drop-shadow-sm" />;
+    const theme = getBrandTheme(brand);
+    const isLink = brand.startsWith('http');
+    
+    let displayName = brand;
+    if (isLink) {
+      const lower = brand.toLowerCase();
+      if (lower.includes('ezviz') || lower.includes('16oips6v2')) displayName = 'EZVIZ';
+      else if (lower.includes('hikvision') || lower.includes('1m1hhh')) displayName = 'HIKVISION';
+      else if (lower.includes('polman') || lower.includes('1zozo23t')) displayName = 'POLMAN';
+      else if (lower.includes('rbs') || lower.includes('telecom')) displayName = 'RBS';
+      else {
+        // Try getting filename or clean title
+        try {
+          const u = new URL(brand);
+          const parts = u.pathname.split('/');
+          const file = parts[parts.length - 1];
+          if (file && file.length > 3) {
+            displayName = decodeURIComponent(file.split('.')[0]).replace(/[-_]/g, ' ').substring(0, 15);
+          } else {
+            displayName = 'מותג';
+          }
+        } catch {
+          displayName = 'מותג';
+        }
+      }
     }
-    if (brand.toUpperCase() === 'HIKVISION') {
-      return <img src={transformImageLink("https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M", 120)} alt="HIKVISION" className="h-8 sm:h-12 object-contain drop-shadow-sm" />;
+
+    if (!imgFailed) {
+      const upper = brand.toUpperCase();
+      if (upper === 'EZVIZ' || (!isLink && upper.includes('EZVIZ')) || (isLink && upper.includes('EZVIZ'))) {
+        return <img src={transformImageLink("https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh", 120)} alt="EZVIZ" onError={() => setImgFailed(true)} className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/50 rounded px-1" />;
+      }
+      if (upper === 'HIKVISION' || (!isLink && upper.includes('HIKVISION')) || (isLink && upper.includes('HIKVISION'))) {
+        return <img src={transformImageLink("https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M", 120)} alt="HIKVISION" onError={() => setImgFailed(true)} className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/50 rounded px-1" />;
+      }
+      if (upper === 'POLMAN' || (!isLink && upper.includes('POLMAN')) || (isLink && upper.includes('POLMAN'))) {
+        return <img src={transformImageLink("https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU", 120)} alt="POLMAN" onError={() => setImgFailed(true)} className="h-10 sm:h-14 object-contain drop-shadow-sm bg-white/80 rounded-full px-1" />;
+      }
+      if (isLink) {
+        return <img src={transformImageLink(brand, 120)} alt="Brand Logo" onError={() => setImgFailed(true)} className="h-10 sm:h-14 object-contain drop-shadow-md bg-white/90 shadow-sm border border-gray-100 rounded-md px-2 py-0.5" />;
+      }
     }
-    if (brand.toUpperCase() === 'POLMAN') {
-      return <img src={transformImageLink("https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU", 120)} alt="POLMAN" className="h-10 sm:h-14 object-contain drop-shadow-sm bg-white/80 rounded-full px-1" />;
-    }
-    if (brand.startsWith('http')) {
-      return <img src={transformImageLink(brand, 120)} alt="Brand Logo" className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/80 rounded-md px-1" />;
-    }
+
     return (
-      <span className={`text-[10px] sm:text-xs font-bold px-2 py-1 rounded-none border inline-block ${theme.badge}`}>
-        {brand}
+      <span className={`text-[10px] sm:text-xs font-bold px-2 py-1 rounded shadow-xs border inline-block ${theme.badge} max-w-[120px] truncate`}>
+        {displayName}
       </span>
     );
   };
@@ -1089,14 +1123,14 @@ export default function App() {
               </div>
 
               {selectedProduct.images.length > 1 && (
-                <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
-                  {selectedProduct.images.map((img: string, idx: number) => (
+                <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 pt-2" style={{ scrollbarWidth: 'none' }}>
+                  {selectedProduct.images.slice(0, 4).map((img: string, idx: number) => (
                     <button 
                       key={idx} 
                       onClick={() => setMainImage(img)}
-                      className={`w-16 h-16 sm:w-20 sm:h-20 bg-white p-1 rounded-none border-2 overflow-hidden flex-shrink-0 ${mainImage === img ? 'border-[#004387]' : 'border-transparent'}`}
+                      className={`w-24 h-24 sm:w-40 sm:h-40 bg-white p-2 rounded-none border-2 overflow-hidden flex-shrink-0 transition-all ${mainImage === img ? 'border-[#004387] shadow-md scale-105' : 'border-gray-200 hover:border-gray-300'}`}
                     >
-                      <img src={transformImageLink(img, 150)} alt="thumbnail" onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
+                      <img src={transformImageLink(img, 300)} alt={`תמונה ${idx + 1} של המוצר`} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
                     </button>
                   ))}
                 </div>
