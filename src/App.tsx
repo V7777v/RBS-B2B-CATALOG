@@ -305,6 +305,8 @@ export default function App() {
             }
          }
          
+         const brandValue = row.brand || row.brands || row.Brands || row.Brand || row['מותג'] || '';
+         
          return {
            ...row,
            category: categoryName,
@@ -312,7 +314,8 @@ export default function App() {
            parentSubcategory: parentSubcategory,
            isComingSoon: isComingSoon,
            image: subImage,
-           active: isActive
+           active: isActive,
+           brand: typeof brandValue === 'string' ? brandValue.trim() : String(brandValue).trim()
          };
       });
 
@@ -502,7 +505,8 @@ export default function App() {
         name: subName,
         count: count,
         isComingSoon: sheetSub?.isComingSoon === true,
-        image: customImage || getFallbackImage(subName) || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(subName)
+        image: customImage || getFallbackImage(subName) || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(subName),
+        brand: sheetSub?.brand
       };
     }).filter(sub => sub.count > 0).sort((a, b) => {
        const orderList = SUBCATEGORIES_ORDER[selectedCatalog] || [];
@@ -575,7 +579,8 @@ export default function App() {
         name: nestedName,
         count: count,
         isComingSoon: sheetSub?.isComingSoon === true,
-        image: customImage || getFallbackImage(nestedName) || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(nestedName)
+        image: customImage || getFallbackImage(nestedName) || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(nestedName),
+        brand: sheetSub?.brand
       };
     }).filter(sub => sub.count > 0).sort((a,b) => {
        const orderList = SUBCATEGORIES_ORDER[selectedCatalog] || [];
@@ -841,6 +846,29 @@ export default function App() {
     return theme;
   };
 
+  const BrandBadge: React.FC<{ brand: string }> = ({ brand }) => {
+    if (!brand) return null;
+    const theme = getBrandTheme(brand);
+    
+    if (brand.toUpperCase() === 'EZVIZ') {
+      return <img src={transformImageLink("https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh", 120)} alt="EZVIZ" className="h-8 sm:h-12 object-contain drop-shadow-sm" />;
+    }
+    if (brand.toUpperCase() === 'HIKVISION') {
+      return <img src={transformImageLink("https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M", 120)} alt="HIKVISION" className="h-8 sm:h-12 object-contain drop-shadow-sm" />;
+    }
+    if (brand.toUpperCase() === 'POLMAN') {
+      return <img src={transformImageLink("https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU", 120)} alt="POLMAN" className="h-10 sm:h-14 object-contain drop-shadow-sm bg-white/80 rounded-full px-1" />;
+    }
+    if (brand.startsWith('http')) {
+      return <img src={transformImageLink(brand, 120)} alt="Brand Logo" className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/80 rounded-md px-1" />;
+    }
+    return (
+      <span className={`text-[10px] sm:text-xs font-bold px-2 py-1 rounded-none border inline-block ${theme.badge}`}>
+        {brand}
+      </span>
+    );
+  };
+
   // --- COMPONENTS ---
 
   const CatalogCard: React.FC<{ catalog: any }> = ({ catalog }) => (
@@ -849,6 +877,11 @@ export default function App() {
       className="group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100"
     >
       <div className="aspect-square relative border-b border-gray-100 bg-white flex items-center justify-center p-3 sm:p-6 overflow-hidden">
+        {catalog.brand && (
+          <div className="absolute top-2 right-2 z-10">
+            <BrandBadge brand={catalog.brand} />
+          </div>
+        )}
         <img src={transformImageLink(catalog.image, 400)} alt={catalog.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300" />
       </div>
       <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right">
@@ -874,6 +907,11 @@ export default function App() {
         </div>
       )}
       <div className="relative aspect-square p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
+        {sub.brand && (
+          <div className="absolute top-2 right-2 z-10">
+            <BrandBadge brand={sub.brand} />
+          </div>
+        )}
         {sub.image ? (
           <img src={transformImageLink(sub.image, 400)} alt={sub.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500" />
         ) : (
@@ -919,19 +957,7 @@ export default function App() {
           <img src={transformImageLink(product.images[0], 350)} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm ${product.isComingSoon ? 'opacity-70' : ''}`} />
           
           <div className={`absolute top-2 right-2 z-10`}>
-            {(product.brand && product.brand.toUpperCase() === 'EZVIZ') ? (
-              <img src={transformImageLink("https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh", 120)} alt="EZVIZ" className="h-8 sm:h-12 object-contain drop-shadow-sm" />
-            ) : (product.brand && product.brand.toUpperCase() === 'HIKVISION') ? (
-              <img src={transformImageLink("https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M", 120)} alt="HIKVISION" className="h-8 sm:h-12 object-contain drop-shadow-sm" />
-            ) : (product.brand && product.brand.toUpperCase() === 'POLMAN') ? (
-              <img src={transformImageLink("https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU", 120)} alt="POLMAN" className="h-10 sm:h-14 object-contain drop-shadow-sm bg-white/80 rounded-full px-1" />
-            ) : (product.brand && product.brand.startsWith('http')) ? (
-              <img src={transformImageLink(product.brand, 120)} alt="Brand Logo" className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/80 rounded-md px-1" />
-            ) : product.brand ? (
-              <span className={`text-[10px] sm:text-xs font-bold px-2 py-1 rounded-none border inline-block ${theme.badge}`}>
-                {product.brand}
-              </span>
-            ) : null}
+            <BrandBadge brand={product.brand} />
           </div>
         </div>
         <div className="p-3 sm:p-4 flex flex-col flex-grow text-center">
