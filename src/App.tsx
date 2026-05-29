@@ -1661,7 +1661,7 @@ export default function App() {
     const handleLogin = (e: React.FormEvent) => {
       e.preventDefault();
       // "1234" is a simple fallback if you don't use environment variables
-      if (password === '1234') {
+      if (password === 'Rbs2026') {
         setIsAuthenticated(true);
       } else {
         setErrorMsg('סיסמה שגויה. אנא השתמש בקוד הגישה שקיבלת מהחברה.');
