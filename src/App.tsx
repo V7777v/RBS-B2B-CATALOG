@@ -6,6 +6,7 @@ import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { HumanVerification } from './components/HumanVerification';
+import { AddressAutocomplete } from './components/AddressAutocomplete';
 import InstallBanner from './components/InstallBanner';
 import { CabinetConfigurator } from './components/CabinetConfigurator';
 import { AccessoryCabinets } from './components/AccessoryCabinets';
@@ -1672,7 +1673,17 @@ export default function App() {
                 <p className="text-xs text-gray-500 mt-1">כתובת המייל אליה יישלח אישור/העתק כשתשתמשו בשליחה דרך המייל.</p>
               </div>
 
-              <input type="text" placeholder="כתובת אספקה" value={address} onChange={e => setAddress(e.target.value)} className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm" />
+              <AddressAutocomplete 
+                value={address} 
+                onChange={setAddress}
+                theme={{
+                  bg: 'bg-white',
+                  text: 'text-[#0c2d57]',
+                  border: 'border-gray-200',
+                  accent: 'text-[#004387]',
+                  hover: 'hover:bg-gray-50'
+                }}
+              />
 
               <textarea placeholder="הערות למשלוח / הזמנה" value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm resize-none"></textarea>
               
