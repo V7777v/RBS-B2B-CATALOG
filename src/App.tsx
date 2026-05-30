@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff
 } from 'lucide-react';
 import Papa from 'papaparse';
+import { motion, AnimatePresence } from 'motion/react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { HumanVerification } from './components/HumanVerification';
 import InstallBanner from './components/InstallBanner';
@@ -1725,44 +1726,124 @@ export default function App() {
 
   const LoginView = () => {
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
+    const [shakeTrigger, setShakeTrigger] = useState(0);
 
     const handleLogin = (e: React.FormEvent) => {
       e.preventDefault();
-      // "1234" is a simple fallback if you don't use environment variables
       if (password === 'Rbs2026') {
         setIsAuthenticated(true);
       } else {
         setErrorMsg('סיסמה שגויה. אנא השתמש בקוד הגישה שקיבלת מהחברה.');
+        setShakeTrigger(prev => prev + 1);
       }
     };
 
     return (
-      <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="bg-white p-8 shadow-xl max-w-sm w-full text-center border-t-4 border-[#004387]">
-          {/* Default icon or user's logo could go here */}
-          <div className="w-16 h-16 bg-[#004387] text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-md">
-             <Lock size={32} />
-          </div>
-          <h2 className="text-2xl font-bold text-[#0c2d57] mb-2">כניסה לקטלוג B2B</h2>
-          <p className="text-gray-500 mb-8 text-sm">הקטלוג מיועד ללקוחות עסקיים ומורשים בלבד. הקש סיסמה לכניסה.</p>
+      <div dir="rtl" className="min-h-screen flex items-center justify-center bg-[#0d1627] p-4 relative overflow-hidden">
+        {/* Abstract floating shapes for high-end feel */}
+        <div className="absolute top-[-10%] right-[-10%] w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-[#004387]/20 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-[#f7941d]/10 rounded-full blur-[120px] pointer-events-none" />
+
+        <motion.div 
+          initial={{ opacity: 0, y: 30, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="bg-white/95 backdrop-blur-md p-6 sm:p-10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] max-w-md w-full text-center border border-white/20 relative z-10"
+        >
+          {/* Logo container with rotation animation */}
+          <motion.div 
+            initial={{ scale: 0, rotate: -180 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.2 }}
+            className="w-20 h-20 bg-gradient-to-tr from-[#004387] to-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/20"
+          >
+             <Lock size={36} className="text-white drop-shadow-md animate-pulse" />
+          </motion.div>
+          
+          <motion.h2 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="text-2xl sm:text-3xl font-extrabold text-[#0c2d57] mb-2 tracking-tight"
+          >
+            כניסה לקטלוג B2B
+          </motion.h2>
+          
+          <motion.p 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="text-gray-500 mb-8 text-xs sm:text-sm max-w-xs mx-auto leading-relaxed font-medium"
+          >
+            הקטלוג מיועד ללקוחות עסקיים ומורשים בלבד. הקש סיסמה לכניסה.
+          </motion.p>
           
           <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-               <input 
-                 type="password" 
-                 placeholder="הזן קוד גישה" 
-                 value={password}
-                 onChange={(e) => setPassword(e.target.value)}
-                 className="w-full p-4 border border-gray-300 focus:border-[#004387] focus:ring-1 focus:ring-[#004387] outline-none text-center text-lg tracking-[0.25em]"
-               />
-            </div>
-            {errorMsg && <p className="text-red-500 text-sm font-medium">{errorMsg}</p>}
-            <button type="submit" className="w-full bg-[#f7941d] hover:bg-[#e0861a] text-white font-bold py-3 transition-colors text-lg flex items-center justify-center gap-2">
-              היכנס למערכת <ChevronLeft size={18} />
-            </button>
+            <motion.div 
+              animate={shakeTrigger ? {
+                x: [0, -10, 10, -10, 10, -5, 5, 0],
+              } : {}}
+              transition={{ duration: 0.5 }}
+              key={shakeTrigger}
+              className="relative rounded-xl overflow-hidden"
+            >
+              <div className="relative flex items-center">
+                 <input 
+                   type={showPassword ? "text" : "password"} 
+                   placeholder="הזן קוד גישה" 
+                   value={password}
+                   onChange={(e) => setPassword(e.target.value)}
+                   className="w-full pl-12 pr-6 py-4 border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:border-[#004387] focus:ring-4 focus:ring-blue-100 outline-none text-center text-xl font-bold tracking-[0.2em] transition-all"
+                 />
+                 
+                 {/* Password Toggle Button with nice framer hover/active dynamics */}
+                 <button
+                   type="button"
+                   onClick={() => setShowPassword(!showPassword)}
+                   className="absolute left-3 p-2 text-gray-400 hover:text-[#004387] focus:outline-none transition-colors border-none bg-transparent cursor-pointer"
+                   title={showPassword ? "הסתר קוד" : "הצג קוד"}
+                 >
+                   <AnimatePresence mode="wait">
+                     <motion.div
+                       key={showPassword ? "eye-open" : "eye-closed"}
+                       initial={{ opacity: 0, scale: 0.8 }}
+                       animate={{ opacity: 1, scale: 1 }}
+                       exit={{ opacity: 0, scale: 0.8 }}
+                       transition={{ duration: 0.15 }}
+                     >
+                       {showPassword ? <EyeOff size={22} /> : <Eye size={22} />}
+                     </motion.div>
+                   </AnimatePresence>
+                 </button>
+              </div>
+            </motion.div>
+            
+            <AnimatePresence>
+              {errorMsg && (
+                <motion.p 
+                  initial={{ opacity: 0, height: 0, y: -10 }}
+                  animate={{ opacity: 1, height: 'auto', y: 0 }}
+                  exit={{ opacity: 0, height: 0, y: -10 }}
+                  className="text-red-500 text-sm font-semibold text-right flex items-center gap-1.5 justify-center bg-red-50 py-2.5 px-4 rounded-xl border border-red-100"
+                >
+                  <span className="inline-block w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
+                  {errorMsg}
+                </motion.p>
+              )}
+            </AnimatePresence>
+            
+            <motion.button 
+              type="submit" 
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full bg-[#f7941d] hover:bg-[#e0861a] hover:shadow-lg hover:shadow-orange-500/20 text-white font-extrabold py-4 rounded-xl transition-all text-lg flex items-center justify-center gap-2 border-none shadow-md shadow-orange-500/10 cursor-pointer"
+            >
+              היכנס למערכת <ChevronLeft size={20} className="transition-transform group-hover:-translate-x-1" />
+            </motion.button>
           </form>
-        </div>
+        </motion.div>
       </div>
     );
   };
