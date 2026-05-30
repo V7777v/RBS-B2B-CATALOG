@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -363,9 +363,24 @@ export default function App() {
           const subcategoryName = typeof row.subcategory === 'string' ? row.subcategory.trim() : (row.subcategory || '');
           const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
           const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
-          const isHotSale = row['מבצע חם']?.toString()?.trim()?.toUpperCase() === 'TRUE';
-          const saleType = typeof row['סוג מבצע'] === 'string' ? row['סוג מבצע'].trim() : (row['סוג מבצע'] || null);
-          const saleValue = typeof row['ערך מבצע'] === 'string' ? row['ערך מבצע'].trim() : (row['ערך מבצע'] || null);
+          const hotSaleKey = Object.keys(row).find(k => {
+             const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+             return clean.includes('מבצע חם') || clean.includes('מבצע_חם') || clean.includes('hot sale') || clean.includes('hotsale') || clean === 'מבצע' || clean === 'מבצעים';
+          });
+          const saleTypeKey = Object.keys(row).find(k => {
+             const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+             return clean.includes('סוג מבצע') || clean.includes('sale type') || clean.includes('saletype') || clean.includes('סוג המבצע');
+          });
+          const saleValueKey = Object.keys(row).find(k => {
+             const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+             return clean.includes('ערך מבצע') || clean.includes('sale value') || clean.includes('salevalue') || clean.includes('ערך המבצע') || clean.includes('מחיר מבצע');
+          });
+
+          const hotSaleVal = hotSaleKey ? String(row[hotSaleKey]).trim().toUpperCase() : '';
+          const isHotSale = hotSaleVal === 'TRUE' || hotSaleVal === 'YES' || hotSaleVal === 'כן' || hotSaleVal === '1' || hotSaleVal === 'V' || hotSaleVal === 'Y' || hotSaleVal === 'פעיל' || hotSaleVal === 'במבצע';
+          const saleType = saleTypeKey && typeof row[saleTypeKey] === 'string' ? row[saleTypeKey].trim() : (saleTypeKey ? row[saleTypeKey] : null);
+          const saleValue = saleValueKey && typeof row[saleValueKey] === 'string' ? row[saleValueKey].trim() : (saleValueKey ? row[saleValueKey] : null);
+
 
           return {
             ...row,
@@ -465,7 +480,11 @@ export default function App() {
     if (!selectedCatalog) return [];
     
     const activeCatObj = catalogFolders.find(c => c.name === selectedCatalog);
-    const isHotSaleMode = activeCatObj && activeCatObj.brand === 'HOT SALE';
+    const isHotSaleMode = activeCatObj && (
+      (activeCatObj.brand && activeCatObj.brand.trim().toUpperCase() === 'HOT SALE') ||
+      activeCatObj.name.includes('מבצע') ||
+      activeCatObj.name.toLowerCase().includes('sale')
+    );
 
     if (isHotSaleMode) {
       const hotSaleProducts = catalogData.filter(item => item.active !== 'FALSE' && item.isHotSale);
@@ -661,7 +680,11 @@ export default function App() {
     // Filter by catalog and subcategory
     if (selectedCatalog && currentView === 'products') {
       const activeCatObj = catalogFolders.find(c => c.name === selectedCatalog);
-      const isHotSaleMode = activeCatObj && activeCatObj.brand === 'HOT SALE';
+      const isHotSaleMode = activeCatObj && (
+        (activeCatObj.brand && activeCatObj.brand.trim().toUpperCase() === 'HOT SALE') ||
+        activeCatObj.name.includes('מבצע') ||
+        activeCatObj.name.toLowerCase().includes('sale')
+      );
 
       filtered = filtered.filter(item => {
         if (item.name === 'מוצר הדגמה' || item.name === 'קטגוריית אם') return false;
@@ -826,7 +849,11 @@ export default function App() {
 
   const navigateToSubcategory = (subName: string | null) => {
     const activeCatObj = catalogFolders.find(c => c.name === selectedCatalog);
-    const isHotSaleMode = activeCatObj && activeCatObj.brand === 'HOT SALE';
+    const isHotSaleMode = activeCatObj && (
+      (activeCatObj.brand && activeCatObj.brand.trim().toUpperCase() === 'HOT SALE') ||
+      activeCatObj.name.includes('מבצע') ||
+      activeCatObj.name.toLowerCase().includes('sale')
+    );
 
     let hasNested = false;
     if (!isHotSaleMode) {
@@ -1129,6 +1156,43 @@ export default function App() {
       }
     }, [selectedProduct]);
 
+    const imagesList = selectedProduct?.images || [];
+    const activeIdx = imagesList.indexOf(mainImage);
+
+    const handlePrevImage = (e?: React.MouseEvent) => {
+      if (e) e.stopPropagation();
+      if (imagesList.length <= 1) return;
+      const newIndex = activeIdx > 0 ? activeIdx - 1 : imagesList.length - 1;
+      setMainImage(imagesList[newIndex]);
+      setTimeout(() => {
+        const carousel = document.getElementById('image-carousel');
+        if (carousel) {
+          const activeThumb = carousel.children[newIndex] as HTMLElement;
+          if (activeThumb) {
+             const scrollLeft = activeThumb.offsetLeft - (carousel.clientWidth / 2) + (activeThumb.clientWidth / 2);
+             carousel.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+          }
+        }
+      }, 50);
+    };
+
+    const handleNextImage = (e?: React.MouseEvent) => {
+      if (e) e.stopPropagation();
+      if (imagesList.length <= 1) return;
+      const newIndex = activeIdx < imagesList.length - 1 ? activeIdx + 1 : 0;
+      setMainImage(imagesList[newIndex]);
+      setTimeout(() => {
+        const carousel = document.getElementById('image-carousel');
+        if (carousel) {
+          const activeThumb = carousel.children[newIndex] as HTMLElement;
+          if (activeThumb) {
+             const scrollLeft = activeThumb.offsetLeft - (carousel.clientWidth / 2) + (activeThumb.clientWidth / 2);
+             carousel.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+          }
+        }
+      }, 50);
+    };
+
     const handleMouseMove = (e: any) => {
       const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -1183,10 +1247,9 @@ export default function App() {
             <div className="w-full lg:w-5/12 flex flex-col gap-3 sm:gap-4">
               {/* ZOOMABLE IMAGE CONTAINER */}
               <div 
-                className={`aspect-square rounded-none border border-gray-100 ${theme.bg} p-2 sm:p-4 flex items-center justify-center relative overflow-hidden cursor-crosshair group ${isMobileDevice ? '!cursor-zoom-in' : ''}`}
+                className={`aspect-square rounded-none border border-gray-100 ${theme.bg} p-2 sm:p-4 flex items-center justify-center relative overflow-hidden group ${isMobileDevice ? 'cursor-default' : 'cursor-crosshair'}`}
                 onMouseMove={isMobileDevice ? undefined : handleMouseMove}
                 onMouseLeave={isMobileDevice ? undefined : handleMouseLeave}
-                onClick={isMobileDevice ? () => setIsMobileModalOpen(true) : undefined}
               >
                 <img 
                   src={transformImageLink(mainImage, 800)} 
@@ -1195,34 +1258,78 @@ export default function App() {
                   className="w-full h-full object-contain mix-blend-multiply transition-transform duration-200 ease-out lg:group-hover:scale-[2.5]"
                   style={{ transformOrigin: `${zoomPos.x}% ${zoomPos.y}%` }}
                 />
+
+                {/* Left & Right Chevrons overlaid on main image */}
+                {imagesList.length > 1 && (
+                  <>
+                    <button 
+                      onClick={handlePrevImage}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 hover:text-[#004387] border border-gray-100 w-10 h-10 rounded-full shadow-md transition-all active:scale-90 z-20 flex items-center justify-center cursor-pointer"
+                      aria-label="תמונה קודמת"
+                    >
+                      <ChevronLeft size={24} />
+                    </button>
+                    <button 
+                      onClick={handleNextImage}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 hover:text-[#004387] border border-gray-100 w-10 h-10 rounded-full shadow-md transition-all active:scale-90 z-20 flex items-center justify-center cursor-pointer"
+                      aria-label="תמונה הבאה"
+                    >
+                      <ChevronRight size={24} />
+                    </button>
+                  </>
+                )}
+
+                {/* Zoom icon for mobile */}
+                {isMobileDevice && (
+                  <button 
+                    onClick={() => setIsMobileModalOpen(true)}
+                    className="absolute bottom-3 right-3 bg-white/90 text-gray-700 hover:text-[#0c2d57] border border-gray-200 rounded-full p-2.5 shadow-sm active:scale-95 z-20 flex items-center justify-center cursor-pointer"
+                    aria-label="זום"
+                  >
+                    <ZoomIn size={18} />
+                  </button>
+                )}
               </div>
 
-              {selectedProduct.images.length > 1 && (
-                <div className="relative group/carousel mt-2">
+              {imagesList.length > 1 && (
+                <div className="relative group/carousel mt-1 px-1">
                   <div id="image-carousel" className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 pt-2 snap-x scroll-smooth" style={{ scrollbarWidth: 'none' }}>
-                    {selectedProduct.images.map((img: string, idx: number) => (
+                    {imagesList.map((img: string, idx: number) => (
                       <button 
                         key={idx} 
-                        onClick={() => setMainImage(img)}
+                        onClick={() => {
+                          setMainImage(img);
+                          const carousel = document.getElementById('image-carousel');
+                          if (carousel) {
+                            const activeThumb = carousel.children[idx] as HTMLElement;
+                            if (activeThumb) {
+                               const scrollLeft = activeThumb.offsetLeft - (carousel.clientWidth / 2) + (activeThumb.clientWidth / 2);
+                               carousel.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+                            }
+                          }
+                        }}
                         className={`w-20 h-20 sm:w-28 sm:h-28 bg-white p-1 sm:p-2 rounded-none border-2 overflow-hidden flex-shrink-0 transition-all snap-start ${mainImage === img ? 'border-[#004387] shadow-md scale-[1.02]' : 'border-gray-200 hover:border-gray-300'}`}
                       >
                         <img src={transformImageLink(img, 300)} alt={`תמונה ${idx + 1} של המוצר`} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
                       </button>
                     ))}
                   </div>
-                  {selectedProduct.images.length > 3 && (
+
+                  {imagesList.length > 3 && (
                     <>
                       <button 
-                        className="absolute top-1/2 left-0 -translate-y-1/2 -ml-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#0c2d57] hover:scale-110 transition-all opacity-0 group-hover/carousel:opacity-100 hidden sm:block z-10"
-                        onClick={(e) => { e.stopPropagation(); document.getElementById('image-carousel')?.scrollBy({ left: -150, behavior: 'smooth' }); }}
+                        className="absolute top-1/2 left-0 -translate-y-[calc(50%+8px)] -ml-2 sm:-ml-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#004387] hover:bg-gray-50 active:scale-95 transition-all z-20 flex items-center justify-center cursor-pointer"
+                        onClick={handlePrevImage}
+                        aria-label="גלול שמאל"
                       >
-                        <ChevronLeft size={20} />
+                        <ChevronLeft size={18} />
                       </button>
                       <button 
-                        className="absolute top-1/2 right-0 -translate-y-1/2 -mr-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#0c2d57] hover:scale-110 transition-all opacity-0 group-hover/carousel:opacity-100 hidden sm:block z-10"
-                        onClick={(e) => { e.stopPropagation(); document.getElementById('image-carousel')?.scrollBy({ left: 150, behavior: 'smooth' }); }}
+                        className="absolute top-1/2 right-0 -translate-y-[calc(50%+8px)] -mr-2 sm:-mr-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#004387] hover:bg-gray-50 active:scale-95 transition-all z-20 flex items-center justify-center cursor-pointer"
+                        onClick={handleNextImage}
+                        aria-label="גלול ימין"
                       >
-                        <ChevronRight size={20} />
+                        <ChevronRight size={18} />
                       </button>
                     </>
                   )}
