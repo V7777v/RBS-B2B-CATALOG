@@ -363,6 +363,9 @@ export default function App() {
           const subcategoryName = typeof row.subcategory === 'string' ? row.subcategory.trim() : (row.subcategory || '');
           const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
           const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
+          const isHotSale = row['מבצע חם']?.toString()?.trim()?.toUpperCase() === 'TRUE';
+          const saleType = typeof row['סוג מבצע'] === 'string' ? row['סוג מבצע'].trim() : (row['סוג מבצע'] || null);
+          const saleValue = typeof row['ערך מבצע'] === 'string' ? row['ערך מבצע'].trim() : (row['ערך מבצע'] || null);
 
           return {
             ...row,
@@ -370,6 +373,9 @@ export default function App() {
             subcategory: subcategoryName,
             nestedSubcategory: nestedSubcategoryName,
             isComingSoon: isComingSoon,
+            isHotSale: isHotSale,
+            saleType: saleType,
+            saleValue: saleValue,
             price: parsePrice(row.price),
             retailPrice: row.retailPrice ? parsePrice(row.retailPrice) : null,
             images: itemImages.map(transformImageLink)
@@ -458,6 +464,27 @@ export default function App() {
   const activeSubcategories = useMemo(() => {
     if (!selectedCatalog) return [];
     
+    const activeCatObj = catalogFolders.find(c => c.name === selectedCatalog);
+    const isHotSaleMode = activeCatObj && activeCatObj.brand === 'HOT SALE';
+
+    if (isHotSaleMode) {
+      const hotSaleProducts = catalogData.filter(item => item.active !== 'FALSE' && item.isHotSale);
+      const categoriesWithHotSales = [...new Set(hotSaleProducts.map(p => p.category).filter(Boolean))];
+
+      return categoriesWithHotSales.map(catName => {
+        const catObj = catalogFolders.find(c => c.name === catName);
+        const count = hotSaleProducts.filter(p => p.category === catName).length;
+        
+        return {
+          name: catName,
+          count: count,
+          isComingSoon: false,
+          image: catObj?.image || getFallbackImage(catName) || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(catName),
+          brand: catObj?.brand
+        };
+      });
+    }
+
     // First get all subcategories defined in the Subcategories global tab for this catalog
     const definedSubs = subcategoriesGlobalData.filter(s => s.category === selectedCatalog && s.active !== false && !s.parentSubcategory);
     
@@ -633,8 +660,19 @@ export default function App() {
 
     // Filter by catalog and subcategory
     if (selectedCatalog && currentView === 'products') {
+      const activeCatObj = catalogFolders.find(c => c.name === selectedCatalog);
+      const isHotSaleMode = activeCatObj && activeCatObj.brand === 'HOT SALE';
+
       filtered = filtered.filter(item => {
-        if (item.category !== selectedCatalog || item.name === 'מוצר הדגמה' || item.name === 'קטגוריית אם') return false;
+        if (item.name === 'מוצר הדגמה' || item.name === 'קטגוריית אם') return false;
+        
+        if (isHotSaleMode) {
+          if (!item.isHotSale) return false;
+          if (selectedSubcategory && item.category !== selectedSubcategory) return false;
+          return true;
+        }
+
+        if (item.category !== selectedCatalog) return false;
         
         if (selectedNestedSubcategory) {
           if (selectedSubcategory === 'Inginium Full Channel' || selectedSubcategory === 'מתגי ליבה ורשת מנוהלים') {
@@ -787,10 +825,15 @@ export default function App() {
   };
 
   const navigateToSubcategory = (subName: string | null) => {
-    let hasNested = catalogData.some(p => p.category === selectedCatalog && p.subcategory === subName && !!p.nestedSubcategory);
-    
-    if (subName === 'Inginium Full Channel' || subName === 'מתגי ליבה ורשת מנוהלים' || subName === 'ספקי כוח ומתח') {
-       hasNested = true;
+    const activeCatObj = catalogFolders.find(c => c.name === selectedCatalog);
+    const isHotSaleMode = activeCatObj && activeCatObj.brand === 'HOT SALE';
+
+    let hasNested = false;
+    if (!isHotSaleMode) {
+      hasNested = catalogData.some(p => p.category === selectedCatalog && p.subcategory === subName && !!p.nestedSubcategory);
+      if (subName === 'Inginium Full Channel' || subName === 'מתגי ליבה ורשת מנוהלים' || subName === 'ספקי כוח ומתח') {
+         hasNested = true;
+      }
     }
     
     navigateForward({
@@ -984,11 +1027,15 @@ export default function App() {
         onClick={() => navigateToProduct(product)}
         className={`group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}
       >
-        {product.isComingSoon && (
+        {product.isHotSale ? (
+          <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-red-600 to-orange-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50">
+            מבצע חם!
+          </div>
+        ) : product.isComingSoon ? (
           <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50">
             בקרוב!
           </div>
-        )}
+        ) : null}
         <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square relative border-b border-gray-100 overflow-hidden`}>
           <img src={transformImageLink(product.images[0], 350)} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm ${product.isComingSoon ? 'opacity-70' : ''}`} />
           
@@ -1001,7 +1048,16 @@ export default function App() {
           <h3 className="text-[#0c2d57] text-xs sm:text-base font-semibold mb-2 line-clamp-2 leading-tight min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center text-center">{product.name}</h3>
           
           <div className="mt-auto pt-2 sm:pt-2 flex flex-col items-center w-full">
-            {product.price === 0 ? (
+            {product.isHotSale ? (
+              <div className="flex flex-col items-center leading-tight mb-2 w-full text-center mt-auto">
+                 <span className="text-[10px] sm:text-xs text-red-600 font-bold leading-[1.2] mb-1 w-full block">
+                   {product.saleType || 'מבצע מיוחד'}
+                 </span>
+                 <span className="text-sm sm:text-base font-extrabold text-red-600 leading-none block">
+                   {product.saleValue || 'פרטים בעגלה'}
+                 </span>
+              </div>
+            ) : product.price === 0 ? (
               <div className="text-xs sm:text-sm font-bold text-gray-600 mb-2 mt-auto">צור קשר</div>
             ) : product.retailPrice ? (
               <div className="flex flex-col items-center leading-tight mb-2 w-full text-center">
@@ -1288,16 +1344,25 @@ export default function App() {
 
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
                   <div className="flex flex-col w-full sm:w-auto text-center sm:text-right">
-                     {selectedProduct.retailPrice && currentOptionals.length === 0 && (
-                        <span className="text-sm sm:text-base text-gray-800 font-medium mb-1">
-                          מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
-                        </span>
-                     )}
-                     {currentOptionals.length === 0 && (
-                       <div className="text-2xl sm:text-3xl font-bold text-[#f7941d]">
-                          ₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-                          <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">מחיר מומלץ למתקין <span className="hidden sm:inline">(ללא מע"מ)</span></span>
-                       </div>
+                     {selectedProduct.isHotSale ? (
+                        <div className="text-2xl sm:text-3xl font-bold text-red-600 mb-1">
+                          {selectedProduct.saleValue || "פרטים בעגלה"}
+                           <span className="block text-sm sm:text-base font-bold text-red-600/80 mr-1 sm:mr-2">{selectedProduct.saleType || "מבצע מיוחד"}</span>
+                        </div>
+                     ) : (
+                        <>
+                          {selectedProduct.retailPrice && currentOptionals.length === 0 && (
+                             <span className="text-sm sm:text-base text-gray-800 font-medium mb-1">
+                               מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
+                             </span>
+                          )}
+                          {currentOptionals.length === 0 && (
+                            <div className="text-2xl sm:text-3xl font-bold text-[#f7941d]">
+                               ₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
+                               <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">מחיר מומלץ למתקין <span className="hidden sm:inline">(ללא מע"מ)</span></span>
+                            </div>
+                          )}
+                        </>
                      )}
                   </div>
                   {selectedProduct.isComingSoon ? (
@@ -1467,6 +1532,11 @@ export default function App() {
          orderDetails += `${idx + 1}. ${item.name}\n`;
          orderDetails += `   מק"ט: ${item.sku}\n`;
          orderDetails += `   כמות: ${item.quantity}\n`;
+         
+         if (item.isHotSale) {
+           orderDetails += `   * מבצע חם: ${item.saleType ? item.saleType + ' ' : ''}${item.saleValue || ''}\n`;
+         }
+         
          if (item.optionals && item.optionals.length > 0) {
            orderDetails += `   תוספות בארון:\n`;
            item.optionals.forEach((opt: any) => {
@@ -2239,6 +2309,12 @@ export default function App() {
                       <div className="flex-col flex flex-grow">
                         <div className="font-semibold text-sm text-[#0c2d57] line-clamp-2">{item.name}</div>
                         <div className="text-xs text-gray-500 mt-1">מק"ט: <span className="font-mono">{item.sku}</span></div>
+                        
+                        {item.isHotSale && (
+                          <div className="text-[10px] text-red-600 font-bold mt-1.5 flex items-center gap-1 bg-red-50/50 p-1 w-fit rounded border border-red-100">
+                             ⭐ {item.saleType || 'מבצע'}: {item.saleValue || 'מחיר מיוחד - פנה לנציג'}
+                          </div>
+                        )}
                         
                         {item.optionals && item.optionals.length > 0 && (
                           <div className="text-[10px] text-gray-600 mt-2 bg-gray-50 p-1.5 border border-gray-100 rounded">
