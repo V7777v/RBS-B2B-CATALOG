@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -1028,7 +1028,8 @@ export default function App() {
         className={`group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}
       >
         {product.isHotSale ? (
-          <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-red-600 to-orange-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50">
+          <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-red-600 to-orange-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50 flex items-center justify-center gap-1">
+            <Flame size={12} className="text-yellow-300" />
             מבצע חם!
           </div>
         ) : product.isComingSoon ? (
@@ -1050,12 +1051,28 @@ export default function App() {
           <div className="mt-auto pt-2 sm:pt-2 flex flex-col items-center w-full">
             {product.isHotSale ? (
               <div className="flex flex-col items-center leading-tight mb-2 w-full text-center mt-auto">
-                 <span className="text-[10px] sm:text-xs text-red-600 font-bold leading-[1.2] mb-1 w-full block">
-                   {product.saleType || 'מבצע מיוחד'}
-                 </span>
-                 <span className="text-sm sm:text-base font-extrabold text-red-600 leading-none block">
-                   {product.saleValue || 'פרטים בעגלה'}
-                 </span>
+                 <div className="bg-red-50 border border-red-100 rounded-md py-1 px-2 mb-2 w-full">
+                   <div className="text-[11px] sm:text-xs text-red-600 font-bold flex items-center justify-center gap-1">
+                     <Flame size={12} className="text-red-500" /> {product.saleType || 'מבצע מיוחד'}
+                   </div>
+                   <div className="text-xs sm:text-sm font-extrabold text-red-600 leading-tight mt-0.5">
+                     {product.saleValue || 'פרטים בעגלה'}
+                   </div>
+                 </div>
+                 {product.price > 0 ? (
+                   <div className="flex flex-col items-center leading-tight w-full text-center opacity-70">
+                     {product.retailPrice && (
+                       <span className="text-[9px] sm:text-[10px] text-gray-500 font-medium leading-[1.2] w-full block line-through">
+                         צרכן: ₪{product.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                       </span>
+                     )}
+                     <span className="text-xs sm:text-sm font-bold text-gray-500 leading-none block mt-0.5">
+                       מתקין: ₪{product.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
+                     </span>
+                   </div>
+                 ) : (
+                   <div className="text-[10px] sm:text-xs font-bold text-gray-400">צור קשר למחירים</div>
+                 )}
               </div>
             ) : product.price === 0 ? (
               <div className="text-xs sm:text-sm font-bold text-gray-600 mb-2 mt-auto">צור קשר</div>
@@ -1181,16 +1198,34 @@ export default function App() {
               </div>
 
               {selectedProduct.images.length > 1 && (
-                <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 pt-2" style={{ scrollbarWidth: 'none' }}>
-                  {selectedProduct.images.slice(0, 4).map((img: string, idx: number) => (
-                    <button 
-                      key={idx} 
-                      onClick={() => setMainImage(img)}
-                      className={`w-24 h-24 sm:w-40 sm:h-40 bg-white p-2 rounded-none border-2 overflow-hidden flex-shrink-0 transition-all ${mainImage === img ? 'border-[#004387] shadow-md scale-105' : 'border-gray-200 hover:border-gray-300'}`}
-                    >
-                      <img src={transformImageLink(img, 300)} alt={`תמונה ${idx + 1} של המוצר`} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
-                    </button>
-                  ))}
+                <div className="relative group/carousel mt-2">
+                  <div id="image-carousel" className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 pt-2 snap-x scroll-smooth" style={{ scrollbarWidth: 'none' }}>
+                    {selectedProduct.images.map((img: string, idx: number) => (
+                      <button 
+                        key={idx} 
+                        onClick={() => setMainImage(img)}
+                        className={`w-20 h-20 sm:w-28 sm:h-28 bg-white p-1 sm:p-2 rounded-none border-2 overflow-hidden flex-shrink-0 transition-all snap-start ${mainImage === img ? 'border-[#004387] shadow-md scale-[1.02]' : 'border-gray-200 hover:border-gray-300'}`}
+                      >
+                        <img src={transformImageLink(img, 300)} alt={`תמונה ${idx + 1} של המוצר`} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
+                      </button>
+                    ))}
+                  </div>
+                  {selectedProduct.images.length > 3 && (
+                    <>
+                      <button 
+                        className="absolute top-1/2 left-0 -translate-y-1/2 -ml-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#0c2d57] hover:scale-110 transition-all opacity-0 group-hover/carousel:opacity-100 hidden sm:block z-10"
+                        onClick={(e) => { e.stopPropagation(); document.getElementById('image-carousel')?.scrollBy({ left: -150, behavior: 'smooth' }); }}
+                      >
+                        <ChevronLeft size={20} />
+                      </button>
+                      <button 
+                        className="absolute top-1/2 right-0 -translate-y-1/2 -mr-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#0c2d57] hover:scale-110 transition-all opacity-0 group-hover/carousel:opacity-100 hidden sm:block z-10"
+                        onClick={(e) => { e.stopPropagation(); document.getElementById('image-carousel')?.scrollBy({ left: 150, behavior: 'smooth' }); }}
+                      >
+                        <ChevronRight size={20} />
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1342,29 +1377,33 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
-                  <div className="flex flex-col w-full sm:w-auto text-center sm:text-right">
-                     {selectedProduct.isHotSale ? (
-                        <div className="text-2xl sm:text-3xl font-bold text-red-600 mb-1">
-                          {selectedProduct.saleValue || "פרטים בעגלה"}
-                           <span className="block text-sm sm:text-base font-bold text-red-600/80 mr-1 sm:mr-2">{selectedProduct.saleType || "מבצע מיוחד"}</span>
-                        </div>
-                     ) : (
-                        <>
-                          {selectedProduct.retailPrice && currentOptionals.length === 0 && (
-                             <span className="text-sm sm:text-base text-gray-800 font-medium mb-1">
-                               מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
-                             </span>
-                          )}
-                          {currentOptionals.length === 0 && (
-                            <div className="text-2xl sm:text-3xl font-bold text-[#f7941d]">
-                               ₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-                               <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">מחיר מומלץ למתקין <span className="hidden sm:inline">(ללא מע"מ)</span></span>
-                            </div>
-                          )}
-                        </>
-                     )}
-                  </div>
+                <div className="flex flex-col w-full gap-4 mt-2">
+                  {selectedProduct.isHotSale && (
+                    <div className="w-full bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200 rounded-lg p-3 sm:p-5 shadow-sm flex flex-col sm:flex-row items-center sm:justify-between gap-3 transform hover:scale-[1.01] transition-transform">
+                      <div className="flex items-center gap-2 text-red-600 font-black text-xl sm:text-2xl leading-none">
+                        <Flame className="w-7 h-7 sm:w-9 sm:h-9 text-red-500 fill-red-500 animate-pulse drop-shadow-md" />
+                        <span>{selectedProduct.saleType || "מבצע מיוחד"}</span>
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black text-red-700 bg-white px-4 sm:px-6 py-2 rounded-md shadow-md border-b-2 border-red-200 drop-shadow-sm text-center">
+                        {selectedProduct.saleValue || "פרטים בעגלה"}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
+                    <div className="flex flex-col w-full sm:w-auto text-center sm:text-right">
+                       {selectedProduct.retailPrice && currentOptionals.length === 0 && (
+                          <span className="text-sm sm:text-base text-gray-800 font-medium mb-1">
+                            מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
+                          </span>
+                       )}
+                       {currentOptionals.length === 0 && (
+                         <div className="text-2xl sm:text-3xl font-bold text-[#f7941d]">
+                            ₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
+                            <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">מחיר מומלץ למתקין <span className="hidden sm:inline">(ללא מע"מ)</span></span>
+                         </div>
+                       )}
+                    </div>
                   {selectedProduct.isComingSoon ? (
                     <div className="w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md text-sm sm:text-base bg-gray-200 text-gray-600 cursor-not-allowed">
                        <span className="animate-pulse">בקרוב!</span>
@@ -1392,11 +1431,12 @@ export default function App() {
                     {isAdded ? 'נוסף לעגלה! ✓' : 'הוסף להזמנה'}
                   </button>
                   )}
+                </div>
               </div>
-            </div>
             </div>
           </div>
         </div>
+      </div>
 
         {/* MOBILE FULL SCREEN IMAGE MODAL */}
         {isMobileModalOpen && (
@@ -2312,7 +2352,7 @@ export default function App() {
                         
                         {item.isHotSale && (
                           <div className="text-[10px] text-red-600 font-bold mt-1.5 flex items-center gap-1 bg-red-50/50 p-1 w-fit rounded border border-red-100">
-                             ⭐ {item.saleType || 'מבצע'}: {item.saleValue || 'מחיר מיוחד - פנה לנציג'}
+                             <Flame size={12} className="text-red-500" /> {item.saleType || 'מבצע'}: {item.saleValue || 'מחיר מיוחד - פנה לנציג'}
                           </div>
                         )}
                         
