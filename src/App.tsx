@@ -1431,7 +1431,7 @@ export default function App() {
                         
                         {/* Video Preview Popup */}
                         {isVideoHovered && !isMobileDevice && getVideoEmbedUrl(selectedProduct.videoLink) && (
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-72 sm:w-80 aspect-video bg-black z-50 rounded-lg overflow-hidden shadow-2xl border border-gray-200 pointer-events-none animate-in fade-in zoom-in-95 duration-200">
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-72 sm:w-80 aspect-video bg-black z-50 rounded-lg overflow-hidden shadow-2xl border border-gray-200 animate-in fade-in zoom-in-95 duration-200">
                             <iframe 
                               width="100%" 
                               height="100%" 
