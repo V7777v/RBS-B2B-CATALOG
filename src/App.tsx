@@ -957,16 +957,17 @@ export default function App() {
     return filtered;
   }, [selectedCatalog, selectedSubcategory, selectedNestedSubcategory, currentView, searchQuery, catalogData]);
 
-  // If search matches or current view matches are sparse but we have more rows in the sheet,
-  // automatically pre-fetch additional chunks of 50 in background so search feels instant and fully comprehensive.
+  // Automatically fetch remaining chunks of products in the background after the initial instant render
+  // This ensures that all categories, subcategories, counts, and search queries are fully populated and work perfectly.
   useEffect(() => {
-    if ((searchQuery || currentView === 'products') && filteredProducts.length < 12 && hasMoreProducts && !isFetchingMore && !isLoading && !isProductsLoading && !error) {
+    if (isLoading || isProductsLoading || error) return;
+    if (hasMoreProducts && !isFetchingMore) {
       const timer = setTimeout(() => {
         loadMoreProducts();
-      }, 300);
+      }, 50);
       return () => clearTimeout(timer);
     }
-  }, [searchQuery, currentView, filteredProducts.length, hasMoreProducts, isFetchingMore, isLoading, isProductsLoading, error, loadMoreProducts]);
+  }, [isLoading, isProductsLoading, hasMoreProducts, isFetchingMore, error, loadMoreProducts]);
 
   // --- CART FUNCTIONS ---
   const addToCart = (product: any, quantity = 1, optionals: any[] = []) => {
@@ -2398,6 +2399,12 @@ export default function App() {
               <div className="hidden sm:flex items-center text-sm text-[#0c2d57] opacity-80 whitespace-nowrap gap-3">
                 <img src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" alt="RBS Logo" className="h-8 object-contain" />
                 <span className="font-semibold px-2 border-r border-[#0c2d57]/20">B2B Portal</span>
+                {hasMoreProducts && (
+                  <div className="flex items-center gap-1.5 text-xs text-[#fe8d00] bg-orange-50 px-2 py-0.5 animate-pulse select-none font-medium border border-orange-100">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#fe8d00] animate-ping"></span>
+                    <span>בסנכרון נתונים...</span>
+                  </div>
+                )}
               </div>
             </div>
 
