@@ -77,8 +77,18 @@ const transformImageLink = (url: string, size?: number) => {
   return url;
 };
 
-const getYouTubeEmbedUrl = (url: string) => {
+const getVideoEmbedUrl = (url: string) => {
   if (!url) return null;
+
+  // Google Drive Support
+  if (url.includes('drive.google.com/file/d/')) {
+    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return `https://drive.google.com/file/d/${match[1]}/preview`;
+    }
+  }
+
+  // YouTube Support
   let videoId = null;
   try {
     if (url.includes('youtube.com/watch')) {
@@ -1420,12 +1430,12 @@ export default function App() {
                         </a>
                         
                         {/* Video Preview Popup */}
-                        {isVideoHovered && !isMobileDevice && getYouTubeEmbedUrl(selectedProduct.videoLink) && (
+                        {isVideoHovered && !isMobileDevice && getVideoEmbedUrl(selectedProduct.videoLink) && (
                           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-72 sm:w-80 aspect-video bg-black z-50 rounded-lg overflow-hidden shadow-2xl border border-gray-200 pointer-events-none animate-in fade-in zoom-in-95 duration-200">
                             <iframe 
                               width="100%" 
                               height="100%" 
-                              src={getYouTubeEmbedUrl(selectedProduct.videoLink)!} 
+                              src={getVideoEmbedUrl(selectedProduct.videoLink)!} 
                               title="Video Preview" 
                               frameBorder="0" 
                               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
