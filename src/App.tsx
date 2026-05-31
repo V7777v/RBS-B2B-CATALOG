@@ -10,6 +10,7 @@ import { AddressAutocomplete } from './components/AddressAutocomplete';
 import InstallBanner from './components/InstallBanner';
 import { CabinetConfigurator } from './components/CabinetConfigurator';
 import { AccessoryCabinets } from './components/AccessoryCabinets';
+import { TechnicalAdvisor } from './components/TechnicalAdvisor';
 
 const SHEET_BASE = 'https://docs.google.com' + '/spreadsheets/d/';
 const SHEET_SECRET_ID = '1NtYwQeTX' + '3blf' + '0aMcv' + 'tnlk9' + 'liIaJOiG9' + 'BOsP4Qc' + '8lSRs';
@@ -2790,6 +2791,7 @@ export default function App() {
       )}
 
       {!isHumanVerified && <HumanVerification onVerified={() => setIsHumanVerified(true)} />}
+      <TechnicalAdvisor catalogData={catalogData} addToCart={addToCart} isAuthenticated={isAuthenticated} />
       <InstallBanner />
     </div>
   );
