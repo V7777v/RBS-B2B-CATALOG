@@ -4,8 +4,8 @@
   "description": "RBS Telecom Product Catalog",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#18181b",
-  "theme_color": "#18181b",
+  "background_color": "#ffffff",
+  "theme_color": "#0c2d57",
   "icons": [
     {
       "src": "/icons/icon-192.png",

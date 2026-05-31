@@ -17,7 +17,7 @@ export default defineConfig(() => {
           name: 'RBS Catalog',
           short_name: 'RBS',
           description: 'קטלוג B2B - RBS Telecom',
-          theme_color: '#0a0a0a',
+          theme_color: '#0c2d57',
           background_color: '#ffffff',
           display: 'standalone',
           orientation: 'portrait',
