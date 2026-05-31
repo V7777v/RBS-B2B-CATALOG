@@ -198,6 +198,143 @@ const SUBCATEGORIES_ORDER: Record<string, string[]> = {
   ]
 };
 
+const fetchCSV = (gid: string, limit?: number, offset?: number) => {
+  return new Promise<any[]>((resolve, reject) => {
+    let url = `${SHEET_URL}/gviz/tq?tqx=out:csv&gid=${gid}&_=${Date.now()}`;
+    if (limit !== undefined && offset !== undefined) {
+      url += `&tq=${encodeURIComponent(`SELECT * LIMIT ${limit} OFFSET ${offset}`)}`;
+    }
+    Papa.parse(url, {
+      download: true,
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const normalizedData = results.data.map(row => {
+          const newRow: any = {};
+          for (const key in row as object) {
+            newRow[key.trim()] = (row as any)[key];
+          }
+          return newRow;
+        });
+        resolve(normalizedData);
+      },
+      error: (error: any) => reject(error)
+    });
+  });
+};
+
+// --- VIEWPORT INTERSECTION OBSERVER HOOK ---
+interface UseIntersectionObserverProps {
+  threshold?: number;
+  rootMargin?: string;
+  freezeOnceVisible?: boolean;
+}
+
+function useIntersectionObserver({
+  threshold = 0,
+  rootMargin = '100px',
+  freezeOnceVisible = true,
+}: UseIntersectionObserverProps = {}): [React.LegacyRef<HTMLDivElement>, boolean] {
+  const [isVisible, setIsVisible] = useState(false);
+  const elementRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = elementRef.current;
+    if (!node || typeof window === 'undefined' || !window.IntersectionObserver) return;
+    if (isVisible && freezeOnceVisible) return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setIsVisible(true);
+        if (freezeOnceVisible) {
+          observer.disconnect();
+        }
+      } else if (!freezeOnceVisible) {
+        setIsVisible(false);
+      }
+    }, { threshold, rootMargin });
+
+    observer.observe(node);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [threshold, rootMargin, freezeOnceVisible, isVisible]);
+
+  const setRef = useCallback((node: HTMLDivElement | null) => {
+    elementRef.current = node;
+  }, []);
+
+  return [setRef as any, isVisible];
+}
+
+interface VirtualProductCardProps {
+  product: any;
+  children: React.ReactNode;
+}
+
+const VirtualProductCard: React.FC<VirtualProductCardProps> = ({ product, children }) => {
+  const [ref, isVisible] = useIntersectionObserver({
+    rootMargin: '250px',
+    freezeOnceVisible: true,
+  });
+
+  if (!isVisible) {
+    return (
+      <div 
+        ref={ref}
+        className="w-full h-[320px] sm:h-[450px] bg-white border border-gray-100 flex flex-col justify-between p-4 relative shadow-[0_5px_15px_rgba(0,0,0,0.02)]"
+      >
+        <div className="w-full aspect-square bg-gray-50 flex items-center justify-center animate-pulse">
+          <Loader2 size={24} className="animate-spin text-gray-200" />
+        </div>
+        <div className="space-y-2 mt-4 animate-pulse">
+          <div className="h-3 bg-gray-100 rounded w-1/3 mx-auto"></div>
+          <div className="h-4 bg-gray-100 rounded w-3/4 mx-auto"></div>
+          <div className="h-3 bg-gray-100 rounded w-1/2 mx-auto"></div>
+        </div>
+        <div className="w-full h-10 bg-gray-50 mt-4 animate-pulse"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref}>
+      {children}
+    </div>
+  );
+};
+
+interface InfiniteScrollTriggerProps {
+  onLoadMore: () => void;
+  hasMore: boolean;
+  isLoading: boolean;
+}
+
+const InfiniteScrollTrigger: React.FC<InfiniteScrollTriggerProps> = ({ onLoadMore, hasMore, isLoading }) => {
+  const [ref, isIntersecting] = useIntersectionObserver({
+    rootMargin: '300px',
+    freezeOnceVisible: false,
+  });
+
+  useEffect(() => {
+    if (isIntersecting && hasMore && !isLoading) {
+      onLoadMore();
+    }
+  }, [isIntersecting, hasMore, isLoading, onLoadMore]);
+
+  return (
+    <div ref={ref} className="w-full flex justify-center py-8">
+      {isLoading && (
+        <div className="flex items-center gap-2 text-gray-500">
+          <Loader2 size={24} className="animate-spin text-[#004387]" />
+          <span>טוען מוצרים נוספים...</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function App() {
   // --- STATE ---
   const [catalogFolders, setCatalogFolders] = useState<any[]>([]);
@@ -225,40 +362,123 @@ export default function App() {
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(24);
+  const [visibleCount, setVisibleCount] = useState(50);
 
   // Reset pagination on view/filter change
   useEffect(() => {
-    setVisibleCount(24);
+    setVisibleCount(50);
   }, [currentView, selectedCatalog, selectedSubcategory, selectedNestedSubcategory, searchQuery]);
 
   // --- DATA FETCHING ---
   const lastFetchTimeRef = useRef(0);
+  const [productsOffset, setProductsOffset] = useState(0);
+  const [hasMoreProducts, setHasMoreProducts] = useState(true);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
+
+  const loadMoreProducts = useCallback(async () => {
+    if (isFetchingMore || !hasMoreProducts) return;
+    setIsFetchingMore(true);
+    try {
+      const productsCsv = await fetchCSV(PRODUCTS_GID, 50, productsOffset);
+      if (productsCsv.length < 50) {
+        setHasMoreProducts(false);
+      }
+      
+      if (productsCsv.length > 0) {
+        const parsedProducts = productsCsv.map((row: any) => {
+          let itemImages: string[] = [];
+          
+          const rawImagesField = row.imagesJSON || row[''] || row.images || row['תמונות'] || '';
+          if (rawImagesField) {
+            try {
+               itemImages = JSON.parse(rawImagesField);
+               if(!Array.isArray(itemImages)) {
+                  itemImages = [itemImages];
+               }
+            } catch(e) {
+               if (typeof rawImagesField === 'string') {
+                  const cleaned = rawImagesField.trim();
+                  if (cleaned.startsWith('http')) {
+                     itemImages = cleaned.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
+                  }
+               }
+            }
+          }
+          
+          if (!itemImages || itemImages.length === 0) {
+              if (row.imageURL && row.imageURL.trim().startsWith('http')) {
+                 itemImages = row.imageURL.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
+              }
+              if (!itemImages || itemImages.length === 0) {
+                 itemImages = ['https://placehold.co/600x400/f3f4f6/000000?text=No+Image'];
+              }
+          }
+
+          const categoryName = typeof row.category === 'string' ? row.category.trim() : (row.category || '');
+          const subcategoryName = typeof row.subcategory === 'string' ? row.subcategory.trim() : (row.subcategory || '');
+          const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
+          const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
+          const hotSaleKey = Object.keys(row).find(k => {
+             const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+             return clean.includes('מבצע חם') || clean.includes('מבצע_חם') || clean.includes('hot sale') || clean.includes('hotsale') || clean === 'מבצע' || clean === 'מבצעים';
+          });
+          const saleTypeKey = Object.keys(row).find(k => {
+             const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+             return clean.includes('סוג מבצע') || clean.includes('sale type') || clean.includes('saletype') || clean.includes('סוג המבצע');
+          });
+          const saleValueKey = Object.keys(row).find(k => {
+             const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+             return clean.includes('ערך מבצע') || clean.includes('sale value') || clean.includes('salevalue') || clean.includes('ערך המבצע') || clean.includes('מחיר מבצע');
+          });
+
+          const hotSaleVal = hotSaleKey ? String(row[hotSaleKey]).trim().toUpperCase() : '';
+          const isHotSale = hotSaleVal === 'TRUE' || hotSaleVal === 'YES' || hotSaleVal === 'כן' || hotSaleVal === '1' || hotSaleVal === 'V' || hotSaleVal === 'Y' || hotSaleVal === 'פעיל' || hotSaleVal === 'במבצע';
+          const saleType = saleTypeKey && typeof row[saleTypeKey] === 'string' ? row[saleTypeKey].trim() : (saleTypeKey ? row[saleTypeKey] : null);
+          const saleValue = saleValueKey && typeof row[saleValueKey] === 'string' ? row[saleValueKey].trim() : (saleValueKey ? row[saleValueKey] : null);
+
+          return {
+            ...row,
+            category: categoryName,
+            subcategory: subcategoryName,
+            nestedSubcategory: nestedSubcategoryName,
+            isComingSoon: isComingSoon,
+            isHotSale: isHotSale,
+            saleType: saleType,
+            saleValue: saleValue,
+            price: parsePrice(row.price),
+            retailPrice: row.retailPrice ? parsePrice(row.retailPrice) : null,
+            images: itemImages.map(transformImageLink)
+          };
+        });
+
+        // Add without duplicate ids to keep data perfectly consistent and robust
+        setCatalogData(prev => {
+          const ids = new Set(prev.map(p => p.id));
+          const uniqueNew = parsedProducts.filter(p => !ids.has(p.id));
+          return [...prev, ...uniqueNew];
+        });
+        setProductsOffset(prev => prev + 50);
+      } else {
+        setHasMoreProducts(false);
+      }
+    } catch (err) {
+      console.error("Error fetching more products:", err);
+    } finally {
+      setIsFetchingMore(false);
+    }
+  }, [productsOffset, hasMoreProducts, isFetchingMore]);
+
+  const handleLoadMore = useCallback(() => {
+    setVisibleCount(prev => prev + 50);
+    if (hasMoreProducts && !isFetchingMore) {
+      loadMoreProducts();
+    }
+  }, [hasMoreProducts, isFetchingMore, loadMoreProducts]);
 
   const loadData = useCallback(async (silent = false) => {
     try {
       if (!silent) setIsLoading(true);
-      
-      const fetchCSV = (gid: string) => {
-        return new Promise<any[]>((resolve, reject) => {
-          Papa.parse(`${SHEET_URL}/gviz/tq?tqx=out:csv&gid=${gid}&_=${Date.now()}`, {
-            download: true,
-            header: true,
-            skipEmptyLines: true,
-            complete: (results) => {
-              const normalizedData = results.data.map(row => {
-                const newRow: any = {};
-                for (const key in row as object) {
-                  newRow[key.trim()] = (row as any)[key];
-                }
-                return newRow;
-              });
-              resolve(normalizedData);
-            },
-            error: (error: any) => reject(error)
-          });
-        });
-      };
+      setError(null);
 
       // 1. Fetch metadata sheets (catalogs and subcategories are tiny, taking negligible time)
       const [catalogsCsv, subcategoriesCsv] = await Promise.all([
@@ -337,87 +557,90 @@ export default function App() {
       // Stop the main block immediately, allowing the system to display the Home Page INSTANTLY!
       if (!silent) setIsLoading(false);
 
-      // 2. Fetch products asynchronously (the heavy GID sheet) in the background
+      // 2. Fetch the FIRST 50 products from Google Sheets, so initial render is incredibly fast!
       setIsProductsLoading(true);
-      fetchCSV(PRODUCTS_GID).then((productsCsv) => {
-        const parsedProducts = productsCsv.map((row: any) => {
-          let itemImages: string[] = [];
-          
-          const rawImagesField = row.imagesJSON || row[''] || row.images || row['תמונות'] || '';
-          if (rawImagesField) {
-            try {
-               itemImages = JSON.parse(rawImagesField);
-               if(!Array.isArray(itemImages)) {
-                  itemImages = [itemImages];
-               }
-            } catch(e) {
-               if (typeof rawImagesField === 'string') {
-                  const cleaned = rawImagesField.trim();
-                  if (cleaned.startsWith('http')) {
-                     itemImages = cleaned.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
-                  }
-               }
+      setProductsOffset(0);
+      setHasMoreProducts(true);
+
+      const productsCsv = await fetchCSV(PRODUCTS_GID, 50, 0);
+      const parsedProducts = productsCsv.map((row: any) => {
+        let itemImages: string[] = [];
+        
+        const rawImagesField = row.imagesJSON || row[''] || row.images || row['תמונות'] || '';
+        if (rawImagesField) {
+          try {
+             itemImages = JSON.parse(rawImagesField);
+             if(!Array.isArray(itemImages)) {
+                itemImages = [itemImages];
+             }
+          } catch(e) {
+             if (typeof rawImagesField === 'string') {
+                const cleaned = rawImagesField.trim();
+                if (cleaned.startsWith('http')) {
+                   itemImages = cleaned.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
+                }
+             }
+          }
+        }
+        
+        if (!itemImages || itemImages.length === 0) {
+            if (row.imageURL && row.imageURL.trim().startsWith('http')) {
+               itemImages = row.imageURL.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
             }
-          }
-          
-          if (!itemImages || itemImages.length === 0) {
-              if (row.imageURL && row.imageURL.trim().startsWith('http')) {
-                 itemImages = row.imageURL.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
-              }
-              if (!itemImages || itemImages.length === 0) {
-                 itemImages = ['https://placehold.co/600x400/f3f4f6/000000?text=No+Image'];
-              }
-          }
+            if (!itemImages || itemImages.length === 0) {
+               itemImages = ['https://placehold.co/600x400/f3f4f6/000000?text=No+Image'];
+            }
+        }
 
-          const categoryName = typeof row.category === 'string' ? row.category.trim() : (row.category || '');
-          const subcategoryName = typeof row.subcategory === 'string' ? row.subcategory.trim() : (row.subcategory || '');
-          const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
-          const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
-          const hotSaleKey = Object.keys(row).find(k => {
-             const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
-             return clean.includes('מבצע חם') || clean.includes('מבצע_חם') || clean.includes('hot sale') || clean.includes('hotsale') || clean === 'מבצע' || clean === 'מבצעים';
-          });
-          const saleTypeKey = Object.keys(row).find(k => {
-             const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
-             return clean.includes('סוג מבצע') || clean.includes('sale type') || clean.includes('saletype') || clean.includes('סוג המבצע');
-          });
-          const saleValueKey = Object.keys(row).find(k => {
-             const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
-             return clean.includes('ערך מבצע') || clean.includes('sale value') || clean.includes('salevalue') || clean.includes('ערך המבצע') || clean.includes('מחיר מבצע');
-          });
-
-          const hotSaleVal = hotSaleKey ? String(row[hotSaleKey]).trim().toUpperCase() : '';
-          const isHotSale = hotSaleVal === 'TRUE' || hotSaleVal === 'YES' || hotSaleVal === 'כן' || hotSaleVal === '1' || hotSaleVal === 'V' || hotSaleVal === 'Y' || hotSaleVal === 'פעיל' || hotSaleVal === 'במבצע';
-          const saleType = saleTypeKey && typeof row[saleTypeKey] === 'string' ? row[saleTypeKey].trim() : (saleTypeKey ? row[saleTypeKey] : null);
-          const saleValue = saleValueKey && typeof row[saleValueKey] === 'string' ? row[saleValueKey].trim() : (saleValueKey ? row[saleValueKey] : null);
-
-
-          return {
-            ...row,
-            category: categoryName,
-            subcategory: subcategoryName,
-            nestedSubcategory: nestedSubcategoryName,
-            isComingSoon: isComingSoon,
-            isHotSale: isHotSale,
-            saleType: saleType,
-            saleValue: saleValue,
-            price: parsePrice(row.price),
-            retailPrice: row.retailPrice ? parsePrice(row.retailPrice) : null,
-            images: itemImages.map(transformImageLink)
-          };
+        const categoryName = typeof row.category === 'string' ? row.category.trim() : (row.category || '');
+        const subcategoryName = typeof row.subcategory === 'string' ? row.subcategory.trim() : (row.subcategory || '');
+        const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
+        const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
+        const hotSaleKey = Object.keys(row).find(k => {
+           const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+           return clean.includes('מבצע חם') || clean.includes('מבצע_חם') || clean.includes('hot sale') || clean.includes('hotsale') || clean === 'מבצע' || clean === 'מבצעים';
+        });
+        const saleTypeKey = Object.keys(row).find(k => {
+           const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+           return clean.includes('סוג מבצע') || clean.includes('sale type') || clean.includes('saletype') || clean.includes('סוג המבצע');
+        });
+        const saleValueKey = Object.keys(row).find(k => {
+           const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+           return clean.includes('ערך מבצע') || clean.includes('sale value') || clean.includes('salevalue') || clean.includes('ערך המבצע') || clean.includes('מחיר מבצע');
         });
 
-        setCatalogData(parsedProducts);
-        setIsProductsLoading(false);
-        lastFetchTimeRef.current = Date.now();
-      }).catch(err => {
-         console.error("Error loading background products:", err);
-         setIsProductsLoading(false);
+        const hotSaleVal = hotSaleKey ? String(row[hotSaleKey]).trim().toUpperCase() : '';
+        const isHotSale = hotSaleVal === 'TRUE' || hotSaleVal === 'YES' || hotSaleVal === 'כן' || hotSaleVal === '1' || hotSaleVal === 'V' || hotSaleVal === 'Y' || hotSaleVal === 'פעיל' || hotSaleVal === 'במבצע';
+        const saleType = saleTypeKey && typeof row[saleTypeKey] === 'string' ? row[saleTypeKey].trim() : (saleTypeKey ? row[saleTypeKey] : null);
+        const saleValue = saleValueKey && typeof row[saleValueKey] === 'string' ? row[saleValueKey].trim() : (saleValueKey ? row[saleValueKey] : null);
+
+        return {
+          ...row,
+          category: categoryName,
+          subcategory: subcategoryName,
+          nestedSubcategory: nestedSubcategoryName,
+          isComingSoon: isComingSoon,
+          isHotSale: isHotSale,
+          saleType: saleType,
+          saleValue: saleValue,
+          price: parsePrice(row.price),
+          retailPrice: row.retailPrice ? parsePrice(row.retailPrice) : null,
+          images: itemImages.map(transformImageLink)
+        };
       });
+
+      setCatalogData(parsedProducts);
+      setProductsOffset(50);
+      if (productsCsv.length < 50) {
+        setHasMoreProducts(false);
+      }
+      setIsProductsLoading(false);
+      lastFetchTimeRef.current = Date.now();
 
     } catch (err) {
       console.error("Error loading data:", err);
-      setError("שגיאה בטעינת הנתונים. אנא ודא שהמסמך פומבי ונגיש.");
+      setError("שגיאה בטעינת הנתונים מהמערכת. ודא שהחיבור תקין ונסה שוב.");
+      setIsProductsLoading(false);
     } finally {
       if (!silent) setIsLoading(false);
     }
@@ -733,6 +956,17 @@ export default function App() {
     
     return filtered;
   }, [selectedCatalog, selectedSubcategory, selectedNestedSubcategory, currentView, searchQuery, catalogData]);
+
+  // If search matches or current view matches are sparse but we have more rows in the sheet,
+  // automatically pre-fetch additional chunks of 50 in background so search feels instant and fully comprehensive.
+  useEffect(() => {
+    if ((searchQuery || currentView === 'products') && filteredProducts.length < 12 && hasMoreProducts && !isFetchingMore && !isLoading && !isProductsLoading && !error) {
+      const timer = setTimeout(() => {
+        loadMoreProducts();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [searchQuery, currentView, filteredProducts.length, hasMoreProducts, isFetchingMore, isLoading, isProductsLoading, error, loadMoreProducts]);
 
   // --- CART FUNCTIONS ---
   const addToCart = (product: any, quantity = 1, optionals: any[] = []) => {
@@ -2102,10 +2336,18 @@ export default function App() {
 
   if (error) {
      return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-red-600">
-          <X size={48} className="mb-4" />
-          <h2 className="text-xl font-bold mb-4">{error}</h2>
-          <button onClick={() => window.location.reload()} className="bg-[#004387] text-white px-6 py-2">נסה שוב</button>
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-[#0c2d57] p-4">
+          <X size={48} className="mb-4 text-red-500" />
+          <h2 className="text-lg font-semibold text-center leading-relaxed text-gray-700 max-w-md mb-6">{error}</h2>
+          <button 
+            onClick={() => {
+              setError(null);
+              loadData();
+            }}
+            className="bg-[#004387] hover:bg-[#fe8d00] text-white px-8 py-3 transition-colors shadow-sm font-medium rounded-none"
+          >
+            נסה שוב
+          </button>
         </div>
      );
   }
@@ -2262,18 +2504,17 @@ export default function App() {
                   <>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
                       {filteredProducts.slice(0, visibleCount).map(product => (
-                        <ProductCard key={product.id} product={product} />
+                        <VirtualProductCard key={product.id} product={product}>
+                          <ProductCard product={product} />
+                        </VirtualProductCard>
                       ))}
                     </div>
-                    {visibleCount < filteredProducts.length && (
-                      <div className="flex justify-center mt-8">
-                        <button 
-                          onClick={() => setVisibleCount(prev => prev + 24)}
-                          className="bg-[#004387] text-white px-8 py-3 rounded shadow hover:bg-[#fe8d00] transition-colors"
-                        >
-                          הצג עוד מוצרים
-                        </button>
-                      </div>
+                    {(hasMoreProducts || visibleCount < filteredProducts.length) && (
+                      <InfiniteScrollTrigger 
+                        onLoadMore={handleLoadMore} 
+                        hasMore={hasMoreProducts || visibleCount < filteredProducts.length} 
+                        isLoading={isFetchingMore} 
+                      />
                     )}
                   </>
                 )}
@@ -2402,18 +2643,17 @@ export default function App() {
                   <>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
                       {filteredProducts.slice(0, visibleCount).map(product => (
-                        <ProductCard key={product.id} product={product} />
+                        <VirtualProductCard key={product.id} product={product}>
+                          <ProductCard product={product} />
+                        </VirtualProductCard>
                       ))}
                     </div>
-                    {visibleCount < filteredProducts.length && (
-                      <div className="flex justify-center mt-8">
-                        <button 
-                          onClick={() => setVisibleCount(prev => prev + 24)}
-                          className="bg-[#004387] text-white px-8 py-3 rounded shadow hover:bg-[#fe8d00] transition-colors"
-                        >
-                          הצג עוד מוצרים
-                        </button>
-                      </div>
+                    {(hasMoreProducts || visibleCount < filteredProducts.length) && (
+                      <InfiniteScrollTrigger 
+                        onLoadMore={handleLoadMore} 
+                        hasMore={hasMoreProducts || visibleCount < filteredProducts.length} 
+                        isLoading={isFetchingMore} 
+                      />
                     )}
                   </>
                 )}
