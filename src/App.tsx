@@ -361,7 +361,13 @@ export default function App() {
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<any[]>([]);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('rbs_b2b_auth') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -2217,6 +2223,7 @@ export default function App() {
         
         // Match against secure precomputed hash - Rbs2026 is never stored in plaintext
         if (hashHex === 'dc7061dd847ce8d81661f9d47feef0c0ae9cde6aafb4e55070b3771daa94e655') {
+          localStorage.setItem('rbs_b2b_auth', 'true');
           setIsAuthenticated(true);
         } else {
           setErrorMsg('סיסמה שגויה. אנא השתמש בקוד הגישה שקיבלת מהחברה.');
@@ -2225,6 +2232,7 @@ export default function App() {
       } catch (err) {
         // Fail-safe fallback code in case window.crypto is blocked (e.g. non-HTTPS local dev port iframe)
         if (password === 'Rbs2026') {
+          localStorage.setItem('rbs_b2b_auth', 'true');
           setIsAuthenticated(true);
         } else {
           setErrorMsg('סיסמה שגויה. אנא השתמש בקוד הגישה שקיבלת מהחברה.');
@@ -2239,47 +2247,30 @@ export default function App() {
         <div className="absolute top-[-10%] right-[-10%] w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-[#004387]/20 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-[#f7941d]/10 rounded-full blur-[120px] pointer-events-none" />
 
-        <motion.div 
-          initial={{ opacity: 0, y: 30, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        <div 
           className="bg-white/95 backdrop-blur-md p-6 sm:p-10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] max-w-md w-full text-center border border-white/20 relative z-10"
         >
           {/* Logo container with rotation animation */}
-          <motion.div 
-            initial={{ scale: 0, rotate: -180 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.2 }}
+          <div 
             className="w-20 h-20 bg-gradient-to-tr from-[#004387] to-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/20"
           >
-             <Lock size={36} className="text-white drop-shadow-md animate-pulse" />
-          </motion.div>
+             <Lock size={36} className="text-white drop-shadow-md" />
+          </div>
           
-          <motion.h2 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+          <h2 
             className="text-2xl sm:text-3xl font-extrabold text-[#0c2d57] mb-2 tracking-tight"
           >
             כניסה לקטלוג B2B
-          </motion.h2>
+          </h2>
           
-          <motion.p 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
+          <p 
             className="text-gray-500 mb-8 text-xs sm:text-sm max-w-xs mx-auto leading-relaxed font-medium"
           >
             הקטלוג מיועד ללקוחות עסקיים ומורשים בלבד. הקש סיסמה לכניסה.
-          </motion.p>
+          </p>
           
           <form onSubmit={handleLogin} className="space-y-6">
-            <motion.div 
-              animate={shakeTrigger ? {
-                x: [0, -10, 10, -10, 10, -5, 5, 0],
-              } : {}}
-              transition={{ duration: 0.5 }}
-              key={shakeTrigger}
+            <div 
               className="relative rounded-xl overflow-hidden"
             >
               <div className="relative flex items-center">
@@ -2311,7 +2302,7 @@ export default function App() {
                    </AnimatePresence>
                  </button>
               </div>
-            </motion.div>
+            </div>
             
             <AnimatePresence>
               {errorMsg && (
@@ -2336,7 +2327,7 @@ export default function App() {
               היכנס למערכת <ChevronLeft size={20} className="transition-transform group-hover:-translate-x-1" />
             </motion.button>
           </form>
-        </motion.div>
+        </div>
       </div>
     );
   };
@@ -2344,15 +2335,6 @@ export default function App() {
   // --- MAIN LAYOUT ---
   if (!isAuthenticated) {
      return <LoginView />;
-  }
-
-  if (isLoading) {
-     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-[#0c2d57]">
-          <Loader2 size={48} className="animate-spin mb-4 text-[#f7941d]" />
-          <h2 className="text-xl font-bold">טוען נתונים מהמערכת...</h2>
-        </div>
-     );
   }
 
   if (error) {
@@ -2506,8 +2488,12 @@ export default function App() {
 
           {/* MAIN CONTENT AREA */}
           <main className="w-full pb-32 md:pb-20">
-            
-            {searchQuery ? (
+            {isLoading ? (
+               <div className="flex flex-col items-center justify-center p-12 bg-white text-[#0c2d57] min-h-[50vh]">
+                 <Loader2 size={48} className="animate-spin mb-4 text-[#fe8d00]" />
+                 <h2 className="text-xl font-bold">טוען נתונים מהמערכת...</h2>
+               </div>
+            ) : searchQuery ? (
                // SEARCH RESULTS
                <>
                 <div className="mb-6 flex items-center justify-center gap-2 text-sm text-gray-500 text-center">
@@ -2516,10 +2502,9 @@ export default function App() {
                     <span>תוצאות חיפוש ל: <strong className="text-[#0c2d57]">{searchQuery}</strong></span>
                 </div>
                 {isProductsLoading ? (
-                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center animate-in fade-in duration-300">
+                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
                     <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
                     <h3 className="text-xl font-bold text-[#0c2d57]">מבצע חיפוש...</h3>
-                    <p className="text-gray-500 mt-2 text-sm leading-relaxed">אנו טוענים את כל המוצרים והמפרטים מהמערכת, זה ייקח רק כמה שניות.</p>
                   </div>
                 ) : filteredProducts.length === 0 ? (
                   <div className="text-center py-20 bg-white border border-gray-100">
@@ -2582,10 +2567,9 @@ export default function App() {
                 <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-4 sm:mb-6 text-center w-full block">בחר קטגוריה</h2>
                 
                 {isProductsLoading ? (
-                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center animate-in fade-in duration-300">
+                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
                     <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
-                    <h3 className="text-xl font-bold text-[#0c2d57]">טוען קטגוריות ומוצרים...</h3>
-                    <p className="text-gray-500 mt-2 text-sm leading-relaxed">מכין את קטלוג {selectedCatalog} בשבילך, רק רגע...</p>
+                    <h3 className="text-xl font-bold text-[#0c2d57]">טוען נתונים...</h3>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
@@ -2621,10 +2605,9 @@ export default function App() {
                 <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-4 sm:mb-6 text-center w-full">בחר תת-קטגוריה</h2>
                 
                 {isProductsLoading ? (
-                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center animate-in fade-in duration-300">
+                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
                     <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
-                    <h3 className="text-xl font-bold text-[#0c2d57]">טוען תת-קטגוריות...</h3>
-                    <p className="text-gray-500 mt-2 text-sm leading-relaxed">אנו טוענים את כל הנתונים, זה ייקח רק פעימה אחת.</p>
+                    <h3 className="text-xl font-bold text-[#0c2d57]">טוען נתונים...</h3>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-6 max-w-4xl mx-auto">
@@ -2661,10 +2644,9 @@ export default function App() {
                 </div>
 
                 {isProductsLoading ? (
-                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center animate-in fade-in duration-300">
+                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
                     <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
                     <h3 className="text-xl font-bold text-[#0c2d57]">טוען מוצרים...</h3>
-                    <p className="text-gray-500 mt-2 text-sm leading-relaxed">אנחנו מחברים בינך לבין רשימת המוצרים והמחירים העדכניים.</p>
                   </div>
                 ) : (
                   <>
@@ -2687,7 +2669,7 @@ export default function App() {
               </>
             ) : currentView === 'product' && selectedProduct ? (
               isProductsLoading ? (
-                <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center animate-in fade-in duration-300">
+                <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
                   <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
                   <h3 className="text-xl font-bold text-[#0c2d57]">טוען את פרטי המוצר...</h3>
                 </div>

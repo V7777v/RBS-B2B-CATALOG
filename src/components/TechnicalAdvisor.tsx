@@ -3,6 +3,7 @@ import {
   Sparkles, X, Send, Bot, User, Loader2, Plus, CornerDownLeft, Info, HelpCircle, ShoppingCart, Check, RefreshCw, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { UPSCalculator } from './UPSCalculator';
 
 interface TechnicalAdvisorProps {
   catalogData: any[];
@@ -68,10 +69,12 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
   if (!isAuthenticated) return null;
 
   const handleSend = async (customText?: string) => {
-    const textToSend = customText || input;
+    const textToSend = typeof customText === 'string' ? customText : input;
     if (!textToSend.trim() || isLoading) return;
 
-    if (!customText) setInput('');
+    if (calcOpen) setCalcOpen(false);
+
+    if (typeof customText !== 'string') setInput('');
 
     // Append user message
     const userMsg = {
@@ -169,13 +172,6 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
 
     return suggestions.slice(0, 3);
   };
-
-  const quickQuestions = [
-    { label: 'כמה וואט צורכת מצלמה / AP?', q: 'כמה וואט צורך AP ממוצע או מצלמת רשת? אנא עזור לי לחשב עבור 6 נקודות.' },
-    { label: 'תכנון אל-פסק (UPS) לשני מכשירים לשעתיים', q: 'אני צריך לתכנן אל-פסק שיחזיק 2 מכשירים של 25 וואט כל אחד למשך שעתיים גיבוי. איזה מומלץ לי לבחור ומה החישוב הנדרש?' },
-    { label: 'התאמת ארון תקשורת ואביזרים', q: 'אני מרכיב ארון תקשורת 9U. אילו אביזרים נלווים, מדפים, מאווררים ופנלים מומלץ לי להוסיף אליו מהקופסה?' },
-    { label: 'בדיקת סיבים אופטיים תואמים', q: 'מה ההבדל בין מגשר סיב אופטי חד-מצב (SM) לרב--מצב (MM) ואיזה פתרון מומלץ בקטלוג לרשת אופטית של RBS?' }
-  ];
 
   const handleAddSuggested = (product: any) => {
     addToCart(product, 1);
@@ -341,54 +337,9 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="bg-white border-b border-gray-200 overflow-hidden text-sm"
+                    className="bg-white border-b border-gray-200 overflow-hidden text-sm relative z-20 shadow-sm"
                   >
-                    <div className="p-4 bg-[#0a1628]/5 border-b border-[#004387]/5">
-                      <div className="flex items-center gap-1.5 font-bold text-[#0c2d57] mb-2">
-                        <Info className="w-4 h-4 text-[#fe8d00]" />
-                        חישוב קיבולת אל-פסק (UPS Calculation)
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-3 mb-3">
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1">הספק צרכנים (Watts):</label>
-                          <input 
-                            type="number" 
-                            value={calcWatts} 
-                            onChange={(e) => setCalcWatts(Math.max(1, parseInt(e.target.value) || 0))}
-                            className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-xs text-right outline-none focus:ring-1 focus:ring-[#004387]"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1">זמן גיבוי נדרש (שעות):</label>
-                          <input 
-                            type="number" 
-                            step="0.5"
-                            value={calcHours} 
-                            onChange={(e) => setCalcHours(Math.max(0.5, parseFloat(e.target.value) || 0))}
-                            className="w-full bg-white border border-gray-200 rounded px-2 py-1 text-xs text-right outline-none focus:ring-1 focus:ring-[#004387]"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Result */}
-                      <div className="bg-orange-50 border border-orange-100 p-2.5 rounded flex items-center justify-between text-xs">
-                        <div>
-                          <span className="text-gray-600 block">אנרגיה נדרשת (Wh):</span>
-                          <span className="font-bold text-[#fe8d00] text-sm font-mono">{calcResultWh} Watt-Hours</span>
-                        </div>
-                        <button 
-                          onClick={() => {
-                            const prompt = `ארגן לי בבקשה פתרון אל פסק מתאים מהקטלוג שיכול להחזיק הספק צרכנים של ${calcWatts} וואט למשך ${calcHours} שעות עבודה (נחוצים לפחות ${calcResultWh} וואט-שעה).`;
-                            handleSend(prompt);
-                          }}
-                          className="bg-[#004387] text-white hover:bg-[#fe8d00] transition-colors py-1.5 px-3 font-semibold text-[11px] rounded flex items-center gap-1 border-none cursor-pointer"
-                        >
-                          <Sparkles className="w-3 h-3 text-yellow-300" />
-                          שאל את היועץ החכם
-                        </button>
-                      </div>
-                    </div>
+                    <UPSCalculator catalogData={catalogData} onAddToCart={addToCart} onAskAdvisor={handleSend} />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -448,7 +399,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                         {/* Render inline direct-add product cards matched dynamically */}
                         {isModel && suggestedProducts.length > 0 && (
                           <div className="mt-2 space-y-2 bg-white rounded-lg p-2.5 border border-dashed border-[#004387]/20">
-                            <span className="text-[10px] text-[#004387] font-bold block">מוצרים ביועץ הניתנים להוספה ידנית:</span>
+                            <span className="text-[10px] text-[#004387] font-bold block">מוצרים שהוזכרו להוספה מהירה לעגלה:</span>
                             {suggestedProducts.map((prod, pIdx) => (
                               <div key={pIdx} className="flex items-center justify-between gap-2.5 p-1.5 border border-gray-100 rounded bg-gray-50/50">
                                 <div className="flex items-center gap-2 min-w-0">
@@ -523,23 +474,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Quick Questions suggestion chip area */}
-              {messages.length === 1 && (
-                <div className="p-3 bg-[#004387]/5 border-t border-gray-200">
-                  <span className="text-[10px] text-gray-500 font-bold block mb-1.5">הצעות להתחלת שיחה:</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {quickQuestions.map((qq, qi) => (
-                      <button 
-                        key={qi}
-                        onClick={() => handleSend(qq.q)}
-                        className="bg-white hover:bg-[#004387]/5 text-gray-700 hover:text-[#004387] px-2.5 py-1.5 rounded-lg border border-gray-200 transition-colors text-[10px] sm:text-xs text-right cursor-pointer"
-                      >
-                        {qq.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Quick Questions suggestion chip area (Removed) */}
 
               {/* Input Area */}
               <div className="p-3 bg-white border-t border-gray-200">

@@ -184,12 +184,12 @@ ${catalogSummaryString}
 
     let response;
     // Multi-layer fallback logic to guarantee service uptime:
-    // Layer 1: gemini-3.5-flash with googleSearch grounding (for real-time data)
-    // Layer 2: gemini-3.5-flash standard (if grounding is out of quota - 429)
-    // Layer 3: gemini-3.1-flash-lite standard (if 3.5-flash is overloaded - 503)
+    // Layer 1: gemini-2.5-flash with googleSearch grounding (for real-time data)
+    // Layer 2: gemini-2.5-flash standard (if grounding is out of quota - 429)
+    // Layer 3: gemini-1.5-flash-8b standard (if flash is overloaded - 503)
     try {
       response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: contents,
         config: {
           systemInstruction,
@@ -197,24 +197,32 @@ ${catalogSummaryString}
         }
       });
     } catch (searchError: any) {
-      console.warn("Advisor: Layer 1 (gemini-3.5-flash with search) failed, falling back to Layer 2 standard:", searchError.message || searchError);
+      console.warn("Advisor: Layer 1 (gemini-2.5-flash with search) failed, falling back to Layer 2 standard:", searchError.message || searchError);
       try {
         response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-2.5-flash",
           contents: contents,
           config: {
             systemInstruction
           }
         });
       } catch (standardError: any) {
-        console.warn("Advisor: Layer 2 (gemini-3.5-flash standard) failed, falling back to Layer 3 (gemini-3.1-flash-lite standard):", standardError.message || standardError);
-        response = await ai.models.generateContent({
-          model: "gemini-3.1-flash-lite",
-          contents: contents,
-          config: {
-            systemInstruction
-          }
-        });
+        console.warn("Advisor: Layer 2 (gemini-2.5-flash standard) failed, falling back to Layer 3 (gemini-1.5-flash-8b standard):", standardError.message || standardError);
+        try {
+          response = await ai.models.generateContent({
+            model: "gemini-1.5-flash-8b",
+            contents: contents,
+            config: {
+              systemInstruction
+            }
+          });
+        } catch (liteError: any) {
+          console.error("Advisor: All layers failed.", liteError.message || liteError);
+          return res.json({
+            text: "סליחה, עקב עומס זמני או הגבלות שימוש, איני יכול לענות כרגע. אנא נסה שוב מאוחר יותר.",
+            sources: []
+          });
+        }
       }
     }
 
