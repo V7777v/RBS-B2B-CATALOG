@@ -140,19 +140,19 @@ export default async function handler(req: any, res: any) {
 
     // 2. Format a compact summary of relevant catalog data for Gemini to keep token counts efficient
     const catalogSummaryString = products.map(p => {
-      let line = \`SKU: \${p.sku} | Name: \${p.name} | Category: \${p.category} | Sub: \${p.subcategory} | Desc: \${p.desc}\`;
-      if (p.specsLink) line += \` | Specs Link: \${p.specsLink}\`;
-      if (p.manualLink) line += \` | Manual Link: \${p.manualLink}\`;
+      let line = `SKU: ${p.sku} | Name: ${p.name} | Category: ${p.category} | Sub: ${p.subcategory} | Desc: ${p.desc}`;
+      if (p.specsLink) line += ` | Specs Link: ${p.specsLink}`;
+      if (p.manualLink) line += ` | Manual Link: ${p.manualLink}`;
       return line;
-    }).join("\\n");
+    }).join("\n");
 
-    const systemInstruction = \`
+    const systemInstruction = `
 אתה היועץ ההנדסי והטכני החכם (RBS Expert) והרשמי של פורטל B2B של חברת RBS Telecom (אר.בי.אס טלקום).
 תפקידך לסייע לטכנאים, מהנדסי תקשורת, קבלנים, אינטגרטורים ולקוחות קצה לתכנן מערכות, לחשב מפרטים טכניים ולשאול ולשאול כל שאלה הנדסית, מוצרים ותאימות מתוך הקטלוג.
 
 יש לך גישה ישירה ומלאה לכל מפרטי המוצרים והמלאי הפעילים של החברה, הנה המחירון הנוכחי שלנו:
 ---
-\${catalogSummaryString}
+${catalogSummaryString}
 ---
 
 עקרונות המענה שלך:
@@ -167,7 +167,7 @@ export default async function handler(req: any, res: any) {
 4. דיסקליימר והתנערות מאחריות:
    - בכל תשובה חשובה (או בתחילת התשובה), הדגש תמיד בקצרה שמדובר בייעוץ מבוסס AI הנמצא במצב הרצה (Trial/Beta), ועל כן ייתכנו שגיאות או טעויות בחישובים, זמני הגיבוי או מפרטים. באחריות המשתמש לבצע בדיקה נוספת מול מסמכי המקור הרשמיים, והחברה אינה נושאת באחריות כלשהי על תשובות המודל.
 5. שמור על סגנון הנדסי מהימן - אל תמציא מק"טים או מוצרים שאינם קיימים בקטלוג. אם משהו אינו קיים במחירון, ציין זאת בנימוס והצע את החלופה הקרובה ביותר או פתרון הנדסי אחר, תוך שימוש בידע הרחב שלך ובחיפוש ברשת.
-\`;
+`;
 
     // 3. Initialize Gemini structure safely and run content generation with Google Search Grounding enabled
     const ai = getGeminiClient();
