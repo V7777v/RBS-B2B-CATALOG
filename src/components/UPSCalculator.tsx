@@ -51,7 +51,7 @@ function formatTime(mins: number) {
   return m === 0 ? `${h} שעות` : `${h} שעות ו-${m} דק'`;
 }
 
-export const UPSCalculator: React.FC<{ catalogData?: any[], onAddToCart?: (product: any) => void, onAskAdvisor?: (question: string) => void }> = ({ catalogData = [], onAddToCart, onAskAdvisor }) => {
+export const UPSCalculator: React.FC<{ catalogData?: any[], onAddToCart?: (product: any, quantity?: number) => void, onAskAdvisor?: (question: string) => void }> = ({ catalogData = [], onAddToCart, onAskAdvisor }) => {
   const [load, setLoad] = useState<number>(100);
   const [tech, setTech] = useState<'line' | 'online_std' | 'online_ext'>('line');
 
@@ -95,7 +95,7 @@ export const UPSCalculator: React.FC<{ catalogData?: any[], onAddToCart?: (produ
   }).filter(u => u).sort((a: any, b: any) => a.watts - b.watts);
 
   return (
-    <div className="bg-white border-b border-gray-200 overflow-y-auto max-h-[60vh] text-sm flex flex-col hide-scroll">
+    <div className="bg-white border-b border-gray-200 overflow-y-auto max-h-[55vh] text-sm flex flex-col scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pr-1 select-text">
       <div className="p-4 bg-slate-50/50">
         <div className="flex items-center gap-1.5 font-bold text-[#0c2d57] mb-3 text-base">
           <Bolt className="w-5 h-5 text-[#fe8d00] fill-current" />
@@ -104,33 +104,53 @@ export const UPSCalculator: React.FC<{ catalogData?: any[], onAddToCart?: (produ
         
         <div className="mb-4">
           <label className="block text-xs font-semibold text-gray-600 mb-1">הספק צרכנים צפוי בחיבור לאל-פסק:</label>
-          <div className="flex items-center relative">
-            <input 
-              type="number" 
-              value={load || ''}
-              onChange={(e) => setLoad(Math.max(0, parseInt(e.target.value) || 0))}
-              className="w-full text-center text-3xl font-black text-[#0c2d57] border border-gray-300 bg-white focus:border-[#fe8d00] focus:ring-2 focus:ring-orange-100 rounded-lg py-3 transition-all outline-none"
-            />
-            <span className="absolute left-6 font-bold text-gray-400 select-none pointer-events-none text-xl">W</span>
+          <div className="flex items-center gap-2">
+            <button 
+              type="button"
+              onClick={() => setLoad(prev => Math.max(0, prev - 50))}
+              className="p-2 sm:p-2.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-lg text-gray-700 font-black transition-colors flex items-center justify-center cursor-pointer select-none text-xs"
+              title="הפחתת 50W"
+            >
+              -50W
+            </button>
+            
+            <div className="flex-1 flex items-center relative">
+              <input 
+                type="number" 
+                value={load || ''}
+                onChange={(e) => setLoad(Math.max(0, parseInt(e.target.value) || 0))}
+                className="w-full text-center text-2xl font-black text-[#0c2d57] border border-gray-300 bg-white focus:border-[#fe8d00] focus:ring-2 focus:ring-orange-100 rounded-lg py-1.5 transition-all outline-none"
+              />
+              <span className="absolute left-3 font-bold text-gray-400 select-none pointer-events-none text-sm">W</span>
+            </div>
+
+            <button 
+              type="button"
+              onClick={() => setLoad(prev => prev + 50)}
+              className="p-2 sm:p-2.5 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-lg text-gray-700 font-black transition-colors flex items-center justify-center cursor-pointer select-none text-xs"
+              title="הוספת 50W"
+            >
+              +50W
+            </button>
           </div>
         </div>
 
         <div className="flex bg-white p-1 rounded-md mb-4 border border-gray-200 shadow-sm relative gap-1">
           <button 
             onClick={() => setTech('line')} 
-            className={`flex-1 text-[11px] font-bold py-2.5 rounded transition-colors text-center ${tech === 'line' ? 'bg-[#004387] text-white shadow' : 'text-gray-500 hover:bg-gray-50'}`}
+            className={`flex-1 text-[11px] font-bold py-2 rounded transition-colors text-center ${tech === 'line' ? 'bg-[#004387] text-white shadow' : 'text-gray-500 hover:bg-gray-50'}`}
           >
             אל פסק רגיל
           </button>
           <button 
             onClick={() => setTech('online_std')} 
-            className={`flex-1 text-[11px] font-bold py-2.5 rounded transition-colors text-center ${tech === 'online_std' ? 'bg-[#004387] text-white shadow' : 'text-gray-500 hover:bg-gray-50'}`}
+            className={`flex-1 text-[11px] font-bold py-2 rounded transition-colors text-center ${tech === 'online_std' ? 'bg-[#004387] text-white shadow' : 'text-gray-500 hover:bg-gray-50'}`}
           >
             אונליין (Tower)
           </button>
           <button 
             onClick={() => setTech('online_ext')} 
-            className={`flex-1 text-[11px] font-bold py-2.5 rounded transition-colors text-center ${tech === 'online_ext' ? 'bg-[#004387] text-white shadow' : 'text-gray-500 hover:bg-gray-50'}`}
+            className={`flex-1 text-[11px] font-bold py-2 rounded transition-colors text-center ${tech === 'online_ext' ? 'bg-[#004387] text-white shadow' : 'text-gray-500 hover:bg-gray-50'}`}
           >
             אונליין (RM)
           </button>
@@ -177,25 +197,67 @@ export const UPSCalculator: React.FC<{ catalogData?: any[], onAddToCart?: (produ
                      </div>
                    </div>
 
-                   <div className="bg-[#f8f9fa] rounded-lg border border-gray-100 overflow-hidden mt-1 relative z-10">
-                     <div className="bg-gray-100/80 px-2.5 py-1.5 text-[10px] text-gray-500 font-bold flex items-center gap-1.5 border-b border-gray-200/50">
-                       <Clock className="w-3.5 h-3.5" /> זמן גיבוי צפוי לעומס של {load}W:
+                   {/* Conditional UPS expandability display layout */}
+                   {!r.canExtend ? (
+                     <div className="bg-[#f8f9fa] rounded-lg border border-gray-100 p-2.5 mt-1 relative z-10 flex justify-between items-center">
+                       <div className="flex items-center gap-1.5 text-xs text-gray-500 font-semibold">
+                         <Clock className="w-4 h-4 text-[#004387]" />
+                         <span>זמן גיבוי סוללה פנימית צפוי:</span>
+                       </div>
+                       <span className="text-xs font-black text-[#004387] bg-blue-50 px-2 py-1 rounded border border-blue-100/50">
+                         {formatTime(r.configs[0]?.mins || 0)}
+                       </span>
                      </div>
-                     <div className="p-2 space-y-1.5">
-                       {r.configs.map((c: any, ci: number) => {
-                         let label = c.packs === 0 ? (r.canExtend ? 'המכשיר עצמו (ללא הרחבה)' : 'זמן גיבוי סוללה פנימית') : (r.internalWh === 0 && c.packs === 1 ? 'עם 1 מארז חיצוני (מינימום נדרש)' : `הוספת ${c.packs} מארזי סוללות לארון`);
-                         return (
-                           <div key={ci} className="flex justify-between items-center bg-white px-2.5 py-2 rounded border border-gray-100 shadow-sm transition-all hover:border-[#fe8d00]/30">
-                             <div className="flex items-center gap-2 min-w-0">
-                               {(c.packs > 0) ? <LayoutGrid className="w-4 h-4 text-[#fe8d00]" /> : <Zap className="w-4 h-4 text-[#004387]" />}
-                               <span className="text-[11px] text-gray-700 font-semibold truncate">{label}</span>
+                   ) : (
+                     <div className="bg-[#f8f9fa] rounded-lg border border-gray-100 overflow-hidden mt-1 relative z-10">
+                       <div className="bg-gray-100/80 px-2.5 py-1.5 text-[10px] text-gray-500 font-bold flex items-center gap-1.5 border-b border-gray-200/50">
+                         <Clock className="w-3.5 h-3.5" /> זמן גיבוי צפוי לעומס של {load}W:
+                       </div>
+                       <div className="p-2 space-y-1.5">
+                         {r.configs.map((c: any, ci: number) => {
+                           let label = c.packs === 0 ? 'המכשיר עצמו (ללא הרחבה)' : (r.internalWh === 0 && c.packs === 1 ? 'עם 1 מארז חיצוני (מינימום נדרש)' : `הוספת ${c.packs} מארזי סוללות לארון`);
+                           return (
+                             <div key={ci} className="flex justify-between items-center bg-white px-2.5 py-2 rounded border border-gray-100 shadow-sm transition-all hover:border-[#fe8d00]/30">
+                               <div className="flex items-center gap-2 min-w-0">
+                                 {(c.packs > 0) ? <LayoutGrid className="w-4 h-4 text-[#fe8d00]" /> : <Zap className="w-4 h-4 text-[#004387]" />}
+                                 <span className="text-[11px] text-gray-700 font-semibold truncate">{label}</span>
+                               </div>
+                               <div className="flex items-center gap-2 shrink-0">
+                                 <span className="text-xs font-black text-[#004387] bg-blue-50 px-2 py-1 rounded shrink-0 border border-blue-100/50">{formatTime(c.mins)}</span>
+                                 {c.packs > 0 && onAddToCart && r.extPack && (
+                                   <button 
+                                     onClick={(e) => {
+                                       e.stopPropagation();
+                                       const matchingPack = catalogData.find(item => item.sku === r.extPack.model);
+                                       if (matchingPack) {
+                                         onAddToCart(matchingPack, c.packs);
+                                       } else {
+                                         onAddToCart({
+                                           id: `ext-${r.extPack.model}`,
+                                           sku: r.extPack.model,
+                                           name: `מארז סוללות חיצוני HIKVISION דגם ${r.extPack.model}`,
+                                           price: 0,
+                                           priceType: 'POY',
+                                           images: [r.extPack.image || r.image],
+                                           brand: "HIKVISION",
+                                           category: "אל-פסק (UPS)",
+                                           subcategory: "מארז סוללות"
+                                         }, c.packs);
+                                       }
+                                     }}
+                                     className="p-1 text-[#fe8d00] hover:text-[#004387] hover:bg-orange-50 rounded border border-[#fe8d00]/20 transition-all flex items-center justify-center cursor-pointer font-bold text-[10px] gap-0.5"
+                                     title={`הוסף ${c.packs} מארזי סוללות ${r.extPack.model} לעגלה`}
+                                   >
+                                     🛒 <span>+{c.packs}</span>
+                                   </button>
+                                 )}
+                               </div>
                              </div>
-                             <span className="text-xs font-black text-[#004387] bg-blue-50 px-2 py-1 rounded ml-1 shrink-0 border border-blue-100/50">{formatTime(c.mins)}</span>
-                           </div>
-                         )
-                       })}
+                           )
+                         })}
+                       </div>
                      </div>
-                   </div>
+                   )}
 
                    <div className="flex gap-2 w-full mt-3">
                      {onAddToCart && (

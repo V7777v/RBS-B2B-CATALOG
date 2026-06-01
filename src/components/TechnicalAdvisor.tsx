@@ -177,6 +177,24 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
     addToCart(product, 1);
   };
 
+  const handleResetChat = () => {
+    setMessages([
+      {
+        role: 'model',
+        text: `שלום! אני עוזר התכנון והיועץ הטכני של RBS Telecom. 
+  
+אני כאן כדי לסייע לך לבחור מוצרים, לבדוק מפרטים ומידות, לתכנן ארונות תקשורת, סיבים אופטיים, מערכות POE, לחשב צריכת הספק (Watts) ולהתאים נפחי אל-פסק (UPS). 
+  
+באפשרותך לשאול אותי כל שאלה טכנית או הנדסית לגבי הקטלוג שלנו או לתכנון הרשת שלך!
+  
+*הבהרה: המערכת נמצאת בשלב הרצה (Trial/Beta) ונעזרת במודל ייעוץ הנדסי חכם חלפי - מומלץ לאמת זמני גיבוי ומפרטים קריטיים מול מקורות רשמיים והוראות היצרן המצורפות.*`,
+        timestamp: new Date()
+      }
+    ]);
+    setInput('');
+    setCalcOpen(false);
+  };
+
   return (
     <>
       {/* Floating Sparkle Action Button */}
@@ -312,20 +330,36 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 xs:gap-2 relative z-10 shrink-0">
+                  {/* Reset/Refresh chatbot button */}
+                  <button 
+                    onClick={handleResetChat}
+                    className="p-1 px-1.5 xs:px-2 text-[10px] sm:text-xs font-semibold rounded-md border border-white/10 bg-white/5 hover:bg-red-500/20 hover:border-red-500/30 text-white transition-all flex items-center gap-1 cursor-pointer"
+                    title="איפוס והתחלת שיחה חדשה"
+                  >
+                    <RefreshCw className="w-3 h-3 text-red-300" />
+                    <span>איפוס</span>
+                  </button>
+
+                  {/* Toggle UPS Calculator Button */}
                   <button 
                     onClick={() => setCalcOpen(!calcOpen)}
-                    className="p-1 px-2 text-xs font-semibold rounded-md border border-white/20 bg-white/10 hover:bg-[#fe8d00] hover:border-transparent transition-all flex items-center gap-1 text-white border-none cursor-pointer"
+                    className={`p-1 px-1.5 xs:px-2 text-[10px] sm:text-xs font-semibold rounded-md border transition-all flex items-center gap-1 cursor-pointer ${
+                      calcOpen 
+                        ? 'bg-[#fe8d00] border-transparent text-white shadow-inner font-bold' 
+                        : 'border-white/20 bg-white/10 text-white hover:bg-[#fe8d00] hover:border-transparent'
+                    }`}
                   >
-                    <RefreshCw className={`w-3 h-3 ${calcOpen ? 'rotate-180' : ''} transition-transform`} />
-                    מחשבון UPS
+                    <Sparkles className={`w-3 h-3 ${calcOpen ? 'text-white' : 'text-yellow-300'}`} />
+                    <span>{calcOpen ? "סגור מחשבון" : "מחשבון UPS"}</span>
                   </button>
+
                   <button 
                     onClick={() => setIsOpen(false)}
-                    className="p-1.5 rounded-full hover:bg-white/10 text-white border-none cursor-pointer"
+                    className="p-1 sm:p-1.5 rounded-full hover:bg-white/10 text-white border-none cursor-pointer"
                     aria-label="סגור חלון יועץ"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4 sm:w-5 h-5" />
                   </button>
                 </div>
               </div>
