@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { 
-  Sparkles, X, Send, Bot, User, Loader2, Plus, CornerDownLeft, Info, HelpCircle, ShoppingCart, Check, RefreshCw, AlertTriangle
+  Sparkles, X, Send, Bot, User, Loader2, Plus, CornerDownLeft, Info, HelpCircle, ShoppingCart, Check, RefreshCw, AlertTriangle, Square
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UPSCalculator } from './UPSCalculator';
@@ -41,6 +43,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [sources, setSources] = useState<any[]>([]);
   
   // Interactive UPS Calculator State
@@ -68,7 +71,14 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
 
   if (!isAuthenticated) return null;
 
-  const handleSend = async (customText?: string) => {
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setIsLoading(false);
+  };
+
+  const handleSend = async (customText?: string, forceAI: boolean = false) => {
     const textToSend = typeof customText === 'string' ? customText : input;
     if (!textToSend.trim() || isLoading) return;
 
@@ -85,6 +95,11 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
     setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     try {
       // Prepare chat history payload
       const historyPayload = messages.map(m => ({
@@ -99,8 +114,10 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
         },
         body: JSON.stringify({
           message: textToSend,
-          history: historyPayload
-        })
+          history: historyPayload,
+          forceAI: forceAI
+        }),
+        signal: abortControllerRef.current.signal
       });
 
       if (!res.ok) {
@@ -122,60 +139,33 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
         role: 'model',
         text: data.text,
         timestamp: new Date(),
-        sources: data.sources || []
+        sources: data.sources || [],
+        type: data.type,
+        directProducts: data.products,
+        originalQuery: textToSend
       }]);
 
     } catch (err: any) {
+      if (err.name === 'AbortError') return;
+
       console.error("AI Advisor Communication error:", err);
       const errorMsg = err.message || 'שגיאה לא ידועה';
       
       setMessages(prev => [...prev, {
         role: 'model',
         text: `אופס! נתקלתי בבעיה בחיבור לשרת.\n\n**פרטי השגיאה:** ${errorMsg}`,
-        timestamp: new Date()
+        timestamp: new Date(),
+        isError: true,
+        failedQuery: textToSend
       }]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Extract SKU suggestions based on current model output
-  const findProductSuggestions = (text: string) => {
-    if (!text || !catalogData || catalogData.length === 0) return [];
-    
-    // Find matching products by looking up SKUs or partial SKUs in the message
-    const suggestions: any[] = [];
-    const lowerText = text.toLowerCase();
-    
-    catalogData.forEach(p => {
-      // Check if SKU exists and is mentioned in text, limit to max 3 items to avoid overwhelming
-      if (p && p.sku && typeof p.sku === 'string' && p.sku.length > 2) {
-        if (lowerText.includes(p.sku.toLowerCase()) && !suggestions.some(s => s.sku === p.sku)) {
-          suggestions.push(p);
-        }
-      }
-    });
 
-    // If no direct SKU, check name keywords for high relevancy items (like "מחבר", "אל פסק", "סיב פאץ'")
-    if (suggestions.length === 0) {
-      const words = ["ups", "אל פסק", "ארון", "cabinet", "מגשר", "poe"];
-      for (const word of words) {
-        if (lowerText.includes(word)) {
-          const match = catalogData.find(p => p && p.name && typeof p.name === 'string' && p.name.toLowerCase().includes(word) && !p.isComingSoon);
-          if (match && !suggestions.some(s => s.id === match.id)) {
-            suggestions.push(match);
-          }
-          if (suggestions.length >= 2) break;
-        }
-      }
-    }
 
-    return suggestions.slice(0, 3);
-  };
 
-  const handleAddSuggested = (product: any) => {
-    addToCart(product, 1);
-  };
 
   const handleResetChat = () => {
     setMessages([
@@ -315,48 +305,60 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
               </AnimatePresence>
 
               {/* Header */}
-              <div className="bg-[#0c2d57] text-white p-4 flex justify-between items-center relative overflow-hidden">
+              <div className="bg-[#0c2d57] text-white p-2 sm:p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center relative overflow-hidden gap-2 sm:gap-0 shrink-0">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-[#fe8d00]/10 rounded-full blur-xl pointer-events-none" />
-                <div className="flex items-center gap-2.5 relative z-10">
-                  <div className="bg-[#fe8d00] p-1.5 rounded-lg text-white">
+                <div className="flex items-center gap-2.5 relative z-10 w-full sm:w-auto">
+                  <div className="bg-[#fe8d00] p-1.5 rounded-lg text-white shrink-0">
                     <Bot className="w-5 h-5" />
                   </div>
-                  <div>
-                    <h3 className="font-bold text-base flex items-center gap-1.5 leading-tight text-white m-0">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-sm sm:text-base flex items-center gap-1.5 leading-tight text-white m-0 truncate">
                       RBS Expert
-                      <span className="text-[10px] bg-green-500 text-white px-1.5 py-0.5 animate-pulse rounded select-none font-semibold">LIVE</span>
+                      <span className="text-[9px] sm:text-[10px] bg-green-500 text-white px-1.5 py-0.5 animate-pulse rounded select-none font-semibold shrink-0">LIVE</span>
                     </h3>
-                    <p className="text-[11px] text-gray-300 leading-none mt-0.5">מנוע ייעוץ הנדסי וחישוב אל-פסק</p>
+                    <p className="text-[10px] sm:text-[11px] text-gray-300 leading-none mt-0.5 truncate">מנוע ייעוץ הנדסי וחישוב אל-פסק</p>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 xs:gap-2 relative z-10 shrink-0">
-                  {/* Reset/Refresh chatbot button */}
-                  <button 
-                    onClick={handleResetChat}
-                    className="p-1 px-1.5 xs:px-2 text-[10px] sm:text-xs font-semibold rounded-md border border-white/10 bg-white/5 hover:bg-red-500/20 hover:border-red-500/30 text-white transition-all flex items-center gap-1 cursor-pointer"
-                    title="איפוס והתחלת שיחה חדשה"
-                  >
-                    <RefreshCw className="w-3 h-3 text-red-300" />
-                    <span>איפוס</span>
-                  </button>
-
-                  {/* Toggle UPS Calculator Button */}
-                  <button 
-                    onClick={() => setCalcOpen(!calcOpen)}
-                    className={`p-1 px-1.5 xs:px-2 text-[10px] sm:text-xs font-semibold rounded-md border transition-all flex items-center gap-1 cursor-pointer ${
-                      calcOpen 
-                        ? 'bg-[#fe8d00] border-transparent text-white shadow-inner font-bold' 
-                        : 'border-white/20 bg-white/10 text-white hover:bg-[#fe8d00] hover:border-transparent'
-                    }`}
-                  >
-                    <Sparkles className={`w-3 h-3 ${calcOpen ? 'text-white' : 'text-yellow-300'}`} />
-                    <span>{calcOpen ? "סגור מחשבון" : "מחשבון UPS"}</span>
-                  </button>
-
+                  
+                  {/* Close button for mobile right in the top corner against the bot name */}
                   <button 
                     onClick={() => setIsOpen(false)}
-                    className="p-1 sm:p-1.5 rounded-full hover:bg-white/10 text-white border-none cursor-pointer"
+                    className="p-1 sm:hidden rounded-full hover:bg-white/10 text-white border-none cursor-pointer shrink-0 ml-1"
+                    aria-label="סגור חלון יועץ"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between sm:justify-end gap-1.5 w-full sm:w-auto relative z-10 shrink-0 border-t border-white/10 pt-2 sm:pt-0 sm:border-t-0">
+                  <div className="flex gap-1.5 flex-1">
+                    {/* Reset/Refresh chatbot button */}
+                    <button 
+                      onClick={handleResetChat}
+                      className="flex-1 sm:flex-initial p-1.5 px-2 text-[10px] sm:text-xs font-semibold rounded-md border border-white/10 bg-white/5 hover:bg-red-500/20 hover:border-red-500/30 text-white transition-all flex justify-center items-center gap-1 cursor-pointer"
+                      title="איפוס והתחלת שיחה חדשה"
+                    >
+                      <RefreshCw className="w-3 h-3 text-red-300" />
+                      <span>איפוס</span>
+                    </button>
+
+                    {/* Toggle UPS Calculator Button */}
+                    <button 
+                      onClick={() => setCalcOpen(!calcOpen)}
+                      className={`flex-1 sm:flex-initial p-1.5 px-2 text-[10px] sm:text-xs font-semibold rounded-md border transition-all flex justify-center items-center gap-1 cursor-pointer ${
+                        calcOpen 
+                          ? 'bg-[#fe8d00] border-transparent text-white shadow-inner font-bold' 
+                          : 'border-white/20 bg-white/10 text-white hover:bg-[#fe8d00] hover:border-transparent'
+                      }`}
+                    >
+                      <Sparkles className={`w-3 h-3 shrink-0 ${calcOpen ? 'text-white' : 'text-yellow-300'}`} />
+                      <span className="truncate">{calcOpen ? "סגור מחשבון" : "מחשבון UPS"}</span>
+                    </button>
+                  </div>
+
+                  {/* Close button for desktop layout */}
+                  <button 
+                    onClick={() => setIsOpen(false)}
+                    className="hidden sm:block p-1.5 rounded-full hover:bg-white/10 text-white border-none cursor-pointer shrink-0"
                     aria-label="סגור חלון יועץ"
                   >
                     <X className="w-4 h-4 sm:w-5 h-5" />
@@ -390,9 +392,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
               <div className="flex-1 overflow-y-auto p-4 space-y-4 select-text">
                 {messages.map((m, idx) => {
                   const isModel = m.role === 'model';
-                  const suggestedProducts = isModel ? findProductSuggestions(m.text) : [];
-                  
-                  return (
+                    return (
                     <div key={idx} className={`flex ${isModel ? 'justify-start' : 'justify-end'} gap-2`}>
                       {isModel && (
                         <div className="w-8 h-8 rounded-full bg-[#0c2d57] text-white flex items-center justify-center shrink-0 self-start text-xs border border-white/20">
@@ -400,13 +400,146 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                         </div>
                       )}
                       
-                      <div className="flex flex-col max-w-[85%]">
-                        <div className={`p-3 rounded-xl shadow-xs text-xs sm:text-sm whitespace-pre-wrap leading-relaxed ${
+                      <div className="flex flex-col max-w-[90%] sm:max-w-[85%] overflow-hidden">
+                        <div className={`p-3 rounded-xl shadow-xs text-xs sm:text-sm whitespace-pre-wrap leading-relaxed break-words break-all sm:break-words ${
                           isModel 
                             ? 'bg-white border border-gray-100 text-gray-800 rounded-tr-none' 
                             : 'bg-[#004387] text-white rounded-tl-none'
                         }`}>
-                          {m.text}
+                          {isModel ? (
+                            <div className="markdown-body [&>p]:mb-2 [&>ul]:list-disc [&>ul]:ml-4 [&>ul]:mr-4 [&>ul]:mb-2 [&>ol]:list-decimal [&>ol]:ml-4 [&>ol]:mr-4 [&>ol]:mb-2 [&_a.md-link]:text-blue-600 [&_a.md-link]:underline [&_a.md-link:hover]:text-blue-800 [&_strong]:font-bold [&_table]:w-full [&_table]:mb-3 [&_th]:border [&_th]:border-gray-200 [&_th]:p-1 [&_th]:bg-gray-50 [&_td]:border [&_td]:border-gray-200 [&_td]:p-1 break-words">
+                              <Markdown 
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  a: ({node, href, children, ...props}: any) => {
+                                    if (href && href.startsWith('product://')) {
+                                      let sku = href.replace('product://', '');
+                                      try { sku = decodeURIComponent(sku); } catch (e) {}
+                                      sku = sku.trim();
+                                      
+                                      const product = catalogData?.find(p => p && p.sku && p.sku.toString().trim() === sku);
+                                      if (product) {
+                                        return (
+                                          <div className="my-3 flex flex-col sm:flex-row items-center gap-3 p-3 border border-blue-100 rounded-lg bg-gray-50 max-w-sm max-w-full">
+                                            {product.images?.[0] && (
+                                              <img 
+                                                src={product.images[0]} 
+                                                alt={product.name} 
+                                                className="w-16 h-16 object-contain rounded-md bg-white border border-gray-100 p-1"
+                                              />
+                                            )}
+                                            <div className="flex-1 min-w-0 flex flex-col items-center sm:items-start text-center sm:text-right gap-1 w-full">
+                                              <span className="font-bold text-[#004387] text-sm leading-tight text-right w-full" dir="rtl">{product.name}</span>
+                                              <div className="flex flex-wrap gap-2 items-center justify-center sm:justify-start w-full">
+                                                <span className="text-[10px] text-gray-500 font-mono bg-white px-1.5 py-0.5 border border-gray-200 rounded shrink-0">{product.sku}</span>
+                                                {product.price > 0 && (
+                                                  <span className="text-[11px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 shrink-0">₪{product.price.toLocaleString('he-IL')}</span>
+                                                )}
+                                              </div>
+                                              
+                                              <div className="flex flex-wrap items-center gap-2 mt-2 w-full justify-center sm:justify-start">
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.preventDefault();
+                                                    addToCart(product, 1);
+                                                  }}
+                                                  className="flex items-center justify-center gap-1.5 p-1.5 px-3 text-xs font-bold text-white bg-[#004387] hover:bg-[#fe8d00] rounded-md transition-colors shadow-sm"
+                                                  title="הוסף לעגלה"
+                                                >
+                                                  <ShoppingCart className="w-3.5 h-3.5" />
+                                                  <span>הוסף לעגלה</span>
+                                                </button>
+                                                {product.specsLink && (
+                                                  <a
+                                                    href={product.specsLink}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex items-center justify-center p-1.5 px-3 text-xs font-bold text-[#004387] hover:text-white bg-white hover:bg-[#004387] border border-[#004387] rounded-md transition-colors no-underline"
+                                                    style={{ textDecoration: 'none' }}
+                                                    title="מפרט טכני"
+                                                  >
+                                                    <Info className="w-3.5 h-3.5 ml-1" />
+                                                    <span>מפרט טכני</span>
+                                                  </a>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      }
+                                    }
+                                    return <a href={href} {...props} className="md-link" target="_blank" rel="noopener noreferrer">{children}</a>;
+                                  }
+                                }}
+                              >
+                                {m.text}
+                              </Markdown>
+                            </div>
+                          ) : (
+                            m.text
+                          )}
+
+                          {/* Render direct products if available */}
+                          {isModel && m.directProducts && m.directProducts.length > 0 && (
+                            <div className="mt-3 flex flex-col gap-2">
+                              {m.directProducts.map((product: any, idx: number) => (
+                                <div key={idx} className="my-3 flex flex-col sm:flex-row items-center gap-3 p-3 border border-blue-100 rounded-lg bg-gray-50 max-w-sm max-w-full">
+                                  {product.images?.[0] && (
+                                    <img 
+                                      src={product.images[0]} 
+                                      alt={product.name} 
+                                      className="w-16 h-16 object-contain rounded-md bg-white border border-gray-100 p-1"
+                                    />
+                                  )}
+                                  <div className="flex-1 min-w-0 flex flex-col items-center sm:items-start text-center sm:text-right gap-1 w-full">
+                                    <span className="font-bold text-[#004387] text-sm leading-tight text-right w-full" dir="rtl">{product.name}</span>
+                                    <div className="flex flex-wrap gap-2 items-center justify-center sm:justify-start w-full">
+                                      <span className="text-[10px] text-gray-500 font-mono bg-white px-1.5 py-0.5 border border-gray-200 rounded shrink-0">{product.sku}</span>
+                                      {product.price > 0 && (
+                                        <span className="text-[11px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 shrink-0">₪{product.price.toLocaleString('he-IL')}</span>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="flex flex-wrap items-center gap-2 mt-2 w-full justify-center sm:justify-start">
+                                      <button
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          addToCart(product, 1);
+                                        }}
+                                        className="flex items-center justify-center gap-1.5 p-1.5 px-3 text-xs font-bold text-white bg-[#004387] hover:bg-[#fe8d00] rounded-md transition-colors shadow-sm"
+                                        title="הוסף לעגלה"
+                                      >
+                                        <ShoppingCart className="w-3.5 h-3.5" />
+                                        <span>הוסף לעגלה</span>
+                                      </button>
+                                      {product.specsLink && (
+                                        <a
+                                          href={product.specsLink}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center justify-center p-1.5 px-3 text-xs font-bold text-[#004387] hover:text-white bg-white hover:bg-[#004387] border border-[#004387] rounded-md transition-colors no-underline"
+                                          style={{ textDecoration: 'none' }}
+                                          title="מפרט טכני"
+                                        >
+                                          <Info className="w-3.5 h-3.5 ml-1" />
+                                          <span>מפרט טכני</span>
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                              
+                              {m.originalQuery && (
+                                <button
+                                  onClick={() => handleSend(m.originalQuery, true)}
+                                  className="mt-2 text-xs font-bold text-blue-600 underline self-start hover:text-blue-800 transition-colors"
+                                >
+                                  שאל את ה-AI להעמקה על מוצרים אלו
+                                </button>
+                              )}
+                            </div>
+                          )}
 
                           {/* Render external grounding citation web sources */}
                           {isModel && m.sources && m.sources.length > 0 && (
@@ -429,65 +562,24 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                             </div>
                           )}
                         </div>
-
-                        {/* Render inline direct-add product cards matched dynamically */}
-                        {isModel && suggestedProducts.length > 0 && (
-                          <div className="mt-2 space-y-2 bg-white rounded-lg p-2.5 border border-dashed border-[#004387]/20">
-                            <span className="text-[10px] text-[#004387] font-bold block">מוצרים שהוזכרו להוספה מהירה לעגלה:</span>
-                            {suggestedProducts.map((prod, pIdx) => (
-                              <div key={pIdx} className="flex items-center justify-between gap-2.5 p-1.5 border border-gray-100 rounded bg-gray-50/50">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  {prod.images && prod.images[0] && (
-                                    <img 
-                                      src={prod.images[0]} 
-                                      alt={prod.name} 
-                                      className="w-8 h-8 object-contain bg-white border border-gray-100 p-0.5 rounded flex-shrink-0" 
-                                    />
-                                  )}
-                                  <div className="min-w-0 flex-1">
-                                    <div className="text-[11px] font-bold text-gray-800 truncate" title={prod.name}>{prod.name}</div>
-                                    <div className="text-[9px] text-gray-500 font-mono">מק"ט: {prod.sku} {prod.price > 0 && `| ₪${prod.price.toLocaleString('he-IL')}`}</div>
-                                    
-                                    {/* Link block to download/view datasheet specs manual */}
-                                    <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1 select-text">
-                                      {prod.specsLink && (
-                                        <a 
-                                          href={prod.specsLink} 
-                                          target="_blank" 
-                                          rel="noopener noreferrer"
-                                          className="text-[9px] text-blue-600 hover:text-orange-500 font-semibold underline flex items-center gap-0.5"
-                                        >
-                                          📄 דף מפרט טכני
-                                        </a>
-                                      )}
-                                      {prod.manualLink && (
-                                        <a 
-                                          href={prod.manualLink} 
-                                          target="_blank" 
-                                          rel="noopener noreferrer"
-                                          className="text-[9px] text-teal-600 hover:text-orange-500 font-semibold underline flex items-center gap-0.5"
-                                        >
-                                          📘 מדריך למשתמש
-                                        </a>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                                <button 
-                                  onClick={() => handleAddSuggested(prod)}
-                                  className="bg-[#004387] hover:bg-[#fe8d00] text-white p-1 rounded transition-colors flex items-center justify-center shrink-0 border-none cursor-pointer"
-                                  title="הוסף לעגלת קניות"
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
                         
-                        <span className="text-[9px] text-gray-400 mt-1 self-start select-none">
-                          {m.timestamp.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-[9px] text-gray-400 self-start select-none">
+                            {m.timestamp.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          {m.isError && m.failedQuery && (
+                            <button
+                              onClick={() => {
+                                setMessages(prev => prev.filter(msg => msg !== m));
+                                handleSend(m.failedQuery);
+                              }}
+                              className="flex items-center gap-1 text-[10px] text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded transition-colors"
+                            >
+                              <RefreshCw className="w-3 h-3" />
+                              נסה שוב
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -526,13 +618,24 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                     placeholder="שאל אותי על צריכת W, חישובי אל פסק, או מוצר..."
                     className="flex-1 bg-gray-50 border border-gray-200 focus:bg-white rounded-lg px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-[#004387] transition-all text-right"
                   />
-                  <button 
-                    type="submit"
-                    disabled={!input.trim() || isLoading}
-                    className="bg-[#004387] hover:bg-[#fe8d00] disabled:bg-gray-200 text-white p-2.5 rounded-lg transition-colors flex items-center justify-center border-none cursor-pointer disabled:cursor-not-allowed"
-                  >
-                    <Send className="w-4 h-4 rotate-180" />
-                  </button>
+                  {isLoading ? (
+                    <button 
+                      type="button"
+                      onClick={handleStop}
+                      className="bg-red-500 hover:bg-red-600 text-white p-2.5 rounded-lg transition-colors flex items-center justify-center border-none cursor-pointer"
+                      title="עצור ריצה"
+                    >
+                      <Square className="w-4 h-4 fill-current" />
+                    </button>
+                  ) : (
+                    <button 
+                      type="submit"
+                      disabled={!input.trim()}
+                      className="bg-[#004387] hover:bg-[#fe8d00] disabled:bg-gray-200 text-white p-2.5 rounded-lg transition-colors flex items-center justify-center border-none cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      <Send className="w-4 h-4 rotate-180" />
+                    </button>
+                  )}
                 </form>
                 <p className="text-[9px] text-gray-400 text-center mt-1 select-none">
                   תשובות מבוססות על שילוב של קטלוג RBSTelecom וחיפוש Google Search זמני.

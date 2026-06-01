@@ -120,26 +120,47 @@ function getGeminiClient(): GoogleGenAI {
   return aiClient;
 }
 
-// API endpoint to serve chat requests safely
-app.post("/api/advisor/chat", async (req, res) => {
-  try {
-    const { message, history = [] } = req.body;
-    if (!message) {
-      return res.status(400).json({ error: "Message content is required" });
+// Cache variables for Gemini
+let geminiContextCacheName: string | null = null;
+let geminiContextCacheExpiresAt: number = 0;
+
+function findRelevantProducts(query: string, products: any[]) {
+  const normQuery = query.toLowerCase().replace(/\s+/g, ' ').trim();
+  const tokens = normQuery.split(' ').filter(t => t.length >= 2);
+  
+  if (tokens.length === 0) return { matches: [], maxScore: 0 };
+
+  const scoredProducts = products.map(p => {
+    let score = 0;
+    const searchableFields = [
+      (p.sku || '').toLowerCase(),
+      (p.name || '').toLowerCase(),
+      (p.category || '').toLowerCase(),
+      (p.subcategory || '').toLowerCase(),
+      (p.desc || '').toLowerCase()
+    ];
+    
+    for (const token of tokens) {
+      if (searchableFields.some(field => field.includes(token))) {
+        score++;
+      }
     }
+    return { product: p, score };
+  });
 
-    // 1. Get complete context from RBS catalog
-    const products = await getCatalogDataContext();
+  const matches = scoredProducts
+    .filter(sp => sp.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20)
+    .map(sp => sp.product);
 
-    // 2. Format a compact summary of relevant catalog data for Gemini to keep token counts efficient
-    const catalogSummaryString = products.map(p => {
-      let line = `SKU: ${p.sku} | Name: ${p.name} | Category: ${p.category} | Sub: ${p.subcategory} | Desc: ${p.desc}`;
-      if (p.specsLink) line += ` | Specs Link: ${p.specsLink}`;
-      if (p.manualLink) line += ` | Manual Link: ${p.manualLink}`;
-      return line;
-    }).join("\n");
+  const maxScore = matches.length > 0 ? Math.max(...scoredProducts.filter(sp => sp.score > 0).map(sp => sp.score)) : 0;
+  
+  return { matches, maxScore, tokenCount: tokens.length };
+}
 
-    const systemInstruction = `
+function getSystemInstructionTemplate(catalogSummaryString: string) {
+  return `
 אתה היועץ ההנדסי והטכני החכם (RBS Expert) והרשמי של פורטל B2B של חברת RBS Telecom (אר.בי.אס טלקום).
 תפקידך לסייע לטכנאים, מהנדסי תקשורת, קבלנים, אינטגרטורים ולקוחות קצה לתכנן מערכות, לחשב מפרטים טכניים ולשאול ולשאול כל שאלה הנדסית, מוצרים ותאימות מתוך הקטלוג.
 
@@ -152,15 +173,67 @@ ${catalogSummaryString}
 1. ענה תמיד בעברית מקצועית, אדיבה וברורה.
 2. תמיכה רחבה ומלאה:
    - שאלות על UPS, הספקים, או AP הן רק דוגמה. עליך לתת מענה ולענות על *כל דבר* - כל שאילתה טכנית, מידע על ארונות תקשורת, תלת פאזי, מגשרים, סיבים אופטיים, הזנות מתח, מתגים, מפרטים, או תאימות.
-3. קישורים לדפי נתונים ומדריכים (Datasheets & Manuals):
-   - לכל מוצר בקטלוג עשויים להיות קישורים משויכים: "Specs Link" (מפרט טכני) ו/או "Manual Link" (מדריך למשתמש).
-   - אם משתמש שואל על מוצר, מפרט שלו או מחפש קובץ מדריך/דף נתונים, ועבור המוצר המתאים קיים Specs Link או Manual Link במאגר המוצרים שקיבלת לעיל, עליך להציג את הקישורים הללו במפורש ובצורה בולטת כקישורי Markdown בעברית!
-     (לדוגמה: "[📄 לצפייה בדף מפרט טכני של המוצר](קישור)")
-   - אם משהו אינו קיים ישירות בקטלוג שלך, בצע חיפוש באינטרנט (באמצעות כלי Google Search Grounding הקיים ברשותך) כדי למצוא נתוני מפרט רשמיים / הגיוניים, וקשר למקורות המידע.
+3. חלוניות מוצר מובנות (Product Cards):
+   - כאשר אתה מציג מוצר מהקטלוג או ממליץ עליו, אין לספק קישור טקסטואלי רגיל למפרט. במקום זאת, עליך לייצר "חלונית מוצר" בתוך התשובה שלך!
+   - כדי לעשות זאת, השתמש בפורמט הקישור הבא: [שם המוצר שאתה רוצה להציג](product://SKU) (כאשר SKU הוא המק"ט המדויק של המוצר).
+   - המערכת שלנו תמיר את הקישור הזה אוטומטית לחלונית מידע מרשימה הכוללת קישור למפרט הטכני וכפתור "הוסף לעגלה" בתוך השיחה עצמה.
+   - לעולם אל תציג "Manual Link" (מדריך למשתמש) כברירת מחדל אלא אם התבקשת מפורשות.
+   - אל תסביר למשתמש כיצד להוסיף לעגלה, החלונית תעשה זאת עבורו.
+   - אם משהו אינו קיים ישירות בקטלוג שלך, בצע חיפוש באינטרנט (באמצעות כלי Google Search Grounding הקיים ברשותך) כדי למצוא נתוני מפרט טכני.
 4. דיסקליימר והתנערות מאחריות:
    - בכל תשובה חשובה (או בתחילת התשובה), הדגש תמיד בקצרה שמדובר בייעוץ מבוסס AI הנמצא במצב הרצה (Trial/Beta), ועל כן ייתכנו שגיאות או טעויות בחישובים, זמני הגיבוי או מפרטים. באחריות המשתמש לבצע בדיקה נוספת מול מסמכי המקור הרשמיים, והחברה אינה נושאת באחריות כלשהי על תשובות המודל.
 5. שמור על סגנון הנדסי מהימן - אל תמציא מק"טים או מוצרים שאינם קיימים בקטלוג. אם משהו אינו קיים במחירון, ציין זאת בנימוס והצע את החלופה הקרובה ביותר או פתרון הנדסי אחר, תוך שימוש בידע הרחב שלך ובחיפוש ברשת.
 `;
+}
+
+// API endpoint to serve chat requests safely
+app.post("/api/advisor/chat", async (req, res) => {
+  try {
+    const { message, history = [], forceAI = false } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: "Message content is required" });
+    }
+
+    // 1. Get complete context from RBS catalog
+    const products = await getCatalogDataContext();
+
+    // 2. Pre-filter relevant products
+    const { matches: relevantProducts, maxScore, tokenCount } = findRelevantProducts(message, products);
+
+    // Check if we can do a direct response
+    // If it's not forced to AI, and we have a strong match (max score > 1 or it's a short product-like query)
+    const isStrongMatch = relevantProducts.length > 0 && (maxScore >= 2 || (maxScore === 1 && tokenCount <= 3));
+    if (!forceAI && isStrongMatch) {
+      return res.json({
+        type: "direct_products",
+        products: relevantProducts.slice(0, 5), // Return up to 5 top products directly
+        text: "מצאתי את המוצרים הבאים בקטלוג שיכולים להתאים לשאלתך:",
+        sources: []
+      });
+    }
+
+    // Decide whether to use AI caching or inline catalog
+    let catalogSummaryString = "";
+    let shouldUseCache = false;
+
+    if (relevantProducts.length > 0) {
+      catalogSummaryString = relevantProducts.map(p => {
+        let line = `SKU: ${p.sku} | Name: ${p.name} | Category: ${p.category} | Sub: ${p.subcategory} | Desc: ${p.desc}`;
+        if (p.specsLink) line += ` | Specs Link: ${p.specsLink}`;
+        if (p.manualLink) line += ` | Manual Link: ${p.manualLink}`;
+        return line;
+      }).join("\n");
+      shouldUseCache = false;
+    } else {
+      catalogSummaryString = products.map(p => {
+        let line = `SKU: ${p.sku} | Name: ${p.name} | Category: ${p.category} | Sub: ${p.subcategory}`;
+        return line;
+      }).join("\n");
+      // Use caching for the large catalog if possible
+      shouldUseCache = true;
+    }
+
+    const systemInstruction = getSystemInstructionTemplate(catalogSummaryString);
 
     // 3. Initialize Gemini structure safely and run content generation with Google Search Grounding enabled
     const ai = getGeminiClient();
@@ -182,48 +255,55 @@ ${catalogSummaryString}
       parts: [{ text: message }]
     });
 
+    let config: any = {
+      systemInstruction,
+      tools: [{ googleSearch: {} }]
+    };
+
+    if (shouldUseCache) {
+       const now = Date.now();
+       if (!geminiContextCacheName || now > geminiContextCacheExpiresAt) {
+          try {
+            // Note: caching system requires at least ~32,000 tokens for context cache, 
+            // if the catalog is smaller it will throw an error, which we catch.
+            const cacheResponse = await ai.caches.create({
+               model: "models/gemini-3.1-flash-lite",
+               config: {
+                 systemInstruction,
+                 ttl: "3600s"
+               }
+            });
+            geminiContextCacheName = cacheResponse.name;
+            geminiContextCacheExpiresAt = now + 3500 * 1000;
+            console.log("Advisor: Created Gemini context cache:", geminiContextCacheName);
+          } catch (e: any) {
+             console.error("Advisor: Failed to create context cache (might be under 32k tokens), falling back to inline systemInstruction.", e.message || e);
+             geminiContextCacheName = null;
+          }
+       }
+       if (geminiContextCacheName) {
+          config = {
+             cachedContent: geminiContextCacheName,
+             tools: [{ googleSearch: {} }]
+          };
+       }
+    }
+
     let response;
-    // Multi-layer fallback logic to guarantee service uptime:
-    // Layer 1: gemini-2.5-flash with googleSearch grounding (for real-time data)
-    // Layer 2: gemini-2.5-flash standard (if grounding is out of quota - 429)
-    // Layer 3: gemini-1.5-flash-8b standard (if flash is overloaded - 503)
+    // Single model usage: gemini-3.1-flash-lite
     try {
       response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.1-flash-lite",
         contents: contents,
-        config: {
-          systemInstruction,
-          tools: [{ googleSearch: {} }]
-        }
+        config: config
       });
-    } catch (searchError: any) {
-      console.warn("Advisor: Layer 1 (gemini-2.5-flash with search) failed, falling back to Layer 2 standard:", searchError.message || searchError);
-      try {
-        response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: contents,
-          config: {
-            systemInstruction
-          }
-        });
-      } catch (standardError: any) {
-        console.warn("Advisor: Layer 2 (gemini-2.5-flash standard) failed, falling back to Layer 3 (gemini-1.5-flash-8b standard):", standardError.message || standardError);
-        try {
-          response = await ai.models.generateContent({
-            model: "gemini-1.5-flash-8b",
-            contents: contents,
-            config: {
-              systemInstruction
-            }
-          });
-        } catch (liteError: any) {
-          console.error("Advisor: All layers failed.", liteError.message || liteError);
-          return res.json({
-            text: "סליחה, עקב עומס זמני או הגבלות שימוש, איני יכול לענות כרגע. אנא נסה שוב מאוחר יותר.",
-            sources: []
-          });
-        }
-      }
+      console.log("Advisor: Successfully generated content using gemini-3.1-flash-lite");
+    } catch (liteError: any) {
+      console.error("Advisor: gemini-3.1-flash-lite failed.", liteError.message || liteError);
+      return res.json({
+        text: "סליחה, עקב עומס זמני או הגבלות שימוש, איני יכול לענות כרגע. אנא נסה שוב מאוחר יותר.",
+        sources: []
+      });
     }
 
     const textOutput = response.text || "סליחה, לא הצלחתי לעבד את התשובה. אנא נסה שוב.";
@@ -236,6 +316,7 @@ ${catalogSummaryString}
     })).filter((s: any) => s.uri);
 
     res.json({
+      type: "ai_response",
       text: textOutput,
       sources: webSources
     });
