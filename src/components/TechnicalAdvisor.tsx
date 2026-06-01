@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Sparkles, X, Send, Bot, User, Loader2, Plus, CornerDownLeft, Info, HelpCircle, ShoppingCart, Check, RefreshCw, AlertTriangle, Settings
+  Sparkles, X, Send, Bot, User, Loader2, Plus, CornerDownLeft, Info, HelpCircle, ShoppingCart, Check, RefreshCw, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -24,14 +24,6 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
     }
   });
   const [tempChecked, setTempChecked] = useState(false);
-  const [clientGeminiKey, setClientGeminiKey] = useState<string>(() => {
-    try {
-      return localStorage.getItem('rbs_client_gemini_api_key') || ((import.meta as any).env?.VITE_GEMINI_API_KEY as string) || '';
-    } catch {
-      return '';
-    }
-  });
-  const [showKeyInput, setShowKeyInput] = useState<boolean>(false);
 
   const [messages, setMessages] = useState<any[]>([
     {
@@ -42,7 +34,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
 
 באפשרותך לשאול אותי כל שאלה טכנית או הנדסית לגבי הקטלוג שלנו או לתכנון הרשת שלך!
 
-*הבהרה: המערכת נמצאת בשלב הרצה (Trial/Beta) ונעזרת בבינה מלאכותית - מומלץ לאמת זמני גיבוי ומפרטים קריטיים מול מקורות רשמיים והוראות היצרן המצורפות.*`,
+*הבהרה: המערכת נמצאת בשלב הרצה (Trial/Beta) ונעזרת במודל ייעוץ הנדסי חכם חלפי - מומלץ לאמת זמני גיבוי ומפרטים קריטיים מול מקורות רשמיים והוראות היצרן המצורפות.*`,
       timestamp: new Date()
     }
   ]);
@@ -75,86 +67,6 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
 
   if (!isAuthenticated) return null;
 
-  const callGeminiClientSide = async (apiKey: string, promptText: string, chatHistory: any[]) => {
-    // Format compact summary of relevant catalog data
-    const catalogSummaryString = catalogData.map(p => {
-      let line = `SKU: ${p.sku || p.id} | Name: ${p.name} | Category: ${p.category} | Sub: ${p.subcategory} | Desc: ${p.desc || ''}`;
-      if (p.specsLink) line += ` | Specs Link: ${p.specsLink}`;
-      if (p.manualLink) line += ` | Manual Link: ${p.manualLink}`;
-      return line;
-    }).join("\n");
-
-    const systemInstruction = `
-אתה הקופיילוט והיועץ הטכני החכם והרשמי של פורטל B2B של חברת RBS Telecom (אר.בי.אס טלקום).
-תפקידך לסייע לטכנאים, מהנדסי תקשורת, קבלנים, אינטגרטורים ולקוחות קצה לתכנן מערכות, לחשב מפרטים טכניים ולשאול כל שאלה הנדסית, מוצרים ותאימות מתוך הקטלוג.
-
-יש לך גישה ישירה ומלאה לכל מפרטי המוצרים והמלאי הפעילים של החברה, הנה המחירון הנוכחי שלנו:
----
-${catalogSummaryString}
----
-
-עקרונות המענה שלך:
-1. ענה תמיד בעברית מקצועית, אדיבה וברורה.
-2. תמיכה רחבה ומלאה:
-   - שאלות על UPS, הספקים, או AP הן רק דוגמה. עליך לתת מענה ולענות על *כל דבר* - כל שאילתה טכנית, מידע על ארונות תקשורת, תלת פאזי, מגשרים, סיבים אופטיים, הזנות מתח, מתגים, מפרטים, או תאימות.
-3. קישורים לדפי נתונים ומדריכים (Datasheets & Manuals):
-   - לכל מוצר בקטלוג עשויים להיות קישורים משויכים: "Specs Link" (מפרט טכני) ו/או "Manual Link" (מדריך למשתמש).
-   - אם משתמש שואל על מוצר, מפרט שלו או מחפש קובץ מדריך/דף נתונים, ועבור המוצר המתאים קיים Specs Link או Manual Link במאגר המוצרים שקיבלת לעיל, עליך להציג את הקישורים הללו במפורש ובצורה בולטת כקישורי Markdown בעברית!
-     (לדוגמה: "[📄 לצפייה בדף מפרט טכני של המוצר](קישור)")
-4. דיסקליימר והתנערות מאחריות:
-   - בכל תשובה, הדגש תמיד בקצרה שמדובר בייעוץ מבוסס AI הנמצא במצב הרצה (Trial/Beta), ועל כן ייתכנו שגיאות או טעויות בחישובים, זמני הגיבוי או מפרטים. באחריות המשתמש לבצע בדיקה נוספת מול מסמכי המקור הרשמיים, והחברה אינה נושאת באחריות כלשהי על תשובות המודל.
-5. שמור על סגנון הנדסי מהימן - אל תמציא מק"טים או מוצרים שאינם קיימים בקטלוג. אם משהו אינו קיים במחירון, ציין זאת בנימוס והצע את החלופה הקרובה ביותר או פתרון הנדסי אחר, תוך שימוש בידע הרחב שלך ובחיפוש ברשת.
-`;
-
-    // Format chat history for Google Gemini REST API format
-    const formattedContents = [
-      ...chatHistory.map(m => ({
-        role: m.role === 'model' ? 'model' : 'user',
-        parts: [{ text: m.text }]
-      })),
-      {
-        role: 'user',
-        parts: [{ text: promptText }]
-      }
-    ].filter(c => c.parts && c.parts[0] && c.parts[0].text);
-
-    const models = ["gemini-1.5-flash", "gemini-2.5-flash", "gemini-1.5-flash-8b"];
-    let lastErr = null;
-
-    for (const model of models) {
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            contents: formattedContents,
-            systemInstruction: {
-              parts: [{ text: systemInstruction }]
-            }
-          })
-        });
-
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData?.error?.message || `HTTP error ${response.status}`);
-        }
-
-        const data = await response.json();
-        const outputText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (outputText) {
-          return { text: outputText };
-        }
-        throw new Error("No text candidates retrieved");
-      } catch (err: any) {
-        console.warn(`Browser-direct call with model ${model} failed:`, err);
-        lastErr = err;
-      }
-    }
-    throw lastErr || new Error("Failed to call Gemini via all fallback models");
-  };
-
   const handleSend = async (customText?: string) => {
     const textToSend = customText || input;
     if (!textToSend.trim() || isLoading) return;
@@ -177,80 +89,48 @@ ${catalogSummaryString}
         text: m.text
       }));
 
-      // Try server side first
-      let success = false;
-      try {
-        const res = await fetch('/api/advisor/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            message: textToSend,
-            history: historyPayload
-          })
-        });
+      const res = await fetch('/api/advisor/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: textToSend,
+          history: historyPayload
+        })
+      });
 
-        if (res.ok) {
-          const contentType = res.headers.get("Content-Type") || res.headers.get("content-type") || "";
-          if (contentType.includes("application/json")) {
-            const data = await res.json();
-            setMessages(prev => [...prev, {
-              role: 'model',
-              text: data.text,
-              timestamp: new Date(),
-              sources: data.sources || []
-            }]);
-            success = true;
+      if (!res.ok) {
+        let errMsg = 'התקשרות עם השרת נכשלה';
+        try {
+          const errData = await res.json();
+          if (errData && errData.details) {
+            errMsg += `: ${errData.details}`;
+          } else if (errData && errData.error) {
+            errMsg += `: ${errData.error}`;
           }
-        }
-      } catch (e) {
-        console.warn("Express server connection failed, falling back to direct client-side model call:", e);
+        } catch (e) {}
+        throw new Error(errMsg);
       }
 
-      if (!success) {
-        // Safe Client-side fallback mode
-        if (clientGeminiKey && clientGeminiKey.trim()) {
-          const fallbackData = await callGeminiClientSide(clientGeminiKey, textToSend, historyPayload);
-          setMessages(prev => [...prev, {
-            role: 'model',
-            text: fallbackData.text,
-            timestamp: new Date(),
-            sources: []
-          }]);
-        } else {
-          // Instruct user to specify client chemical token
-          setShowKeyInput(true);
-          throw new Error("מפתח API אינו מוגדר. האפליקציה פועלת כרגע במצב סטטי (Vercel), ויש להזין מפתח Gemini API אישי תחת סמל ה-⚙️ בראש חלון היועץ כדי להפעיל שיחה ישירה.");
-        }
-      }
+      const data = await res.json();
+      
+      setMessages(prev => [...prev, {
+        role: 'model',
+        text: data.text,
+        timestamp: new Date(),
+        sources: data.sources || []
+      }]);
 
     } catch (err: any) {
       console.error("AI Advisor Communication error:", err);
       const errorMsg = err.message || 'שגיאה לא ידועה';
       
-      if (showKeyInput || errorMsg.includes("מפתח API")) {
-        setMessages(prev => [...prev, {
-          role: 'model',
-          text: `⚠️ **היועץ עבר למצב עבודה ישיר (Direct Browser Client):**
-
-מכיוון שהאתר מאוחסן בשרת סטטי (Vercel) ללא גישה לקוד ה-Node.js, שיחות ה-AI צריכות להתבצע במקביל ישירות מהדפדפן שלכם.
-
-**מדריך קצר להפעלה ב-10 שניות:**
-1. לחצו על סמל ה-**⚙️** בראש חלון הקופיילוט.
-2. הזינו את מפתח ה-Gemini API האישי שלכם (ניתן להוציא מפתח בחינם בשניות מתוך [Google AI Studio](https://aistudio.google.com/)).
-3. המפתח יישמר מקומית בדפדפן שלכם בלבד ותוכלו לחזור לשאול כל שאלה!
-
-*בוני האתר וצוות RBS Telecom יכולים להגדיר את המפתח במערכת Vercel תחת משתנה הסביבה \`VITE_GEMINI_API_KEY\` כדי שיעבוד אוטומטית לכולם ללא הזנה ידנית.*`,
-          timestamp: new Date()
-        }]);
-      } else {
-        setMessages(prev => [...prev, {
-          role: 'model',
-          text: `אופס! נתקלתי בבעיה בחיבור לשרת הגיבוי/היועץ.\n\n**פרטי השגיאה:** ${errorMsg}\n\nאם האפליקציה מאוחסנת ב-Vercel, אנא לחצו על סמל ה-⚙️ בראש חלון היועץ כדי להזין מפתח Gemini API אישי ולהתחבר ישירות.`,
-          timestamp: new Date()
-        }]);
-      }
+      setMessages(prev => [...prev, {
+        role: 'model',
+        text: `אופס! נתקלתי בבעיה בחיבור לשרת.\n\n**פרטי השגיאה:** ${errorMsg}`,
+        timestamp: new Date()
+      }]);
     } finally {
       setIsLoading(false);
     }
@@ -365,14 +245,14 @@ ${catalogSummaryString}
                       </div>
 
                       <div className="text-center">
-                        <h4 className="text-lg font-bold text-white mb-2">מערכת תמיכה וייעוץ הנדסי (AI Co-Pilot)</h4>
+                        <h4 className="text-lg font-bold text-white mb-2">מערכת תמיכה וייעוץ הנדסי (RBS Expert)</h4>
                         <div className="h-1 w-16 bg-[#fe8d00] mx-auto rounded-full" />
                       </div>
 
                       <div className="bg-white/5 rounded-xl p-4 border border-white/10 text-xs sm:text-sm space-y-3 leading-relaxed text-cyan-50">
-                        <p className="font-semibold text-white">אנא קרא ואשר את התנאים הבאים לפני תחילת השימוש בצ'אט הקופיילוט:</p>
+                        <p className="font-semibold text-white">אנא קרא ואשר את התנאים הבאים לפני תחילת השימוש ביועץ ההנדסי:</p>
                         <ul className="list-disc pr-4 space-y-2 text-right">
-                          <li><strong>מערכת בהרצה:</strong> מנוע ה-Co-Pilot נמצא כרגע בשלב הרצה וניסוי לשימוש פנימי.</li>
+                          <li><strong>מערכת בהרצה:</strong> מנוע ה-Expert נמצא כרגע בשלב הרצה וניסוי לשימוש פנימי.</li>
                           <li><strong>חישובים והספקים:</strong> נתוני הספקים (Watts) ומפרטי הגיבוי מופקים על ידי מודל AI. ייתכנו שגיאות או טענות ויש לעשות בדיקה נוספת מול מקורות רשמיים.</li>
                           <li><strong>התנערות מאחריות:</strong> כל התשובות וההצעות הן בגדר המלצה בלבד. לחברה אין שום אחריות ישירה או עקיפה לגבי נכונות המענה או נזקים הנובעים מכך.</li>
                           <li><strong>חובת בדיקה נוספת:</strong> באחריות המשתמש לאמת מידע קריטי ישירות מול דפי המפרט הטכני והמדריכים של היצרן המצורפים לקטלוג.</li>
@@ -429,7 +309,7 @@ ${catalogSummaryString}
                   </div>
                   <div>
                     <h3 className="font-bold text-base flex items-center gap-1.5 leading-tight text-white m-0">
-                      RBS Co-Pilot
+                      RBS Expert
                       <span className="text-[10px] bg-green-500 text-white px-1.5 py-0.5 animate-pulse rounded select-none font-semibold">LIVE</span>
                     </h3>
                     <p className="text-[11px] text-gray-300 leading-none mt-0.5">מנוע ייעוץ הנדסי וחישוב אל-פסק</p>
@@ -445,13 +325,6 @@ ${catalogSummaryString}
                     מחשבון UPS
                   </button>
                   <button 
-                    onClick={() => setShowKeyInput(!showKeyInput)}
-                    className={`p-1.5 rounded-full hover:bg-white/15 transition-colors text-white border-none cursor-pointer ${showKeyInput ? 'bg-[#fe8d00] text-white' : 'bg-white/5'}`}
-                    title="הגדרת חיבור Gemini לעבודה ב-Vercel"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
-                  <button 
                     onClick={() => setIsOpen(false)}
                     className="p-1.5 rounded-full hover:bg-white/10 text-white border-none cursor-pointer"
                     aria-label="סגור חלון יועץ"
@@ -460,79 +333,6 @@ ${catalogSummaryString}
                   </button>
                 </div>
               </div>
-
-              {/* Client-side Direct API Key setup panel */}
-              <AnimatePresence>
-                {showKeyInput && (
-                  <motion.div 
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="bg-slate-900 text-white border-b border-white/10 overflow-hidden text-xs"
-                  >
-                    <div className="p-4 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-[#fe8d00] flex items-center gap-1.5">
-                          <Settings className="w-3.5 h-3.5 animate-spin-slow" />
-                          הגדרת חיבור דפדפן ישיר (Direct Client Mode)
-                        </span>
-                        <button 
-                          onClick={() => setShowKeyInput(false)}
-                          className="text-gray-400 hover:text-white bg-transparent border-none cursor-pointer"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      
-                      <p className="text-gray-300 leading-normal">
-                        בדיקת השרת מזהה שהאתר רץ במצב סטטי (Vercel). כדי לחבר את ה-AI ישירות לדפדפן שלכם ללא תלות בשרת, אנא הזינו מפתח Gemini API אישי:
-                      </p>
-
-                      <div className="flex gap-2">
-                        <input 
-                          type="password" 
-                          value={clientGeminiKey}
-                          onChange={(e) => {
-                            const val = e.target.value.trim();
-                            setClientGeminiKey(val);
-                            try {
-                              localStorage.setItem('rbs_client_gemini_api_key', val);
-                            } catch {}
-                          }}
-                          placeholder="הזן מפתח API של Gemini (מתחיל ב-AIza...)"
-                          className="flex-1 bg-white/10 border border-white/20 rounded px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#fe8d00] font-mono select-all text-right"
-                        />
-                        {clientGeminiKey ? (
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              try {
-                                localStorage.removeItem('rbs_client_gemini_api_key');
-                              } catch {}
-                              setClientGeminiKey('');
-                            }}
-                            className="bg-red-600/30 hover:bg-red-600 hover:text-white text-red-100 px-2.5 text-xs rounded transition-all border-none font-semibold cursor-pointer shrink-0"
-                          >
-                            איפוס
-                          </button>
-                        ) : null}
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-gray-400">
-                        <span>המפתח נשמר בדפדפן שלך בלבד ובאופן מאובטח לחלוטין.</span>
-                        <a 
-                          href="https://aistudio.google.com/" 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="text-[#fe8d00] font-bold hover:underline"
-                        >
-                          קבלת מפתח אישי חינם 🔗
-                        </a>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
 
               {/* Dynamic Interactive calculator drop panel */}
               <AnimatePresence>
@@ -585,7 +385,7 @@ ${catalogSummaryString}
                           className="bg-[#004387] text-white hover:bg-[#fe8d00] transition-colors py-1.5 px-3 font-semibold text-[11px] rounded flex items-center gap-1 border-none cursor-pointer"
                         >
                           <Sparkles className="w-3 h-3 text-yellow-300" />
-                          שאל את הקופיילוט
+                          שאל את היועץ החכם
                         </button>
                       </div>
                     </div>
@@ -648,7 +448,7 @@ ${catalogSummaryString}
                         {/* Render inline direct-add product cards matched dynamically */}
                         {isModel && suggestedProducts.length > 0 && (
                           <div className="mt-2 space-y-2 bg-white rounded-lg p-2.5 border border-dashed border-[#004387]/20">
-                            <span className="text-[10px] text-[#004387] font-bold block">מוצרים בקופיילוט הניתנים להוספה ידנית:</span>
+                            <span className="text-[10px] text-[#004387] font-bold block">מוצרים ביועץ הניתנים להוספה ידנית:</span>
                             {suggestedProducts.map((prod, pIdx) => (
                               <div key={pIdx} className="flex items-center justify-between gap-2.5 p-1.5 border border-gray-100 rounded bg-gray-50/50">
                                 <div className="flex items-center gap-2 min-w-0">
