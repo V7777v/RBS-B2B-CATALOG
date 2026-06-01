@@ -183,24 +183,39 @@ ${catalogSummaryString}
     });
 
     let response;
+    // Multi-layer fallback logic to guarantee service uptime:
+    // Layer 1: gemini-3.5-flash with googleSearch grounding (for real-time data)
+    // Layer 2: gemini-3.5-flash standard (if grounding is out of quota - 429)
+    // Layer 3: gemini-3.1-flash-lite standard (if 3.5-flash is overloaded - 503)
     try {
       response = await ai.models.generateContent({
         model: "gemini-3.5-flash",
         contents: contents,
         config: {
           systemInstruction,
-          tools: [{ googleSearch: {} }] // Enabled Web Search Grounding for precise lookup of external datasheets
+          tools: [{ googleSearch: {} }]
         }
       });
     } catch (searchError: any) {
-      console.warn("Google Search Grounding failed, falling back to standard generation:", searchError);
-      response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: contents,
-        config: {
-          systemInstruction
-        }
-      });
+      console.warn("Advisor: Layer 1 (gemini-3.5-flash with search) failed, falling back to Layer 2 standard:", searchError.message || searchError);
+      try {
+        response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: contents,
+          config: {
+            systemInstruction
+          }
+        });
+      } catch (standardError: any) {
+        console.warn("Advisor: Layer 2 (gemini-3.5-flash standard) failed, falling back to Layer 3 (gemini-3.1-flash-lite standard):", standardError.message || standardError);
+        response = await ai.models.generateContent({
+          model: "gemini-3.1-flash-lite",
+          contents: contents,
+          config: {
+            systemInstruction
+          }
+        });
+      }
     }
 
     const textOutput = response.text || "סליחה, לא הצלחתי לעבד את התשובה. אנא נסה שוב.";
@@ -228,7 +243,12 @@ ${catalogSummaryString}
 
 // Serve health status
 app.get("/api/health", (req, res) => {
-  res.json({ status: "healthy", timestamp: new Date().toISOString() });
+  res.json({ 
+    status: "healthy", 
+    timestamp: new Date().toISOString(),
+    hasApiKey: !!process.env.GEMINI_API_KEY,
+    apiKeyLength: process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.length : 0
+  });
 });
 
 // Configure Vite middleware or production static files serving
