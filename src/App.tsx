@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -226,6 +226,80 @@ const fetchCSV = (gid: string, limit?: number, offset?: number) => {
   });
 };
 
+const parseProductRow = (row: any) => {
+  let itemImages: string[] = [];
+  
+  const rawImagesField = row.imagesJSON || row[''] || row.images || row['תמונות'] || '';
+  if (rawImagesField) {
+    try {
+        itemImages = JSON.parse(rawImagesField);
+        if(!Array.isArray(itemImages)) {
+          itemImages = [itemImages];
+        }
+    } catch(e) {
+        if (typeof rawImagesField === 'string') {
+          const cleaned = rawImagesField.trim();
+          if (cleaned.startsWith('http')) {
+              itemImages = cleaned.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
+          }
+        }
+    }
+  }
+  
+  if (!itemImages || itemImages.length === 0) {
+      if (row.imageURL && row.imageURL.trim().startsWith('http')) {
+          itemImages = row.imageURL.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
+      }
+      if (!itemImages || itemImages.length === 0) {
+          itemImages = ['https://placehold.co/600x400/f3f4f6/000000?text=No+Image'];
+      }
+  }
+
+  const categoryName = typeof row.category === 'string' ? row.category.trim() : (row.category || '');
+  const subcategoryName = typeof row.subcategory === 'string' ? row.subcategory.trim() : (row.subcategory || '');
+  const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
+  const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
+  const hotSaleKey = Object.keys(row).find(k => {
+      const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+      return clean.includes('מבצע חם') || clean.includes('מבצע_חם') || clean.includes('hot sale') || clean.includes('hotsale') || clean === 'מבצע' || clean === 'מבצעים';
+  });
+  const saleTypeKey = Object.keys(row).find(k => {
+      const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+      return clean.includes('סוג מבצע') || clean.includes('sale type') || clean.includes('saletype') || clean.includes('סוג המבצע');
+  });
+  const saleValueKey = Object.keys(row).find(k => {
+      const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+      return clean.includes('ערך מבצע') || clean.includes('sale value') || clean.includes('salevalue') || clean.includes('ערך המבצע') || clean.includes('מחיר מבצע');
+  });
+
+  const hotSaleVal = hotSaleKey ? String(row[hotSaleKey]).trim().toUpperCase() : '';
+  const isHotSale = hotSaleVal === 'TRUE' || hotSaleVal === 'YES' || hotSaleVal === 'כן' || hotSaleVal === '1' || hotSaleVal === 'V' || hotSaleVal === 'Y' || hotSaleVal === 'פעיל' || hotSaleVal === 'במבצע';
+  const saleType = saleTypeKey && typeof row[saleTypeKey] === 'string' ? row[saleTypeKey].trim() : (saleTypeKey ? row[saleTypeKey] : null);
+  const saleValue = saleValueKey && typeof row[saleValueKey] === 'string' ? row[saleValueKey].trim() : (saleValueKey ? row[saleValueKey] : null);
+
+  // Parse Lab Certs
+  const labCertsRaw = row['אישורי מעבדה'] || row.labCerts || row['labCerts'] || '';
+  let labCerts: string[] = [];
+  if (typeof labCertsRaw === 'string' && labCertsRaw.trim()) {
+      labCerts = labCertsRaw.split(/[\n,;]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http') || s.startsWith('www.'));
+  }
+
+  return {
+    ...row,
+    category: categoryName,
+    subcategory: subcategoryName,
+    nestedSubcategory: nestedSubcategoryName,
+    isComingSoon: isComingSoon,
+    isHotSale: isHotSale,
+    saleType: saleType,
+    saleValue: saleValue,
+    price: parsePrice(row.price),
+    retailPrice: row.retailPrice ? parsePrice(row.retailPrice) : null,
+    images: itemImages.map(transformImageLink),
+    labCerts: labCerts.map(link => link.startsWith('www.') ? 'https://' + link : link)
+  };
+};
+
 // --- VIEWPORT INTERSECTION OBSERVER HOOK ---
 interface UseIntersectionObserverProps {
   threshold?: number;
@@ -338,6 +412,129 @@ const InfiniteScrollTrigger: React.FC<InfiniteScrollTriggerProps> = ({ onLoadMor
   );
 };
 
+const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) => void }) => {
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      // High-performance cryptographic SHA-256 hash using native Web Crypto API
+      const msgBuffer = new TextEncoder().encode(password);
+      const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      // Match against secure precomputed hash - Rbs2026 is never stored in plaintext
+      if (hashHex === 'dc7061dd847ce8d81661f9d47feef0c0ae9cde6aafb4e55070b3771daa94e655') {
+        localStorage.setItem('rbs_b2b_auth', 'true');
+        setIsAuthenticated(true);
+      } else {
+        setErrorMsg('סיסמה שגויה. אנא השתמש בקוד הגישה שקיבלת מהחברה.');
+      }
+    } catch (err) {
+      // Fail-safe fallback code in case window.crypto is blocked (e.g. non-HTTPS local dev port iframe)
+      if (password === 'Rbs2026') {
+        localStorage.setItem('rbs_b2b_auth', 'true');
+        setIsAuthenticated(true);
+      } else {
+        setErrorMsg('סיסמה שגויה. אנא השתמש בקוד הגישה שקיבלת מהחברה.');
+      }
+    }
+  };
+
+  return (
+    <div dir="rtl" className="min-h-[100dvh] flex items-center justify-center bg-[#0d1627] p-4 relative overflow-hidden">
+      {/* Abstract floating shapes for high-end feel */}
+      <div className="absolute top-[-10%] right-[-10%] w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-[#004387]/20 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] left-[-10%] w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-[#f7941d]/10 rounded-full blur-[120px] pointer-events-none" />
+
+      <div 
+        className="bg-white/95 backdrop-blur-md p-6 sm:p-10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] max-w-md w-full text-center border border-white/20 relative z-10"
+      >
+        {/* Logo container with rotation animation */}
+        <div 
+          className="w-20 h-20 bg-gradient-to-tr from-[#004387] to-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/20"
+        >
+           <Lock size={36} className="text-white drop-shadow-md" />
+        </div>
+        
+        <h2 
+          className="text-2xl sm:text-3xl font-extrabold text-[#0c2d57] mb-2 tracking-tight"
+        >
+          כניסה לקטלוג B2B
+        </h2>
+        
+        <p 
+          className="text-gray-500 mb-8 text-xs sm:text-sm max-w-xs mx-auto leading-relaxed font-medium"
+        >
+          הקטלוג מיועד ללקוחות עסקיים ומורשים בלבד. הקש סיסמה לכניסה.
+        </p>
+        
+        <form onSubmit={handleLogin} className="space-y-6">
+          <div 
+            className="relative rounded-xl overflow-hidden"
+          >
+            <div className="relative flex items-center">
+               <input 
+                 type={showPassword ? "text" : "password"} 
+                 placeholder="הזן קוד גישה" 
+                 value={password}
+                 onChange={(e) => setPassword(e.target.value)}
+                 className="w-full pl-12 pr-6 py-4 border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:border-[#004387] focus:ring-4 focus:ring-blue-100 outline-none text-center text-xl font-bold tracking-[0.2em] transition-all"
+               />
+               
+               {/* Password Toggle Button with nice framer hover/active dynamics */}
+               <button
+                 type="button"
+                 onClick={() => setShowPassword(!showPassword)}
+                 className="absolute left-3 p-2 text-gray-400 hover:text-[#004387] focus:outline-none transition-colors border-none bg-transparent cursor-pointer"
+                 title={showPassword ? "הסתר קוד" : "הצג קוד"}
+               >
+                 <AnimatePresence mode="wait">
+                   <motion.div
+                     key={showPassword ? "eye-open" : "eye-closed"}
+                     initial={{ opacity: 0, scale: 0.8 }}
+                     animate={{ opacity: 1, scale: 1 }}
+                     exit={{ opacity: 0, scale: 0.8 }}
+                     transition={{ duration: 0.15 }}
+                   >
+                     {showPassword ? <EyeOff size={22} /> : <Eye size={22} />}
+                   </motion.div>
+                 </AnimatePresence>
+               </button>
+            </div>
+          </div>
+          
+          <AnimatePresence>
+            {errorMsg && (
+              <motion.p 
+                initial={{ opacity: 0, height: 0, y: -10 }}
+                animate={{ opacity: 1, height: 'auto', y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -10 }}
+                className="text-red-500 text-sm font-semibold text-right flex items-center gap-1.5 justify-center bg-red-50 py-2.5 px-4 rounded-xl border border-red-100"
+              >
+                <span className="inline-block w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
+                {errorMsg}
+              </motion.p>
+            )}
+          </AnimatePresence>
+          
+          <motion.button 
+            type="submit" 
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="w-full bg-[#f7941d] hover:bg-[#e0861a] hover:shadow-lg hover:shadow-orange-500/20 text-white font-extrabold py-4 rounded-xl transition-all text-lg flex items-center justify-center gap-2 border-none shadow-md shadow-orange-500/10 cursor-pointer"
+          >
+            היכנס למערכת <ChevronLeft size={20} className="transition-transform group-hover:-translate-x-1" />
+          </motion.button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   // --- STATE ---
   const [catalogFolders, setCatalogFolders] = useState<any[]>([]);
@@ -394,71 +591,7 @@ export default function App() {
       }
       
       if (productsCsv.length > 0) {
-        const parsedProducts = productsCsv.map((row: any) => {
-          let itemImages: string[] = [];
-          
-          const rawImagesField = row.imagesJSON || row[''] || row.images || row['תמונות'] || '';
-          if (rawImagesField) {
-            try {
-               itemImages = JSON.parse(rawImagesField);
-               if(!Array.isArray(itemImages)) {
-                  itemImages = [itemImages];
-               }
-            } catch(e) {
-               if (typeof rawImagesField === 'string') {
-                  const cleaned = rawImagesField.trim();
-                  if (cleaned.startsWith('http')) {
-                     itemImages = cleaned.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
-                  }
-               }
-            }
-          }
-          
-          if (!itemImages || itemImages.length === 0) {
-              if (row.imageURL && row.imageURL.trim().startsWith('http')) {
-                 itemImages = row.imageURL.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
-              }
-              if (!itemImages || itemImages.length === 0) {
-                 itemImages = ['https://placehold.co/600x400/f3f4f6/000000?text=No+Image'];
-              }
-          }
-
-          const categoryName = typeof row.category === 'string' ? row.category.trim() : (row.category || '');
-          const subcategoryName = typeof row.subcategory === 'string' ? row.subcategory.trim() : (row.subcategory || '');
-          const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
-          const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
-          const hotSaleKey = Object.keys(row).find(k => {
-             const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
-             return clean.includes('מבצע חם') || clean.includes('מבצע_חם') || clean.includes('hot sale') || clean.includes('hotsale') || clean === 'מבצע' || clean === 'מבצעים';
-          });
-          const saleTypeKey = Object.keys(row).find(k => {
-             const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
-             return clean.includes('סוג מבצע') || clean.includes('sale type') || clean.includes('saletype') || clean.includes('סוג המבצע');
-          });
-          const saleValueKey = Object.keys(row).find(k => {
-             const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
-             return clean.includes('ערך מבצע') || clean.includes('sale value') || clean.includes('salevalue') || clean.includes('ערך המבצע') || clean.includes('מחיר מבצע');
-          });
-
-          const hotSaleVal = hotSaleKey ? String(row[hotSaleKey]).trim().toUpperCase() : '';
-          const isHotSale = hotSaleVal === 'TRUE' || hotSaleVal === 'YES' || hotSaleVal === 'כן' || hotSaleVal === '1' || hotSaleVal === 'V' || hotSaleVal === 'Y' || hotSaleVal === 'פעיל' || hotSaleVal === 'במבצע';
-          const saleType = saleTypeKey && typeof row[saleTypeKey] === 'string' ? row[saleTypeKey].trim() : (saleTypeKey ? row[saleTypeKey] : null);
-          const saleValue = saleValueKey && typeof row[saleValueKey] === 'string' ? row[saleValueKey].trim() : (saleValueKey ? row[saleValueKey] : null);
-
-          return {
-            ...row,
-            category: categoryName,
-            subcategory: subcategoryName,
-            nestedSubcategory: nestedSubcategoryName,
-            isComingSoon: isComingSoon,
-            isHotSale: isHotSale,
-            saleType: saleType,
-            saleValue: saleValue,
-            price: parsePrice(row.price),
-            retailPrice: row.retailPrice ? parsePrice(row.retailPrice) : null,
-            images: itemImages.map(transformImageLink)
-          };
-        });
+        const parsedProducts = productsCsv.map(parseProductRow);
 
         // Add without duplicate ids to keep data perfectly consistent and robust
         setCatalogData(prev => {
@@ -572,71 +705,7 @@ export default function App() {
       setHasMoreProducts(true);
 
       const productsCsv = await fetchCSV(PRODUCTS_GID, 50, 0);
-      const parsedProducts = productsCsv.map((row: any) => {
-        let itemImages: string[] = [];
-        
-        const rawImagesField = row.imagesJSON || row[''] || row.images || row['תמונות'] || '';
-        if (rawImagesField) {
-          try {
-             itemImages = JSON.parse(rawImagesField);
-             if(!Array.isArray(itemImages)) {
-                itemImages = [itemImages];
-             }
-          } catch(e) {
-             if (typeof rawImagesField === 'string') {
-                const cleaned = rawImagesField.trim();
-                if (cleaned.startsWith('http')) {
-                   itemImages = cleaned.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
-                }
-             }
-          }
-        }
-        
-        if (!itemImages || itemImages.length === 0) {
-            if (row.imageURL && row.imageURL.trim().startsWith('http')) {
-               itemImages = row.imageURL.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
-            }
-            if (!itemImages || itemImages.length === 0) {
-               itemImages = ['https://placehold.co/600x400/f3f4f6/000000?text=No+Image'];
-            }
-        }
-
-        const categoryName = typeof row.category === 'string' ? row.category.trim() : (row.category || '');
-        const subcategoryName = typeof row.subcategory === 'string' ? row.subcategory.trim() : (row.subcategory || '');
-        const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
-        const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
-        const hotSaleKey = Object.keys(row).find(k => {
-           const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
-           return clean.includes('מבצע חם') || clean.includes('מבצע_חם') || clean.includes('hot sale') || clean.includes('hotsale') || clean === 'מבצע' || clean === 'מבצעים';
-        });
-        const saleTypeKey = Object.keys(row).find(k => {
-           const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
-           return clean.includes('סוג מבצע') || clean.includes('sale type') || clean.includes('saletype') || clean.includes('סוג המבצע');
-        });
-        const saleValueKey = Object.keys(row).find(k => {
-           const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
-           return clean.includes('ערך מבצע') || clean.includes('sale value') || clean.includes('salevalue') || clean.includes('ערך המבצע') || clean.includes('מחיר מבצע');
-        });
-
-        const hotSaleVal = hotSaleKey ? String(row[hotSaleKey]).trim().toUpperCase() : '';
-        const isHotSale = hotSaleVal === 'TRUE' || hotSaleVal === 'YES' || hotSaleVal === 'כן' || hotSaleVal === '1' || hotSaleVal === 'V' || hotSaleVal === 'Y' || hotSaleVal === 'פעיל' || hotSaleVal === 'במבצע';
-        const saleType = saleTypeKey && typeof row[saleTypeKey] === 'string' ? row[saleTypeKey].trim() : (saleTypeKey ? row[saleTypeKey] : null);
-        const saleValue = saleValueKey && typeof row[saleValueKey] === 'string' ? row[saleValueKey].trim() : (saleValueKey ? row[saleValueKey] : null);
-
-        return {
-          ...row,
-          category: categoryName,
-          subcategory: subcategoryName,
-          nestedSubcategory: nestedSubcategoryName,
-          isComingSoon: isComingSoon,
-          isHotSale: isHotSale,
-          saleType: saleType,
-          saleValue: saleValue,
-          price: parsePrice(row.price),
-          retailPrice: row.retailPrice ? parsePrice(row.retailPrice) : null,
-          images: itemImages.map(transformImageLink)
-        };
-      });
+      const parsedProducts = productsCsv.map(parseProductRow);
 
       setCatalogData(parsedProducts);
       setProductsOffset(50);
@@ -1082,6 +1151,11 @@ export default function App() {
   };
 
   const goBack = () => {
+    if (searchQuery) {
+       setSearchQuery('');
+       return;
+    }
+    
     if (window.history.state && window.history.length > 1) {
        window.history.back();
     } else {
@@ -1476,6 +1550,14 @@ export default function App() {
             <button onClick={() => navigateToSubcategory(selectedSubcategory)} className="hover:text-[#004387]">
               {selectedSubcategory}
             </button>
+            {selectedNestedSubcategory && (
+              <>
+                <ChevronLeft size={14} className="flex-shrink-0 sm:w-4 sm:h-4" />
+                <button onClick={() => navigateToNestedSubcategory(selectedNestedSubcategory)} className="hover:text-[#004387]">
+                  {selectedNestedSubcategory}
+                </button>
+              </>
+            )}
             <ChevronLeft size={14} className="flex-shrink-0 sm:w-4 sm:h-4" />
             <span className="font-semibold text-[#0c2d57] truncate max-w-[120px] sm:max-w-[300px]">{selectedProduct.name}</span>
           </div>
@@ -1606,18 +1688,18 @@ export default function App() {
               </p>
 
               {/* DOCUMENTATION & LINKS SECTION */}
-              {(selectedProduct.specsLink || selectedProduct.manualLink || selectedProduct.videoLink) && (
+              {(selectedProduct.specsLink || selectedProduct.manualLink || selectedProduct.videoLink || (selectedProduct.labCerts && selectedProduct.labCerts.length > 0)) && (
                 <div className="mb-6 sm:mb-8">
                   <h3 className="font-semibold text-[#0c2d57] mb-3 sm:mb-4 text-base sm:text-lg border-b pb-2">מידע נוסף ומסמכים</h3>
-                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                  <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 mb-4">
                     {selectedProduct.specsLink && (
                       <div 
-                        className="flex-1 relative flex"
+                        className="flex-1 min-w-[140px] relative flex"
                         onMouseEnter={() => setIsSpecsHovered(true)}
                         onMouseLeave={() => setIsSpecsHovered(false)}
                       >
                         <a href={selectedProduct.specsLink} target="_blank" rel="noreferrer" className="w-full flex items-center justify-center gap-2 sm:gap-3 bg-white text-[#004387] border border-[#004387] hover:bg-[#004387] hover:text-white py-2 sm:py-3 px-3 sm:px-4 rounded-none transition-all font-bold text-sm sm:text-base group">
-                          <FileText size={18} className="sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
+                          <FileText size={24} className="text-[#004387] group-hover:text-white transition-colors group-hover:scale-110 duration-200" />
                           מפרט טכני
                         </a>
 
@@ -1638,12 +1720,12 @@ export default function App() {
 
                     {selectedProduct.manualLink && (
                       <div 
-                        className="flex-1 relative flex"
+                        className="flex-1 min-w-[140px] relative flex"
                         onMouseEnter={() => setIsManualHovered(true)}
                         onMouseLeave={() => setIsManualHovered(false)}
                       >
                         <a href={selectedProduct.manualLink} target="_blank" rel="noreferrer" className="w-full flex items-center justify-center gap-2 sm:gap-3 bg-white text-[#004387] border border-[#004387] hover:bg-[#004387] hover:text-white py-2 sm:py-3 px-3 sm:px-4 rounded-none transition-all font-bold text-sm sm:text-base group">
-                          <File size={18} className="sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
+                          <BookOpen size={24} className="text-[#004387] group-hover:text-white transition-colors group-hover:scale-110 duration-200" />
                           מדריך למשתמש
                         </a>
 
@@ -1664,12 +1746,12 @@ export default function App() {
 
                     {selectedProduct.videoLink && (
                       <div 
-                        className="flex-1 relative flex" 
+                        className="flex-1 min-w-[140px] relative flex" 
                         onMouseEnter={() => setIsVideoHovered(true)} 
                         onMouseLeave={() => setIsVideoHovered(false)}
                       >
                         <a href={selectedProduct.videoLink} target="_blank" rel="noreferrer" className="w-full flex items-center justify-center gap-2 sm:gap-3 bg-white text-[#004387] border border-[#004387] hover:bg-[#004387] hover:text-white py-2 sm:py-3 px-3 sm:px-4 rounded-none transition-all font-bold text-sm sm:text-base group">
-                          <Video size={18} className="sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
+                          <Youtube size={24} className="text-[#004387] group-hover:text-white transition-colors group-hover:scale-110 duration-200" />
                           סרטון הדרכה
                         </a>
                         
@@ -1689,6 +1771,34 @@ export default function App() {
                       </div>
                     )}
                   </div>
+
+                  {/* LAB CERTIFICATES SECTION */}
+                  {selectedProduct.labCerts && selectedProduct.labCerts.length > 0 && (
+                    <div className="mt-4 sm:mt-6 pt-4">
+                      <h4 className="font-semibold text-gray-700 mb-3 sm:mb-4 text-sm sm:text-base flex items-center justify-center gap-2">
+                         אישורי מעבדה ותקנים ({selectedProduct.labCerts.length}) <ShieldCheck size={20} className="text-emerald-500" />
+                      </h4>
+                      <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+                        {selectedProduct.labCerts.map((certLink: string, idx: number) => {
+                          const isPdf = certLink.toLowerCase().includes('.pdf');
+                          
+                          return (
+                            <a 
+                              key={idx}
+                              href={certLink} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className="group flex flex-row items-center gap-3 bg-white text-emerald-700 border border-emerald-200 hover:border-emerald-500 hover:bg-emerald-50 py-2 px-4 rounded-full transition-all hover:shadow-sm"
+                            >
+                              <Link size={16} className="text-emerald-600" />
+                              <span className="text-sm font-medium text-emerald-800">אישור #{idx + 1}</span>
+                              <Download size={16} className="text-emerald-600 opacity-70 group-hover:opacity-100" />
+                            </a>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2206,135 +2316,9 @@ export default function App() {
     );
   };
 
-  const LoginView = () => {
-    const [password, setPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
-    const [errorMsg, setErrorMsg] = useState('');
-    const [shakeTrigger, setShakeTrigger] = useState(0);
-
-    const handleLogin = async (e: React.FormEvent) => {
-      e.preventDefault();
-      try {
-        // High-performance cryptographic SHA-256 hash using native Web Crypto API
-        const msgBuffer = new TextEncoder().encode(password);
-        const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgBuffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        
-        // Match against secure precomputed hash - Rbs2026 is never stored in plaintext
-        if (hashHex === 'dc7061dd847ce8d81661f9d47feef0c0ae9cde6aafb4e55070b3771daa94e655') {
-          localStorage.setItem('rbs_b2b_auth', 'true');
-          setIsAuthenticated(true);
-        } else {
-          setErrorMsg('סיסמה שגויה. אנא השתמש בקוד הגישה שקיבלת מהחברה.');
-          setShakeTrigger(prev => prev + 1);
-        }
-      } catch (err) {
-        // Fail-safe fallback code in case window.crypto is blocked (e.g. non-HTTPS local dev port iframe)
-        if (password === 'Rbs2026') {
-          localStorage.setItem('rbs_b2b_auth', 'true');
-          setIsAuthenticated(true);
-        } else {
-          setErrorMsg('סיסמה שגויה. אנא השתמש בקוד הגישה שקיבלת מהחברה.');
-          setShakeTrigger(prev => prev + 1);
-        }
-      }
-    };
-
-    return (
-      <div dir="rtl" className="min-h-screen flex items-center justify-center bg-[#0d1627] p-4 relative overflow-hidden">
-        {/* Abstract floating shapes for high-end feel */}
-        <div className="absolute top-[-10%] right-[-10%] w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-[#004387]/20 rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-[-10%] left-[-10%] w-[350px] sm:w-[500px] h-[350px] sm:h-[500px] bg-[#f7941d]/10 rounded-full blur-[120px] pointer-events-none" />
-
-        <div 
-          className="bg-white/95 backdrop-blur-md p-6 sm:p-10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] max-w-md w-full text-center border border-white/20 relative z-10"
-        >
-          {/* Logo container with rotation animation */}
-          <div 
-            className="w-20 h-20 bg-gradient-to-tr from-[#004387] to-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/20"
-          >
-             <Lock size={36} className="text-white drop-shadow-md" />
-          </div>
-          
-          <h2 
-            className="text-2xl sm:text-3xl font-extrabold text-[#0c2d57] mb-2 tracking-tight"
-          >
-            כניסה לקטלוג B2B
-          </h2>
-          
-          <p 
-            className="text-gray-500 mb-8 text-xs sm:text-sm max-w-xs mx-auto leading-relaxed font-medium"
-          >
-            הקטלוג מיועד ללקוחות עסקיים ומורשים בלבד. הקש סיסמה לכניסה.
-          </p>
-          
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div 
-              className="relative rounded-xl overflow-hidden"
-            >
-              <div className="relative flex items-center">
-                 <input 
-                   type={showPassword ? "text" : "password"} 
-                   placeholder="הזן קוד גישה" 
-                   value={password}
-                   onChange={(e) => setPassword(e.target.value)}
-                   className="w-full pl-12 pr-6 py-4 border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:border-[#004387] focus:ring-4 focus:ring-blue-100 outline-none text-center text-xl font-bold tracking-[0.2em] transition-all"
-                 />
-                 
-                 {/* Password Toggle Button with nice framer hover/active dynamics */}
-                 <button
-                   type="button"
-                   onClick={() => setShowPassword(!showPassword)}
-                   className="absolute left-3 p-2 text-gray-400 hover:text-[#004387] focus:outline-none transition-colors border-none bg-transparent cursor-pointer"
-                   title={showPassword ? "הסתר קוד" : "הצג קוד"}
-                 >
-                   <AnimatePresence mode="wait">
-                     <motion.div
-                       key={showPassword ? "eye-open" : "eye-closed"}
-                       initial={{ opacity: 0, scale: 0.8 }}
-                       animate={{ opacity: 1, scale: 1 }}
-                       exit={{ opacity: 0, scale: 0.8 }}
-                       transition={{ duration: 0.15 }}
-                     >
-                       {showPassword ? <EyeOff size={22} /> : <Eye size={22} />}
-                     </motion.div>
-                   </AnimatePresence>
-                 </button>
-              </div>
-            </div>
-            
-            <AnimatePresence>
-              {errorMsg && (
-                <motion.p 
-                  initial={{ opacity: 0, height: 0, y: -10 }}
-                  animate={{ opacity: 1, height: 'auto', y: 0 }}
-                  exit={{ opacity: 0, height: 0, y: -10 }}
-                  className="text-red-500 text-sm font-semibold text-right flex items-center gap-1.5 justify-center bg-red-50 py-2.5 px-4 rounded-xl border border-red-100"
-                >
-                  <span className="inline-block w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
-                  {errorMsg}
-                </motion.p>
-              )}
-            </AnimatePresence>
-            
-            <motion.button 
-              type="submit" 
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full bg-[#f7941d] hover:bg-[#e0861a] hover:shadow-lg hover:shadow-orange-500/20 text-white font-extrabold py-4 rounded-xl transition-all text-lg flex items-center justify-center gap-2 border-none shadow-md shadow-orange-500/10 cursor-pointer"
-            >
-              היכנס למערכת <ChevronLeft size={20} className="transition-transform group-hover:-translate-x-1" />
-            </motion.button>
-          </form>
-        </div>
-      </div>
-    );
-  };
-
   // --- MAIN LAYOUT ---
   if (!isAuthenticated) {
-     return <LoginView />;
+     return <LoginView setIsAuthenticated={setIsAuthenticated} />;
   }
 
   if (error) {
@@ -2630,12 +2614,22 @@ export default function App() {
                       {selectedCatalog}
                     </button>
                     <ChevronLeft size={16} className="flex-shrink-0" />
-                    <span className="font-semibold text-[#0c2d57]">{selectedSubcategory}</span>
+                    {selectedNestedSubcategory ? (
+                       <>
+                         <button onClick={() => navigateToSubcategory(selectedSubcategory)} className="hover:text-[#004387]">
+                           {selectedSubcategory}
+                         </button>
+                         <ChevronLeft size={16} className="flex-shrink-0" />
+                         <span className="font-semibold text-[#0c2d57]">{selectedNestedSubcategory}</span>
+                       </>
+                    ) : (
+                       <span className="font-semibold text-[#0c2d57]">{selectedSubcategory}</span>
+                    )}
                   </div>
                 </div>
 
                 <div className="mb-6 sm:mb-8 text-center relative">
-                   <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] inline-block w-full sm:w-auto px-4">{selectedSubcategory}</h2>
+                   <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] inline-block w-full sm:w-auto px-4">{selectedNestedSubcategory || selectedSubcategory}</h2>
                    {!isProductsLoading && (
                      <div className="mt-3 sm:mt-0 sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2 flex items-center justify-center">
                        <span className="text-gray-600 bg-[#f2f2f2] px-3 py-1 rounded-none text-xs sm:text-sm font-medium whitespace-nowrap border border-gray-100 shadow-sm">{filteredProducts.length} מוצרים</span>
