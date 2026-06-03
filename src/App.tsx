@@ -8,9 +8,9 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { HumanVerification } from './components/HumanVerification';
 import { AddressAutocomplete } from './components/AddressAutocomplete';
 import InstallBanner from './components/InstallBanner';
-import { CabinetConfigurator } from './components/CabinetConfigurator';
-import { AccessoryCabinets } from './components/AccessoryCabinets';
-import { TechnicalAdvisor } from './components/TechnicalAdvisor';
+const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
+const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
+const TechnicalAdvisor = React.lazy(() => import('./components/TechnicalAdvisor').then(module => ({ default: module.TechnicalAdvisor })));
 
 const SHEET_BASE = 'https://docs.google.com' + '/spreadsheets/d/';
 const SHEET_SECRET_ID = '1NtYwQeTX' + '3blf' + '0aMcv' + 'tnlk9' + 'liIaJOiG9' + 'BOsP4Qc' + '8lSRs';
@@ -1807,13 +1807,17 @@ export default function App() {
                 !selectedProduct['Nested subcategory']?.includes('אביזרים') && 
                 /ארון|מסד|מארז/i.test(selectedProduct.name)) && (
                 <div className="mb-6">
-                  <CabinetConfigurator product={selectedProduct} catalogData={catalogData} onOptionalsChange={handleOptionalsChange} />
+                  <React.Suspense fallback={<div className="animate-pulse h-32 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center text-sm text-gray-500">טוען קונפיגורטור...</div>}>
+                    <CabinetConfigurator product={selectedProduct} catalogData={catalogData} onOptionalsChange={handleOptionalsChange} />
+                  </React.Suspense>
                 </div>
               )}
 
               {/* COMPATIBLE CABINETS (If this is an accessory) */}
               {((selectedProduct['Nested subcategory']?.includes('אביזרים') || selectedProduct.subcategory?.includes('אביזרים למסדים') || /מדף|פנל|מאוורר|ברגים|אביזר|KVM/i.test(selectedProduct.name)) && !(/ארון|מסד|מארז/i.test(selectedProduct.name))) && (
-                <AccessoryCabinets product={selectedProduct} catalogData={catalogData} ProductCard={ProductCard} />
+                <React.Suspense fallback={<div className="animate-pulse h-32 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center text-sm text-gray-500">טוען ארונות תואמים...</div>}>
+                  <AccessoryCabinets product={selectedProduct} catalogData={catalogData} ProductCard={ProductCard} />
+                </React.Suspense>
               )}
 
               <div className="mt-auto border-t border-gray-200 pt-4 sm:pt-6">
@@ -2767,7 +2771,9 @@ export default function App() {
       )}
 
       {!isHumanVerified && <HumanVerification onVerified={() => setIsHumanVerified(true)} />}
-      <TechnicalAdvisor catalogData={catalogData} addToCart={addToCart} isAuthenticated={isAuthenticated} />
+      <React.Suspense fallback={null}>
+        <TechnicalAdvisor catalogData={catalogData} addToCart={addToCart} isAuthenticated={isAuthenticated} />
+      </React.Suspense>
       <InstallBanner />
     </div>
   );

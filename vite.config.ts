@@ -87,6 +87,46 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    build: {
+      cssCodeSplit: true,
+      target: 'esnext',
+      minify: 'esbuild',
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('xlsx') || id.includes('jszip')) {
+                return 'vendor-xlsx';
+              }
+              if (id.includes('react') || id.includes('scheduler') || id.includes('react-dom') || id.includes('react-zoom-pan-pinch')) {
+                return 'vendor-react-core';
+              }
+              if (id.includes('motion') || id.includes('framer-motion')) {
+                return 'vendor-motion';
+              }
+              if (id.includes('lucide-react')) {
+                return 'vendor-icons';
+              }
+              if (
+                id.includes('react-markdown') ||
+                id.includes('remark') ||
+                id.includes('micromark') ||
+                id.includes('unist') ||
+                id.includes('vfile') ||
+                id.includes('mdast')
+              ) {
+                return 'vendor-markdown';
+              }
+              if (id.includes('papaparse')) {
+                return 'vendor-papaparse';
+              }
+              return 'vendor-others';
+            }
+          }
+        }
+      },
+      chunkSizeWarningLimit: 1200,
+    },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
