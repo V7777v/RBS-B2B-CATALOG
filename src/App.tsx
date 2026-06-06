@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -678,9 +678,109 @@ const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) 
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [biometricSupported, setBiometricSupported] = useState(false);
+  const [isBiometricSaved, setIsBiometricSaved] = useState(false);
+  const [enableBiometricEnroll, setEnableBiometricEnroll] = useState(false);
+
+  // Check support for Touch ID / Face ID
+  useEffect(() => {
+    const checkSupport = async () => {
+      if (window.PublicKeyCredential) {
+        try {
+          const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+          setBiometricSupported(!!available);
+          
+          const saved = localStorage.getItem('rbs_b2b_biometric_enabled') === 'true';
+          setIsBiometricSaved(saved);
+          
+          // Auto-trigger biometric login on mount after a small delay if saved and not inside iframe
+          if (saved && window.self === window.top) {
+            setTimeout(() => {
+              handleBiometricLogin();
+            }, 600);
+          }
+        } catch (e) {
+          console.log('Biometric evaluation skipped/not supported:', e);
+        }
+      }
+    };
+    checkSupport();
+  }, []);
+
+  const enrollBiometric = async () => {
+    try {
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+      
+      const id = new Uint8Array(16);
+      window.crypto.getRandomValues(id);
+
+      const publicKeyOptions: PublicKeyCredentialCreationOptions = {
+        challenge: challenge,
+        rp: {
+          name: "RBS B2B Catalog",
+          id: window.location.hostname,
+        },
+        user: {
+          id: id,
+          name: "rbs-b2b-user",
+          displayName: "RBS B2B User",
+        },
+        pubKeyCredParams: [
+          { type: "public-key", alg: -7 },   // ES256 (ECDSA with SHA-256)
+          { type: "public-key", alg: -257 }, // RS256 (RSASSA-PKCS1-v1_5 with SHA-256)
+        ],
+        timeout: 60000,
+        authenticatorSelection: {
+          authenticatorAttachment: "platform", // Direct device biometric / TouchID / FaceID
+          userVerification: "required",
+        },
+      };
+
+      const credential = await navigator.credentials.create({
+        publicKey: publicKeyOptions
+      });
+      return !!credential;
+    } catch (err) {
+      console.error("Biometric registration cancelled or failed:", err);
+      return false;
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    try {
+      setErrorMsg('');
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+
+      const publicKeyOptions: PublicKeyCredentialRequestOptions = {
+        challenge: challenge,
+        timeout: 60000,
+        rpId: window.location.hostname,
+        userVerification: "required",
+      };
+
+      const credential = await navigator.credentials.get({
+        publicKey: publicKeyOptions
+      });
+
+      if (credential) {
+        localStorage.setItem('rbs_b2b_auth', 'true');
+        setIsAuthenticated(true);
+      }
+    } catch (err: any) {
+      console.error("Biometric authenticator error:", err);
+      if (window.self !== window.top) {
+        setErrorMsg('בגלל מגבלות אבטחה של דפדפנים, זיהוי ביומטרי (Face ID / טביעת אצבע) דורש פתיחה של האתר בטאב חדש (לא בתוך מסגרת/iframe).');
+      } else if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+        setErrorMsg('אימות ביומטרי נכשל או בוטל.');
+      }
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    let isSuccess = false;
     try {
       // High-performance cryptographic SHA-256 hash using native Web Crypto API
       const msgBuffer = new TextEncoder().encode(password);
@@ -690,19 +790,28 @@ const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) 
       
       // Match against secure precomputed hash - Rbs2026 is never stored in plaintext
       if (hashHex === 'dc7061dd847ce8d81661f9d47feef0c0ae9cde6aafb4e55070b3771daa94e655') {
-        localStorage.setItem('rbs_b2b_auth', 'true');
-        setIsAuthenticated(true);
+        isSuccess = true;
       } else {
         setErrorMsg('סיסמה שגויה. אנא השתמש בקוד הגישה שקיבלת מהחברה.');
       }
     } catch (err) {
       // Fail-safe fallback code in case window.crypto is blocked (e.g. non-HTTPS local dev port iframe)
       if (password === 'Rbs2026') {
-        localStorage.setItem('rbs_b2b_auth', 'true');
-        setIsAuthenticated(true);
+        isSuccess = true;
       } else {
         setErrorMsg('סיסמה שגויה. אנא השתמש בקוד הגישה שקיבלת מהחברה.');
       }
+    }
+
+    if (isSuccess) {
+      if (enableBiometricEnroll && biometricSupported) {
+        const enrolled = await enrollBiometric();
+        if (enrolled) {
+          localStorage.setItem('rbs_b2b_biometric_enabled', 'true');
+        }
+      }
+      localStorage.setItem('rbs_b2b_auth', 'true');
+      setIsAuthenticated(true);
     }
   };
 
@@ -731,7 +840,7 @@ const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) 
         <p 
           className="text-gray-500 mb-8 text-xs sm:text-sm max-w-xs mx-auto leading-relaxed font-medium"
         >
-          הקטלוג מיועד ללקוחות עסקיים ומורשים בלבד. הקש סיסמה לכניסה.
+          הקטלוג מיועד ללקוחות עסקיים ומורשים בלבד. הקש סיסמה לכניסה או השתמש בזיהוי ביומטרי מהיר.
         </p>
         
         <form onSubmit={handleLogin} className="space-y-6">
@@ -782,6 +891,35 @@ const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) 
               </motion.p>
             )}
           </AnimatePresence>
+
+          {/* Biometric login trigger option (if registered) */}
+          {isBiometricSaved && biometricSupported && (
+            <motion.button
+              type="button"
+              onClick={handleBiometricLogin}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full bg-[#004387] hover:bg-blue-800 text-white font-bold py-3.5 px-4 rounded-xl transition-all text-base flex items-center justify-center gap-2 border-none shadow-md cursor-pointer"
+            >
+              <Fingerprint size={22} className="text-white" />
+              כניסה מהירה עם Face ID / טביעת אצבע
+            </motion.button>
+          )}
+
+          {/* Biometric enrollment checkbox (if supported but not yet registered) */}
+          {!isBiometricSaved && biometricSupported && (
+            <label className="flex items-center gap-2.5 justify-start cursor-pointer group text-right py-1">
+              <input
+                type="checkbox"
+                checked={enableBiometricEnroll}
+                onChange={(e) => setEnableBiometricEnroll(e.target.checked)}
+                className="w-5 h-5 text-[#004387] border-gray-300 rounded focus:ring-blue-500 accent-[#004387] cursor-pointer"
+              />
+              <span className="text-xs sm:text-sm text-gray-600 font-semibold group-hover:text-[#004387] transition-colors leading-tight">
+                הפעל כניסה מהירה עם זיהוי פנים / טביעת אצבע בפעם הבאה במכשיר זה
+              </span>
+            </label>
+          )}
           
           <motion.button 
             type="submit" 
@@ -791,6 +929,22 @@ const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) 
           >
             היכנס למערכת <ChevronLeft size={20} className="transition-transform group-hover:-translate-x-1" />
           </motion.button>
+
+          {/* Disenrollment option if already enrolled */}
+          {isBiometricSaved && (
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.removeItem('rbs_b2b_biometric_enabled');
+                  setIsBiometricSaved(false);
+                }}
+                className="text-xs text-gray-400 hover:text-red-500 transition-colors border-none bg-transparent cursor-pointer font-medium underline"
+              >
+                בטל זיהוי ביומטרי במכשיר זה
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>
