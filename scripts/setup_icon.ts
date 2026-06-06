@@ -54,8 +54,8 @@ async function main() {
     }
     console.log("Successfully generated all icons for Vercel build.");
   } catch (error) {
-    console.error("Failed to set up icons:", error);
-    process.exit(1);
+    console.warn("⚠️ Warning: Failed to fetch/generate latest icons from Google Drive during prebuild. Using fallback or existing assets. Error:", error);
+    // Let the build proceed smoothly instead of failing the entire deployment.
   }
 }
 
