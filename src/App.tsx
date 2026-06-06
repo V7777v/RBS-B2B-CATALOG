@@ -1545,10 +1545,10 @@ export default function App() {
 
     const handleMouseMove = (e: any) => {
       const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      const x = ((clientX - left) / width) * 100;
-      const y = ((clientY - top) / height) * 100;
+      const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+      const x = Math.max(0, Math.min(100, ((clientX - left) / width) * 100));
+      const y = Math.max(0, Math.min(100, ((clientY - top) / height) * 100));
       setZoomPos({ x, y });
       setIsZoomed(true);
     };
@@ -1608,8 +1608,10 @@ export default function App() {
               {/* ZOOMABLE IMAGE CONTAINER */}
               <div 
                 className={`aspect-square rounded-none border border-gray-100 ${theme.bg} p-2 sm:p-4 flex items-center justify-center relative overflow-hidden group cursor-crosshair`}
+                onMouseEnter={() => setIsZoomed(true)}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
+                onTouchStart={() => setIsZoomed(true)}
                 onTouchMove={handleMouseMove}
                 onTouchEnd={handleMouseLeave}
               >
@@ -1617,10 +1619,11 @@ export default function App() {
                   src={transformImageLink(mainImage, 800)} 
                   alt={selectedProduct.name} 
                   onError={handleImageError}
-                  className="w-full h-full object-contain mix-blend-multiply transition-transform duration-200 ease-out"
+                  className="w-full h-full object-contain mix-blend-multiply pointer-events-none"
                   style={{ 
                     transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
-                    transform: isZoomed ? 'scale(2.5)' : 'scale(1)'
+                    transform: isZoomed ? 'scale(2.5)' : 'scale(1)',
+                    transition: isZoomed ? 'transform 0.05s ease-out' : 'transform 0.2s ease-out'
                   }}
                 />
 

@@ -74,6 +74,7 @@ interface CabinetConfiguratorProps {
 
 export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ product, catalogData, onOptionalsChange, initialAccessory }) => {
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [cabinetData, setCabinetData] = useState<CabinetData | null>(null);
   
   const [totalU, setTotalU] = useState<number>(0);
@@ -97,7 +98,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     }
     setSelectedOptionals(prev => {
       const newArr = [...prev];
-      newArr[index].quantity += 1;
+      newArr[index] = { ...newArr[index], quantity: newArr[index].quantity + 1 };
       return newArr;
     });
     setAvailableU(prev => prev - item.uSize);
@@ -107,6 +108,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     const fetchAndParse = async () => {
       try {
         setLoading(true);
+        setErrorMsg(null);
 
         const MAIN_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs/export?format=xlsx';
         const res = await fetch(MAIN_SHEET_URL);
@@ -124,6 +126,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
            console.error('[CabinetConfigurator] CRITICAL: Required sheets not found. Looking for:', 
               `'טבלת ארונות מעודכנת'`, 'and', `'מדפים ואביזרים'`, 
               'but found:', wb.SheetNames);
+           setErrorMsg('שגיאה: לא נמצאו הגיליונות הנדרשים בקובץ Google Sheets (ארונות / מדפים ואביזרים). בדוק את שמות הגיליונות.');
            setLoading(false);
            return;
         }
@@ -313,6 +316,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         
       } catch (error) {
         console.error("Configurator Error:", error);
+        setErrorMsg('שגיאה בטעינת נתוני הקונפיגורטור מ-Google Sheets. ודא שהקובץ משותף לצפייה ציבורית ונסה לרענן.');
         setLoading(false);
       }
     };
@@ -352,7 +356,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       const existingIdx = prev.findIndex(item => item.pn === acc.pn);
       if (existingIdx >= 0) {
         const newArr = [...prev];
-        newArr[existingIdx].quantity += 1;
+        newArr[existingIdx] = { ...newArr[existingIdx], quantity: newArr[existingIdx].quantity + 1 };
         return newArr;
       }
       return [...prev, { ...acc, quantity: 1, id: Math.random().toString() }];
@@ -372,7 +376,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     } else {
       setSelectedOptionals(prev => {
          const newArr = [...prev];
-         newArr[index].quantity -= 1;
+         newArr[index] = { ...newArr[index], quantity: newArr[index].quantity - 1 };
          return newArr;
       });
       setAvailableU(prev => prev + item.uSize);
@@ -385,7 +389,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         const existingIdx = prev.findIndex(item => item.pn === pendingAccessory.pn);
         if (existingIdx >= 0) {
           const newArr = [...prev];
-          newArr[existingIdx].quantity += 1;
+          newArr[existingIdx] = { ...newArr[existingIdx], quantity: newArr[existingIdx].quantity + 1 };
           return newArr;
         }
         return [...prev, { ...pendingAccessory, quantity: 1, id: Math.random().toString() }];
@@ -397,6 +401,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   };
 
   if (loading) return <div className="p-8 mt-8 bg-gray-50 text-center text-gray-500 border border-gray-200">טוען קונפיגורטור ארון מותאם אישית...</div>;
+  if (errorMsg) return <div className="p-8 mt-8 bg-red-50 text-center text-red-700 border border-red-200" dir="rtl">{errorMsg}</div>;
 
   // --- DYNAMIC SLOT CALCULATION FOR VISUAL CHASSIS ---
   interface VisualSlot {
@@ -676,6 +681,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                       {isOptional && typeof slot.optionalIdx === 'number' && (
                         <div className="flex items-center gap-1 bg-slate-900/80 border border-slate-700 px-1 py-0.5 rounded opacity-80 group-hover:opacity-100 transition-opacity">
                           <button 
+                            type="button"
                             title="הוסף יחידה"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -689,6 +695,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                             {slot.accessoryRef.quantity}x
                           </span>
                           <button 
+                            type="button"
                             title="הסר יחידה"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -838,6 +845,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                        
                        <div className="flex bg-slate-50 border border-slate-200 rounded-none overflow-hidden h-7">
                          <button 
+                           type="button"
                            title="הוסף 1"
                            onClick={() => handleIncrementQuantity(idx)} 
                            className="px-2.5 hover:bg-slate-200 text-[#004387] transition-colors"
@@ -848,6 +856,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                            {item.quantity}
                          </span>
                          <button 
+                           type="button"
                            title="הפחת 1"
                            onClick={() => handleRemoveOptional(idx)} 
                            className="px-2.5 hover:bg-slate-200 text-red-500 transition-colors"
@@ -855,6 +864,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                            <Minus size={12} />
                          </button>
                          <button 
+                           type="button"
                            title="הסר לחלוטין"
                            onClick={() => handleRemoveOptional(idx, true)} 
                            className="px-2 border-r border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
@@ -920,6 +930,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                       </span>
                       
                       <button 
+                        type="button"
                         onClick={() => handleAddOptional(acc, idx)}
                         className={`px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1 rounded-none hover:shadow-sm
                           ${addedIdx === idx 
@@ -970,6 +981,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             </p>
             <div className="flex gap-3 justify-center">
               <button 
+                type="button"
                 onClick={() => {
                   setWarningModalOpen(false);
                   setPendingAccessory(null);
@@ -979,6 +991,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 בטל התקנה
               </button>
               <button 
+                type="button"
                 onClick={forceAddPending}
                 className="flex-1 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold transition-all text-sm shadow-sm rounded-none"
               >

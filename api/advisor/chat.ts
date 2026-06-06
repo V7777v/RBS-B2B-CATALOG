@@ -92,24 +92,20 @@ async function getCatalogDataContext(): Promise<any[]> {
   }
 }
 
-// Lazy init Gemini client with fail-fast check
-let aiClient: GoogleGenAI | null = null;
+// Dynamic fetch of Gemini client with fail-fast check
 function getGeminiClient(): GoogleGenAI {
-  if (!aiClient) {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
-      throw new Error("GEMINI_API_KEY is not defined in the environment secrets.");
-    }
-    aiClient = new GoogleGenAI({
-      apiKey: key,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build'
-        }
-      }
-    });
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    throw new Error("GEMINI_API_KEY is not defined in the environment secrets.");
   }
-  return aiClient;
+  return new GoogleGenAI({
+    apiKey: key,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build'
+      }
+    }
+  });
 }
 
 // Cache variables for Gemini
@@ -192,6 +188,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "Message content is required" });
     }
 
+    // Check if GEMINI_API_KEY is defined and is valid
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey.trim() === "") {
+      return res.json({
+        type: "ai_response",
+        text: `⚠️ **חיבור ה-API של Google אינו פעיל עדיין לחשבונך במערכת.**
+
+כדי שתוכל להשתמש ב-**RBS Expert** (היועץ ההנדסי והטכני החכם), מנהל המערכת צריך להגדיר את מפתח ה-API האישי שלכם בפורטל הבנייה:
+1. פתח את תפריט **Settings** (הגדרות) ב-AI Studio בצד העמוד.
+2. לחץ על **Secrets** (סודות ומפתחות).
+3. הוסף רשומה חדשה עם השם \`GEMINI_API_KEY\` והדבק שם את מפתח ה-API האישי שקיבלת מ-Google AI Studio.
+
+ברגע שתגדיר מפתח זה, המערכת תתחבר אוטומטית ללא מידע חסר לפאנל! ✨`,
+        sources: []
+      });
+    }
+
     // 1. Get complete context from RBS catalog
     const products = await getCatalogDataContext();
 
@@ -212,8 +225,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Decide whether to use AI caching or inline catalog
     let catalogSummaryString = "";
-    let shouldUseCache = false;
-
     if (relevantProducts.length > 0) {
       catalogSummaryString = relevantProducts.map(p => {
         let line = `SKU: ${p.sku} | Name: ${p.name} | Category: ${p.category} | Sub: ${p.subcategory} | Desc: ${p.desc}`;
@@ -221,14 +232,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (p.manualLink) line += ` | Manual Link: ${p.manualLink}`;
         return line;
       }).join("\n");
-      shouldUseCache = false;
     } else {
       catalogSummaryString = products.map(p => {
         let line = `SKU: ${p.sku} | Name: ${p.name} | Category: ${p.category} | Sub: ${p.subcategory}`;
         return line;
       }).join("\n");
-      // Use caching for the large catalog if possible
-      shouldUseCache = true;
     }
 
     const systemInstruction = getSystemInstructionTemplate(catalogSummaryString);
@@ -253,55 +261,77 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       parts: [{ text: message }]
     });
 
-    let config: any = {
+    const config: any = {
       systemInstruction,
       tools: [{ googleSearch: {} }]
     };
 
-    if (shouldUseCache) {
-       const now = Date.now();
-       if (!geminiContextCacheName || now > geminiContextCacheExpiresAt) {
-          try {
-            // Note: caching system requires at least ~32,000 tokens for context cache, 
-            // if the catalog is smaller it will throw an error, which we catch.
-            const cacheResponse = await ai.caches.create({
-               model: "models/gemini-3.1-flash-lite",
-               config: {
-                 systemInstruction,
-                 ttl: "3600s"
-               }
-            });
-            geminiContextCacheName = cacheResponse.name;
-            geminiContextCacheExpiresAt = now + 3500 * 1000;
-            console.log("Advisor: Created Gemini context cache:", geminiContextCacheName);
-          } catch (e: any) {
-             console.error("Advisor: Failed to create context cache (might be under 32k tokens), falling back to inline systemInstruction.", e.message || e);
-             geminiContextCacheName = null;
-          }
-       }
-       if (geminiContextCacheName) {
-          config = {
-             cachedContent: geminiContextCacheName,
-             tools: [{ googleSearch: {} }]
-          };
-       }
-    }
-
     let response;
-    // Single model usage: gemini-3.1-flash-lite
+    // Single model usage: try gemini-3.5-flash first, and fall back to gemini-3.1-flash-lite if needed
     try {
+      console.log("Advisor: Attempting gemini-3.5-flash...");
       response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
+        model: "gemini-3.5-flash",
         contents: contents,
         config: config
       });
-      console.log("Advisor: Successfully generated content using gemini-3.1-flash-lite");
-    } catch (liteError: any) {
-      console.error("Advisor: gemini-3.1-flash-lite failed.", liteError.message || liteError);
-      return res.json({
-        text: "סליחה, עקב עומס זמני או הגבלות שימוש, איני יכול לענות כרגע. אנא נסה שוב מאוחר יותר.",
-        sources: []
-      });
+      console.log("Advisor: Successfully generated content using gemini-3.5-flash");
+    } catch (primaryError: any) {
+      console.warn("Advisor: gemini-3.5-flash failed, attempting fallback to gemini-3.1-flash-lite...", primaryError.message || primaryError);
+      try {
+        response = await ai.models.generateContent({
+          model: "gemini-3.1-flash-lite",
+          contents: contents,
+          config: config
+        });
+        console.log("Advisor: Successfully generated content using fallback gemini-3.1-flash-lite");
+      } catch (liteError: any) {
+        console.error("Advisor: gemini-3.1-flash-lite fallback also failed.", liteError.message || liteError);
+        
+        const errorMsg = liteError.message || String(liteError);
+        const isQuotaExceeded = errorMsg.includes("RESOURCE_EXHAUSTED") || 
+                                errorMsg.includes("quota") || 
+                                errorMsg.includes("exceeded") || 
+                                errorMsg.includes("429");
+
+        if (isQuotaExceeded) {
+          return res.json({
+            type: "ai_response",
+            text: `🚦 **מכסת השימוש במפתח ה-Gemini API שלך הסתיימה או נחסמה על ידי גוגל (RESOURCE_EXHAUSTED).**
+
+**הסבר חשוב – למה זה קורה גם אם לא השתמשת ביועץ היום?**
+1. **סטטוס פרויקט וחשבון תשלום (Billing):** לעיתים קרובות, גוגל מסווגת מפתחות כ-RESOURCE_EXHAUSTED אם הפרויקט בו הם נוצרו ב-Cloud Console אינו פעיל, שייך לחשבון אירוח שאינו בתוקף, או שהכרטיס המקושר אליו פג תוקף, גם אם לא ניצלת אחוז קטן מהמכסה היום.
+2. **מכסות קשיחות של הרמה החינמית:** מפתחות חינמיים ב-Google AI Studio מוגבלים מאוד ברמה היומית והחודשית, והמכסה מתאפסת לפי שעון גוגל העולמי ולא לפי יום קלנדרי מקומי.
+3. **מפתח משותף:** במידה והמפתח משמש אפליקציות, ניסויים או מערכות אחרות שלך או של מפתחים נוספים, צריכת הטוקנים משותפת והיא זו שמילאה את המכסה.
+
+**איך לראות בדיוק מה קרה ולפתור זאת כעת?**
+אנא בצע את השלבים הפשוטים הבאים כדי להחזיר את ה-Expert לפעילות מיידית:
+1. **הפקת מפתח חדש (מומלץ ביותר):** כנס לאתר הרשמי להפקת המפתחות [Google AI Studio](https://aistudio.google.com/) וצור מפתח API חדש לחלוטין (זה לוקח דקה אחת והוא חינמי לגמרי).
+2. **הגדרת המפתח החדש:**
+   - בעמוד הנוכחי, פתח את תפריט ה-**Settings** (סמל של גלגל שיניים בפינה השמאלית/צדדית של העמוד).
+   - לחץ על **Secrets** (סודות ומפתחות).
+   - מצא את הרשומה בשם \`GEMINI_API_KEY\` והדבק שם את המפתח החדש שיצרת (ללא רווחים לפני או אחרי).
+3. **שדרוג במידת הצורך:** במידה ואתה משתמש במפתח באופן רציף, כדאי לשקול להעביר אותו למודל **Pay-as-you-go** ב-AI Studio. הוא מציע תמחור זול ביותר (חלקי סנט לפליטה) ומסיר לחלוטין את כל חסימות הקצב ומכסות החינם של גוגל!`,
+            sources: []
+          });
+        }
+
+        return res.json({
+          type: "ai_response",
+          text: `⚠️ **חיבור ה-AI נכשל בפנייה לשרתי Google.**
+
+**פרטי השגיאה:**
+\`\`\`
+${errorMsg}
+\`\`\`
+
+**הצעות לפתרון לעבודה עם RBS Expert:**
+1. פתח את תפריט הגדרות ה-**Secrets** של הפרויקט ב-AI Studio.
+2. ודא שהוספת את המשתנה \`GEMINI_API_KEY\` עם מפתח API תקין ופעיל.
+3. ודא שאין רווחים מיותרים בהתחלה או בסוף של המפתח.`,
+          sources: []
+        });
+      }
     }
 
     const textOutput = response.text || "סליחה, לא הצלחתי לעבד את התשובה. אנא נסה שוב.";
