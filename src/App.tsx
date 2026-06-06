@@ -240,7 +240,7 @@ const parseProductRow = (row: any) => {
         if (typeof rawImagesField === 'string') {
           const cleaned = rawImagesField.trim();
           if (cleaned.startsWith('http')) {
-              itemImages = cleaned.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
+              itemImages = cleaned.split(/[\\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
           }
         }
     }
@@ -248,7 +248,7 @@ const parseProductRow = (row: any) => {
   
   if (!itemImages || itemImages.length === 0) {
       if (row.imageURL && row.imageURL.trim().startsWith('http')) {
-          itemImages = row.imageURL.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
+          itemImages = row.imageURL.split(/[\\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
       }
       if (!itemImages || itemImages.length === 0) {
           itemImages = ['https://placehold.co/600x400/f3f4f6/000000?text=No+Image'];
@@ -281,7 +281,7 @@ const parseProductRow = (row: any) => {
   const labCertsRaw = row['אישורי מעבדה'] || row.labCerts || row['labCerts'] || '';
   let labCerts: string[] = [];
   if (typeof labCertsRaw === 'string' && labCertsRaw.trim()) {
-      labCerts = labCertsRaw.split(/[\n,;]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http') || s.startsWith('www.'));
+      labCerts = labCertsRaw.split(/[\\n,;]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http') || s.startsWith('www.'));
   }
 
   return {
@@ -350,7 +350,264 @@ interface VirtualProductCardProps {
   children: React.ReactNode;
 }
 
+
+
+// --- BRAND STYLING HELPER ---
+const getBrandTheme = (brand: string) => {
+  // השתמשנו בצבעי המותג של RBS לכפתורים (כחול כהה לרגיל, כתום למעבר)
+  let theme = {
+    bg: 'bg-white', 
+    border: 'border-gray-200', 
+    accent: 'text-[#f7941d]',
+    button: 'bg-[#004387] hover:bg-[#fe8d00] text-white rounded-none', 
+    badge: 'bg-gray-100 text-gray-800 border-gray-200'
+  };
+  switch(brand?.toUpperCase()) {
+    case 'EZVIZ':
+      theme.bg = 'bg-blue-50/50'; 
+      theme.border = 'border-blue-100'; 
+      theme.badge = 'bg-blue-50 text-blue-800 border-blue-100';
+      break;
+    case 'HIKVISION':
+      theme.bg = 'bg-red-50/50'; 
+      theme.border = 'border-red-100'; 
+      theme.badge = 'bg-red-50 text-red-800 border-red-100';
+      break;
+  }
+  return theme;
+};
+
+const BrandBadge: React.FC<{brand: string}> = ({brand}) => {
+  const [imgFailed, setImgFailed] = useState(false);
+  if (!brand) return null;
+  const theme = getBrandTheme(brand);
+  const isLink = brand.startsWith('http');
+  let displayName = brand;
+  if (isLink) {
+    const lower = brand.toLowerCase();
+    if (lower.includes('ezviz') || lower.includes('16oips6v2')) displayName = 'EZVIZ';
+    else if (lower.includes('hikvision') || lower.includes('1m1hhh')) displayName = 'HIKVISION';
+    else if (lower.includes('polman') || lower.includes('1zozo23t')) displayName = 'POLMAN';
+    else if (lower.includes('rbs') || lower.includes('telecom')) displayName = 'RBS';
+    else {
+      try {
+        const u = new URL(brand);
+        const parts = u.pathname.split('/');
+        const file = parts[parts.length - 1];
+        if (file && file.length > 3) {
+          displayName = decodeURIComponent(file.split('.')[0]).replace(/[-_]/g, '').substring(0, 15);
+        } else {
+          displayName = 'מותג';
+        }
+      } catch {
+        displayName = 'מותג';
+      }
+    }
+  }
+  if (!imgFailed) {
+    const upper = brand.toUpperCase();
+    if (upper === 'EZVIZ' || (!isLink && upper.includes('EZVIZ')) || (isLink && upper.includes('EZVIZ'))) {
+      return <img src={transformImageLink("https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh", 120)} alt="EZVIZ" onError={() => setImgFailed(true)} className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/50 rounded px-1"/>;
+    }
+    if (upper === 'HIKVISION' || (!isLink && upper.includes('HIKVISION')) || (isLink && upper.includes('HIKVISION'))) {
+      return <img src={transformImageLink("https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M", 120)} alt="HIKVISION" onError={() => setImgFailed(true)} className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/50 rounded px-1"/>;
+    }
+    if (upper === 'POLMAN' || (!isLink && upper.includes('POLMAN')) || (isLink && upper.includes('POLMAN'))) {
+      return <img src={transformImageLink("https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU", 120)} alt="POLMAN" onError={() => setImgFailed(true)} className="h-10 sm:h-14 object-contain drop-shadow-sm bg-white/80 rounded-full px-1"/>;
+    }
+    if (isLink) {
+      return <img src={transformImageLink(brand, 120)} alt="BrandLogo" onError={() => setImgFailed(true)} className="h-10 sm:h-14 object-contain drop-shadow-md bg-white/90 shadow-sm border border-gray-100 rounded-md px-2 py-0.5"/>;
+    }
+  }
+  return (
+    <span className={`text-[10px] sm:text-xs font-bold px-2 py-1 rounded shadow-xs border inline-block ${theme.badge} max-w-[120px] truncate`}>
+      {displayName}
+    </span>
+  );
+};
+
+interface CatalogCardProps { catalog: any; navigateToCatalog: (name: string) => void; }
+const CatalogCard: React.FC<CatalogCardProps> = ({catalog, navigateToCatalog}) => (
+  <div onClick={() => navigateToCatalog(catalog.name)} className="group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100">
+    <div className="aspect-square relative border-b border-gray-100 bg-white flex items-center justify-center p-3 sm:p-6 overflow-hidden">
+      {catalog.brand && (
+        <div className="absolute top-2 right-2 z-10">
+          <BrandBadge brand={catalog.brand} />
+        </div>
+      )}
+      <img src={transformImageLink(catalog.image, 400)} alt={catalog.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300"/>
+    </div>
+    <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right">
+      <h3 className="font-semibold text-[#0c2d57] text-sm sm:text-lg mb-1 sm:mb-2 line-clamp-2 leading-tight min-h-[2.5rem] sm:min-h-0 flex items-center justify-center sm:justify-start">
+        {catalog.name}
+      </h3>
+      <p className="text-gray-600 text-xs sm:text-sm leading-relaxed mb-2 sm:mb-4 line-clamp-2 hidden sm:block">
+        {catalog.desc}
+      </p>
+      <div className="mt-auto pt-2 border-t border-gray-50 sm:border-none flex justify-center sm:justify-between items-center text-[#f7941d] font-bold text-xs sm:text-sm">
+        <span className="hidden sm:inline">פתח מחירון</span>
+        <span className="sm:hidden">פתח</span>
+        <ChevronLeft size={16} className="w-4 h-4 sm:w-5 sm:h-5 ml-1 sm:ml-0" />
+      </div>
+    </div>
+  </div>
+);
+
+interface SubcategoryCardProps {
+  sub: any;
+  onClick?: () => void;
+  navigateToSubcategory?: (name: string) => void;
+}
+const SubcategoryCard: React.FC<SubcategoryCardProps> = ({sub, onClick, navigateToSubcategory}) => (
+  <div onClick={onClick || (() => navigateToSubcategory && navigateToSubcategory(sub.name))} className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 relative border border-gray-100">
+    {sub.isComingSoon && (
+      <div className="absolute top-2 left-[-30px] z-10 w-32 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50">
+        בקרוב!
+      </div>
+    )}
+    <div className="relative aspect-square p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
+      {sub.brand && (
+        <div className="absolute top-2 right-2 z-10">
+          <BrandBadge brand={sub.brand} />
+        </div>
+      )}
+      {sub.image ? (
+        <img src={transformImageLink(sub.image, 400)} alt={sub.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500"/>
+      ) : (
+        <FolderOpen className="text-gray-300 w-10 h-10 sm:w-12 sm:h-12"/>
+      )}
+    </div>
+    <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white text-center justify-between">
+      <div>
+        <h3 className="font-semibold text-[#0c2d57] text-xs sm:text-lg leading-tight mb-1 sm:mb-2 line-clamp-2">
+          {sub.name}
+        </h3>
+        <p className="text-gray-500 text-[11px] sm:text-sm mb-1 sm:mb-4 font-medium">
+          {sub.count} מוצרים
+        </p>
+      </div>
+      <div className="mt-auto flex justify-center items-center gap-1 text-[#f7941d] font-bold text-xs sm:text-sm opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity pt-1 border-t border-gray-50 sm:border-none">
+        <span className="hidden sm:inline">הצג</span>
+        <ChevronLeft size={14} className="w-4 h-4 sm:w-4 sm:h-4"/>
+      </div>
+    </div>
+  </div>
+);
+
+interface ProductCardProps {
+  product: any;
+  navigateToProduct: (product: any) => void;
+  addToCart: (product: any, quantity?: number, optionals?: any[]) => void;
+}
+const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, addToCart}) => {
+  const theme = getBrandTheme(product.brand);
+  const [isAdded, setIsAdded] = useState(false);
+  
+  const handleAddClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Assuming addToCart is available in scope or we must use original code
+    // Wait, the original had addToCart passed in! Let me fix it...
+    // In move_comp.cjs the replacement was 'export interface ProductCardProps { product: any; navigateToProduct: (product: any) => void; addToCart: (product: any) => void; }'
+    // BUT the prompt said the agent ROLLED IT BACK. Which means it's the ORIGINAL one!
+    // Original one relied on global state or context?
+    // Let me check my reconstruction. `const ProductCard: React.FC<{product: any}> = ({product}) => {`
+    // Yes, this was the original one. addToCart and navigateToProduct were in the same file correctly.
+    addToCart(product);
+    setIsAdded(true);
+    setTimeout(() => setIsAdded(false), 1500);
+  };
+  
+  return (
+    <div onClick={() => navigateToProduct(product)} className={`group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}>
+      {product.isHotSale ? (
+        <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-red-600 to-orange-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50 flex items-center justify-center gap-1">
+          <Flame size={12} className="text-yellow-300" />
+          מבצע חם!
+        </div>
+      ) : product.isComingSoon ? (
+        <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50">
+          בקרוב!
+        </div>
+      ) : null}
+      
+      <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square relative border-b border-gray-100 overflow-hidden`}>
+        <img src={transformImageLink(product.images[0], 350)} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm ${product.isComingSoon ? 'opacity-70' : ''}`} />
+        <div className={`absolute top-2 right-2 z-10`}>
+          <BrandBadge brand={product.brand} />
+        </div>
+      </div>
+      
+      <div className="p-3 sm:p-4 flex flex-col flex-grow text-center">
+        <div className="text-[10px] sm:text-xs text-gray-400 mb-1 line-clamp-1">{product.sku}</div>
+        <h3 className="text-[#0c2d57] text-xs sm:text-base font-semibold mb-2 line-clamp-2 leading-tight min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center text-center">{product.name}</h3>
+        
+        <div className="mt-auto pt-2 sm:pt-2 flex flex-col items-center w-full">
+          {product.isHotSale ? (
+            <div className="flex flex-col items-center leading-tight mb-2 w-full text-center mt-auto">
+              <div className="bg-red-50 border border-red-100 rounded-md py-1 px-2 mb-2 w-full">
+                <div className="text-[11px] sm:text-xs text-red-600 font-bold flex items-center justify-center gap-1">
+                  <Flame size={12} className="text-red-500" />
+                  {product.saleType || 'מבצע מיוחד'}
+                </div>
+                <div className="text-xs sm:text-sm font-extrabold text-red-600 leading-tight mt-0.5">
+                  {product.saleValue || 'פרטים בעגלה'}
+                </div>
+              </div>
+              {product.price > 0 ? (
+                <div className="flex flex-col items-center leading-tight w-full text-center opacity-70">
+                  {product.retailPrice && (
+                    <span className="text-[9px] sm:text-[10px] text-gray-500 font-medium leading-[1.2] w-full block line-through">
+                      צרכן: ₪{product.retailPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    </span>
+                  )}
+                  <span className="text-xs sm:text-sm font-bold text-gray-500 leading-none block mt-0.5">
+                    מתקין: ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </span>
+                </div>
+              ) : (
+                <div className="text-[10px] sm:text-xs font-bold text-gray-400">צור קשר למחירים</div>
+              )}
+            </div>
+          ) : product.price === 0 ? (
+            <div className="text-xs sm:text-sm font-bold text-gray-600 mb-2 mt-auto">צור קשר</div>
+          ) : product.retailPrice ? (
+            <div className="flex flex-col items-center leading-tight mb-2 w-full text-center">
+              <span className="text-[9px] sm:text-xs text-gray-600 font-medium leading-[1.2] mb-1 w-full block">
+                צרכן: ₪{product.retailPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block">(כולל מע"מ)</span>
+              </span>
+              <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none block">
+                ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">מחיר מומלץ למתקין</span>
+              </span>
+            </div>
+          ) : (
+            <div className="mb-2 mt-auto flex flex-col items-center leading-none text-center">
+              <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none">
+                ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              </span>
+              <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">מחיר מומלץ למתקין</span>
+            </div>
+          )}
+          
+          {product.isComingSoon ? (
+            <div className="w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200">
+              <span className="text-xs sm:text-sm font-bold">בקרוב</span>
+            </div>
+          ) : (
+            <button onClick={handleAddClick} className={`w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 transition-all duration-300 ${isAdded ? 'bg-green-600 text-white rounded-none hover:bg-green-600' : theme.button}`}>
+              <ShoppingCart size={15} className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isAdded ? 'animate-bounce' : ''}`} />
+              <span className="text-xs sm:text-sm font-bold">{isAdded ? 'נוסף! ✓' : 'הוספה'}</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const VirtualProductCard: React.FC<VirtualProductCardProps> = ({ product, children }) => {
+
   const [ref, isVisible] = useIntersectionObserver({
     rootMargin: '250px',
     freezeOnceVisible: true,
@@ -1224,248 +1481,7 @@ export default function App() {
     setIsCartOpen(false);
   };
 
-  // --- BRAND STYLING HELPER ---
-  const getBrandTheme = (brand: string) => {
-    // השתמשנו בצבעי המותג של RBS לכפתורים (כחול כהה לרגיל, כתום למעבר)
-    let theme = {
-      bg: 'bg-white', 
-      border: 'border-gray-200', 
-      accent: 'text-[#f7941d]',
-      button: 'bg-[#004387] hover:bg-[#fe8d00] text-white rounded-none', 
-      badge: 'bg-gray-100 text-gray-800 border-gray-200'
-    };
-    switch(brand?.toUpperCase()) {
-      case 'EZVIZ':
-        theme.bg = 'bg-blue-50/50'; 
-        theme.border = 'border-blue-100'; 
-        theme.badge = 'bg-blue-50 text-blue-800 border-blue-100';
-        break;
-      case 'HIKVISION':
-        theme.bg = 'bg-red-50/50'; 
-        theme.border = 'border-red-100'; 
-        theme.badge = 'bg-red-50 text-red-800 border-red-100';
-        break;
-    }
-    return theme;
-  };
 
-  const BrandBadge: React.FC<{ brand: string }> = ({ brand }) => {
-    const [imgFailed, setImgFailed] = useState(false);
-    if (!brand) return null;
-    
-    const theme = getBrandTheme(brand);
-    const isLink = brand.startsWith('http');
-    
-    let displayName = brand;
-    if (isLink) {
-      const lower = brand.toLowerCase();
-      if (lower.includes('ezviz') || lower.includes('16oips6v2')) displayName = 'EZVIZ';
-      else if (lower.includes('hikvision') || lower.includes('1m1hhh')) displayName = 'HIKVISION';
-      else if (lower.includes('polman') || lower.includes('1zozo23t')) displayName = 'POLMAN';
-      else if (lower.includes('rbs') || lower.includes('telecom')) displayName = 'RBS';
-      else {
-        // Try getting filename or clean title
-        try {
-          const u = new URL(brand);
-          const parts = u.pathname.split('/');
-          const file = parts[parts.length - 1];
-          if (file && file.length > 3) {
-            displayName = decodeURIComponent(file.split('.')[0]).replace(/[-_]/g, ' ').substring(0, 15);
-          } else {
-            displayName = 'מותג';
-          }
-        } catch {
-          displayName = 'מותג';
-        }
-      }
-    }
-
-    if (!imgFailed) {
-      const upper = brand.toUpperCase();
-      if (upper === 'EZVIZ' || (!isLink && upper.includes('EZVIZ')) || (isLink && upper.includes('EZVIZ'))) {
-        return <img src={transformImageLink("https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh", 120)} alt="EZVIZ" onError={() => setImgFailed(true)} className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/50 rounded px-1" />;
-      }
-      if (upper === 'HIKVISION' || (!isLink && upper.includes('HIKVISION')) || (isLink && upper.includes('HIKVISION'))) {
-        return <img src={transformImageLink("https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M", 120)} alt="HIKVISION" onError={() => setImgFailed(true)} className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/50 rounded px-1" />;
-      }
-      if (upper === 'POLMAN' || (!isLink && upper.includes('POLMAN')) || (isLink && upper.includes('POLMAN'))) {
-        return <img src={transformImageLink("https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU", 120)} alt="POLMAN" onError={() => setImgFailed(true)} className="h-10 sm:h-14 object-contain drop-shadow-sm bg-white/80 rounded-full px-1" />;
-      }
-      if (isLink) {
-        return <img src={transformImageLink(brand, 120)} alt="Brand Logo" onError={() => setImgFailed(true)} className="h-10 sm:h-14 object-contain drop-shadow-md bg-white/90 shadow-sm border border-gray-100 rounded-md px-2 py-0.5" />;
-      }
-    }
-
-    return (
-      <span className={`text-[10px] sm:text-xs font-bold px-2 py-1 rounded shadow-xs border inline-block ${theme.badge} max-w-[120px] truncate`}>
-        {displayName}
-      </span>
-    );
-  };
-
-  // --- COMPONENTS ---
-
-  const CatalogCard: React.FC<{ catalog: any }> = ({ catalog }) => (
-    <div 
-      onClick={() => navigateToCatalog(catalog.name)}
-      className="group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100"
-    >
-      <div className="aspect-square relative border-b border-gray-100 bg-white flex items-center justify-center p-3 sm:p-6 overflow-hidden">
-        {catalog.brand && (
-          <div className="absolute top-2 right-2 z-10">
-            <BrandBadge brand={catalog.brand} />
-          </div>
-        )}
-        <img src={transformImageLink(catalog.image, 400)} alt={catalog.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300" />
-      </div>
-      <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right">
-        <h3 className="font-semibold text-[#0c2d57] text-sm sm:text-lg mb-1 sm:mb-2 line-clamp-2 leading-tight min-h-[2.5rem] sm:min-h-0 flex items-center justify-center sm:justify-start">{catalog.name}</h3>
-        <p className="text-gray-600 text-xs sm:text-sm leading-relaxed mb-2 sm:mb-4 line-clamp-2 hidden sm:block">{catalog.desc}</p>
-        <div className="mt-auto pt-2 border-t border-gray-50 sm:border-none flex justify-center sm:justify-between items-center text-[#f7941d] font-bold text-xs sm:text-sm">
-          <span className="hidden sm:inline">פתח מחירון</span>
-          <span className="sm:hidden">פתח</span>
-          <ChevronLeft size={16} className="w-4 h-4 sm:w-5 sm:h-5 ml-1 sm:ml-0" />
-        </div>
-      </div>
-    </div>
-  );
-
-  const SubcategoryCard: React.FC<{ sub: any, onClick?: () => void }> = ({ sub, onClick }) => (
-    <div 
-      onClick={onClick || (() => navigateToSubcategory(sub.name))}
-      className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 relative border border-gray-100"
-    >
-      {sub.isComingSoon && (
-        <div className="absolute top-2 left-[-30px] z-10 w-32 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50">
-          בקרוב!
-        </div>
-      )}
-      <div className="relative aspect-square p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
-        {sub.brand && (
-          <div className="absolute top-2 right-2 z-10">
-            <BrandBadge brand={sub.brand} />
-          </div>
-        )}
-        {sub.image ? (
-          <img src={transformImageLink(sub.image, 400)} alt={sub.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500" />
-        ) : (
-          <FolderOpen className="text-gray-300 w-10 h-10 sm:w-12 sm:h-12" />
-        )}
-      </div>
-      
-      <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white text-center justify-between">
-        <div>
-           <h3 className="font-semibold text-[#0c2d57] text-xs sm:text-lg leading-tight mb-1 sm:mb-2 line-clamp-2">{sub.name}</h3>
-           <p className="text-gray-500 text-[11px] sm:text-sm mb-1 sm:mb-4 font-medium">{sub.count} מוצרים</p>
-        </div>
-        <div className="mt-auto flex justify-center items-center gap-1 text-[#f7941d] font-bold text-xs sm:text-sm opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity pt-1 border-t border-gray-50 sm:border-none">
-          <span className="hidden sm:inline">הצג</span>
-          <ChevronLeft size={14} className="w-4 h-4 sm:w-4 sm:h-4" />
-        </div>
-      </div>
-    </div>
-  );
-
-  const ProductCard: React.FC<{ product: any }> = ({ product }) => {
-    const theme = getBrandTheme(product.brand);
-    const [isAdded, setIsAdded] = useState(false);
-
-    const handleAddClick = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      addToCart(product);
-      setIsAdded(true);
-      setTimeout(() => setIsAdded(false), 1500);
-    };
-
-    return (
-      <div 
-        onClick={() => navigateToProduct(product)}
-        className={`group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}
-      >
-        {product.isHotSale ? (
-          <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-red-600 to-orange-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50 flex items-center justify-center gap-1">
-            <Flame size={12} className="text-yellow-300" />
-            מבצע חם!
-          </div>
-        ) : product.isComingSoon ? (
-          <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50">
-            בקרוב!
-          </div>
-        ) : null}
-        <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square relative border-b border-gray-100 overflow-hidden`}>
-          <img src={transformImageLink(product.images[0], 350)} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm ${product.isComingSoon ? 'opacity-70' : ''}`} />
-          
-          <div className={`absolute top-2 right-2 z-10`}>
-            <BrandBadge brand={product.brand} />
-          </div>
-        </div>
-        <div className="p-3 sm:p-4 flex flex-col flex-grow text-center">
-          <div className="text-[10px] sm:text-xs text-gray-400 mb-1 line-clamp-1">{product.sku}</div>
-          <h3 className="text-[#0c2d57] text-xs sm:text-base font-semibold mb-2 line-clamp-2 leading-tight min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center text-center">{product.name}</h3>
-          
-          <div className="mt-auto pt-2 sm:pt-2 flex flex-col items-center w-full">
-            {product.isHotSale ? (
-              <div className="flex flex-col items-center leading-tight mb-2 w-full text-center mt-auto">
-                 <div className="bg-red-50 border border-red-100 rounded-md py-1 px-2 mb-2 w-full">
-                   <div className="text-[11px] sm:text-xs text-red-600 font-bold flex items-center justify-center gap-1">
-                     <Flame size={12} className="text-red-500" /> {product.saleType || 'מבצע מיוחד'}
-                   </div>
-                   <div className="text-xs sm:text-sm font-extrabold text-red-600 leading-tight mt-0.5">
-                     {product.saleValue || 'פרטים בעגלה'}
-                   </div>
-                 </div>
-                 {product.price > 0 ? (
-                   <div className="flex flex-col items-center leading-tight w-full text-center opacity-70">
-                     {product.retailPrice && (
-                       <span className="text-[9px] sm:text-[10px] text-gray-500 font-medium leading-[1.2] w-full block line-through">
-                         צרכן: ₪{product.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                       </span>
-                     )}
-                     <span className="text-xs sm:text-sm font-bold text-gray-500 leading-none block mt-0.5">
-                       מתקין: ₪{product.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-                     </span>
-                   </div>
-                 ) : (
-                   <div className="text-[10px] sm:text-xs font-bold text-gray-400">צור קשר למחירים</div>
-                 )}
-              </div>
-            ) : product.price === 0 ? (
-              <div className="text-xs sm:text-sm font-bold text-gray-600 mb-2 mt-auto">צור קשר</div>
-            ) : product.retailPrice ? (
-              <div className="flex flex-col items-center leading-tight mb-2 w-full text-center">
-                 <span className="text-[9px] sm:text-xs text-gray-600 font-medium leading-[1.2] mb-1 w-full block">
-                   צרכן: ₪{product.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block">(כולל מע"מ)</span>
-                 </span>
-                 <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none block">
-                   ₪{product.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-                   <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">מחיר מומלץ למתקין</span>
-                 </span>
-              </div>
-            ) : (
-              <div className="mb-2 mt-auto flex flex-col items-center leading-none text-center">
-                <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none">₪{product.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">מחיר מומלץ למתקין</span>
-              </div>
-            )}
-            
-            {product.isComingSoon ? (
-               <div className="w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200">
-                 <span className="text-xs sm:text-sm font-bold">בקרוב</span>
-               </div>
-            ) : (
-              <button 
-                onClick={handleAddClick}
-                className={`w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 transition-all duration-300 ${isAdded ? 'bg-green-600 text-white rounded-none hover:bg-green-600' : theme.button}`}
-              >
-                <ShoppingCart size={15} className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isAdded ? 'animate-bounce' : ''}`} />
-                <span className="text-xs sm:text-sm font-bold">{isAdded ? 'נוסף! ✓' : 'הוספה'}</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const ProductDetailsView = () => {
     const [mainImage, setMainImage] = useState(selectedProduct?.images[0]);
@@ -1960,7 +1976,7 @@ export default function App() {
               <h3 className="text-xl font-bold text-[#0c2d57] mb-6 border-b border-gray-200 pb-2">מוצרים משלימים ומקבילים</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6">
                 {similar.map(product => (
-                  <ProductCard key={product.id} product={product} />
+                  <ProductCard key={product.id} product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} />
                 ))}
               </div>
             </div>
@@ -2030,39 +2046,62 @@ export default function App() {
     };
 
     const buildOrderDetailsText = () => {
-      let orderDetails = `הזמנה חדשה מקטלוג B2B\n`;
-      orderDetails += `---------------------------------\n`;
-      orderDetails += `שם חברה/לקוח: ${companyName}\n`;
-      if (companyId) orderDetails += `ח.פ/עוסק מורשה: ${companyId}\n`;
-      if (contactName) orderDetails += `איש קשר: ${contactName}\n`;
-      if (phone) orderDetails += `טלפון: ${phonePrefix}-${phone}\n`;
-      if (secondaryPhone) orderDetails += `טלפון נוסף: ${secondaryPhone}\n`;
-      if (customerEmail) orderDetails += `מייל לקוח: ${customerEmail}\n`;
-      if (address) orderDetails += `כתובת אספקה: ${address}\n`;
-      if (notes) orderDetails += `הערות: ${notes}\n`;
-      orderDetails += `---------------------------------\n\n`;
-      orderDetails += `פריטים:\n\n`;
+      let orderDetails = `הזמנה חדשה מקטלוג B2B
+`;
+      orderDetails += `---------------------------------
+`;
+      orderDetails += `שם חברה/לקוח: ${companyName}
+`;
+      if (companyId) orderDetails += `ח.פ/עוסק מורשה: ${companyId}
+`;
+      if (contactName) orderDetails += `איש קשר: ${contactName}
+`;
+      if (phone) orderDetails += `טלפון: ${phonePrefix}-${phone}
+`;
+      if (secondaryPhone) orderDetails += `טלפון נוסף: ${secondaryPhone}
+`;
+      if (customerEmail) orderDetails += `מייל לקוח: ${customerEmail}
+`;
+      if (address) orderDetails += `כתובת אספקה: ${address}
+`;
+      if (notes) orderDetails += `הערות: ${notes}
+`;
+      orderDetails += `---------------------------------
+
+`;
+      orderDetails += `פריטים:
+
+`;
       
       cart.forEach((item, idx) => {
-         orderDetails += `${idx + 1}. ${item.name}\n`;
-         orderDetails += `   מק"ט: ${item.sku}\n`;
-         orderDetails += `   כמות: ${item.quantity}\n`;
+         orderDetails += `${idx + 1}. ${item.name}
+`;
+         orderDetails += `   מק"ט: ${item.sku}
+`;
+         orderDetails += `   כמות: ${item.quantity}
+`;
          
          if (item.isHotSale) {
-           orderDetails += `   * מבצע חם: ${item.saleType ? item.saleType + ' ' : ''}${item.saleValue || ''}\n`;
+           orderDetails += `   * מבצע חם: ${item.saleType ? item.saleType + ' ' : ''}${item.saleValue || ''}
+`;
          }
          
          if (item.optionals && item.optionals.length > 0) {
-           orderDetails += `   תוספות בארון:\n`;
+           orderDetails += `   תוספות בארון:
+`;
            item.optionals.forEach((opt: any) => {
-             orderDetails += `     - ${opt.pn} | ${opt.description}\n`;
+             orderDetails += `     - ${opt.pn} | ${opt.description}
+`;
            });
          }
-         orderDetails += `\n`;
+         orderDetails += `
+`;
       });
       
-      orderDetails += `---------------------------------\n`;
-      orderDetails += `סה"כ כמות פריטים: ${cart.reduce((acc, item) => acc + item.quantity, 0)}\n`;
+      orderDetails += `---------------------------------
+`;
+      orderDetails += `סה"כ כמות פריטים: ${cart.reduce((acc, item) => acc + item.quantity, 0)}
+`;
 
       return orderDetails;
     };
@@ -2505,7 +2544,7 @@ export default function App() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
                       {filteredProducts.slice(0, visibleCount).map(product => (
                         <VirtualProductCard key={product.id} product={product}>
-                          <ProductCard product={product} />
+                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} />
                         </VirtualProductCard>
                       ))}
                     </div>
@@ -2535,7 +2574,7 @@ export default function App() {
                 
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
                   {catalogFolders.map((catalog, idx) => (
-                    <CatalogCard key={idx} catalog={catalog} />
+                    <CatalogCard key={idx} catalog={catalog} navigateToCatalog={navigateToCatalog} />
                   ))}
                 </div>
               </div>
@@ -2567,7 +2606,7 @@ export default function App() {
                       </div>
                     ) : (
                       activeSubcategories.map((sub, idx) => (
-                        <SubcategoryCard key={idx} sub={sub} />
+                        <SubcategoryCard key={idx} sub={sub} navigateToSubcategory={navigateToSubcategory} />
                       ))
                     )}
                   </div>
@@ -2651,7 +2690,7 @@ export default function App() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
                       {filteredProducts.slice(0, visibleCount).map(product => (
                         <VirtualProductCard key={product.id} product={product}>
-                          <ProductCard product={product} />
+                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} />
                         </VirtualProductCard>
                       ))}
                     </div>
