@@ -962,7 +962,7 @@ export default function App() {
       if (!silent) setIsLoading(false);
 
       // 2. Fetch the FIRST 50 products from Google Sheets, so initial render is incredibly fast!
-      setIsProductsLoading(true);
+      if (!silent) setIsProductsLoading(true);
       setProductsOffset(0);
       setHasMoreProducts(true);
 
@@ -1491,6 +1491,7 @@ export default function App() {
   const ProductDetailsView = () => {
     const [mainImage, setMainImage] = useState(selectedProduct?.images[0]);
     const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
+    const [isZoomed, setIsZoomed] = useState(false);
     const [isAdded, setIsAdded] = useState(false);
     const [isVideoHovered, setIsVideoHovered] = useState(false);
     const [isSpecsHovered, setIsSpecsHovered] = useState(false);
@@ -1549,10 +1550,12 @@ export default function App() {
       const x = ((clientX - left) / width) * 100;
       const y = ((clientY - top) / height) * 100;
       setZoomPos({ x, y });
+      setIsZoomed(true);
     };
 
     const handleMouseLeave = () => {
       setZoomPos({ x: 50, y: 50 });
+      setIsZoomed(false);
     };
 
     if (!selectedProduct) return null;
@@ -1604,16 +1607,21 @@ export default function App() {
             <div className="w-full lg:w-5/12 flex flex-col gap-3 sm:gap-4">
               {/* ZOOMABLE IMAGE CONTAINER */}
               <div 
-                className={`aspect-square rounded-none border border-gray-100 ${theme.bg} p-2 sm:p-4 flex items-center justify-center relative overflow-hidden group ${isMobileDevice ? 'cursor-default' : 'cursor-crosshair'}`}
-                onMouseMove={isMobileDevice ? undefined : handleMouseMove}
-                onMouseLeave={isMobileDevice ? undefined : handleMouseLeave}
+                className={`aspect-square rounded-none border border-gray-100 ${theme.bg} p-2 sm:p-4 flex items-center justify-center relative overflow-hidden group cursor-crosshair`}
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+                onTouchMove={handleMouseMove}
+                onTouchEnd={handleMouseLeave}
               >
                 <img referrerPolicy="no-referrer" 
                   src={transformImageLink(mainImage, 800)} 
                   alt={selectedProduct.name} 
                   onError={handleImageError}
-                  className="w-full h-full object-contain mix-blend-multiply transition-transform duration-200 ease-out lg:group-hover:scale-[2.5]"
-                  style={{ transformOrigin: `${zoomPos.x}% ${zoomPos.y}%` }}
+                  className="w-full h-full object-contain mix-blend-multiply transition-transform duration-200 ease-out"
+                  style={{ 
+                    transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
+                    transform: isZoomed ? 'scale(2.5)' : 'scale(1)'
+                  }}
                 />
 
                 {/* Left & Right Chevrons overlaid on main image */}
@@ -1837,7 +1845,13 @@ export default function App() {
               {/* COMPATIBLE CABINETS (If this is an accessory) */}
               {((selectedProduct['Nested subcategory']?.includes('אביזרים') || selectedProduct.subcategory?.includes('אביזרים למסדים') || /מדף|פנל|מאוורר|ברגים|אביזר|KVM/i.test(selectedProduct.name)) && !(/ארון|מסד|מארז/i.test(selectedProduct.name))) && (
                 <React.Suspense fallback={<div className="animate-pulse h-32 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center text-sm text-gray-500">טוען ארונות תואמים...</div>}>
-                  <AccessoryCabinets product={selectedProduct} catalogData={catalogData} ProductCard={ProductCard} />
+                  <AccessoryCabinets 
+                    product={selectedProduct} 
+                    catalogData={catalogData} 
+                    ProductCard={ProductCard} 
+                    navigateToProduct={navigateToProduct}
+                    addToCart={addToCart}
+                  />
                 </React.Suspense>
               )}
 
@@ -1904,28 +1918,55 @@ export default function App() {
                     <div className="w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md text-sm sm:text-base bg-gray-200 text-gray-600 cursor-not-allowed">
                        <span className="animate-pulse">בקרוב!</span>
                     </div>
+                  ) : currentOptionals.length > 0 ? (
+                    <div className="flex flex-col gap-3 w-full">
+                      <div className="flex flex-col sm:flex-row gap-3 w-full">
+                        <button 
+                          onClick={() => {
+                            addToCart(selectedProduct, 1, currentOptionals);
+                            setIsAdded(true);
+                            setTimeout(() => setIsAdded(false), 1500);
+                          }}
+                          className={`flex-1 flex items-center justify-center gap-2 px-5 py-4 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base cursor-pointer rounded-none text-white ${isAdded ? 'bg-green-600' : 'bg-[#fe8d00] hover:bg-[#004387]'}`}
+                        >
+                          <ShoppingCart size={18} className={isAdded ? 'animate-bounce' : ''} />
+                          {isAdded ? 'נארז יחד ונוסף! ✓' : 'הוסף כחבילה אחת (מומלץ)'}
+                        </button>
+                        
+                        <button 
+                          onClick={() => {
+                            addToCart(selectedProduct, 1, []);
+                            currentOptionals.forEach((opt: any) => {
+                               const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
+                               if (catItem) {
+                                  addToCart(catItem, 1, []);
+                               }
+                            });
+                            setIsAdded(true);
+                            setTimeout(() => setIsAdded(false), 1550);
+                          }}
+                          className="flex-1 flex items-center justify-center gap-2 px-5 py-4 font-bold text-[#004387] border-2 border-[#004387] bg-white hover:bg-gray-50 transition-all text-sm sm:text-base cursor-pointer rounded-none"
+                        >
+                          <ShoppingCart size={18} />
+                          {isAdded ? 'פריטים נפרדים נוספו! ✓' : 'בחר כפריטים נפרדים'}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-center text-[#004387] font-semibold bg-[#e6f0fa]/40 py-2 border border-[#b3d4f5] rounded-none">
+                        💡 תאימות מושלמת: הוספה כחבילה אחת מקשרת את כל האביזרים ישירות לארון זה בעגלה ומונעת טעויות ייצור והרכבה!
+                      </p>
+                    </div>
                   ) : (
                     <button 
                       onClick={() => {
-                        if (currentOptionals.length > 0) {
-                           addToCart(selectedProduct, 1, []);
-                           currentOptionals.forEach((opt: any) => {
-                              const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
-                              if (catItem) {
-                                 addToCart(catItem, 1, []);
-                              }
-                           });
-                        } else {
-                           addToCart(selectedProduct, 1, []);
-                        }
+                        addToCart(selectedProduct, 1, []);
                         setIsAdded(true);
                         setTimeout(() => setIsAdded(false), 1500);
                       }}
-                    className={`w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base ${isAdded ? 'bg-green-600 hover:bg-green-600 text-white' : theme.button}`}
-                  >
-                    <ShoppingCart size={18} className={`sm:w-5 sm:h-5 ${isAdded ? 'animate-bounce' : ''}`} />
-                    {isAdded ? 'נוסף לעגלה! ✓' : 'הוסף להזמנה'}
-                  </button>
+                      className={`w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base ${isAdded ? 'bg-green-600 hover:bg-green-600 text-white' : theme.button}`}
+                    >
+                      <ShoppingCart size={18} className={`sm:w-5 sm:h-5 ${isAdded ? 'animate-bounce' : ''}`} />
+                      {isAdded ? 'נוסף לעגלה! ✓' : 'הוסף להזמנה'}
+                    </button>
                   )}
                 </div>
               </div>
