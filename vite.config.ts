@@ -6,7 +6,6 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
   return {
-    base: '/b2b-catalog/',
     plugins: [
       react(), 
       tailwindcss(),
@@ -22,8 +21,8 @@ export default defineConfig(() => {
           background_color: '#ffffff',
           display: 'standalone',
           orientation: 'portrait',
-          scope: '/b2b-catalog/',
-          start_url: '/b2b-catalog/',
+          scope: '/',
+          start_url: '/',
           lang: 'he',
           dir: 'rtl',
           icons: [
@@ -34,7 +33,6 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-          navigateFallback: null,
           navigateFallbackDenylist: [
             /^\/api/,
             /sheets\.googleapis\.com/,
