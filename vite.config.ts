@@ -12,7 +12,7 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icons/*.png'],
+        includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icons/*.png'],
         manifest: {
           name: 'RBS Catalog',
           short_name: 'RBS',
