@@ -56,26 +56,31 @@ const transformImageLink = (url: string, size?: number) => {
   if (!url) return url;
   try {
     const trimmedUrl = url.trim();
-    let result = trimmedUrl;
-    if (trimmedUrl.includes('drive.google.com/file/d/')) {
-      const match = trimmedUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
-      if (match && match[1]) {
-        result = `https://lh3.googleusercontent.com/d/${match[1]}`;
-      }
-    } else if (trimmedUrl.includes('id=')) {
-      const match = trimmedUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-      if (match && match[1]) {
-        result = `https://lh3.googleusercontent.com/d/${match[1]}`;
-      }
-    } else if (trimmedUrl.includes('drive.google.com/drive/folders/')) {
+    if (trimmedUrl.includes('drive.google.com/drive/folders/')) {
       return 'https://placehold.co/600x400/f3f4f6/000000?text=Drive+Folder';
     }
 
-    if (size && result.includes('lh3.googleusercontent.com/d/')) {
-      const base = result.split('=')[0];
-      return `${base}=s${size}`;
+    let fileId = null;
+    if (trimmedUrl.includes('drive.google.com/file/d/')) {
+      const match = trimmedUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) fileId = match[1];
+    } else if (trimmedUrl.includes('id=')) {
+      const match = trimmedUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) fileId = match[1];
+    } else if (trimmedUrl.includes('lh3.googleusercontent.com/d/')) {
+      const match = trimmedUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) fileId = match[1];
     }
-    return result;
+
+    if (fileId) {
+      // If passed by map(), size might be the index (0, 1, 2...). 
+      // Only use size if it's clearly a pixel width (e.g. > 10).
+      const validSize = (typeof size === 'number' && size > 10) ? size : 800;
+      // use thumbnail endpoint for fast resize and bypassing cookie restrictions in iframes
+      return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${validSize}`;
+    }
+
+    return trimmedUrl;
   } catch(e) { /* ignore */ }
   return url;
 };
@@ -240,7 +245,7 @@ const parseProductRow = (row: any) => {
         if (typeof rawImagesField === 'string') {
           const cleaned = rawImagesField.trim();
           if (cleaned.startsWith('http')) {
-              itemImages = cleaned.split(/[\\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
+              itemImages = cleaned.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
           }
         }
     }
@@ -248,7 +253,7 @@ const parseProductRow = (row: any) => {
   
   if (!itemImages || itemImages.length === 0) {
       if (row.imageURL && row.imageURL.trim().startsWith('http')) {
-          itemImages = row.imageURL.split(/[\\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
+          itemImages = row.imageURL.split(/[\n,]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http'));
       }
       if (!itemImages || itemImages.length === 0) {
           itemImages = ['https://placehold.co/600x400/f3f4f6/000000?text=No+Image'];
@@ -259,20 +264,20 @@ const parseProductRow = (row: any) => {
   const subcategoryName = typeof row.subcategory === 'string' ? row.subcategory.trim() : (row.subcategory || '');
   const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
   const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
-  const hotSaleKey = Object.keys(row).find(k => {
-      const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+  const hotSaleKey = Object.keys(row).find((k: string) => {
+      const clean = k.trim().replace(/s+/g, ' ').toLowerCase();
       return clean.includes('מבצע חם') || clean.includes('מבצע_חם') || clean.includes('hot sale') || clean.includes('hotsale') || clean === 'מבצע' || clean === 'מבצעים';
   });
-  const saleTypeKey = Object.keys(row).find(k => {
-      const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+  const saleTypeKey = Object.keys(row).find((k: string) => {
+      const clean = k.trim().replace(/s+/g, ' ').toLowerCase();
       return clean.includes('סוג מבצע') || clean.includes('sale type') || clean.includes('saletype') || clean.includes('סוג המבצע');
   });
-  const saleValueKey = Object.keys(row).find(k => {
-      const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+  const saleValueKey = Object.keys(row).find((k: string) => {
+      const clean = k.trim().replace(/s+/g, ' ').toLowerCase();
       return clean.includes('ערך מבצע') || clean.includes('sale value') || clean.includes('salevalue') || clean.includes('ערך המבצע') || clean.includes('מחיר מבצע');
   });
 
-  const hotSaleVal = hotSaleKey ? String(row[hotSaleKey]).trim().toUpperCase() : '';
+  const hotSaleVal = hotSaleKey ? String(row[hotSaleKey as keyof typeof row]).trim().toUpperCase() : '';
   const isHotSale = hotSaleVal === 'TRUE' || hotSaleVal === 'YES' || hotSaleVal === 'כן' || hotSaleVal === '1' || hotSaleVal === 'V' || hotSaleVal === 'Y' || hotSaleVal === 'פעיל' || hotSaleVal === 'במבצע';
   const saleType = saleTypeKey && typeof row[saleTypeKey] === 'string' ? row[saleTypeKey].trim() : (saleTypeKey ? row[saleTypeKey] : null);
   const saleValue = saleValueKey && typeof row[saleValueKey] === 'string' ? row[saleValueKey].trim() : (saleValueKey ? row[saleValueKey] : null);
@@ -281,7 +286,7 @@ const parseProductRow = (row: any) => {
   const labCertsRaw = row['אישורי מעבדה'] || row.labCerts || row['labCerts'] || '';
   let labCerts: string[] = [];
   if (typeof labCertsRaw === 'string' && labCertsRaw.trim()) {
-      labCerts = labCertsRaw.split(/[\\n,;]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http') || s.startsWith('www.'));
+      labCerts = labCertsRaw.split(/[\n,;]+/).map((s: string) => s.trim()).filter((s: string) => s.startsWith('http') || s.startsWith('www.'));
   }
 
   return {
@@ -295,8 +300,8 @@ const parseProductRow = (row: any) => {
     saleValue: saleValue,
     price: parsePrice(row.price),
     retailPrice: row.retailPrice ? parsePrice(row.retailPrice) : null,
-    images: itemImages.map(transformImageLink),
-    labCerts: labCerts.map(link => link.startsWith('www.') ? 'https://' + link : link)
+    images: itemImages.map((img: string) => transformImageLink(img, 800)),
+    labCerts: labCerts.map((link: string) => link.startsWith('www.') ? 'https://' + link : link)
   };
 };
 
@@ -407,16 +412,16 @@ const BrandBadge: React.FC<{brand: string}> = ({brand}) => {
   if (!imgFailed) {
     const upper = brand.toUpperCase();
     if (upper === 'EZVIZ' || (!isLink && upper.includes('EZVIZ')) || (isLink && upper.includes('EZVIZ'))) {
-      return <img src={transformImageLink("https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh", 120)} alt="EZVIZ" onError={() => setImgFailed(true)} className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/50 rounded px-1"/>;
+      return <img referrerPolicy="no-referrer" src={transformImageLink("https://drive.google.com/uc?id=16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh", 120)} alt="EZVIZ" onError={() => setImgFailed(true)} className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/50 rounded px-1"/>;
     }
     if (upper === 'HIKVISION' || (!isLink && upper.includes('HIKVISION')) || (isLink && upper.includes('HIKVISION'))) {
-      return <img src={transformImageLink("https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M", 120)} alt="HIKVISION" onError={() => setImgFailed(true)} className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/50 rounded px-1"/>;
+      return <img referrerPolicy="no-referrer" src={transformImageLink("https://drive.google.com/uc?id=1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M", 120)} alt="HIKVISION" onError={() => setImgFailed(true)} className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/50 rounded px-1"/>;
     }
     if (upper === 'POLMAN' || (!isLink && upper.includes('POLMAN')) || (isLink && upper.includes('POLMAN'))) {
-      return <img src={transformImageLink("https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU", 120)} alt="POLMAN" onError={() => setImgFailed(true)} className="h-10 sm:h-14 object-contain drop-shadow-sm bg-white/80 rounded-full px-1"/>;
+      return <img referrerPolicy="no-referrer" src={transformImageLink("https://drive.google.com/uc?id=1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU", 120)} alt="POLMAN" onError={() => setImgFailed(true)} className="h-10 sm:h-14 object-contain drop-shadow-sm bg-white/80 rounded-full px-1"/>;
     }
     if (isLink) {
-      return <img src={transformImageLink(brand, 120)} alt="BrandLogo" onError={() => setImgFailed(true)} className="h-10 sm:h-14 object-contain drop-shadow-md bg-white/90 shadow-sm border border-gray-100 rounded-md px-2 py-0.5"/>;
+      return <img referrerPolicy="no-referrer" src={transformImageLink(brand, 120)} alt="BrandLogo" onError={() => setImgFailed(true)} className="h-10 sm:h-14 object-contain drop-shadow-md bg-white/90 shadow-sm border border-gray-100 rounded-md px-2 py-0.5"/>;
     }
   }
   return (
@@ -435,7 +440,7 @@ const CatalogCard: React.FC<CatalogCardProps> = ({catalog, navigateToCatalog}) =
           <BrandBadge brand={catalog.brand} />
         </div>
       )}
-      <img src={transformImageLink(catalog.image, 400)} alt={catalog.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300"/>
+      <img referrerPolicy="no-referrer" src={transformImageLink(catalog.image, 400)} alt={catalog.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300"/>
     </div>
     <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right">
       <h3 className="font-semibold text-[#0c2d57] text-sm sm:text-lg mb-1 sm:mb-2 line-clamp-2 leading-tight min-h-[2.5rem] sm:min-h-0 flex items-center justify-center sm:justify-start">
@@ -472,7 +477,7 @@ const SubcategoryCard: React.FC<SubcategoryCardProps> = ({sub, onClick, navigate
         </div>
       )}
       {sub.image ? (
-        <img src={transformImageLink(sub.image, 400)} alt={sub.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500"/>
+        <img referrerPolicy="no-referrer" src={transformImageLink(sub.image, 400)} alt={sub.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500"/>
       ) : (
         <FolderOpen className="text-gray-300 w-10 h-10 sm:w-12 sm:h-12"/>
       )}
@@ -531,7 +536,7 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
       ) : null}
       
       <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square relative border-b border-gray-100 overflow-hidden`}>
-        <img src={transformImageLink(product.images[0], 350)} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm ${product.isComingSoon ? 'opacity-70' : ''}`} />
+        <img referrerPolicy="no-referrer" src={transformImageLink(product.images[0], 350)} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm ${product.isComingSoon ? 'opacity-70' : ''}`} />
         <div className={`absolute top-2 right-2 z-10`}>
           <BrandBadge brand={product.brand} />
         </div>
@@ -1583,13 +1588,13 @@ export default function App() {
           {((selectedProduct.brand === 'EZVIZ') || (selectedProduct.brand === 'HIKVISION') || (selectedProduct.brand === 'POLMAN') || (selectedProduct.brand && selectedProduct.brand.startsWith('http'))) ? (
             <div className="w-full py-4 px-4 sm:py-6 sm:px-6 bg-[#004387] flex justify-center items-center">
                {selectedProduct.brand === 'EZVIZ' ? (
-                 <img src="https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh" alt="EZVIZ" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
+                 <img referrerPolicy="no-referrer" src={transformImageLink("https://drive.google.com/uc?id=16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh", 400)} alt="EZVIZ" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
                ) : selectedProduct.brand === 'HIKVISION' ? (
-                 <img src="https://lh3.googleusercontent.com/d/1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M" alt="HIKVISION" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
+                 <img referrerPolicy="no-referrer" src={transformImageLink("https://drive.google.com/uc?id=1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M", 400)} alt="HIKVISION" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
                ) : selectedProduct.brand === 'POLMAN' ? (
-                 <img src="https://lh3.googleusercontent.com/d/1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU" alt="POLMAN" loading="eager" className="h-56 sm:h-80 object-contain drop-shadow-md bg-white rounded-3xl px-6 py-2" />
+                 <img referrerPolicy="no-referrer" src={transformImageLink("https://drive.google.com/uc?id=1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU", 400)} alt="POLMAN" loading="eager" className="h-56 sm:h-80 object-contain drop-shadow-md bg-white rounded-3xl px-6 py-2" />
                ) : (selectedProduct.brand && selectedProduct.brand.startsWith('http')) ? (
-                 <img src={transformImageLink(selectedProduct.brand, 400)} alt="Brand Logo" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md" />
+                 <img referrerPolicy="no-referrer" src={transformImageLink(selectedProduct.brand, 400)} alt="Brand Logo" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md" />
                ) : null}
             </div>
           ) : null}
@@ -1603,7 +1608,7 @@ export default function App() {
                 onMouseMove={isMobileDevice ? undefined : handleMouseMove}
                 onMouseLeave={isMobileDevice ? undefined : handleMouseLeave}
               >
-                <img 
+                <img referrerPolicy="no-referrer" 
                   src={transformImageLink(mainImage, 800)} 
                   alt={selectedProduct.name} 
                   onError={handleImageError}
@@ -1662,7 +1667,7 @@ export default function App() {
                         }}
                         className={`w-20 h-20 sm:w-28 sm:h-28 bg-white p-1 sm:p-2 rounded-none border-2 overflow-hidden flex-shrink-0 transition-all snap-start ${mainImage === img ? 'border-[#004387] shadow-md scale-[1.02]' : 'border-gray-200 hover:border-gray-300'}`}
                       >
-                        <img src={transformImageLink(img, 300)} alt={`תמונה ${idx + 1} של המוצר`} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
+                        <img referrerPolicy="no-referrer" src={transformImageLink(img, 300)} alt={`תמונה ${idx + 1} של המוצר`} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
                       </button>
                     ))}
                   </div>
@@ -1948,7 +1953,7 @@ export default function App() {
                 {({ zoomIn, zoomOut, resetTransform }) => (
                   <React.Fragment>
                     <TransformComponent wrapperClass="!w-full !flex !items-center !justify-center" contentClass="!w-full !flex !items-center !justify-center">
-                      <img 
+                      <img referrerPolicy="no-referrer" 
                         src={transformImageLink(mainImage, 1200)} 
                         alt={selectedProduct.name} 
                         onError={handleImageError}
@@ -2224,7 +2229,7 @@ export default function App() {
               <div className="space-y-4">
                 {cart.map(item => (
                   <div key={item.id} className="flex gap-4 items-center border-b border-gray-100 pb-4 last:border-0">
-                    <img src={transformImageLink(item.images[0], 120)} alt={item.name} onError={handleImageError} className="w-16 h-16 object-contain bg-[#f2f2f2] p-1" />
+                    <img referrerPolicy="no-referrer" src={transformImageLink(item.images[0], 120)} alt={item.name} onError={handleImageError} className="w-16 h-16 object-contain bg-[#f2f2f2] p-1" />
                     <div className="flex-grow">
                       <div className="font-semibold text-[#0c2d57]">{item.name}</div>
                       <div className="text-xs text-gray-500 mb-2">מק"ט: {item.sku}</div>
@@ -2426,7 +2431,7 @@ export default function App() {
               
               {/* Breadcrumb style path indicator */}
               <div className="hidden sm:flex items-center text-sm text-[#0c2d57] opacity-80 whitespace-nowrap gap-3">
-                <img src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" alt="RBS Logo" className="h-8 object-contain" />
+                <img referrerPolicy="no-referrer" src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" alt="RBS Logo" className="h-8 object-contain" />
                 <span className="font-semibold px-2 border-r border-[#0c2d57]/20">B2B Portal</span>
                 {hasMoreProducts && (
                   <div className="flex items-center gap-1.5 text-xs text-[#fe8d00] bg-orange-50 px-2 py-0.5 animate-pulse select-none font-medium border border-orange-100">
@@ -2747,7 +2752,7 @@ export default function App() {
                   {cart.map(item => (
                     <div key={item.id} className="flex gap-4 border-b border-gray-100 pb-4">
                       <div className="w-20 h-20 bg-[#f2f2f2] p-1 flex-shrink-0 border border-gray-200">
-                        <img src={transformImageLink(item.images[0], 150)} alt={item.name} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply" />
+                        <img referrerPolicy="no-referrer" src={transformImageLink(item.images[0], 150)} alt={item.name} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply" />
                       </div>
                       <div className="flex-col flex flex-grow">
                         <div className="font-semibold text-sm text-[#0c2d57] line-clamp-2">{item.name}</div>
