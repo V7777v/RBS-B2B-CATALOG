@@ -370,6 +370,47 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// Proxy endpoint for cached Google Sheets access on Express
+app.get("/api/sheets", async (req, res) => {
+  const { gid, limit, offset } = req.query;
+  if (!gid) {
+    return res.status(400).json({ error: "Missing GID parameter" });
+  }
+
+  try {
+    let url = `${SHEET_URL}/gviz/tq?tqx=out:csv&gid=${gid}`;
+    if (limit !== undefined && offset !== undefined) {
+      url += `&tq=${encodeURIComponent(`SELECT * LIMIT ${limit} OFFSET ${offset}`)}`;
+    }
+    url += `&_=${Date.now()}`;
+
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) RBS-B2B-Proxy"
+      }
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).json({ error: `Google Sheets returned status ${response.statusText}` });
+    }
+
+    const text = await response.text();
+    const bypassCache = req.query.bypass_cache === "true";
+
+    if (bypassCache) {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+    } else {
+      res.setHeader("Cache-Control", "public, max-age=0, s-maxage=600, stale-while-revalidate=1200");
+    }
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    return res.status(200).send(text);
+  } catch (error: any) {
+    console.error("Express sheets proxy error:", error);
+    return res.status(500).json({ error: error.message || "Proxy failure" });
+  }
+});
+
 // Configure Vite middleware or production static files serving
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

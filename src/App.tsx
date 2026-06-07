@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -230,28 +230,49 @@ const SUBCATEGORIES_ORDER: Record<string, string[]> = {
   ]
 };
 
-const fetchCSV = (gid: string, limit?: number, offset?: number) => {
+const fetchCSV = (gid: string, limit?: number, offset?: number, bypassCache?: boolean) => {
   return new Promise<any[]>((resolve, reject) => {
-    let url = `${SHEET_URL}/gviz/tq?tqx=out:csv&gid=${gid}&_=${Date.now()}`;
+    // 1. First, call our edge-cached CDN proxy on Vercel/Express for instant connection and 100% Google Sheets quota protection:
+    let url = `/api/sheets?gid=${gid}`;
     if (limit !== undefined && offset !== undefined) {
-      url += `&tq=${encodeURIComponent(`SELECT * LIMIT ${limit} OFFSET ${offset}`)}`;
+      url += `&limit=${limit}&offset=${offset}`;
     }
-    Papa.parse(url, {
-      download: true,
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const normalizedData = results.data.map(row => {
-          const newRow: any = {};
-          for (const key in row as object) {
-            newRow[key.trim()] = (row as any)[key];
+    if (bypassCache) {
+      url += `&bypass_cache=true`;
+    }
+
+    const runParse = (targetUrl: string, useFallbackOnFail: boolean) => {
+      Papa.parse(targetUrl, {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          const normalizedData = results.data.map(row => {
+            const newRow: any = {};
+            for (const key in row as object) {
+              newRow[key.trim()] = (row as any)[key];
+            }
+            return newRow;
+          });
+          resolve(normalizedData);
+        },
+        error: (error: any) => {
+          if (useFallbackOnFail) {
+            console.warn("Express/Vercel Sheets proxy was bypassed, falling back directly to Google Sheets...", error);
+            // 2. Direct Fallback: transparent call to raw Google Sheets if anything goes wrong with the CDN proxy
+            let fallbackUrl = `${SHEET_URL}/gviz/tq?tqx=out:csv&gid=${gid}&_=${Date.now()}`;
+            if (limit !== undefined && offset !== undefined) {
+              fallbackUrl += `&tq=${encodeURIComponent(`SELECT * LIMIT ${limit} OFFSET ${offset}`)}`;
+            }
+            runParse(fallbackUrl, false);
+          } else {
+            reject(error);
           }
-          return newRow;
-        });
-        resolve(normalizedData);
-      },
-      error: (error: any) => reject(error)
-    });
+        }
+      });
+    };
+
+    runParse(url, true);
   });
 };
 
@@ -1010,6 +1031,104 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(50);
 
+  // Admin Sync configuration & Authorization (1 hour window, with option to save password)
+  const [isAdminAuth, setIsAdminAuth] = useState(false);
+  const [showAdminSyncModal, setShowAdminSyncModal] = useState(false);
+  const [adminPassword, setAdminPassword] = useState(() => {
+    try {
+      return localStorage.getItem('rbs_b2b_admin_saved_pwd') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [saveAdminPassword, setSaveAdminPassword] = useState(() => {
+    try {
+      return localStorage.getItem('rbs_b2b_admin_save_pwd') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [adminError, setAdminError] = useState('');
+  const [isSyncingLive, setIsSyncingLive] = useState(false);
+  const [syncSuccessMsg, setSyncSuccessMsg] = useState('');
+
+  // Check valid admin session from localStorage (expires after 1 hour)
+  useEffect(() => {
+    try {
+      const authTime = localStorage.getItem('rbs_b2b_admin_auth_time');
+      if (authTime) {
+        const elapsed = Date.now() - parseInt(authTime, 10);
+        if (elapsed < 3600000) { // 1 hour
+          setIsAdminAuth(true);
+        } else {
+          localStorage.removeItem('rbs_b2b_admin_auth_time');
+        }
+      }
+    } catch (e) {
+      console.log('Error checking admin auth time:', e);
+    }
+  }, []);
+
+  const handleAdminSyncSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setAdminError('');
+    setSyncSuccessMsg('');
+
+    const trimmedPassword = adminPassword.trim();
+    const isAuthorized = isAdminAuth || trimmedPassword === 'Vlad1107';
+
+    if (isAuthorized) {
+      try {
+        setIsSyncingLive(true);
+        
+        // Save the session validation timestamp (1 hour)
+        localStorage.setItem('rbs_b2b_admin_auth_time', Date.now().toString());
+        setIsAdminAuth(true);
+
+        // Save password details if checkbox is checked
+        if (saveAdminPassword) {
+          localStorage.setItem('rbs_b2b_admin_saved_pwd', trimmedPassword);
+          localStorage.setItem('rbs_b2b_admin_save_pwd', 'true');
+        } else {
+          localStorage.removeItem('rbs_b2b_admin_saved_pwd');
+          localStorage.removeItem('rbs_b2b_admin_save_pwd');
+        }
+
+        // Trigger live sheets sync - bypassing the CDN and intermediate browser cache instantly!
+        await loadData(false, true);
+
+        // Display green success toast animation
+        setSyncSuccessMsg('הנתונים סונכרנו בהצלחה ישירות מ-Google Sheets ורעננו את האתר!');
+        
+        // Auto close after 2.5 seconds
+        setTimeout(() => {
+          setShowAdminSyncModal(false);
+          setSyncSuccessMsg('');
+        }, 2200);
+
+      } catch (err) {
+        console.error('Manual direct sheet sync error:', err);
+        setAdminError('סינכרון נכשל עקב בעיית תקשורת. נא ודא חיבור או נסה שוב.');
+      } finally {
+        setIsSyncingLive(false);
+      }
+    } else {
+      setAdminError('סיסמה שגויה. אנא הזן סיסמת מנהל נכונה.');
+    }
+  };
+
+  const clearAdminAuth = () => {
+    try {
+      localStorage.removeItem('rbs_b2b_admin_auth_time');
+      localStorage.removeItem('rbs_b2b_admin_saved_pwd');
+      localStorage.removeItem('rbs_b2b_admin_save_pwd');
+      setIsAdminAuth(false);
+      setAdminPassword('');
+      setSaveAdminPassword(false);
+      setAdminError('אימות מנהל נמחק ממכשיר זה.');
+    } catch {}
+  };
+
   // Reset pagination on view/filter change
   useEffect(() => {
     setVisibleCount(50);
@@ -1057,15 +1176,15 @@ export default function App() {
     }
   }, [hasMoreProducts, isFetchingMore, loadMoreProducts]);
 
-  const loadData = useCallback(async (silent = false) => {
+  const loadData = useCallback(async (silent = false, forceBypassCache = false) => {
     try {
       if (!silent) setIsLoading(true);
       setError(null);
 
       // 1. Fetch metadata sheets (catalogs and subcategories are tiny, taking negligible time)
       const [catalogsCsv, subcategoriesCsv] = await Promise.all([
-        fetchCSV(CATALOGS_GID),
-        fetchCSV(SUBCATEGORIES_GID)
+        fetchCSV(CATALOGS_GID, undefined, undefined, forceBypassCache),
+        fetchCSV(SUBCATEGORIES_GID, undefined, undefined, forceBypassCache)
       ]);
 
       const parsedCatalogs = catalogsCsv.map((row: any) => {
@@ -1144,7 +1263,7 @@ export default function App() {
       setProductsOffset(0);
       setHasMoreProducts(true);
 
-      const productsCsv = await fetchCSV(PRODUCTS_GID, 50, 0);
+      const productsCsv = await fetchCSV(PRODUCTS_GID, 50, 0, forceBypassCache);
       const parsedProducts = productsCsv.map(parseProductRow);
 
       setCatalogData(parsedProducts);
@@ -2654,7 +2773,17 @@ export default function App() {
               {/* Breadcrumb style path indicator */}
               <div className="hidden sm:flex items-center text-sm text-[#0c2d57] opacity-80 whitespace-nowrap gap-3">
                 <img referrerPolicy="no-referrer" src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" alt="RBS Logo" className="h-8 object-contain" />
-                <span className="font-semibold px-2 border-r border-[#0c2d57]/20">B2B Portal</span>
+                <span 
+                  onClick={() => {
+                    setAdminError('');
+                    setSyncSuccessMsg('');
+                    setShowAdminSyncModal(true);
+                  }}
+                  className="font-semibold px-2 border-r border-[#0c2d57]/20 cursor-pointer select-none hover:text-[#004387] active:scale-95 transition-all"
+                  title="מיני-פאנל ניהול וסינכרון"
+                >
+                  B2B Portal
+                </span>
                 {hasMoreProducts && (
                   <div className="flex items-center gap-1.5 text-xs text-[#fe8d00] bg-orange-50 px-2 py-0.5 animate-pulse select-none font-medium border border-orange-100">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#fe8d00] animate-ping"></span>
@@ -2724,7 +2853,17 @@ export default function App() {
                 <button className="absolute top-4 left-4 !p-2 !m-0 bg-[#f2f2f2] text-gray-600 hover:text-[#004387] border-none" onClick={() => setMobileMenuOpen(false)} aria-label="סגור תפריט">
                   <X size={20} />
                 </button>
-                <h2 className="font-bold text-xl mb-6 mt-2 text-[#0c2d57]">ניווט מהיר</h2>
+                <h2 
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setAdminError('');
+                    setSyncSuccessMsg('');
+                    setShowAdminSyncModal(true);
+                  }}
+                  className="font-bold text-xl mb-6 mt-2 text-[#0c2d57] cursor-pointer select-none active:text-[#fe8d00] transition-colors"
+                >
+                  ניווט מהיר
+                </h2>
                 <ul className="space-y-4">
                   <li>
                     <button onClick={navigateHome} className="font-bold text-lg text-[#f7941d] bg-transparent border-none !p-0">כל המחירונים</button>
@@ -3041,6 +3180,130 @@ export default function App() {
         <TechnicalAdvisor catalogData={catalogData} addToCart={addToCart} isAuthenticated={isAuthenticated} />
       </React.Suspense>
       <InstallBanner />
+
+      {/* ADMIN SYNC MODAL OVERLAY */}
+      {showAdminSyncModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" dir="rtl">
+          <div className="bg-white w-full max-w-sm p-6 shadow-2xl relative border-t-4 border-[#004387]">
+            
+            {/* Close button */}
+            <button 
+              onClick={() => setShowAdminSyncModal(false)} 
+              className="absolute top-4 left-4 p-2 bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-800 transition-colors border-none"
+              title="סגור"
+              type="button"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4 mt-2">
+              <div className="p-2.5 bg-[#004387]/10 text-[#004387]">
+                <RefreshCw size={22} className={isSyncingLive ? "animate-spin text-[#004387]" : "text-[#004387]"} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-[#0c2d57] leading-none mb-1">סנכרון נתונים ידני</h3>
+                <p className="text-[11px] text-[#fe8d00] font-bold">עקיפת ה-Cache ועדכון נתונים מיידי</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-500 mb-5 leading-normal">
+              הנתונים של RBS מסתנכרנים אוטומטית פעם ב-10 דקות לשמירת משאבים ומהירות. לצורך עדכונים דחופים, בצע כאן סינכרון ידני בזמן אמת.
+            </p>
+
+            {syncSuccessMsg ? (
+              <div className="mb-4 p-3 bg-green-50 text-green-700 border border-green-200 text-xs font-semibold flex items-center gap-3">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse flex-shrink-0"></span>
+                <span>{syncSuccessMsg}</span>
+              </div>
+            ) : (
+              <form onSubmit={handleAdminSyncSubmit} className="space-y-4">
+                
+                {/* Session Active Box */}
+                {isAdminAuth ? (
+                  <div className="bg-blue-50/70 p-3 border border-blue-100 text-[11px] text-[#004387] leading-relaxed mb-1">
+                    <p className="font-bold mb-1">✓ מכשיר זה מאומת למשך שעה</p>
+                    <p className="text-gray-500 font-normal">אינך צריך להקליד שוב את סיסמת Vlad1107.</p>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5">הזן סיסמת מנהל:</label>
+                    <input 
+                      type="password" 
+                      placeholder="הזן את סיסמת המנהל..." 
+                      className="w-full bg-[#fdfdfd] border border-gray-200 px-3 py-2 text-sm font-medium outline-none focus:border-[#004387] transition-all"
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      required
+                      name="admin_pwd_field"
+                      autoComplete="current-password"
+                    />
+
+                    {/* Checkbox to remember password inside browser */}
+                    <div className="flex items-center gap-2 mt-3 select-none">
+                      <input 
+                        type="checkbox" 
+                        id="save-pwd-checkbox"
+                        checked={saveAdminPassword}
+                        onChange={(e) => setSaveAdminPassword(e.target.checked)}
+                        className="w-3.5 h-3.5 border-gray-300 rounded text-[#004387] focus:ring-[#004387]"
+                      />
+                      <label htmlFor="save-pwd-checkbox" className="text-[11px] text-gray-500 font-medium cursor-pointer">
+                        שמור סיסמה במכשיר לצורך סנכרון מהיר בעתיד
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error Box */}
+                {adminError && (
+                  <div className="p-2.5 bg-red-50 border border-red-100 text-red-600 text-xs font-medium">
+                    {adminError}
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex flex-col gap-2 pt-1">
+                  <button 
+                    type="submit"
+                    disabled={isSyncingLive}
+                    className="w-full bg-[#004387] hover:bg-[#fe8d00] text-white font-bold py-2.5 text-sm transition-all shadow-sm rounded-none flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
+                  >
+                    {isSyncingLive ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>טוען נתונים מה-Sheets...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw size={14} />
+                        <span>{isAdminAuth ? 'סנכרן כעת בזמן אמת' : 'אמת סיסמה וסנכרן'}</span>
+                      </>
+                    )}
+                  </button>
+
+                  {isAdminAuth && (
+                    <button 
+                      type="button"
+                      onClick={clearAdminAuth}
+                      disabled={isSyncingLive}
+                      className="text-[10px] text-red-400 hover:text-red-600 bg-transparent hover:underline py-1 mt-1 border-none outline-none"
+                    >
+                      נקה אימות מנהל במכשיר זה (התנתק)
+                    </button>
+                  )}
+                </div>
+
+              </form>
+            )}
+
+            <div className="mt-5 pt-3 border-t border-gray-100 flex items-center justify-between text-[10px] text-gray-400 font-mono">
+              <span>RBS Admin Manager</span>
+              <span>v1.2.6</span>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
