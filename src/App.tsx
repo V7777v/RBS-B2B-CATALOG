@@ -75,7 +75,31 @@ const transformImageLink = (url: string, size?: number) => {
     if (fileId) {
       // If passed by map(), size might be the index (0, 1, 2...). 
       // Only use size if it's clearly a pixel width (e.g. > 10).
-      const validSize = (typeof size === 'number' && size > 10) ? size : 800;
+      let validSize = (typeof size === 'number' && size > 10) ? size : 800;
+
+      // Detect mobile device or viewport size to minimize image payload
+      const isMobile = typeof window !== 'undefined' && (
+        window.innerWidth < 768 || 
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '')
+      );
+
+      // Check current network connection speed (if supported by browser/OS)
+      const conn = typeof navigator !== 'undefined' ? ((navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection) : null;
+      const isSlowConn = conn && (conn.saveData || /2g|3g/i.test(conn.effectiveType || ''));
+
+      if (isMobile || isSlowConn) {
+        // Adapt requested image dimension: generates much smaller files, loading instantly on mobile networks
+        if (validSize > 800) {
+          validSize = 500;
+        } else if (validSize >= 400) {
+          validSize = 250;
+        } else if (validSize >= 300) {
+          validSize = 180;
+        } else if (validSize >= 120) {
+          validSize = 80;
+        }
+      }
+
       // use thumbnail endpoint for fast resize and bypassing cookie restrictions in iframes
       return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${validSize}`;
     }

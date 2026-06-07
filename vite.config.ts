@@ -66,6 +66,22 @@ export default defineConfig(() => {
             },
             {
               urlPattern: ({ url }) =>
+                url.hostname.includes('drive.google.com') ||
+                url.hostname.includes('googleusercontent.com'),
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'drive-thumbnails-cache',
+                expiration: { 
+                  maxEntries: 250, 
+                  maxAgeSeconds: 30 * 24 * 60 * 60 // 30 days
+                },
+                cacheableResponse: {
+                  statuses: [0, 200]
+                }
+              }
+            },
+            {
+              urlPattern: ({ url }) =>
                 url.hostname === 'fonts.googleapis.com' ||
                 url.hostname === 'fonts.gstatic.com',
               handler: 'CacheFirst',
