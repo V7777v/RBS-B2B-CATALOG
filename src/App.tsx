@@ -478,19 +478,21 @@ const BrandBadge: React.FC<{brand: string}> = ({brand}) => {
 
 interface CatalogCardProps { catalog: any; navigateToCatalog: (name: string) => void; }
 const CatalogCard: React.FC<CatalogCardProps> = ({catalog, navigateToCatalog}) => (
-  <div onClick={() => navigateToCatalog(catalog.name)} className="group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100">
-    <div className="aspect-square relative border-b border-gray-100 bg-white flex items-center justify-center p-3 sm:p-6 overflow-hidden">
+  <div onClick={() => navigateToCatalog(catalog.name)} className="group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100">
+    <div className="aspect-square w-full relative border-b border-gray-100 bg-white flex items-center justify-center p-3 sm:p-6 overflow-hidden">
       {catalog.brand && (
         <div className="absolute top-2 right-2 z-10">
           <BrandBadge brand={catalog.brand} />
         </div>
       )}
-      <img referrerPolicy="no-referrer" src={transformImageLink(catalog.image, 400)} alt={catalog.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300"/>
+      <img referrerPolicy="no-referrer" src={transformImageLink(catalog.image, 400)} alt={catalog.name} loading="lazy" decoding="async" onError={handleImageError} className="max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105"/>
     </div>
     <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right">
-      <h3 className="font-semibold text-[#0c2d57] text-sm sm:text-lg mb-1 sm:mb-2 line-clamp-2 leading-tight min-h-[2.5rem] sm:min-h-0 flex items-center justify-center sm:justify-start">
-        {catalog.name}
-      </h3>
+      <div className="min-h-[2.5rem] sm:min-h-0 flex items-center justify-center sm:justify-start mb-1 sm:mb-2 w-full">
+        <h3 className="font-semibold text-[#0c2d57] text-sm sm:text-lg line-clamp-2 leading-tight text-center sm:text-right w-full">
+          {catalog.name}
+        </h3>
+      </div>
       <p className="text-gray-600 text-xs sm:text-sm leading-relaxed mb-2 sm:mb-4 line-clamp-2 hidden sm:block">
         {catalog.desc}
       </p>
@@ -515,23 +517,25 @@ const SubcategoryCard: React.FC<SubcategoryCardProps> = ({sub, onClick, navigate
         בקרוב!
       </div>
     )}
-    <div className="relative aspect-square p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
+    <div className="relative aspect-square w-full p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
       {sub.brand && (
         <div className="absolute top-2 right-2 z-10">
           <BrandBadge brand={sub.brand} />
         </div>
       )}
       {sub.image ? (
-        <img referrerPolicy="no-referrer" src={transformImageLink(sub.image, 400)} alt={sub.name} loading="lazy" decoding="async" onError={handleImageError} className="w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500"/>
+        <img referrerPolicy="no-referrer" src={transformImageLink(sub.image, 400)} alt={sub.name} loading="lazy" decoding="async" onError={handleImageError} className="max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500 group-hover:scale-105"/>
       ) : (
         <FolderOpen className="text-gray-300 w-10 h-10 sm:w-12 sm:h-12"/>
       )}
     </div>
     <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white text-center justify-between">
-      <div>
-        <h3 className="font-semibold text-[#0c2d57] text-xs sm:text-lg leading-tight mb-1 sm:mb-2 line-clamp-2">
-          {sub.name}
-        </h3>
+      <div className="w-full">
+        <div className="min-h-[2rem] sm:min-h-[2.5rem] flex items-center justify-center mb-1 sm:mb-2 w-full">
+          <h3 className="font-semibold text-[#0c2d57] text-xs sm:text-lg leading-tight line-clamp-2 text-center w-full">
+            {sub.name}
+          </h3>
+        </div>
         <p className="text-gray-500 text-[11px] sm:text-sm mb-1 sm:mb-4 font-medium">
           {sub.count} מוצרים
         </p>
@@ -568,7 +572,7 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
   };
   
   return (
-    <div onClick={() => navigateToProduct(product)} className={`group flex flex-col rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}>
+    <div onClick={() => navigateToProduct(product)} className={`group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}>
       {product.isHotSale ? (
         <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-red-600 to-orange-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50 flex items-center justify-center gap-1">
           <Flame size={12} className="text-yellow-300" />
@@ -580,8 +584,8 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
         </div>
       ) : null}
       
-      <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square relative border-b border-gray-100 overflow-hidden`}>
-        <img referrerPolicy="no-referrer" src={transformImageLink(product.images[0], 350)} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`w-full h-full max-w-full max-h-full object-contain mix-blend-multiply drop-shadow-sm ${product.isComingSoon ? 'opacity-70' : ''}`} />
+      <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square w-full relative border-b border-gray-100 overflow-hidden`}>
+        <img referrerPolicy="no-referrer" src={transformImageLink(product.images[0], 350)} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105 ${product.isComingSoon ? 'opacity-70' : ''}`} />
         <div className={`absolute top-2 right-2 z-10`}>
           <BrandBadge brand={product.brand} />
         </div>
@@ -589,7 +593,9 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
       
       <div className="p-3 sm:p-4 flex flex-col flex-grow text-center">
         <div className="text-[10px] sm:text-xs text-gray-400 mb-1 line-clamp-1">{product.sku}</div>
-        <h3 className="text-[#0c2d57] text-xs sm:text-base font-semibold mb-2 line-clamp-2 leading-tight min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center text-center">{product.name}</h3>
+        <div className="min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center mb-2">
+          <h3 className="text-[#0c2d57] text-xs sm:text-base font-semibold line-clamp-2 leading-tight text-center w-full">{product.name}</h3>
+        </div>
         
         <div className="mt-auto pt-2 sm:pt-2 flex flex-col items-center w-full">
           {product.isHotSale ? (
@@ -1308,8 +1314,23 @@ export default function App() {
       setProductsOffset(50);
       if (productsCsv.length < 50) {
         setHasMoreProducts(false);
+        setIsProductsLoading(false);
+      } else {
+        setIsProductsLoading(false);
+        // Progressive background fetching for ALL products to populate categories entirely
+        fetchCSV(PRODUCTS_GID, undefined, undefined, forceBypassCache)
+          .then(allProductsCsv => {
+            if (allProductsCsv && allProductsCsv.length > 0) {
+              const allParsed = allProductsCsv.map(parseProductRow);
+              setCatalogData(allParsed);
+              setHasMoreProducts(false);
+              setProductsOffset(allParsed.length);
+            }
+          })
+          .catch(err => {
+            console.error("Progressive background fetch of full products sheet failed:", err);
+          });
       }
-      setIsProductsLoading(false);
       lastFetchTimeRef.current = Date.now();
 
     } catch (err) {
@@ -1900,19 +1921,6 @@ export default function App() {
 
 
         <div className="bg-white rounded-none shadow-sm border border-gray-100 mt-2 sm:mt-4">
-          {((selectedProduct.brand === 'EZVIZ') || (selectedProduct.brand === 'HIKVISION') || (selectedProduct.brand === 'POLMAN') || (selectedProduct.brand && selectedProduct.brand.startsWith('http'))) ? (
-            <div className="w-full py-4 px-4 sm:py-6 sm:px-6 bg-[#004387] flex justify-center items-center">
-               {selectedProduct.brand === 'EZVIZ' ? (
-                 <img referrerPolicy="no-referrer" src={transformImageLink("https://drive.google.com/uc?id=16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh", 400)} alt="EZVIZ" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
-               ) : selectedProduct.brand === 'HIKVISION' ? (
-                 <img referrerPolicy="no-referrer" src={transformImageLink("https://drive.google.com/uc?id=1m1HHHksw7F_OP4J2IBnpXhKcm6ETQJ7M", 400)} alt="HIKVISION" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md brightness-0 invert" />
-               ) : selectedProduct.brand === 'POLMAN' ? (
-                 <img referrerPolicy="no-referrer" src={transformImageLink("https://drive.google.com/uc?id=1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU", 400)} alt="POLMAN" loading="eager" className="h-56 sm:h-80 object-contain drop-shadow-md bg-white rounded-3xl px-6 py-2" />
-               ) : (selectedProduct.brand && selectedProduct.brand.startsWith('http')) ? (
-                 <img referrerPolicy="no-referrer" src={transformImageLink(selectedProduct.brand, 400)} alt="Brand Logo" loading="eager" className="h-48 sm:h-64 object-contain drop-shadow-md" />
-               ) : null}
-            </div>
-          ) : null}
 
           <div className="p-4 sm:p-6 md:p-8 flex flex-col lg:flex-row gap-6 sm:gap-8">
             
@@ -2018,13 +2026,17 @@ export default function App() {
             </div>
 
             <div className="w-full lg:w-7/12 flex flex-col">
-              <div className={`text-xs sm:text-sm font-semibold mb-1 sm:mb-2 ${theme.accent}`}>{selectedProduct.category} | {selectedProduct.subcategory}</div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-normal text-[#0c2d57] mb-2 leading-tight">{selectedProduct.name}</h1>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2 sm:mb-3">
+                <div className={`text-xs sm:text-sm font-semibold ${theme.accent}`}>{selectedProduct.category} | {selectedProduct.subcategory}</div>
+                {selectedProduct.brand && (
+                  <div className="flex-shrink-0">
+                    <BrandBadge brand={selectedProduct.brand} />
+                  </div>
+                )}
+              </div>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] mb-2 leading-tight">{selectedProduct.name}</h1>
               <div className="text-gray-500 mb-4 sm:mb-6 text-xs sm:text-sm">
                 מק"ט: <span className="font-mono text-gray-800">{selectedProduct.sku}</span>
-                {selectedProduct.brand && !selectedProduct.brand.startsWith('http') && (
-                  <> | מותג: <span className="font-bold">{selectedProduct.brand}</span></>
-                )}
               </div>
               
               <p className="text-gray-700 mb-6 sm:mb-8 leading-relaxed bg-[#f2f2f2] p-3 sm:p-4 text-sm sm:text-base rounded-none border-none whitespace-pre-line">
@@ -2784,7 +2796,7 @@ export default function App() {
 
       <div id="rbs-b2b-app">
         {/* SECONDARY TOOLBAR INSTEAD OF MAIN HEADER */}
-        <div ref={headerRef} className="fixed top-0 right-0 left-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header">
+        <div ref={headerRef} className="sticky top-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header">
           <div className="container mx-auto px-4 min-h-[56px] flex flex-row items-center justify-between flex-nowrap gap-2 sm:gap-4">
             
             {/* RIGHT SIDE: Menu & Back */}
@@ -2999,11 +3011,11 @@ export default function App() {
           )}
         </div>
 
-        {/* Spacer to prevent content from sliding under the fixed header */}
+        {/* Spacer not needed for sticky layout as browser handles flow spacing natively, preserved at 0px to maintain node structure */}
         <div 
           className="w-full block" 
           style={{ 
-            height: `${headerHeight}px`
+            height: '0px'
           }}
           aria-hidden="true" 
         />
