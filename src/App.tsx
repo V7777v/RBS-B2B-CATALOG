@@ -1052,6 +1052,44 @@ export default function App() {
   const [isSyncingLive, setIsSyncingLive] = useState(false);
   const [syncSuccessMsg, setSyncSuccessMsg] = useState('');
 
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(140);
+
+  // Dynamic header measurement to avoid content overlap on all viewport widths & browsers (including Android/iOS)
+  useEffect(() => {
+    const handleResize = () => {
+      if (headerRef.current) {
+        setHeaderHeight(headerRef.current.offsetHeight);
+      }
+    };
+    
+    // Initial measurement
+    handleResize();
+    
+    // Delay slightly to ensure layout has paint-settled
+    const timer = setTimeout(handleResize, 100);
+    
+    // Attach ResizeObserver for instant and continuous height correction on wrappers/layout changes
+    let observer: ResizeObserver | null = null;
+    if (typeof window !== 'undefined' && 'ResizeObserver' in window && headerRef.current) {
+      observer = new ResizeObserver(() => {
+        handleResize();
+      });
+      observer.observe(headerRef.current);
+    } else {
+      window.addEventListener('resize', handleResize);
+    }
+    
+    return () => {
+      clearTimeout(timer);
+      if (observer) {
+        observer.disconnect();
+      } else {
+        window.removeEventListener('resize', handleResize);
+      }
+    };
+  }, [currentView, searchQuery]);
+
   // Check valid admin session from localStorage (expires after 1 hour)
   useEffect(() => {
     try {
@@ -2746,7 +2784,7 @@ export default function App() {
 
       <div id="rbs-b2b-app">
         {/* SECONDARY TOOLBAR INSTEAD OF MAIN HEADER */}
-        <div className="fixed top-0 right-0 left-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header">
+        <div ref={headerRef} className="fixed top-0 right-0 left-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header">
           <div className="container mx-auto px-4 min-h-[56px] flex flex-row items-center justify-between flex-nowrap gap-2 sm:gap-4">
             
             {/* RIGHT SIDE: Menu & Back */}
@@ -2965,9 +3003,7 @@ export default function App() {
         <div 
           className="w-full block" 
           style={{ 
-            height: (currentView === 'home' && !searchQuery) 
-              ? 'var(--header-height-home, 104px)' 
-              : 'var(--header-height-sub, 140px)' 
+            height: `${headerHeight}px`
           }}
           aria-hidden="true" 
         />
