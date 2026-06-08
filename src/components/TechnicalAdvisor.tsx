@@ -530,13 +530,53 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                                 </div>
                               ))}
                               
-                              {m.originalQuery && (
-                                <button
-                                  onClick={() => handleSend(m.originalQuery, true)}
-                                  className="mt-2 text-xs font-bold text-blue-600 underline self-start hover:text-blue-800 transition-colors"
-                                >
-                                  שאל את ה-AI להעמקה על מוצרים אלו
-                                </button>
+                              {m.originalQuery && m.directProducts && m.directProducts.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-gray-100/80 flex flex-col gap-2">
+                                  <span className="text-[11px] font-bold text-gray-500 block">עוזר תמיכה מהיר ושאלות המשך ספציפיות:</span>
+                                  <div className="flex flex-wrap gap-2">
+                                    {m.directProducts.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const skus = m.directProducts.map((p: any) => p.sku).join(', ');
+                                          handleSend(`אנא השווה בין המוצרים הבאים בטבלה הנדסית ופרט את ההבדלים ביניהם מבחינת מפרט, הספקים ופונקציות: ${skus}`, true);
+                                        }}
+                                        className="text-[11px] font-semibold text-[#004387] bg-blue-50 hover:bg-blue-100 border border-blue-200/50 rounded-full px-2.5 py-1.5 transition-colors cursor-pointer flex items-center gap-1"
+                                      >
+                                        📊 השווה מוצרים אלו בטבלת השוואה
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const skus = m.directProducts.map((p: any) => p.sku).join(', ');
+                                        handleSend(`אנא פרט את המפרט הטכני המלא, התכונות ופונקציונליות השירות עבור מק"טים אלו: ${skus}`, true);
+                                      }}
+                                      className="text-[11px] font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-full px-2.5 py-1.5 transition-colors cursor-pointer flex items-center gap-1"
+                                    >
+                                      🔍 הצג מפרט טכני מלא ופונקציונליות
+                                    </button>
+                                    {m.directProducts.slice(0, 2).map((product: any, pIdx: number) => (
+                                      <button
+                                        key={pIdx}
+                                        type="button"
+                                        onClick={() => {
+                                          handleSend(`מהם השימושים והיתרונות ההנדסיים העיקריים של מוצר ${product.name} (מק"ט: ${product.sku})?`, true);
+                                        }}
+                                        className="text-[11px] font-semibold text-[#fe8d00] bg-amber-50 hover:bg-amber-100 border border-amber-100 rounded-full px-2.5 py-1.5 transition-colors cursor-pointer text-right max-w-xs truncate"
+                                      >
+                                        💡 יתרונות של {product.sku}
+                                      </button>
+                                    ))}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSend(m.originalQuery, true)}
+                                      className="text-xs font-bold text-blue-600 underline hover:text-blue-800 transition-colors mt-1 block py-1 cursor-pointer bg-transparent border-none pr-1"
+                                    >
+                                      שאל את ה-AI להעמקה כללית על שאילתה זו לקטלוג
+                                    </button>
+                                  </div>
+                                </div>
                               )}
                             </div>
                           )}
