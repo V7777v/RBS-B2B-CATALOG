@@ -238,7 +238,7 @@ const fetchCSV = (gid: string, limit?: number, offset?: number, bypassCache?: bo
       url += `&limit=${limit}&offset=${offset}`;
     }
     if (bypassCache) {
-      url += `&bypass_cache=true`;
+      url += `&bypass_cache=true&_=${Date.now()}`;
     }
 
     const runParse = (targetUrl: string, useFallbackOnFail: boolean) => {
@@ -2758,29 +2758,8 @@ export default function App() {
   return (
     <div dir="rtl" className="min-h-screen text-gray-900 selection:bg-[#fe8d00] selection:text-white" style={{ background: 'transparent' }}>
       
-      {/* WordPress styling fix for external container titles - Safer targeting */}
+      {/* CSS Variables for Layout Layout Heights */}
       <style dangerouslySetInnerHTML={{__html: `
-        /* Targeting titles directly, but ignoring anything inside our app */
-        body h1.elementor-heading-title:not(#rbs-b2b-app *), 
-        body .entry-title:not(#rbs-b2b-app *), 
-        body .page-title:not(#rbs-b2b-app *) {
-          text-align: center !important;
-          color: #0c2d57 !important;
-          font-weight: 900 !important;
-          margin-bottom: 20px !important;
-          display: block !important;
-          width: 100% !important;
-        }
-
-        /* Support for WordPress Admin Bar if present to prevent overlap */
-        .admin-bar #rbs-b2b-app .fixed-header {
-          top: 32px !important;
-        }
-        @media screen and (max-width: 782px) {
-          .admin-bar #rbs-b2b-app .fixed-header {
-            top: 46px !important;
-          }
-        }
 
         :root {
           --header-height-home: 104px;
