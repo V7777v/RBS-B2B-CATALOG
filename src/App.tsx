@@ -327,11 +327,17 @@ const parseProductRow = (row: any) => {
   const saleType = saleTypeKey && typeof row[saleTypeKey] === 'string' ? row[saleTypeKey].trim() : (saleTypeKey ? row[saleTypeKey] : null);
   const saleValue = saleValueKey && typeof row[saleValueKey] === 'string' ? row[saleValueKey].trim() : (saleValueKey ? row[saleValueKey] : null);
 
-  const clearanceKey = Object.keys(row).find((k: string) => k.trim() === 'מציאון');
-  const clearancePriceKey = Object.keys(row).find((k: string) => k.trim() === 'מציאון מחיר מיוחד');
+  const clearanceKey = Object.keys(row).find((k: string) => {
+      const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+      return clean.includes('מציאון');
+  });
+  const clearancePriceKey = Object.keys(row).find((k: string) => {
+      const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+      return clean.includes('מציאון מחיר מיוחד') || clean.includes('מחיר מיוחד מציאון') || clean.includes('מחיר מציאון');
+  });
   
   const clearanceVal = clearanceKey ? String(row[clearanceKey as keyof typeof row]).trim().toUpperCase() : '';
-  const isClearance = clearanceVal === 'TRUE' || clearanceVal === 'YES' || clearanceVal === 'כן' || clearanceVal === '1' || clearanceVal === 'V' || clearanceVal === 'Y' || clearanceVal === 'פעיל' || clearanceVal === 'במבצע';
+  const isClearance = clearanceVal === 'TRUE' || clearanceVal === 'YES' || clearanceVal === 'כן' || clearanceVal === '1' || clearanceVal === 'V' || clearanceVal === 'Y' || clearanceVal === 'פעיל' || clearanceVal === 'במבצע' || (subcategoryName && subcategoryName.includes('מציאון'));
   const clearancePrice = clearancePriceKey && row[clearancePriceKey as keyof typeof row] ? parsePrice(row[clearancePriceKey as keyof typeof row]) : null;
 
   // Parse Lab Certs
@@ -1454,19 +1460,18 @@ export default function App() {
         };
       });
 
-      const clearanceDef = subcategoriesGlobalData.find(s => s.category === selectedCatalog && s.subcategory === 'מציאון' && s.active !== false);
-      if (clearanceDef) {
-        const clearanceProducts = catalogData.filter(item => item.active !== 'FALSE' && item.isClearance);
-        const clearanceCount = clearanceProducts.length;
-        if (clearanceCount > 0) {
-           results.unshift({
-             name: 'מציאון',
-             count: clearanceCount,
-             isComingSoon: false,
-             image: clearanceDef.image || getFallbackImage('מציאון') || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent('מציאון'),
-             brand: clearanceDef.brand
-           });
-        }
+      // For clearance, we group items explicitly marked with isClearance
+      const clearanceProducts = catalogData.filter(item => item.active !== 'FALSE' && item.isClearance);
+      const clearanceCount = clearanceProducts.length;
+      if (clearanceCount > 0) {
+         const clearanceDef = subcategoriesGlobalData.find(s => s.category === selectedCatalog && s.subcategory && s.subcategory.includes('מציאון') && s.active !== false);
+         results.unshift({
+           name: clearanceDef ? clearanceDef.subcategory : 'מציאון',
+           count: clearanceCount,
+           isComingSoon: false,
+           image: (clearanceDef && clearanceDef.image) ? clearanceDef.image : 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent('מציאון'),
+           brand: clearanceDef ? clearanceDef.brand : undefined
+         });
       }
 
       return results;
@@ -1658,10 +1663,13 @@ export default function App() {
         if (item.name === 'מוצר הדגמה' || item.name === 'קטגוריית אם') return false;
         
         if (isHotSaleMode) {
-          if (selectedSubcategory === 'מציאון') {
+          if (selectedSubcategory && selectedSubcategory.includes('מציאון')) {
              return item.isClearance === true;
           }
-          if (!item.isHotSale) return false;
+          // If a category IS selected (and it's not clearance), filter out clearance items that are not hot sale
+          if (selectedSubcategory && !item.isHotSale) return false;
+          // Both hot sales and clearance should be allowed when no category is selected
+          if (!item.isHotSale && !item.isClearance) return false;
           if (selectedSubcategory && item.category !== selectedSubcategory) return false;
           return true;
         }
