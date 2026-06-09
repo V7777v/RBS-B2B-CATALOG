@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -327,6 +327,13 @@ const parseProductRow = (row: any) => {
   const saleType = saleTypeKey && typeof row[saleTypeKey] === 'string' ? row[saleTypeKey].trim() : (saleTypeKey ? row[saleTypeKey] : null);
   const saleValue = saleValueKey && typeof row[saleValueKey] === 'string' ? row[saleValueKey].trim() : (saleValueKey ? row[saleValueKey] : null);
 
+  const clearanceKey = Object.keys(row).find((k: string) => k.trim() === 'מציאון');
+  const clearancePriceKey = Object.keys(row).find((k: string) => k.trim() === 'מציאון מחיר מיוחד');
+  
+  const clearanceVal = clearanceKey ? String(row[clearanceKey as keyof typeof row]).trim().toUpperCase() : '';
+  const isClearance = clearanceVal === 'TRUE' || clearanceVal === 'YES' || clearanceVal === 'כן' || clearanceVal === '1' || clearanceVal === 'V' || clearanceVal === 'Y' || clearanceVal === 'פעיל' || clearanceVal === 'במבצע';
+  const clearancePrice = clearancePriceKey && row[clearancePriceKey as keyof typeof row] ? parsePrice(row[clearancePriceKey as keyof typeof row]) : null;
+
   // Parse Lab Certs
   const labCertsRaw = row['אישורי מעבדה'] || row.labCerts || row['labCerts'] || '';
   let labCerts: string[] = [];
@@ -341,9 +348,12 @@ const parseProductRow = (row: any) => {
     nestedSubcategory: nestedSubcategoryName,
     isComingSoon: isComingSoon,
     isHotSale: isHotSale,
+    isClearance: isClearance,
+    clearancePrice: clearancePrice,
     saleType: saleType,
     saleValue: saleValue,
-    price: parsePrice(row.price),
+    price: (isClearance && clearancePrice !== null && clearancePrice > 0) ? clearancePrice : parsePrice(row.price),
+    oldPrice: (isClearance && clearancePrice !== null && clearancePrice > 0 && parsePrice(row.price) > clearancePrice) ? parsePrice(row.price) : null,
     retailPrice: row.retailPrice ? parsePrice(row.retailPrice) : null,
     images: itemImages.map((img: string) => transformImageLink(img, 800)),
     labCerts: labCerts.map((link: string) => link.startsWith('www.') ? 'https://' + link : link)
@@ -573,7 +583,12 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
   
   return (
     <div onClick={() => navigateToProduct(product)} className={`group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}>
-      {product.isHotSale ? (
+      {product.isClearance ? (
+        <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-teal-500 to-emerald-400 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-teal-600/50 flex items-center justify-center gap-1">
+          <Tag size={12} className="text-white" />
+          מציאון
+        </div>
+      ) : product.isHotSale ? (
         <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-red-600 to-orange-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50 flex items-center justify-center gap-1">
           <Flame size={12} className="text-yellow-300" />
           מבצע חם!
@@ -626,23 +641,30 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
             </div>
           ) : product.price === 0 ? (
             <div className="text-xs sm:text-sm font-bold text-gray-600 mb-2 mt-auto">צור קשר</div>
-          ) : product.retailPrice ? (
+          ) : product.retailPrice || product.oldPrice ? (
             <div className="flex flex-col items-center leading-tight mb-2 w-full text-center">
-              <span className="text-[9px] sm:text-xs text-gray-600 font-medium leading-[1.2] mb-1 w-full block">
-                צרכן: ₪{product.retailPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block">(כולל מע"מ)</span>
-              </span>
-              <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none block">
+              {product.retailPrice && (
+                <span className="text-[9px] sm:text-xs text-gray-600 font-medium leading-[1.2] mb-1 w-full block">
+                  צרכן: ₪{product.retailPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block">(כולל מע"מ)</span>
+                </span>
+              )}
+              {product.oldPrice && (
+                <span className="text-[9px] sm:text-xs text-red-500 font-medium leading-[1.2] mb-0 w-full block line-through">
+                  מחירון מתקין: ₪{product.oldPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                </span>
+              )}
+              <span className={`text-base sm:text-lg font-bold ${product.isClearance ? 'text-teal-600' : 'text-[#f7941d]'} leading-none block`}>
                 ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">מחיר מומלץ למתקין</span>
+                <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">{product.isClearance ? 'מבצע מציאון' : 'מחיר מומלץ למתקין'}</span>
               </span>
             </div>
           ) : (
             <div className="mb-2 mt-auto flex flex-col items-center leading-none text-center">
-              <span className="text-base sm:text-lg font-bold text-[#f7941d] leading-none">
+              <span className={`text-base sm:text-lg font-bold ${product.isClearance ? 'text-teal-600' : 'text-[#f7941d]'} leading-none`}>
                 ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
               </span>
-              <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">מחיר מומלץ למתקין</span>
+              <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">{product.isClearance ? 'מחיר מבצע מציאון' : 'מחיר מומלץ למתקין'}</span>
             </div>
           )}
           
@@ -1419,7 +1441,7 @@ export default function App() {
       const hotSaleProducts = catalogData.filter(item => item.active !== 'FALSE' && item.isHotSale);
       const categoriesWithHotSales = [...new Set(hotSaleProducts.map(p => p.category).filter(Boolean))];
 
-      return categoriesWithHotSales.map(catName => {
+      let results = categoriesWithHotSales.map(catName => {
         const catObj = catalogFolders.find(c => c.name === catName);
         const count = hotSaleProducts.filter(p => p.category === catName).length;
         
@@ -1431,6 +1453,23 @@ export default function App() {
           brand: catObj?.brand
         };
       });
+
+      const clearanceDef = subcategoriesGlobalData.find(s => s.category === selectedCatalog && s.subcategory === 'מציאון' && s.active !== false);
+      if (clearanceDef) {
+        const clearanceProducts = catalogData.filter(item => item.active !== 'FALSE' && item.isClearance);
+        const clearanceCount = clearanceProducts.length;
+        if (clearanceCount > 0) {
+           results.unshift({
+             name: 'מציאון',
+             count: clearanceCount,
+             isComingSoon: false,
+             image: clearanceDef.image || getFallbackImage('מציאון') || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent('מציאון'),
+             brand: clearanceDef.brand
+           });
+        }
+      }
+
+      return results;
     }
 
     // First get all subcategories defined in the Subcategories global tab for this catalog
@@ -1619,6 +1658,9 @@ export default function App() {
         if (item.name === 'מוצר הדגמה' || item.name === 'קטגוריית אם') return false;
         
         if (isHotSaleMode) {
+          if (selectedSubcategory === 'מציאון') {
+             return item.isClearance === true;
+          }
           if (!item.isHotSale) return false;
           if (selectedSubcategory && item.category !== selectedSubcategory) return false;
           return true;
@@ -2215,6 +2257,17 @@ export default function App() {
                 )}
 
                 <div className="flex flex-col w-full gap-4 mt-2">
+                  {selectedProduct.isClearance && (
+                    <div className="w-full bg-gradient-to-r from-teal-50 to-emerald-50 border-2 border-teal-200 rounded-lg p-3 sm:p-5 shadow-sm flex flex-col sm:flex-row items-center sm:justify-between gap-3 transform hover:scale-[1.01] transition-transform">
+                      <div className="flex items-center gap-2 text-teal-700 font-black text-xl sm:text-2xl leading-none">
+                        <Tag className="w-7 h-7 sm:w-9 sm:h-9 text-teal-600 fill-teal-600 animate-bounce drop-shadow-md" />
+                        <span>מבצע מציאון</span>
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black text-teal-800 bg-white px-4 sm:px-6 py-2 rounded-md shadow-md border-b-2 border-teal-200 drop-shadow-sm text-center">
+                        מחיר מיוחד
+                      </div>
+                    </div>
+                  )}
                   {selectedProduct.isHotSale && (
                     <div className="w-full bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200 rounded-lg p-3 sm:p-5 shadow-sm flex flex-col sm:flex-row items-center sm:justify-between gap-3 transform hover:scale-[1.01] transition-transform">
                       <div className="flex items-center gap-2 text-red-600 font-black text-xl sm:text-2xl leading-none">
@@ -2230,14 +2283,19 @@ export default function App() {
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
                     <div className="flex flex-col w-full sm:w-auto text-center sm:text-right">
                        {selectedProduct.retailPrice && currentOptionals.length === 0 && (
-                          <span className="text-sm sm:text-base text-gray-800 font-medium mb-1">
+                          <span className="text-sm sm:text-base text-gray-800 font-medium mb-1 line-through">
                             מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
                           </span>
                        )}
+                       {selectedProduct.oldPrice && currentOptionals.length === 0 && (
+                          <span className="text-sm sm:text-base text-red-500 font-medium mb-1 line-through">
+                            מחירון מתקין: ₪{selectedProduct.oldPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                       )}
                        {currentOptionals.length === 0 && (
-                         <div className="text-2xl sm:text-3xl font-bold text-[#f7941d]">
+                         <div className={`text-2xl sm:text-3xl font-bold ${selectedProduct.isClearance ? 'text-teal-600' : 'text-[#f7941d]'}`}>
                             ₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-                            <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">מחיר מומלץ למתקין <span className="hidden sm:inline">(ללא מע"מ)</span></span>
+                            <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">{selectedProduct.isClearance ? 'מחיר מבצע מציאון' : 'מחיר מומלץ למתקין'} <span className="hidden sm:inline">(ללא מע"מ)</span></span>
                          </div>
                        )}
                     </div>
@@ -2454,7 +2512,10 @@ export default function App() {
          orderDetails += `   כמות: ${item.quantity}
 `;
          
-         if (item.isHotSale) {
+         if (item.isClearance) {
+           orderDetails += `   * מציאון: ${item.clearancePrice ? '₪' + item.clearancePrice : 'מחיר מיוחד'}
+`;
+         } else if (item.isHotSale) {
            orderDetails += `   * מבצע חם: ${item.saleType ? item.saleType + ' ' : ''}${item.saleValue || ''}
 `;
          }
@@ -3234,7 +3295,12 @@ export default function App() {
                         <div className="font-semibold text-sm text-[#0c2d57] line-clamp-2">{item.name}</div>
                         <div className="text-xs text-gray-500 mt-1">מק"ט: <span className="font-mono">{item.sku}</span></div>
                         
-                        {item.isHotSale && (
+                        {item.isClearance && (
+                          <div className="text-[10px] text-teal-700 font-bold mt-1.5 flex items-center gap-1 bg-teal-50/50 p-1 w-fit rounded border border-teal-100">
+                             <Tag size={12} className="text-teal-600" /> מציאון: {item.clearancePrice ? `₪${item.clearancePrice}` : 'מחיר מיוחד'}
+                          </div>
+                        )}
+                        {item.isHotSale && !item.isClearance && (
                           <div className="text-[10px] text-red-600 font-bold mt-1.5 flex items-center gap-1 bg-red-50/50 p-1 w-fit rounded border border-red-100">
                              <Flame size={12} className="text-red-500" /> {item.saleType || 'מבצע'}: {item.saleValue || 'מחיר מיוחד - פנה לנציג'}
                           </div>
