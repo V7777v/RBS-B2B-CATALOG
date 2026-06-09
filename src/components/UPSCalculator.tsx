@@ -6,9 +6,9 @@ const rawProducts = [
   { id: "p65", hebName: "אל-פסק 1000VA (קו)", watts: 600, category: "ups-line", internalWh: 108, extPack: null, canExtend: false, model: "DS-UPS1000(O-STD)EU", image: "https://assets.hikvision.com/prd/public/all/image/sm000075359/600_1000.jpg?f=webp", link: "https://drive.google.com/file/d/1SbXy9w20K8wtetspn8yyzPhOTQoqoxVZ/view?usp=sharing" },
   { id: "p66", hebName: "אל-פסק 2000VA (קו)", watts: 1200, category: "ups-line", internalWh: 216, extPack: null, canExtend: false, model: "DS-UPS2000", image: "https://assets.hikvision.com/prd/normal/all/image/m000086220/2000.jpg?f=webp", link: "https://drive.google.com/file/d/1CfwmiJ6W0nTF41TZAn0i5QwDebKwevAZ/view?usp=sharing" },
   { id: "p67", hebName: "אל-פסק 3000VA (קו)", watts: 1800, category: "ups-line", internalWh: 432, extPack: null, canExtend: false, model: "DS-UPS3000", image: "https://assets.hikvision.com/prd/public/all/image/m000086221/%E5%9B%BE%E7%89%87.jpg?f=webp", link: "https://drive.google.com/file/d/1oyHWIG_hyvcIuxjC9HtbJBxq4qCaP6xP/view?usp=sharing" },
-  { id: "p68", hebName: "אל-פסק אונליין 1KVA (מגדל)", watts: 900, category: "ups-online", internalWh: 216, extPack: null, canExtend: false, model: "DS-UPS01K24-R/TS(O-STD)/EU/IEC", image: "https://assets.hikvision.com/prd/normal/all/image/m000162281/1k-%E5%B7%A6%E5%89%8D%E4%BE%A7.png?f=webp", link: "https://drive.google.com/file/d/14ZzKUKJ-zbsJzQs1s35h6fWYt9Xy6SRQ/view?usp=sharing" },
-  { id: "p69", hebName: "אל-פסק אונליין 2KVA (מגדל)", watts: 1800, category: "ups-online", internalWh: 432, extPack: null, canExtend: false, model: "DS-UPS02K48-R/TS(O-STD)/EU/IEC", image: "https://assets.hikvision.com/prd/normal/all/image/m000162282/2k%263k-%E5%B7%A6%E5%89%8D%E4%BE%A7.png?f=webp", link: "https://drive.google.com/file/d/14ZzKUKJ-zbsJzQs1s35h6fWYt9Xy6SRQ/view?usp=drive_link" },
-  { id: "p70", hebName: "אל-פסק אונליין 3KVA (מגדל)", watts: 2700, category: "ups-online", internalWh: 648, extPack: null, canExtend: false, model: "DS-UPS03K72-R/TS(O-STD)/EU/IEC", image: "https://assets.hikvision.com/prd/normal/all/image/m000162283/2k%263k-%E5%B7%A6%E5%89%8D%E4%BE%A71.png?f=webp", link: "https://drive.google.com/file/d/14ZzKUKJ-zbsJzQs1s35h6fWYt9Xy6SRQ/view?usp=drive_link" },
+  { id: "p68", hebName: "אל-פסק אונליין 1KVA (מגדל)", watts: 900, category: "ups-online", internalWh: 216, performanceMatrix: { 0: [[450, 10], [675, 4], [900, 2]] }, extPack: null, canExtend: false, model: "DS-UPS01K24-R/TS(O-STD)/EU/IEC", image: "https://assets.hikvision.com/prd/normal/all/image/m000162281/1k-%E5%B7%A6%E5%89%8D%E4%BE%A7.png?f=webp", link: "https://drive.google.com/file/d/14ZzKUKJ-zbsJzQs1s35h6fWYt9Xy6SRQ/view?usp=sharing" },
+  { id: "p69", hebName: "אל-פסק אונליין 2KVA (מגדל)", watts: 1800, category: "ups-online", internalWh: 432, performanceMatrix: { 0: [[900, 12], [1350, 5], [1800, 2.2]] }, extPack: null, canExtend: false, model: "DS-UPS02K48-R/TS(O-STD)/EU/IEC", image: "https://assets.hikvision.com/prd/normal/all/image/m000162282/2k%263k-%E5%B7%A6%E5%89%8D%E4%BE%A7.png?f=webp", link: "https://drive.google.com/file/d/14ZzKUKJ-zbsJzQs1s35h6fWYt9Xy6SRQ/view?usp=drive_link" },
+  { id: "p70", hebName: "אל-פסק אונליין 3KVA (מגדל)", watts: 2700, category: "ups-online", internalWh: 648, performanceMatrix: { 0: [[1350, 10], [2025, 5.5], [2700, 2.7]] }, extPack: null, canExtend: false, model: "DS-UPS03K72-R/TS(O-STD)/EU/IEC", image: "https://assets.hikvision.com/prd/normal/all/image/m000162283/2k%263k-%E5%B7%A6%E5%89%8D%E4%BE%A71.png?f=webp", link: "https://drive.google.com/file/d/14ZzKUKJ-zbsJzQs1s35h6fWYt9Xy6SRQ/view?usp=drive_link" },
   { id: "p76", hebName: "אל-פסק אונליין 1KVA (ארון)", watts: 900, category: "ups-online", internalWh: 216, performanceMatrix: { 0: [[450,10],[675,4],[900,2]], 1: [[450,40],[675,20],[900,15]], 2: [[450,85],[675,50],[900,35]], 3: [[450,120],[675,75],[900,55]], 4: [[450,180],[675,105],[900,75]] }, extPack: { model: "DS-UPSB0924B-R/TJC", maxPacks: 4, image: "https://assets.hikvision.com/prd/normal/all/image/m000162284/2.png?f=webp", link: "https://drive.google.com/file/d/1K9kP8_lLh-YWBpoYnKIhdQ3dzIeK_gXK/view?usp=sharing" }, canExtend: true, model: "DS-UPS01K24-R/TJS(O-STD)/EU/IEC", image: "https://assets.hikvision.com/prd/normal/all/image/m000162284/2.png?f=webp", link: "https://drive.google.com/drive/folders/1oe4OSvUd1l5wVk2l3_hUUIR4M8QxGpbQ" },
   { id: "p77", hebName: "אל-פסק אונליין 2KVA (ארון)", watts: 1800, category: "ups-online", internalWh: 432, performanceMatrix: { 0: [[900,12],[1350,5],[1800,2.2]], 1: [[900,44],[1350,22],[1800,17.7]], 2: [[900,86],[1350,52],[1800,35]], 3: [[900,120],[1350,77],[1800,54]], 4: [[900,183],[1350,106],[1800,75.4]] }, extPack: { model: "DS-UPSB0948B-R/TJC", maxPacks: 4, image: "https://assets.hikvision.com/prd/normal/all/image/m000162301/6.png?f=webp", link: "https://drive.google.com/file/d/1K9kP8_lLh-YWBpoYnKIhdQ3dzIeK_gXK/view?usp=sharing" }, canExtend: true, model: "DS-UPS02K48-R/TJS(O-STD)/EU/IEC", image: "https://assets.hikvision.com/prd/normal/all/image/m000162285/2.png?f=webp", link: "https://drive.google.com/drive/folders/1oe4OSvUd1l5wVk2l3_hUUIR4M8QxGpbQ" },
   { id: "p78", hebName: "אל-פסק אונליין 3KVA (ארון)", watts: 2700, category: "ups-online", internalWh: 648, performanceMatrix: { 0: [[1350,10],[2025,5.5],[2700,2.7]], 1: [[1350,45],[2025,23],[2700,19]], 2: [[1350,87],[2025,55],[2700,35.7]], 3: [[1350,122],[2025,78],[2700,55]], 4: [[1350,185],[2025,108],[2700,75]] }, extPack: { model: "DS-UPSB0972B-R/TJC", maxPacks: 4, image: "https://assets.hikvision.com/prd/normal/all/image/m000162302/6.png?f=webp", link: "https://drive.google.com/file/d/1K9kP8_lLh-YWBpoYnKIhdQ3dzIeK_gXK/view?usp=sharing" }, canExtend: true, model: "DS-UPS03K72-R/TJS(O-STD)/EU/IEC", image: "https://assets.hikvision.com/prd/normal/all/image/m000162286/2.png?f=webp", link: "https://drive.google.com/drive/folders/1oe4OSvUd1l5wVk2l3_hUUIR4M8QxGpbQ" },
@@ -87,7 +87,24 @@ export const UPSCalculator: React.FC<{ catalogData?: any[], onAddToCart?: (produ
         }
     } else {
         if (ups.internalWh > 0) {
-            configs.push({ packs: 0, mins: Math.floor((ups.internalWh * efficiency * 60) / load) });
+            // Physics-based fallback aligned with reference calculateUPSRuntime.
+            // Online models now carry a performanceMatrix, so this path serves Line-Interactive.
+            const totalWh = ups.internalWh; // Tower/Line have no battery packs (packs = 0)
+            let mins;
+            if (ups.category === 'ups-line') {
+                const lineEfficiency = 0.65;
+                const loadPercentage = load / ups.watts;
+                const peukertFactor = Math.max(0.70, 1.05 - (0.35 * loadPercentage));
+                mins = Math.floor((totalWh * lineEfficiency * peukertFactor * 60) / load);
+            } else {
+                const standbyPowerWatts = 35 * Math.max(1, Math.round(ups.watts / 900));
+                const totalDrawFromBattery = load + standbyPowerWatts;
+                const dischargeRatio = totalDrawFromBattery / totalWh;
+                const capacityRetention = 1.0 / (1.0 + 0.45 * Math.pow(dischargeRatio, 0.75));
+                const inverterEfficiency = 0.84;
+                mins = Math.max(1, Math.floor((totalWh * capacityRetention * inverterEfficiency * 60) / totalDrawFromBattery));
+            }
+            configs.push({ packs: 0, mins });
         }
     }
     
