@@ -325,6 +325,11 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     }
   }, [product?.sku, initialAccessory?.sku]);
 
+  useEffect(() => {
+    console.log('DEBUG_MOUNT: configurator MOUNTED');
+    return () => console.log('DEBUG_UNMOUNT: configurator UNMOUNTED');
+  }, []);
+
   const onOptionalsChangeRef = React.useRef(onOptionalsChange);
   useEffect(() => {
     onOptionalsChangeRef.current = onOptionalsChange;
