@@ -320,6 +320,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     };
 
     if (product) {
+      console.log('DEBUG_RELOAD: configurator re-fetching data for', product?.sku);
       fetchAndParse();
     }
   }, [product?.sku, initialAccessory?.sku]);
@@ -344,6 +345,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   }, [selectedOptionals]);
 
   const handleAddOptional = (acc: Accessory, idx: number) => {
+    console.log('DEBUG_CLICK: add pressed', { availableU, uSize: acc?.uSize, pn: acc?.pn });
     if (availableU - acc.uSize < 0) {
       setPendingAccessory(acc);
       setWarningModalOpen(true);
