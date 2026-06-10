@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, Plus, Minus, X, Server, Download, Box, AlertTriangle } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
 
 interface Accessory {
   pn: string;
@@ -110,32 +110,30 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         setLoading(true);
         setErrorMsg(null);
 
-        const MAIN_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs/export?format=xlsx';
-        const res = await fetch(MAIN_SHEET_URL);
-        const buffer = await res.arrayBuffer();
-        const wb = XLSX.read(buffer, { type: 'array' });
+        const CABINETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs/export?format=csv&gid=250535112';
+        const ACCESSORIES_CSV_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs/export?format=csv&gid=1366808268';
 
-        console.log('[CabinetConfigurator] Available sheets in workbook:', wb.SheetNames);
+        const [cabRes, accRes] = await Promise.all([
+          fetch(CABINETS_CSV_URL),
+          fetch(ACCESSORIES_CSV_URL)
+        ]);
 
-        const cabinetsSheetName = wb.SheetNames.find(n => n.includes('ארונות')) || 'טבלת ארונות מעודכנת';
-        const accessoriesSheetName = wb.SheetNames.find(n => n.includes('מדפים')) || 'מדפים ואביזרים';
-
-        console.log('[CabinetConfigurator] Using sheets:', { cabinetsSheetName, accessoriesSheetName });
-
-        if (!wb.Sheets[cabinetsSheetName] || !wb.Sheets[accessoriesSheetName]) {
-           console.error('[CabinetConfigurator] CRITICAL: Required sheets not found. Looking for:', 
-              `'טבלת ארונות מעודכנת'`, 'and', `'מדפים ואביזרים'`, 
-              'but found:', wb.SheetNames);
-           setErrorMsg('שגיאה: לא נמצאו הגיליונות הנדרשים בקובץ Google Sheets (ארונות / מדפים ואביזרים). בדוק את שמות הגיליונות.');
+        if (!cabRes.ok || !accRes.ok) {
+           console.error('[CabinetConfigurator] CRITICAL: Failed to fetch sheets as CSV.', cabRes.status, accRes.status);
+           setErrorMsg('שגיאה: לא ניתן לטעון את נתוני הארונות והאביזרים מ-Google Sheets. נסה לרענן את העמוד.');
            setLoading(false);
            return;
         }
+
+        const [cabCsvText, accCsvText] = await Promise.all([cabRes.text(), accRes.text()]);
+        const cabCsvRows = (Papa.parse(cabCsvText, { header: false, skipEmptyLines: false }).data) as any[][];
+        const accCsvRows = (Papa.parse(accCsvText, { header: false, skipEmptyLines: false }).data) as any[][];
 
         const normalizeSku = (val: any): string => String(val ?? '').trim().toUpperCase();
         const productSkuNorm = normalizeSku(product.sku);
 
         // 1. Fetch Accessories Table ('מדפים ואביזרים')
-        const accRows = XLSX.utils.sheet_to_json(wb.Sheets[accessoriesSheetName], { header: 1 }) as any[][];
+        const accRows = accCsvRows;
         const accData: Accessory[] = [];
         for (let i = 3; i < accRows.length; i++) {
             const row = accRows[i];
@@ -175,7 +173,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         });
 
         // 2. Fetch Cabinets Table ('טבלת ארונות מעודכנת')
-        const cabRows = XLSX.utils.sheet_to_json(wb.Sheets[cabinetsSheetName], { header: 1 }) as any[][];
+        const cabRows = cabCsvRows;
         
         let cabRow: any[] | null = null;
         for (let i = 2; i < cabRows.length; i++) {
