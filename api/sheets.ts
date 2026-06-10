@@ -23,7 +23,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let url = `${SHEET_URL}/gviz/tq?tqx=out:csv&gid=${gid}`;
     
     if (limit !== undefined && offset !== undefined) {
-      url += `&tq=${encodeURIComponent(`SELECT * LIMIT ${limit} OFFSET ${offset}`)}`;
+      const safeLimit = Math.min(Math.max(parseInt(String(limit), 10) || 0, 0), 5000);
+      const safeOffset = Math.max(parseInt(String(offset), 10) || 0, 0);
+      url += `&tq=${encodeURIComponent(`SELECT * LIMIT ${safeLimit} OFFSET ${safeOffset}`)}`;
     }
 
     // Add random query param in backend ONLY to prevent Google from returning stale Gviz results internally if the spreadsheet changed
