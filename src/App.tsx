@@ -1062,6 +1062,16 @@ export default function App() {
   });
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [addedItemConfirm, setAddedItemConfirm] = useState<{
+    isOpen: boolean;
+    productId: string;
+    optionals: any[];
+    productName: string;
+    productImage?: string;
+    productPrice?: number;
+    quantity: number;
+    category?: string;
+  } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(50);
 
@@ -1728,23 +1738,67 @@ export default function App() {
       }
       return [...prev, { ...product, quantity, optionals }];
     });
-    if (window.innerWidth >= 768) {
-      setIsCartOpen(true);
-    }
+    setAddedItemConfirm({
+      isOpen: true,
+      productId: product.id,
+      optionals: optionals,
+      productName: product.name || "מוצר",
+      productImage: (product.images && product.images[0]) || "",
+      productPrice: parsePrice(product.price),
+      quantity: quantity,
+      category: product.category || ""
+    });
   };
 
-  const updateCartQuantity = (id: string, delta: number) => {
+  const updateConfirmCartItemQuantity = (qty: number) => {
+    if (!addedItemConfirm) return;
+    if (qty <= 0) {
+      removeConfirmCartItem();
+      return;
+    }
     setCart(prev => prev.map(item => {
-      if (item.id === id) {
-        const newQ = item.quantity + delta;
-        return newQ > 0 ? { ...item, quantity: newQ } : item;
+      if (item.id === addedItemConfirm.productId && 
+          JSON.stringify(item.optionals || []) === JSON.stringify(addedItemConfirm.optionals || [])) {
+        return { ...item, quantity: qty };
       }
       return item;
     }));
   };
 
-  const removeFromCart = (id: string) => {
-    setCart(prev => prev.filter(item => item.id !== id));
+  const removeConfirmCartItem = () => {
+    if (!addedItemConfirm) return;
+    setCart(prev => prev.filter(item => 
+      !(item.id === addedItemConfirm.productId && 
+        JSON.stringify(item.optionals || []) === JSON.stringify(addedItemConfirm.optionals || []))
+    ));
+    setAddedItemConfirm(null);
+  };
+
+  const updateCartQuantity = (target: any, delta: number) => {
+    setCart(prev => {
+      const isObject = typeof target === 'object' && target !== null;
+      const updated = prev.map(item => {
+        const isMatch = isObject 
+          ? (item.id === target.id && JSON.stringify(item.optionals || []) === JSON.stringify(target.optionals || []))
+          : item.id === target;
+        if (isMatch) {
+          const newQ = item.quantity + delta;
+          return { ...item, quantity: newQ };
+        }
+        return item;
+      });
+      return updated.filter(item => item.quantity > 0);
+    });
+  };
+
+  const removeFromCart = (target: any) => {
+    const isObject = typeof target === 'object' && target !== null;
+    setCart(prev => prev.filter(item => {
+      if (isObject) {
+        return !(item.id === target.id && JSON.stringify(item.optionals || []) === JSON.stringify(target.optionals || []));
+      }
+      return item.id !== target;
+    }));
   };
 
   const cartTotal = cart.reduce((sum, item) => {
@@ -2685,11 +2739,11 @@ export default function App() {
                       )}
                       <div className="flex items-center gap-2">
                         <div className="flex items-center bg-[#f2f2f2] border border-gray-200 overflow-hidden rounded-md">
-                          <button onClick={() => updateCartQuantity(item.id, -1)} className="p-1 px-3 hover:bg-white text-gray-600 transition-colors" aria-label="הפחת כמות"><Minus size={14}/></button>
+                          <button onClick={() => updateCartQuantity(item, -1)} className="p-1 px-3 hover:bg-white text-gray-600 transition-colors" aria-label="הפחת כמות"><Minus size={14}/></button>
                           <span className="w-8 text-center text-sm font-bold">{item.quantity}</span>
-                          <button onClick={() => updateCartQuantity(item.id, 1)} className="p-1 px-3 hover:bg-white text-gray-600 transition-colors" aria-label="הוסף כמות"><Plus size={14}/></button>
+                          <button onClick={() => updateCartQuantity(item, 1)} className="p-1 px-3 hover:bg-white text-gray-600 transition-colors" aria-label="הוסף כמות"><Plus size={14}/></button>
                         </div>
-                        <button onClick={() => removeFromCart(item.id)} className="text-red-500 hover:text-red-600 transition-colors p-2 bg-red-50 hover:bg-red-100 rounded-md" aria-label="הסר מוצר מחשבון">
+                        <button onClick={() => removeFromCart(item)} className="text-red-500 hover:text-red-600 transition-colors p-2 bg-red-50 hover:bg-red-100 rounded-md" aria-label="הסר מוצר מחשבון">
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -3331,14 +3385,19 @@ export default function App() {
                         <div className="mt-auto pt-2 flex items-end justify-end">
                           
                           <div className="flex items-center bg-[#f2f2f2] border border-gray-200 overflow-hidden">
-                            <button onClick={() => updateCartQuantity(item.id, -1)} className="p-1 px-2 hover:bg-white text-gray-600 transition-colors" aria-label="הפחת כמות"><Minus size={14}/></button>
+                            <button onClick={() => updateCartQuantity(item, -1)} className="p-1 px-2 hover:bg-white text-gray-600 transition-colors" aria-label="הפחת כמות"><Minus size={14}/></button>
                             <span className="w-6 text-center text-sm font-bold">{item.quantity}</span>
-                            <button onClick={() => updateCartQuantity(item.id, 1)} className="p-1 px-2 hover:bg-white text-gray-600 transition-colors" aria-label="הוסף כמות"><Plus size={14}/></button>
+                            <button onClick={() => updateCartQuantity(item, 1)} className="p-1 px-2 hover:bg-white text-gray-600 transition-colors" aria-label="הוסף כמות"><Plus size={14}/></button>
                           </div>
                         </div>
                       </div>
-                      <button onClick={() => removeFromCart(item.id)} className="text-gray-300 hover:text-red-500 transition-colors self-start p-1" aria-label="הסר מוצר מהעגלה">
-                        <Trash2 size={18} />
+                      <button 
+                        onClick={() => removeFromCart(item)} 
+                        className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 transition-all self-start p-2 rounded-md shadow-sm" 
+                        aria-label="הסר מוצר מהעגלה"
+                        title="הסר פריט"
+                      >
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   ))}
@@ -3369,6 +3428,141 @@ export default function App() {
         <TechnicalAdvisor catalogData={catalogData} addToCart={addToCart} isAuthenticated={isAuthenticated} />
       </React.Suspense>
       <InstallBanner />
+
+      {/* SHOPPING CART ADDITION CONFIRMATION MODAL */}
+      {addedItemConfirm && addedItemConfirm.isOpen && (
+        <div id="cart-add-confirm-overlay" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" dir="rtl">
+          <div id="cart-add-confirm-container" className="bg-white w-full max-w-sm p-6 shadow-2xl relative border-t-4 border-green-500 rounded-none">
+            
+            {/* Close button */}
+            <button 
+              id="cart-add-confirm-close-btn"
+              onClick={() => setAddedItemConfirm(null)} 
+              className="absolute top-4 left-4 p-2 bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-800 transition-colors border-none rounded-none"
+              title="סגור"
+              type="button"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-5 mt-2">
+              <div className="p-2.5 bg-green-50 text-green-600 rounded-full">
+                <CheckCircle size={22} className="text-green-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-[#0c2d57] leading-none mb-1">התווסף לסל בהצלחה!</h3>
+                {addedItemConfirm.category && (
+                  <p className="text-[11px] text-gray-400 font-medium">{addedItemConfirm.category}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4 bg-gray-50 p-3 mb-4 border border-gray-100">
+              {addedItemConfirm.productImage ? (
+                <div className="w-16 h-16 bg-white border border-gray-200 p-1 flex items-center justify-center flex-shrink-0">
+                  <img 
+                    referrerPolicy="no-referrer" 
+                    src={transformImageLink(addedItemConfirm.productImage, 150)} 
+                    alt={addedItemConfirm.productName} 
+                    onError={handleImageError} 
+                    className="max-w-full max-h-full object-contain mix-blend-multiply" 
+                  />
+                </div>
+              ) : (
+                <div className="w-16 h-16 bg-white border border-gray-200 p-1 flex items-center justify-center flex-shrink-0 text-gray-300">
+                  <Package size={28} />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-semibold text-[#0c2d57] line-clamp-2 leading-tight mb-2">{addedItemConfirm.productName}</h4>
+                {addedItemConfirm.productPrice !== undefined && addedItemConfirm.productPrice > 0 && (
+                  <div className="text-xs text-gray-500">
+                    מחיר יחידה: <strong className="text-gray-800">₪{addedItemConfirm.productPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Dynamic quantity selector and removal control */}
+            {(() => {
+              const currentConfirmCartItem = cart.find(item => 
+                item.id === addedItemConfirm.productId && 
+                JSON.stringify(item.optionals || []) === JSON.stringify(addedItemConfirm.optionals || [])
+              );
+              const currentQty = currentConfirmCartItem ? currentConfirmCartItem.quantity : addedItemConfirm.quantity;
+
+              return (
+                <div className="mb-6 p-3 bg-slate-50 border border-slate-100 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#0c2d57]">כמות:</span>
+                    <div className="flex items-center border border-gray-300 bg-white shadow-sm">
+                      <button 
+                        type="button"
+                        onClick={() => updateConfirmCartItemQuantity(currentQty - 1)}
+                        className="p-1 px-2.5 bg-gray-50 hover:bg-gray-100 text-gray-600 hover:text-black border-none select-none transition-colors"
+                      >
+                        <Minus size={12} className="stroke-[3]" />
+                      </button>
+                      <input 
+                        type="text" 
+                        inputMode="numeric" 
+                        pattern="[0-9]*"
+                        value={currentQty}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value.replace(/\D/g, '')) || 0;
+                          updateConfirmCartItemQuantity(val);
+                        }}
+                        className="w-10 text-center text-xs font-extrabold text-gray-800 focus:outline-none py-1 border-none bg-transparent"
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => updateConfirmCartItemQuantity(currentQty + 1)}
+                        className="p-1 px-2.5 bg-gray-50 hover:bg-gray-100 text-gray-600 hover:text-black border-none select-none transition-colors"
+                      >
+                        <Plus size={12} className="stroke-[3]" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={removeConfirmCartItem}
+                    className="flex items-center gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 px-2.5 py-1.5 transition-all text-xs font-bold bg-white border border-red-200"
+                    title="הסר מוצר מהסל"
+                  >
+                    <Trash2 size={13} />
+                    <span>הסר מהסל</span>
+                  </button>
+                </div>
+              );
+            })()}
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                id="cart-add-confirm-continue-btn"
+                type="button"
+                onClick={() => setAddedItemConfirm(null)}
+                className="w-full bg-white hover:bg-gray-50 text-gray-700 font-bold py-2 px-3 border border-gray-300 text-sm transition-colors text-center"
+              >
+                מעבר להמשך קניות
+              </button>
+              <button
+                id="cart-add-confirm-view-cart-btn"
+                type="button"
+                onClick={() => {
+                  setAddedItemConfirm(null);
+                  setIsCartOpen(true);
+                }}
+                className="w-full bg-[#004387] hover:bg-[#fe8d00] text-white font-bold py-2 px-3 text-sm transition-colors text-center flex items-center justify-center gap-2 shadow-sm"
+              >
+                <ShoppingCart size={16} />
+                מעבר לסל הקניות
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* ADMIN SYNC MODAL OVERLAY */}
       {showAdminSyncModal && (
