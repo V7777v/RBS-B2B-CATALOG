@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Server, Loader2, ExternalLink, ShoppingCart, CheckCircle2, BadgePercent, ArrowUpRight, HelpCircle, AlertCircle, Sparkles } from 'lucide-react';
 import { CabinetConfigurator } from './CabinetConfigurator';
-import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
 
 // Image helpers (must match local app definitions)
 const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -77,23 +77,15 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
     const fetchAndParse = async () => {
       try {
         setLoading(true);
-        const MAIN_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs/export?format=xlsx';
-        const res = await fetch(MAIN_SHEET_URL);
-        const buffer = await res.arrayBuffer();
-        const wb = XLSX.read(buffer, { type: 'array' });
-
-        const cabinetsSheetName = wb.SheetNames.find(n => n.includes('ארונות')) || 'טבלת ארונות מעודכנת';
-
-        if (!wb.Sheets[cabinetsSheetName]) {
-           console.error('[AccessoryCabinets] Sheet not found:', cabinetsSheetName);
-           setLoading(false);
-           return;
-        }
+        const CABINETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs/export?format=csv&gid=250535112';
+        const res = await fetch(CABINETS_CSV_URL);
+        const csvText = await res.text();
+        const parsed = Papa.parse(csvText, { header: false, skipEmptyLines: false });
 
         const normalizeSku = (val: any): string => String(val ?? '').trim().toUpperCase();
         const productSkuNorm = normalizeSku(product.sku);
 
-        const cabRows = XLSX.utils.sheet_to_json(wb.Sheets[cabinetsSheetName], { header: 1 }) as any[][];
+        const cabRows = parsed.data as any[][];
         
         const compatibleSkus = new Set<string>();
         const specsMap = new Map<string, CabinetSpec>();
