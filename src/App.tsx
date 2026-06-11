@@ -2534,7 +2534,10 @@ export default function App() {
           return (
             <div className="mt-12 mb-8">
               <h3 className="text-xl font-bold text-[#0c2d57] mb-6 border-b border-gray-200 pb-2">מוצרים משלימים ומקבילים</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6">
+              <div className={similar.length === 1 
+                ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-4 md:gap-6" 
+                : "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6"
+              }>
                 {similar.map(product => (
                   <ProductCard key={product.id} product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} />
                 ))}
@@ -3087,10 +3090,10 @@ export default function App() {
             {/* LEFT SIDE: Cart (Protected from theme overrides) */}
             <div className="flex-shrink-0">
               <button 
-                className="relative flex flex-row items-center justify-center gap-2 !p-2 !px-3 !m-0 h-[40px] text-[#004387] bg-white border border-[#004387] hover:bg-[#004387] hover:text-white transition-colors whitespace-nowrap !rounded-none box-border"
+                className="relative flex flex-row items-center justify-center gap-2 !p-2 !px-3.5 !m-0 h-11 text-[#004387] bg-white border border-[#004387]/60 hover:bg-[#004387] hover:text-white hover:border-[#004387] hover:shadow-sm transition-all whitespace-nowrap rounded-xl box-border active:scale-95"
                 onClick={() => setIsCartOpen(true)}
                 aria-label="פתח עגלת הזמנה"
-                style={{ margin: 0, padding: '8px 12px' }}
+                style={{ margin: 0 }}
               >
                 <ShoppingCart size={20} className="flex-shrink-0" />
                 <span className="text-sm font-bold hidden sm:block whitespace-nowrap">עגלת הזמנה</span>
@@ -3309,7 +3312,10 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
+                    <div className={filteredProducts.length === 1 
+                      ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6" 
+                      : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6"
+                    }>
                       {filteredProducts.slice(0, visibleCount).map(product => (
                         <VirtualProductCard key={product.id} product={product}>
                           <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} />
@@ -3340,7 +3346,10 @@ export default function App() {
                   <Package size={120} className="absolute left-4 bottom-0 opacity-10 rotate-12 text-white pointer-events-none" />
                 </div>
                 
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
+                <div className={catalogFolders.length === 1 
+                  ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6" 
+                  : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6"
+                }>
                   {catalogFolders.map((catalog, idx) => (
                     <CatalogCard key={idx} catalog={catalog} navigateToCatalog={navigateToCatalog} />
                   ))}
@@ -3361,7 +3370,10 @@ export default function App() {
                     <h3 className="text-xl font-bold text-[#0c2d57]">טוען נתונים...</h3>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
+                  <div className={activeSubcategories.length === 1 
+                    ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6" 
+                    : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6"
+                  }>
                     {activeSubcategories.length === 0 ? (
                       <div className="col-span-full text-center py-10 text-gray-500 bg-white border border-gray-100">
                         לא נמצאו קטגוריות או מוצרים במחירון זה.
@@ -3389,7 +3401,10 @@ export default function App() {
                     <h3 className="text-xl font-bold text-[#0c2d57]">טוען נתונים...</h3>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-6 max-w-4xl mx-auto">
+                  <div className={nestedSubcategoriesData.length === 1 
+                    ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6" 
+                    : "grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-6 max-w-4xl mx-auto"
+                  }>
                     {nestedSubcategoriesData.map((sub, idx) => (
                       <SubcategoryCard key={idx} sub={sub} onClick={() => navigateToNestedSubcategory(sub.name)} />
                     ))}
@@ -3418,7 +3433,10 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
+                    <div className={filteredProducts.length === 1 
+                      ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6" 
+                      : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6"
+                    }>
                       {filteredProducts.slice(0, visibleCount).map(product => (
                         <VirtualProductCard key={product.id} product={product}>
                           <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} />
@@ -3817,7 +3835,7 @@ export default function App() {
 
       {/* Floating Action Bar for Bulk Selection */}
       {Object.keys(bulkSelection).length > 0 && (
-        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] w-[95%] max-w-sm sm:max-w-md bg-white border border-[#004387] shadow-[0_8px_30px_rgba(0,67,135,0.2)] rounded-lg p-3 sm:p-4 flex items-center justify-between gap-2 sm:gap-4 flex-row" style={{ animation: 'slideUp 0.3s ease-out forwards' }}>
+        <div className="fixed bottom-4 left-4 right-4 sm:left-1/2 sm:right-auto sm:transform sm:-translate-x-1/2 z-[100] w-auto sm:w-full sm:max-w-md bg-white border border-[#004387] shadow-[0_8px_30px_rgba(0,67,135,0.2)] rounded-xl p-3 sm:p-4 flex items-center justify-between gap-2 sm:gap-4 flex-row bulk-floating-bar">
           <div className="flex flex-col">
             <span className="text-[#0c2d57] font-bold text-sm sm:text-base leading-tight">
               {Object.keys(bulkSelection).length} מוצרים סומנו
@@ -3847,9 +3865,21 @@ export default function App() {
 
       {/* Global Style for slide-up animation if tailwind animate-in is not present */}
       <style>{`
-        @keyframes slideUp {
+        @keyframes slideUpDesktop {
           from { transform: translate(-50%, 100%); opacity: 0; }
           to { transform: translate(-50%, 0); opacity: 1; }
+        }
+        @keyframes slideUpMobile {
+          from { transform: translateY(120%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        .bulk-floating-bar {
+          animation: slideUpMobile 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+        }
+        @media (min-width: 640px) {
+          .bulk-floating-bar {
+            animation: slideUpDesktop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+          }
         }
       `}</style>
     </div>
