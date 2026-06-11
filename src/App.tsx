@@ -2901,24 +2901,84 @@ export default function App() {
         <div ref={headerRef} className="sticky top-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header">
           <div className="container mx-auto px-4 min-h-[56px] flex flex-row items-center justify-between flex-nowrap gap-2 sm:gap-4">
             
-            {/* RIGHT SIDE: Menu & Back */}
+            {/* RIGHT SIDE: Menu & Back (Mobile optimized browser controls & Desktop standard) */}
             <div className="flex flex-row items-center gap-2 md:gap-4 flex-shrink-0">
-              <button className="md:hidden !p-2 !m-0 text-gray-600 hover:text-[#004387] bg-transparent border-none" onClick={() => setMobileMenuOpen(true)} aria-label="פתח תפריט">
-                <Menu size={24} />
-              </button>
-
-              {/* כפתור חזור גלובלי - מופיע כשלא בדף הבית או כשיש חיפוש פעיל */}
-              {(currentView !== 'home' || searchQuery) && (
+              
+              {/* MOBILE ONLY: Browser-style Navigation Controls with large touch targets */}
+              <div id="mobile-browser-navigation-bar" className="flex md:hidden items-center gap-1.5 bg-gray-50 border border-gray-200/80 p-1.5 rounded-xl shadow-xs">
+                
+                {/* 1. Menu Button: 48px size, large Menu bars */}
                 <button 
-                  onClick={() => { if (searchQuery) { setSearchQuery(''); } else { goBack(); } }} 
-                  className="flex flex-row items-center justify-center gap-1 !p-2 !m-0 bg-[#f2f2f2] hover:bg-[#004387] text-[#004387] hover:text-white !rounded-none transition-all border-none"
-                  title="חזור"
-                  aria-label="חזור לתצוגה הקודמת"
+                  id="mobile-nav-hamburger"
+                  type="button"
+                  onClick={() => setMobileMenuOpen(true)}
+                  className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 rounded-lg shadow-sm transition-all duration-200 active:scale-95 flex-shrink-0"
+                  aria-label="פתח תפריט"
+                  title="תפריט ניווט"
                 >
-                  <ChevronRight size={20} className="flex-shrink-0" />
-                  <span className="hidden md:block text-sm font-semibold ml-1 whitespace-nowrap">חזור</span>
+                  <Menu size={28} className="stroke-[2.5]" />
                 </button>
-              )}
+
+                <div className="h-8 w-[1px] bg-gray-300/60 mx-0.5"></div>
+
+                {/* 2. Back Button (ChevronRight for RTL back) */}
+                <button 
+                  id="mobile-nav-back"
+                  type="button"
+                  onClick={() => { if (searchQuery) { setSearchQuery(''); } else { goBack(); } }}
+                  className="flex items-center justify-center w-11 h-11 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                  aria-label="אחורה"
+                  title="חזור אחורה"
+                >
+                  <ChevronRight size={24} className="stroke-[2.5]" />
+                </button>
+
+                {/* 3. Forward Button (ChevronLeft for RTL forward) */}
+                <button 
+                  id="mobile-nav-forward"
+                  type="button"
+                  onClick={() => {
+                    if (window.history.state) {
+                      window.history.forward();
+                    }
+                  }}
+                  className="flex items-center justify-center w-11 h-11 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                  aria-label="קדימה"
+                  title="חזור קדימה"
+                >
+                  <ChevronLeft size={24} className="stroke-[2.5]" />
+                </button>
+
+                {/* 4. Home Button */}
+                <button 
+                  id="mobile-nav-home"
+                  type="button"
+                  onClick={navigateHome}
+                  className="flex items-center justify-center w-11 h-11 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                  aria-label="דף הבית"
+                  title="דף הבית"
+                >
+                  <Home size={22} className="stroke-[2]" />
+                </button>
+
+              </div>
+
+              {/* DESKTOP ONLY: Standard navigation controls as they were */}
+              <div id="desktop-navigation-controls" className="hidden md:flex flex-row items-center gap-4">
+                {/* כפתור חזור גלובלי - מופיע כשלא בדף הבית או כשיש חיפוש פעיל */}
+                {(currentView !== 'home' || searchQuery) && (
+                  <button 
+                    id="desktop-back-btn"
+                    onClick={() => { if (searchQuery) { setSearchQuery(''); } else { goBack(); } }} 
+                    className="flex flex-row items-center justify-center gap-1 !p-2 !m-0 bg-[#f2f2f2] hover:bg-[#004387] text-[#004387] hover:text-white !rounded-none transition-all border-none"
+                    title="חזור"
+                    aria-label="חזור לתצוגה הקודמת"
+                  >
+                    <ChevronRight size={20} className="flex-shrink-0" />
+                    <span className="hidden md:block text-sm font-semibold ml-1 whitespace-nowrap">חזור</span>
+                  </button>
+                )}
+              </div>
               
               {/* Breadcrumb style path indicator */}
               <div className="hidden sm:flex items-center text-sm text-[#0c2d57] opacity-80 whitespace-nowrap gap-3">
@@ -3003,10 +3063,10 @@ export default function App() {
                     setSearchQuery('');
                     navigateHome();
                   }} 
-                  className="hover:text-[#004387] p-1 flex items-center gap-1 font-medium bg-transparent border-none cursor-pointer flex-shrink-0 text-gray-500 hover:scale-105 transition-all text-sm"
+                  className="hover:text-[#004387] p-2 sm:p-1 flex items-center gap-1.5 font-bold bg-gray-100 sm:bg-transparent border border-gray-200 sm:border-none rounded-md sm:rounded-none cursor-pointer flex-shrink-0 text-[#004387] sm:text-gray-500 hover:scale-105 transition-all text-xs"
                   title="ראשי"
                 >
-                  <Home size={15} />
+                  <Home size={18} className="sm:w-[15px] sm:h-[15px]" /><span className="sm:hidden text-[11px] font-bold">ראשי</span>
                 </button>
 
                 {searchQuery ? (
