@@ -207,6 +207,19 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
 
   const activeCabinetForBundle = compatibleCabinets.find(c => c.id === selectedCabinetId) || compatibleCabinets[0];
 
+  // Keep the configurator instance stable so a parent re-render cannot unmount/remount it
+  // (which was wiping the user's added accessories). Same element reference => React preserves state.
+  const cabinetConfiguratorEl = React.useMemo(() => (
+    activeCabinetForBundle ? (
+      <CabinetConfigurator 
+        product={activeCabinetForBundle} 
+        catalogData={catalogData} 
+        initialAccessory={product}
+        onOptionalsChange={handleConfiguredOptionalsChange}
+      />
+    ) : null
+  ), [activeCabinetForBundle?.id, catalogData, product?.sku, handleConfiguredOptionalsChange]);
+
   return (
     <div className="mb-6 bg-gradient-to-br from-[#f8fbff] to-[#f0f6ff] border-2 border-[#b3d4f5] p-5 sm:p-6 shadow-sm rounded-none" dir="rtl">
       
@@ -467,12 +480,7 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
             </p>
           </div>
 
-          <CabinetConfigurator 
-            product={activeCabinetForBundle} 
-            catalogData={catalogData} 
-            initialAccessory={product}
-            onOptionalsChange={handleConfiguredOptionalsChange}
-          />
+          {cabinetConfiguratorEl}
 
           <div className="mt-5 p-5 bg-gradient-to-r from-slate-50 to-white border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="min-w-0 pr-1">

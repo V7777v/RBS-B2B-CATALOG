@@ -568,11 +568,33 @@ interface ProductCardProps {
   product: any;
   navigateToProduct: (product: any) => void;
   addToCart: (product: any, quantity?: number, optionals?: any[]) => void;
+  bulkSelection?: Record<string, { product: any, quantity: number }>;
+  onBulkSelectionChange?: (productId: string, product: any, quantity: number) => void;
 }
-const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, addToCart}) => {
+const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, addToCart, bulkSelection, onBulkSelectionChange}) => {
   const theme = getBrandTheme(product.brand);
   const [isAdded, setIsAdded] = useState(false);
   
+  const selection = bulkSelection?.[product.id];
+  const isSelectedForBulk = !!selection;
+  const bulkQuantity = selection?.quantity || 1;
+
+  const handleCheckboxClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onBulkSelectionChange) return;
+    if (isSelectedForBulk) {
+      onBulkSelectionChange(product.id, product, 0);
+    } else {
+      onBulkSelectionChange(product.id, product, 1);
+    }
+  };
+
+  const updateBulkQuantity = (e: React.MouseEvent, delta: number) => {
+    e.stopPropagation();
+    if (!onBulkSelectionChange) return;
+    onBulkSelectionChange(product.id, product, bulkQuantity + delta);
+  };
+
   const handleAddClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     // Assuming addToCart is available in scope or we must use original code
@@ -604,6 +626,18 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
           בקרוב!
         </div>
       ) : null}
+
+      {onBulkSelectionChange && !product.isComingSoon && (
+        <div 
+          className="absolute top-2 left-2 z-30 flex items-center justify-center p-1 cursor-pointer"
+          onClick={handleCheckboxClick}
+          title={isSelectedForBulk ? "הסר מהוספה מרובה" : "סמן להוספה מרובה"}
+        >
+          <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded border flex items-center justify-center transition-all ${isSelectedForBulk ? 'bg-[#004387] border-[#004387]' : 'bg-white border-gray-300 hover:border-[#004387] shadow-sm'}`}>
+            {isSelectedForBulk && <CheckCircle size={14} className="text-white sm:w-4 sm:h-4" />}
+          </div>
+        </div>
+      )}
       
       <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square w-full relative border-b border-gray-100 overflow-hidden`}>
         <img referrerPolicy="no-referrer" src={transformImageLink(product.images[0], 350)} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105 ${product.isComingSoon ? 'opacity-70' : ''}`} />
@@ -677,6 +711,15 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
           {product.isComingSoon ? (
             <div className="w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200">
               <span className="text-xs sm:text-sm font-bold">בקרוב</span>
+            </div>
+          ) : isSelectedForBulk ? (
+            <div className="w-full flex items-center justify-between border-2 border-[#004387] bg-blue-50 py-1.5 px-2" onClick={(e) => e.stopPropagation()}>
+               <button onClick={(e) => updateBulkQuantity(e, -1)} className="p-1 sm:p-1.5 text-[#004387] hover:bg-white rounded transition-colors" title="הפחת כמות"><Minus size={16}/></button>
+               <span className="font-bold text-[#004387] text-xs sm:text-sm flex flex-col items-center leading-none">
+                 <span>{bulkQuantity}</span>
+                 <span className="text-[9px] sm:text-[10px] font-normal mt-0.5">סומנו להוספה</span>
+               </span>
+               <button onClick={(e) => updateBulkQuantity(e, 1)} className="p-1 sm:p-1.5 text-[#004387] hover:bg-white rounded transition-colors" title="הוסף כמות"><Plus size={16}/></button>
             </div>
           ) : (
             <button onClick={handleAddClick} className={`w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 transition-all duration-300 ${isAdded ? 'bg-green-600 text-white rounded-none hover:bg-green-600' : theme.button}`}>
@@ -1062,6 +1105,30 @@ export default function App() {
   });
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [bulkSelection, setBulkSelection] = useState<Record<string, { product: any, quantity: number }>>({});
+
+  const handleBulkSelectionChange = (productId: string, product: any, quantity: number) => {
+    setBulkSelection(prev => {
+      const next = { ...prev };
+      if (quantity <= 0) {
+        delete next[productId];
+      } else {
+        next[productId] = { product, quantity };
+      }
+      return next;
+    });
+  };
+
+  const clearBulkSelection = () => setBulkSelection({});
+
+  const handleAddBulkToCart = () => {
+    Object.values(bulkSelection).forEach(({product, quantity}) => {
+      addToCart(product, quantity);
+    });
+    setBulkSelection({});
+    setIsCartOpen(true);
+  };
+
   const [addedItemConfirm, setAddedItemConfirm] = useState<{
     isOpen: boolean;
     productId: string;
@@ -2469,7 +2536,7 @@ export default function App() {
               <h3 className="text-xl font-bold text-[#0c2d57] mb-6 border-b border-gray-200 pb-2">מוצרים משלימים ומקבילים</h3>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6">
                 {similar.map(product => (
-                  <ProductCard key={product.id} product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} />
+                  <ProductCard key={product.id} product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} />
                 ))}
               </div>
             </div>
@@ -3245,7 +3312,7 @@ export default function App() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
                       {filteredProducts.slice(0, visibleCount).map(product => (
                         <VirtualProductCard key={product.id} product={product}>
-                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} />
+                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} />
                         </VirtualProductCard>
                       ))}
                     </div>
@@ -3354,7 +3421,7 @@ export default function App() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6">
                       {filteredProducts.slice(0, visibleCount).map(product => (
                         <VirtualProductCard key={product.id} product={product}>
-                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} />
+                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} />
                         </VirtualProductCard>
                       ))}
                     </div>
@@ -3747,6 +3814,44 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Floating Action Bar for Bulk Selection */}
+      {Object.keys(bulkSelection).length > 0 && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] w-[95%] max-w-sm sm:max-w-md bg-white border border-[#004387] shadow-[0_8px_30px_rgba(0,67,135,0.2)] rounded-lg p-3 sm:p-4 flex items-center justify-between gap-2 sm:gap-4 flex-row" style={{ animation: 'slideUp 0.3s ease-out forwards' }}>
+          <div className="flex flex-col">
+            <span className="text-[#0c2d57] font-bold text-sm sm:text-base leading-tight">
+              {Object.keys(bulkSelection).length} מוצרים סומנו
+            </span>
+            <span className="text-xs text-gray-500 font-medium leading-tight mt-0.5">
+              סה"כ {Object.values(bulkSelection).reduce((sum, item) => sum + item.quantity, 0)} פריטים
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <button
+              onClick={clearBulkSelection}
+              className="px-2 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors rounded border border-transparent hover:border-red-100"
+              title="נקה בחירה"
+            >
+              איפוס
+            </button>
+            <button
+              onClick={handleAddBulkToCart}
+              className="bg-[#004387] hover:bg-[#fe8d00] text-white px-3 sm:px-5 py-1.5 sm:py-2 text-xs sm:text-sm font-bold shadow-md transition-colors flex items-center gap-1.5 rounded"
+            >
+              <ShoppingCart size={14} className="sm:w-4 sm:h-4" />
+              <span className="whitespace-nowrap">הוסף לסל</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Global Style for slide-up animation if tailwind animate-in is not present */}
+      <style>{`
+        @keyframes slideUp {
+          from { transform: translate(-50%, 100%); opacity: 0; }
+          to { transform: translate(-50%, 0); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }
