@@ -31,6 +31,7 @@ const transformImageLink = (url: string, size?: number) => {
 
     if (fileId) {
       const validSize = (typeof size === 'number' && size > 10) ? size : 400;
+      // use thumbnail endpoint for fast resize and bypassing cookie restrictions in iframes
       return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${validSize}`;
     }
 

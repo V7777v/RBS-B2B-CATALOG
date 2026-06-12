@@ -3178,6 +3178,7 @@ export default function App() {
                     )}
                   </div>
                 )}
+              </div>
 
                 {hasMoreProducts && (
                   <div className="flex items-center gap-1.5 text-xs text-[#fe8d00] bg-orange-50 px-2 py-0.5 animate-pulse select-none font-medium border border-orange-100 font-bold">
@@ -3186,7 +3187,6 @@ export default function App() {
                   </div>
                 )}
               </div>
-            </div>
             
             {/* CENTER SIDE: Search (Protected from collapsing) */}
             <div className="flex-grow min-w-0 max-w-xl mx-2 hidden md:flex items-center bg-[#f2f2f2] px-4 py-2 border border-transparent focus-within:border-[#004387] focus-within:bg-white transition-all">
@@ -3495,35 +3495,6 @@ export default function App() {
                     {/* Changed to h2 with explicit !text-white to avoid WP theme overriding color */}
                     <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 !text-white !text-center w-full block" style={{ color: 'white', textAlign: 'center' }}>ברוכים הבאים לפורטל B2B</h2>
                     <p className="text-sm sm:text-lg opacity-90 max-w-xl font-light mx-auto !text-white !text-center block" style={{ color: 'white' }}>בחר מחירון כדי להציג את הקטגוריות, להוריד מפרטים ולהרכיב הצעת מחיר / הזמנה בקלות.</p>
-                    
-                    {/* Beautiful inline search input inside the welcome banner on mobile devices for easy access */}
-                    <div className="mt-5 max-w-md mx-auto w-full block md:hidden relative z-10">
-                      <div className="flex items-center bg-white/95 backdrop-blur-xs rounded-xl px-3.5 py-2 hover:bg-white transition-all shadow-md border border-white/20">
-                        <Search size={18} className="text-[#004387] ml-2 flex-shrink-0" />
-                        <input 
-                          type="text" 
-                          placeholder="חיפוש חופשי (מק״ט, שם)..." 
-                          className="bg-transparent border-none outline-none w-full min-w-0 text-base text-gray-800 placeholder-gray-400 text-right focus:ring-0 !p-0 !m-0 font-medium"
-                          value={searchQuery}
-                          onChange={(e) => {
-                            setSearchQuery(e.target.value);
-                            if (e.target.value) {
-                              setIsMobileSearchActive(true);
-                            }
-                          }}
-                        />
-                        {searchQuery && (
-                          <button 
-                            type="button" 
-                            onClick={() => { setSearchQuery(''); setIsMobileSearchActive(false); }}
-                            className="p-1 text-gray-400 hover:text-gray-700"
-                            aria-label="נקה"
-                          >
-                            <X size={16} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
                   </div>
                   <Package size={120} className="absolute left-4 bottom-0 opacity-10 rotate-12 text-white pointer-events-none" />
                 </div>
