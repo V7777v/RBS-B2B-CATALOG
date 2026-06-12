@@ -53,15 +53,19 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
   const [calcResultWh, setCalcResultWh] = useState<number>(0);
 
   const [viewportHeight, setViewportHeight] = useState<string>('100dvh');
+  const [keyboardHeight, setKeyboardHeight] = useState<number>(0);
 
   // Dynamic visualViewport adjustments for mobile keyboards & PWA height shifts
   useEffect(() => {
     if (!isOpen || typeof window === 'undefined' || !window.visualViewport) return;
 
     const handleViewportChange = () => {
-      const height = window.visualViewport?.height;
-      if (height) {
-        setViewportHeight(`${height}px`);
+      const vv = window.visualViewport;
+      if (vv) {
+        setViewportHeight(`${vv.height}px`);
+        // Calculate the height covered by native keyboard/helper bars
+        const kh = Math.max(0, window.innerHeight - vv.height);
+        setKeyboardHeight(kh);
       }
     };
 
@@ -69,11 +73,13 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
     window.visualViewport.addEventListener('scroll', handleViewportChange);
     handleViewportChange();
 
-    // Extra trigger slightly later to adapt to keyboard layout adjustments
-    const timer = setTimeout(handleViewportChange, 150);
+    // Extra triggers slightly later to adapt to keyboard layout transitions
+    const timer1 = setTimeout(handleViewportChange, 100);
+    const timer2 = setTimeout(handleViewportChange, 300);
 
     return () => {
-      clearTimeout(timer);
+      clearTimeout(timer1);
+      clearTimeout(timer2);
       window.visualViewport?.removeEventListener('resize', handleViewportChange);
       window.visualViewport?.removeEventListener('scroll', handleViewportChange);
     };
@@ -239,7 +245,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
       {/* Slide-in sidebar advisor interface */}
       <AnimatePresence>
         {isOpen && (
-          <div className="fixed inset-0 z-50 flex justify-end" style={{ direction: 'rtl', height: viewportHeight }}>
+          <div className="fixed inset-0 z-50 flex justify-end" style={{ direction: 'rtl' }}>
             {/* Backdrop */}
             <motion.div 
               initial={{ opacity: 0 }}
@@ -255,8 +261,12 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className="bg-gray-50 w-full sm:max-w-md relative z-10 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.15)] overflow-hidden border-r border-[#004387]/15"
-              style={{ height: viewportHeight }}
+              className="bg-gray-50 w-full sm:max-w-md relative z-10 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.15)] overflow-hidden border-r border-[#004387]/15 h-full"
+              style={{ 
+                height: '100%',
+                maxHeight: '100dvh',
+                paddingBottom: `${keyboardHeight}px`
+              }}
               ref={containerRef}
             >
               {/* AI Disclaimer Dialog Popup Overlay */}

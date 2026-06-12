@@ -859,10 +859,17 @@ const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) 
         },
       };
 
-      const credential = await navigator.credentials.create({
+      const credential = (await navigator.credentials.create({
         publicKey: publicKeyOptions
-      });
-      return !!credential;
+      })) as PublicKeyCredential;
+
+      if (credential && credential.rawId) {
+        // Save the rawId to local storage as binary-to-hex for verification later (critical for iOS Safari compatibility)
+        const hexId = Array.prototype.map.call(new Uint8Array(credential.rawId), (x: number) => ('00' + x.toString(16)).slice(-2)).join('');
+        localStorage.setItem('rbs_b2b_biometric_raw_id', hexId);
+        return true;
+      }
+      return false;
     } catch (err) {
       console.error("Biometric registration cancelled or failed:", err);
       return false;
@@ -875,11 +882,26 @@ const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) 
       const challenge = new Uint8Array(32);
       window.crypto.getRandomValues(challenge);
 
+      const savedRawIdHex = localStorage.getItem('rbs_b2b_biometric_raw_id');
+      const allowCredentials: PublicKeyCredentialDescriptor[] = [];
+      if (savedRawIdHex) {
+        try {
+          const rawIdBytes = new Uint8Array(savedRawIdHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+          allowCredentials.push({
+            type: "public-key",
+            id: rawIdBytes.buffer,
+          });
+        } catch (parseErr) {
+          console.error("Error parsing saved biometric raw ID:", parseErr);
+        }
+      }
+
       const publicKeyOptions: PublicKeyCredentialRequestOptions = {
         challenge: challenge,
         timeout: 60000,
         rpId: window.location.hostname,
         userVerification: "required",
+        allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
       };
 
       const credential = await navigator.credentials.get({
@@ -895,7 +917,7 @@ const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) 
       if (window.self !== window.top) {
         setErrorMsg('בגלל מגבלות אבטחה של דפדפנים, זיהוי ביומטרי (Face ID / טביעת אצבע) דורש פתיחה של האתר בטאב חדש (לא בתוך מסגרת/iframe).');
       } else if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
-        setErrorMsg('אימות ביומטרי נכשל או בוטל.');
+        setErrorMsg('אימות ביומטרי נכשל או בוטל. ודא כי זירזת זיהוי פנים או הזן סיסמה.');
       }
     }
   };
