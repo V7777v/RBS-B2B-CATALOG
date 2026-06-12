@@ -383,11 +383,32 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// Global in-memory cache map for proxy sheets requests
+interface SheetsCacheEntry {
+  text: string;
+  timestamp: number;
+}
+const sheetsCacheMap = new Map<string, SheetsCacheEntry>();
+const CACHE_TTL_SHEETS_MS = 45 * 1000; // 45 seconds cache is ideal
+
 // Proxy endpoint for cached Google Sheets access on Express
 app.get("/api/sheets", async (req, res) => {
   const { gid, limit, offset } = req.query;
   if (!gid) {
     return res.status(400).json({ error: "Missing GID parameter" });
+  }
+
+  const bypassCache = req.query.bypass_cache === "true";
+  const cacheKey = `${gid}_${limit || ""}_${offset || ""}`;
+
+  // Serve from cache if valid and not bypassing
+  if (!bypassCache) {
+    const cached = sheetsCacheMap.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL_SHEETS_MS)) {
+      res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      return res.status(200).send(cached.text);
+    }
   }
 
   try {
@@ -408,12 +429,25 @@ app.get("/api/sheets", async (req, res) => {
     }
 
     const text = await response.text();
-    const bypassCache = req.query.bypass_cache === "true";
+
+    // Store in cache if succeeded and not bypassing
+    if (!bypassCache) {
+      sheetsCacheMap.set(cacheKey, {
+        text,
+        timestamp: Date.now()
+      });
+    } else {
+      // Clear all cache entries if user/admin forced a cache bypass (sync)
+      sheetsCacheMap.clear();
+      if (catalogCache) {
+        catalogCache = null; // Also clear AI advisor cache
+      }
+    }
 
     if (bypassCache) {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
     } else {
-      res.setHeader("Cache-Control", "public, max-age=0, s-maxage=600, stale-while-revalidate=1200");
+      res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
     }
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");

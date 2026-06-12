@@ -79,7 +79,7 @@ const transformImageLink = (url: string, size?: number) => {
 
       // Detect mobile device or viewport size to minimize image payload
       const isMobile = typeof window !== 'undefined' && (
-        window.innerWidth < 768 || 
+        window.innerWidth < 1024 || 
         /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '')
       );
 
@@ -1423,19 +1423,22 @@ export default function App() {
         setIsProductsLoading(false);
       } else {
         setIsProductsLoading(false);
-        // Progressive background fetching for ALL products to populate categories entirely
-        fetchCSV(PRODUCTS_GID, undefined, undefined, forceBypassCache)
-          .then(allProductsCsv => {
-            if (allProductsCsv && allProductsCsv.length > 0) {
-              const allParsed = allProductsCsv.map(parseProductRow);
-              setCatalogData(allParsed);
-              setHasMoreProducts(false);
-              setProductsOffset(allParsed.length);
-            }
-          })
-          .catch(err => {
-            console.error("Progressive background fetch of full products sheet failed:", err);
-          });
+        // Progressive background fetching with a 1.8 second delay.
+        // This ensures the browser can use 100% of its network bandwidth to download and draw initial product images first!
+        setTimeout(() => {
+          fetchCSV(PRODUCTS_GID, undefined, undefined, forceBypassCache)
+            .then(allProductsCsv => {
+              if (allProductsCsv && allProductsCsv.length > 0) {
+                const allParsed = allProductsCsv.map(parseProductRow);
+                setCatalogData(allParsed);
+                setHasMoreProducts(false);
+                setProductsOffset(allParsed.length);
+              }
+            })
+            .catch(err => {
+              console.error("Progressive background fetch of full products sheet failed:", err);
+            });
+        }, 1800);
       }
       lastFetchTimeRef.current = Date.now();
 
@@ -2964,6 +2967,9 @@ export default function App() {
             --header-height-home: 56px;
             --header-height-sub: 92px;
           }
+        }
+        .fixed-header {
+          padding-top: env(safe-area-inset-top, 0px) !important;
         }
       `}} />
 
