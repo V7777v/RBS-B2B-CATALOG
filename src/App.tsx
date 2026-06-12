@@ -2975,9 +2975,9 @@ export default function App() {
             <div className="flex flex-row items-center gap-2 md:gap-4 flex-shrink-0">
               
               {/* MOBILE ONLY: Browser-style Navigation Controls with large touch targets */}
-              <div id="mobile-browser-navigation-bar" className="flex md:hidden items-center gap-1.5 bg-gray-50 border border-gray-200/80 p-1.5 rounded-xl shadow-xs">
+              <div id="mobile-browser-navigation-bar" className="flex md:hidden items-center gap-2 bg-gray-50 border border-gray-200/80 p-2 rounded-xl shadow-xs">
                 
-                {/* 1. Menu Button: 48px size, large Menu bars */}
+                {/* 1. Menu Button: 52px size, large Menu bars */}
                 <button 
                   id="mobile-nav-hamburger"
                   type="button"
@@ -2986,21 +2986,21 @@ export default function App() {
                   aria-label="פתח תפריט"
                   title="תפריט ניווט"
                 >
-                  <Menu size={28} className="stroke-[2.5]" />
+                  <Menu size={30} className="stroke-[2.5]" />
                 </button>
 
-                <div className="h-8 w-[1px] bg-gray-300/60 mx-0.5"></div>
+                <div className="h-9 w-[1px] bg-gray-300/60 mx-0.5"></div>
 
                 {/* 2. Back Button (ChevronRight for RTL back) */}
                 <button 
                   id="mobile-nav-back"
                   type="button"
                   onClick={() => { if (searchQuery) { setSearchQuery(''); } else { goBack(); } }}
-                  className="flex items-center justify-center w-11 h-11 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                  className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
                   aria-label="אחורה"
                   title="חזור אחורה"
                 >
-                  <ChevronRight size={24} className="stroke-[2.5]" />
+                  <ChevronRight size={28} className="stroke-[2.5]" />
                 </button>
 
                 {/* 3. Forward Button (ChevronLeft for RTL forward) */}
@@ -3012,23 +3012,32 @@ export default function App() {
                       window.history.forward();
                     }
                   }}
-                  className="flex items-center justify-center w-11 h-11 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                  className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
                   aria-label="קדימה"
                   title="חזור קדימה"
                 >
-                  <ChevronLeft size={24} className="stroke-[2.5]" />
+                  <ChevronLeft size={28} className="stroke-[2.5]" />
                 </button>
 
-                {/* 4. Home Button */}
+                {/* 4. Clickable RBS Logo / Home Button */}
                 <button 
                   id="mobile-nav-home"
                   type="button"
-                  onClick={navigateHome}
-                  className="flex items-center justify-center w-11 h-11 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                  onClick={() => {
+                    setSearchQuery('');
+                    navigateHome();
+                  }}
+                  className="flex items-center justify-center h-12 px-3 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
                   aria-label="דף הבית"
-                  title="דף הבית"
+                  title="דף הבית - RBS"
+                  style={{ minWidth: '5.2rem' }}
                 >
-                  <Home size={22} className="stroke-[2]" />
+                  <img 
+                    referrerPolicy="no-referrer" 
+                    src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
+                    alt="RBS Logo" 
+                    className="h-8 w-auto object-contain max-w-[76px] select-none" 
+                  />
                 </button>
 
               </div>
@@ -3052,7 +3061,17 @@ export default function App() {
               
               {/* Breadcrumb style path indicator */}
               <div className="hidden sm:flex items-center text-sm text-[#0c2d57] opacity-80 whitespace-nowrap gap-3">
-                <img referrerPolicy="no-referrer" src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" alt="RBS Logo" className="h-8 object-contain" />
+                <img 
+                  referrerPolicy="no-referrer" 
+                  src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
+                  alt="RBS Logo" 
+                  className="h-8 object-contain cursor-pointer hover:opacity-80 active:scale-95 transition-all" 
+                  onClick={() => {
+                    setSearchQuery('');
+                    navigateHome();
+                  }}
+                  title="חזור לדף הבית"
+                />
                 <span 
                   onClick={() => {
                     setAdminError('');
@@ -3127,16 +3146,22 @@ export default function App() {
             <div className="bg-[#fafafa] border-t border-b border-gray-200/60 py-1.5 px-4 w-full text-right transition-all">
               <div className="container mx-auto flex flex-row items-center justify-start flex-wrap gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm text-gray-500 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 
-                {/* Home Indicator */}
+                {/* Home Indicator - Clickable RBS Logo for Home navigation */}
                 <button 
                   onClick={() => {
                     setSearchQuery('');
                     navigateHome();
                   }} 
-                  className="hover:text-[#004387] p-2 sm:p-1 flex items-center gap-1.5 font-bold bg-gray-100 sm:bg-transparent border border-gray-200 sm:border-none rounded-md sm:rounded-none cursor-pointer flex-shrink-0 text-[#004387] sm:text-gray-500 hover:scale-105 transition-all text-xs"
-                  title="ראשי"
+                  className="hover:opacity-85 p-1.5 sm:p-1 flex items-center gap-1.5 font-bold bg-[#004387]/5 sm:bg-transparent border border-[#004387]/15 sm:border-none rounded-xl sm:rounded-none cursor-pointer flex-shrink-0 transition-all hover:scale-105 active:scale-95"
+                  title="ראשי - חזור לדף הבית"
                 >
-                  <Home size={18} className="sm:w-[15px] sm:h-[15px]" /><span className="sm:hidden text-[11px] font-bold">ראשי</span>
+                  <img 
+                    referrerPolicy="no-referrer" 
+                    src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
+                    alt="RBS Logo" 
+                    className="h-5 sm:h-6 w-auto object-contain select-none max-w-[64px]" 
+                  />
+                  <span className="text-[11px] sm:text-xs font-bold text-[#004387]">ראשי</span>
                 </button>
 
                 {searchQuery ? (
@@ -3835,29 +3860,29 @@ export default function App() {
 
       {/* Floating Action Bar for Bulk Selection */}
       {Object.keys(bulkSelection).length > 0 && (
-        <div className="fixed bottom-4 left-4 right-4 sm:left-1/2 sm:right-auto sm:transform sm:-translate-x-1/2 z-[100] w-auto sm:w-full sm:max-w-md bg-white border border-[#004387] shadow-[0_8px_30px_rgba(0,67,135,0.2)] rounded-xl p-3 sm:p-4 flex items-center justify-between gap-2 sm:gap-4 flex-row bulk-floating-bar">
-          <div className="flex flex-col">
-            <span className="text-[#0c2d57] font-bold text-sm sm:text-base leading-tight">
+        <div className="fixed bottom-4 left-3 right-3 sm:left-1/2 sm:right-auto sm:transform sm:-translate-x-1/2 z-[100] mx-auto w-[92%] sm:w-full max-w-sm sm:max-w-md bg-white border-2 border-[#004387] shadow-[0_10px_35px_rgba(0,67,135,0.22)] rounded-2xl p-3.5 sm:p-5 flex items-center justify-between gap-2.5 sm:gap-5 flex-row bulk-floating-bar">
+          <div className="flex flex-col text-right">
+            <span className="text-[#0c2d57] font-extrabold text-sm sm:text-base leading-tight">
               {Object.keys(bulkSelection).length} מוצרים סומנו
             </span>
-            <span className="text-xs text-gray-500 font-medium leading-tight mt-0.5">
+            <span className="text-xs text-gray-500 font-bold leading-tight mt-1 whitespace-nowrap">
               סה"כ {Object.values(bulkSelection).reduce((sum, item) => sum + item.quantity, 0)} פריטים
             </span>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
             <button
               onClick={clearBulkSelection}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors rounded border border-transparent hover:border-red-100"
+              className="px-3 py-2 text-xs sm:text-sm font-bold text-red-500 hover:bg-red-50 hover:text-red-700 transition-all rounded-xl border border-transparent hover:border-red-200 active:scale-95 whitespace-nowrap"
               title="נקה בחירה"
             >
               איפוס
             </button>
             <button
               onClick={handleAddBulkToCart}
-              className="bg-[#004387] hover:bg-[#fe8d00] text-white px-3 sm:px-5 py-1.5 sm:py-2 text-xs sm:text-sm font-bold shadow-md transition-colors flex items-center gap-1.5 rounded"
+              className="bg-[#004387] hover:bg-[#fe8d00] text-white px-4 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-extrabold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 rounded-xl active:scale-95 flex-nowrap whitespace-nowrap"
             >
-              <ShoppingCart size={14} className="sm:w-4 sm:h-4" />
-              <span className="whitespace-nowrap">הוסף לסל</span>
+              <ShoppingCart size={16} className="w-4 h-4 flex-shrink-0" />
+              <span className="whitespace-nowrap">הוסף לעגלה</span>
             </button>
           </div>
         </div>
@@ -3865,20 +3890,20 @@ export default function App() {
 
       {/* Global Style for slide-up animation if tailwind animate-in is not present */}
       <style>{`
-        @keyframes slideUpDesktop {
-          from { transform: translate(-50%, 100%); opacity: 0; }
-          to { transform: translate(-50%, 0); opacity: 1; }
-        }
         @keyframes slideUpMobile {
           from { transform: translateY(120%); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
         }
+        @keyframes slideUpDesktop {
+          from { transform: translate(-50%, 120%); opacity: 0; }
+          to { transform: translate(-50%, 0); opacity: 1; }
+        }
         .bulk-floating-bar {
-          animation: slideUpMobile 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+          animation: slideUpMobile 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
         }
         @media (min-width: 640px) {
           .bulk-floating-bar {
-            animation: slideUpDesktop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+            animation: slideUpDesktop 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
           }
         }
       `}</style>
