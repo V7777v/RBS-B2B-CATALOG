@@ -2981,72 +2981,83 @@ export default function App() {
             {/* RIGHT SIDE: Menu & Back (Mobile optimized browser controls & Desktop standard) */}
             <div className="flex flex-row items-center gap-2 md:gap-4 flex-shrink-0">
               
-              {/* MOBILE ONLY: Browser-style Navigation Controls with large touch targets */}
-              <div id="mobile-browser-navigation-bar" className="flex md:hidden items-center gap-2 bg-gray-50 border border-gray-200/80 p-2 rounded-xl shadow-xs">
-                
-                {/* 1. Menu Button: 52px size, large Menu bars */}
-                <button 
-                  id="mobile-nav-hamburger"
-                  type="button"
-                  onClick={() => setMobileMenuOpen(true)}
-                  className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 rounded-lg shadow-sm transition-all duration-200 active:scale-95 flex-shrink-0"
-                  aria-label="פתח תפריט"
-                  title="תפריט ניווט"
-                >
-                  <Menu size={30} className="stroke-[2.5]" />
-                </button>
+              {/* MOBILE ONLY: Inline Unified Navigation (No duplicate/split headers) */}
+              <div className="flex md:hidden items-center gap-2.5">
+                {/* 1. Mobile Back button */}
+                {(currentView !== 'home' || searchQuery) && (
+                  <button 
+                    id="mobile-nav-back"
+                    type="button"
+                    onClick={() => { if (searchQuery) { setSearchQuery(''); } else { goBack(); } }}
+                    className="flex items-center justify-center w-11 h-11 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-xl shadow-xs transition-all duration-200 active:scale-90 flex-shrink-0"
+                    aria-label="חזור אחורה"
+                    title="חזור אחורה"
+                  >
+                    <ChevronRight size={24} className="stroke-[2.5]" />
+                  </button>
+                )}
 
-                <div className="h-9 w-[1px] bg-gray-300/60 mx-0.5"></div>
-
-                {/* 2. Back Button (ChevronRight for RTL back) */}
-                <button 
-                  id="mobile-nav-back"
-                  type="button"
-                  onClick={() => { if (searchQuery) { setSearchQuery(''); } else { goBack(); } }}
-                  className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
-                  aria-label="אחורה"
-                  title="חזור אחורה"
-                >
-                  <ChevronRight size={28} className="stroke-[2.5]" />
-                </button>
-
-                {/* 3. Forward Button (ChevronLeft for RTL forward) */}
-                <button 
-                  id="mobile-nav-forward"
-                  type="button"
-                  onClick={() => {
-                    if (window.history.state) {
-                      window.history.forward();
-                    }
-                  }}
-                  className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
-                  aria-label="קדימה"
-                  title="חזור קדימה"
-                >
-                  <ChevronLeft size={28} className="stroke-[2.5]" />
-                </button>
-
-                {/* 4. Clickable RBS Logo / Home Button */}
-                <button 
-                  id="mobile-nav-home"
-                  type="button"
+                {/* 2. Clickable RBS Logo */}
+                <img 
+                  referrerPolicy="no-referrer" 
+                  src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
+                  alt="RBS Logo" 
+                  className="h-8 w-auto object-contain cursor-pointer hover:opacity-80 active:scale-95 transition-all flex-shrink-0" 
                   onClick={() => {
                     setSearchQuery('');
                     navigateHome();
                   }}
-                  className="flex items-center justify-center h-12 px-3 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
-                  aria-label="דף הבית"
-                  title="דף הבית - RBS"
-                  style={{ minWidth: '5.2rem' }}
-                >
-                  <img 
-                    referrerPolicy="no-referrer" 
-                    src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
-                    alt="RBS Logo" 
-                    className="h-8 w-auto object-contain max-w-[76px] select-none" 
-                  />
-                </button>
+                  title="ראשי - חזור לדף הבית"
+                />
 
+                {/* 3. Mobile Inline Breadcrumbs integrated right in the header row */}
+                {(currentView !== 'home' || searchQuery) && (
+                  <div className="flex items-center gap-1 text-[11px] font-bold text-[#0c2d57] overflow-x-auto whitespace-nowrap py-0.5 max-w-[130px] xs:max-w-[170px] sm:max-w-xs" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                    {searchQuery ? (
+                      <>
+                        <ChevronLeft size={11} className="text-gray-400 flex-shrink-0" />
+                        <span className="text-[#004387] bg-blue-50/80 px-1 py-0.5 rounded-sm">
+                          חיפוש: {searchQuery}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        {selectedCatalog && (
+                          <>
+                            <ChevronLeft size={11} className="text-gray-400 flex-shrink-0" />
+                            <span className="text-[#0c2d57]/80 truncate max-w-[70px]">
+                              {selectedCatalog}
+                            </span>
+                          </>
+                        )}
+                        {selectedSubcategory && (currentView === 'nested_subs' || currentView === 'products' || currentView === 'product') && (
+                          <>
+                            <ChevronLeft size={11} className="text-gray-400 flex-shrink-0" />
+                            <span className="text-[#0c2d57]/85 truncate max-w-[75px]">
+                              {selectedSubcategory}
+                            </span>
+                          </>
+                        )}
+                        {selectedNestedSubcategory && (currentView === 'products' || currentView === 'product') && (
+                          <>
+                            <ChevronLeft size={11} className="text-gray-400 flex-shrink-0" />
+                            <span className="text-[#0c2d57]/85 truncate max-w-[75px]">
+                              {selectedNestedSubcategory}
+                            </span>
+                          </>
+                        )}
+                        {currentView === 'product' && selectedProduct && (
+                          <>
+                            <ChevronLeft size={11} className="text-gray-400 flex-shrink-0" />
+                            <span className="text-[#004387] font-extrabold truncate max-w-[65px]">
+                              {selectedProduct.name}
+                            </span>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* DESKTOP ONLY: Standard navigation controls as they were */}
@@ -3219,8 +3230,20 @@ export default function App() {
               />
             </div>
 
-            {/* LEFT SIDE: Cart (Protected from theme overrides) */}
-            <div className="flex-shrink-0">
+            {/* LEFT SIDE: Cart & Hamburger Menu (Protected from theme overrides) */}
+            <div className="flex flex-row items-center gap-2 flex-shrink-0">
+              {/* MOBILE ONLY HAMBURGER: On the left side of the single header bar */}
+              <button 
+                id="mobile-nav-hamburger"
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                className="flex md:hidden items-center justify-center w-11 h-11 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 rounded-xl shadow-xs transition-all duration-200 active:scale-95 flex-shrink-0"
+                aria-label="פתח תפריט"
+                title="תפריט ניווט"
+              >
+                <Menu size={24} className="stroke-[2.5]" />
+              </button>
+
               <button 
                 className="relative flex flex-row items-center justify-center gap-2 !p-2 !px-3.5 !m-0 h-11 text-[#004387] bg-white border border-[#004387]/60 hover:bg-[#004387] hover:text-white hover:border-[#004387] hover:shadow-sm transition-all whitespace-nowrap rounded-xl box-border active:scale-95"
                 onClick={() => setIsCartOpen(true)}
@@ -3288,127 +3311,6 @@ export default function App() {
               )}
             </div>
           </div>
-
-          {/* MOBILE ONLY DYNAMIC BREADCRUMB BAR (INTEGRATED AND COMPACT - NO DUPLICATE LOGOS) */}
-          {(currentView !== 'home' || searchQuery) && (
-            <div className={`md:hidden bg-white px-4 pb-2 w-full text-right transition-all ${isSearchFocused ? 'hidden' : 'block'}`}>
-              <div className="flex flex-row items-center justify-start gap-1 text-[11px] text-gray-500 overflow-x-auto py-0.5" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                
-                {/* Clean Home Icon instead of duplicate Logo */}
-                <button 
-                  onClick={() => {
-                    setSearchQuery('');
-                    navigateHome();
-                  }} 
-                  className="hover:opacity-85 text-gray-400 p-1 flex items-center gap-1 font-bold cursor-pointer flex-shrink-0 transition-all hover:scale-105 active:scale-95"
-                  title="ראשי - חזור לדף הבית"
-                >
-                  <Home size={14} className="text-[#004387]" />
-                  <span className="text-[11px] font-bold text-[#004387]">ראשי</span>
-                </button>
-
-                {searchQuery ? (
-                  <>
-                    <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                    <span className="font-semibold text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded-sm">
-                      חיפוש: <strong className="text-[#004387]">{searchQuery}</strong>
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    {/* Catalog Link */}
-                    {selectedCatalog && (
-                      <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                        <button 
-                          onClick={() => navigateToCatalog(selectedCatalog)} 
-                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-600"
-                        >
-                          {selectedCatalog}
-                        </button>
-                      </>
-                    )}
-
-                    {/* Subcategory Link */}
-                    {selectedSubcategory && (currentView === 'nested_subs' || currentView === 'products' || currentView === 'product') && (
-                      <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                        <button 
-                          onClick={() => navigateToSubcategory(selectedSubcategory)} 
-                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-600"
-                        >
-                          {selectedSubcategory}
-                        </button>
-                      </>
-                    )}
-
-                    {/* Nested Subcategory Link */}
-                    {selectedNestedSubcategory && (currentView === 'products' || currentView === 'product') && (
-                      <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                        <button 
-                          onClick={() => navigateToNestedSubcategory(selectedNestedSubcategory)} 
-                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-600"
-                        >
-                          {selectedNestedSubcategory}
-                        </button>
-                      </>
-                    )}
-
-                    {/* Product Name (Active Leaf) */}
-                    {currentView === 'product' && selectedProduct && (
-                      <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-[#004387] truncate max-w-[150px]">
-                          {selectedProduct.name}
-                        </span>
-                      </>
-                    )}
-
-                    {/* Subcategories (Active Leaf) */}
-                    {currentView === 'catalog_subs' && (
-                      <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-gray-700">
-                          קטגוריות
-                        </span>
-                      </>
-                    )}
-
-                    {/* Nested Subcategories (Active Leaf) */}
-                    {currentView === 'nested_subs' && (
-                      <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-gray-700">
-                          תתי קטגוריה
-                        </span>
-                      </>
-                    )}
-
-                    {/* Products View (Active Leaf) */}
-                    {currentView === 'products' && !selectedNestedSubcategory && (
-                      <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-gray-700">
-                          מוצרים
-                        </span>
-                      </>
-                    )}
-
-                    {/* Checkout (Active Leaf) */}
-                    {currentView === 'checkout' && (
-                      <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-gray-700">
-                          סיכום הזמנה ושליחה
-                        </span>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Spacer not needed for sticky layout as browser handles flow spacing natively, preserved at 0px to maintain node structure */}
