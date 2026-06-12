@@ -656,7 +656,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder="שאל אותי על צריכת W, חישובי אל פסק, או מוצר..."
-                    className="flex-1 bg-gray-50 border border-gray-200 focus:bg-white rounded-lg px-3 py-2 text-xs sm:text-sm outline-none focus:ring-1 focus:ring-[#004387] transition-all text-right"
+                    className="flex-1 bg-gray-50 border border-gray-200 focus:bg-white rounded-lg px-3 py-2 text-base md:text-sm outline-none focus:ring-1 focus:ring-[#004387] transition-all text-right"
                   />
                   {isLoading ? (
                     <button 

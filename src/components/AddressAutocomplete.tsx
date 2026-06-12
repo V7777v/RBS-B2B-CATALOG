@@ -268,7 +268,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
             placeholder="הקלד כתובת מלאה כאן (למשל: הרצל 15, כפר יונה)"
             value={manualAddress}
             onChange={(e) => setManualAddress(e.target.value)}
-            className="w-full px-3.5 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm font-semibold text-[#0c2d57] placeholder-gray-400"
+            className="w-full px-3.5 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm font-semibold text-[#0c2d57] placeholder-gray-400"
           />
           <p className="text-[11px] text-gray-500 bg-gray-50 px-3 py-1.5 border-r-2 border-amber-500 font-medium">
             הזנת כתובת חופשית מופעלת. אנא ודא שהרחוב ומספר הבית מדויקים לצורך מסירה תקינה.
@@ -308,7 +308,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
                     value={cityQuery}
                     onChange={handleCityInput}
                     onFocus={() => { if (citySuggestions.length > 0) setIsCityDropdownOpen(true); }}
-                    className="w-full pl-9 pr-3.5 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm font-semibold transition-all text-[#0c2d57]"
+                    className="w-full pl-9 pr-3.5 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm font-semibold transition-all text-[#0c2d57]"
                   />
                   <div className="absolute left-3 text-gray-400">
                     {isCityLoading ? <Loader2 className="animate-spin text-blue-600" size={16} /> : <Search size={15} />}
@@ -377,7 +377,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
                     onChange={handleStreetInput}
                     disabled={!selectedCity}
                     onFocus={() => { if (streetSuggestions.length > 0) setIsStreetDropdownOpen(true); }}
-                    className={`w-full pl-9 pr-3.5 py-3 border rounded-none outline-none text-sm transition-all text-[#0c2d57] ${
+                    className={`w-full pl-9 pr-3.5 py-3 border rounded-none outline-none text-base md:text-sm transition-all text-[#0c2d57] ${
                       !selectedCity 
                         ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed font-medium' 
                         : 'border-gray-200 focus:ring-2 focus:ring-[#004387] bg-white font-bold'
@@ -424,7 +424,7 @@ export const AddressAutocomplete: React.FC<AddressAutocompleteProps> = ({
                 value={houseNumber}
                 onChange={(e) => setHouseNumber(e.target.value)}
                 disabled={!selectedStreet}
-                className={`w-full px-2 py-3 border rounded-none outline-none text-sm transition-all text-center font-extrabold ${
+                className={`w-full px-2 py-3 border rounded-none outline-none text-base md:text-sm transition-all text-center font-extrabold ${
                   !selectedStreet 
                     ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed' 
                     : 'border-gray-200 focus:ring-2 focus:ring-[#004387] bg-white text-[#0c2d57]'
