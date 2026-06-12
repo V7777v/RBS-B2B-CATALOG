@@ -2869,61 +2869,60 @@ export default function App() {
                 <p className="text-xs text-gray-500 mt-1">כתובת המייל אליה יישלח אישור/העתק כשתשתמשו בשליחה דרך המייל.</p>
               </div>
 
-              <AddressAutocomplete 
-                value={address} 
-                onChange={setAddress}
-                theme={{
-                  bg: 'bg-white',
-                  text: 'text-[#0c2d57]',
-                  border: 'border-gray-200',
-                  accent: 'text-[#004387]',
-                  hover: 'hover:bg-gray-50'
-                }}
-              />
+              <div className="space-y-4">
+                <label className="block text-sm font-bold text-gray-700">כתובת למשלוח (אינטראקטיבי / בחירה מהירה)</label>
+                <AddressAutocomplete 
+                  value={address} 
+                  onChange={setAddress}
+                  theme={{
+                    bg: 'bg-white',
+                    text: 'text-gray-800',
+                    border: 'border-gray-200',
+                    accent: '#004387',
+                    hover: 'hover:bg-gray-50'
+                  }}
+                />
+              </div>
 
-              <textarea placeholder="הערות למשלוח / הזמנה" value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm resize-none"></textarea>
-              
-              <div className="pt-3 border-t border-gray-300 mt-3">
-                <label className="block text-sm font-semibold text-[#0c2d57] mb-2">בחירת סוכן מטפל להזמנה <span className="text-red-500">*</span>:</label>
+              <div>
+                <textarea 
+                  placeholder="הערות ודגשים מיוחדים למשלוח..." 
+                  value={notes} 
+                  onChange={e => setNotes(e.target.value)} 
+                  className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm min-h-[100px]" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">בחר סוכן לפניה:</label>
                 <select 
                   value={selectedAgent} 
-                  onChange={e => {setSelectedAgent(e.target.value); setErrors({...errors, selectedAgent: null})}}
-                  className={`w-full px-3 py-3 border ${errors.selectedAgent ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-sm font-medium`}
+                  onChange={e => {setSelectedAgent(e.target.value); setErrors({...errors, selectedAgent: null})}} 
+                  className={`w-full px-3 py-3 border ${errors.selectedAgent ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm`}
                 >
-                  {agents.map((agent, i) => (
-                     <option key={i} value={agent.name === 'בחר/י סוכן מהרשימה' ? '' : agent.name} disabled={i === 0}>
-                        {agent.name}
-                     </option>
+                  <option value="">בחר סוכן מכירות...</option>
+                  {agents.map((agent: any, i: number) => (
+                    <option key={i} value={agent.name}>{agent.name} {agent.email ? `(${agent.email})` : ''}</option>
                   ))}
                 </select>
                 {errors.selectedAgent && <p className="text-red-500 text-xs mt-1">{errors.selectedAgent}</p>}
               </div>
 
-            </div>
+              <div className="space-y-3 mt-6">
+                <button 
+                  onClick={handleSendEmail} 
+                  className="w-full bg-[#004387] text-white py-3.5 px-4 font-bold hover:bg-[#fe8d00] transition-colors flex items-center justify-center gap-2 text-base shadow-sm"
+                >
+                  שליחת הזמנה וגיבוי במייל סוכן
+                </button>
+                <button 
+                  onClick={handleSendWhatsApp} 
+                  className="w-full bg-green-500 text-white py-3.5 px-4 font-bold hover:bg-green-600 transition-colors flex items-center justify-center gap-2 text-base shadow-sm"
+                >
+                  שליחה ישירה לוואטסאפ סוכן
+                </button>
+              </div>
 
-            <div className="mt-auto">
-              <div className="flex justify-between items-center text-lg font-bold mb-6 text-[#0c2d57] border-t border-gray-300 pt-4">
-                <span>סה"כ כמות פריטים:</span>
-                <span className="text-[#f7941d]">{cart.reduce((sum, item) => sum + item.quantity, 0)}</span>
-              </div>
-              
-              <div className="flex flex-col gap-3">
-                 <button 
-                   disabled={cart.length === 0}
-                   onClick={handleSendEmail}
-                   className="w-full bg-[#004387] hover:bg-blue-800 text-white font-bold py-3 rounded-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm border-none"
-                 >
-                   שדר הצעת מחיר במייל
-                 </button>
-                 
-                 <button 
-                   disabled={cart.length === 0}
-                   onClick={handleSendWhatsApp}
-                   className="w-full bg-[#25D366] hover:bg-[#1ebd5a] text-white font-bold py-3 rounded-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm border-none flex items-center justify-center gap-2"
-                 >
-                   שדר בקשה כהודעת WhatsApp
-                 </button>
-              </div>
             </div>
           </div>
         </div>
@@ -2931,65 +2930,116 @@ export default function App() {
     );
   };
 
-  // --- MAIN LAYOUT ---
-  if (!isAuthenticated) {
-     return <LoginView setIsAuthenticated={setIsAuthenticated} />;
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 bg-white text-red-500 min-h-[50vh]">
+        <h2 className="text-xl font-bold mb-4">אירעה שגיאה בטעינת הנתונים</h2>
+        <p className="text-gray-600 mb-6">{error}</p>
+        <button onClick={() => loadData(false, true)} className="bg-[#004387] text-white px-6 py-2">נסה שנית</button>
+      </div>
+    );
   }
 
-  if (error) {
-     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-[#0c2d57] p-4">
-          <X size={48} className="mb-4 text-red-500" />
-          <h2 className="text-lg font-semibold text-center leading-relaxed text-gray-700 max-w-md mb-6">{error}</h2>
-          <button 
-            onClick={() => {
-              setError(null);
-              loadData();
-            }}
-            className="bg-[#004387] hover:bg-[#fe8d00] text-white px-8 py-3 transition-colors shadow-sm font-medium rounded-none"
-          >
-            נסה שוב
-          </button>
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-white" dir="rtl">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-[#004387]" />
+          <p className="text-sm font-semibold text-gray-500">טוען קטלוג RBS B2B...</p>
         </div>
-     );
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginView setIsAuthenticated={setIsAuthenticated} />;
   }
 
   return (
-    <div dir="rtl" className="min-h-screen text-gray-900 selection:bg-[#fe8d00] selection:text-white" style={{ background: 'transparent' }}>
-      
-      {/* CSS Variables for Layout Layout Heights */}
-      <style dangerouslySetInnerHTML={{__html: `
-
-        :root {
-          --header-height-home: 104px;
-          --header-height-sub: 130px;
-        }
-        @media (min-width: 768px) {
-          :root {
-            --header-height-home: 56px;
-            --header-height-sub: 56px;
-          }
-        }
-        .fixed-header {
-          padding-top: env(safe-area-inset-top, 0px) !important;
-        }
-      `}} />
-
-      <div id="rbs-b2b-app">
-        {/* COLLAPSIBLE & RESPONSIVE STICKY HEADER */}
+    <div id="rbs-b2b-app" className="min-h-screen bg-slate-50 flex flex-col font-sans" dir="rtl">
+        {/* SECONDARY TOOLBAR INSTEAD OF MAIN HEADER */}
         <div ref={headerRef} className="sticky top-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header">
-          
-          {/* DESKTOP HEADER (Hidden on mobile) */}
-          <div className="hidden md:flex container mx-auto px-4 min-h-[56px] flex-row items-center justify-between flex-nowrap gap-4">
+          <div className={`container mx-auto px-4 min-h-[56px] flex flex-row items-center justify-between flex-nowrap gap-2 sm:gap-4 ${isSearchFocused ? 'hidden md:flex' : 'flex'}`}>
             
-            {/* RIGHT SIDE: Navigation Controls, Logo & Inline breadcrumbs */}
-            <div className="flex flex-row items-center gap-4 flex-shrink-0">
-              <div id="desktop-navigation-controls" className="flex flex-row items-center gap-4">
+            {/* RIGHT SIDE: Menu & Back (Mobile optimized browser controls & Desktop standard) */}
+            <div className="flex flex-row items-center gap-2 md:gap-4 flex-shrink-0">
+              
+              {/* MOBILE ONLY: Browser-style Navigation Controls with large touch targets */}
+              <div id="mobile-browser-navigation-bar" className="flex md:hidden items-center gap-2 bg-gray-50 border border-gray-200/80 p-2 rounded-xl shadow-xs">
+                
+                {/* 1. Menu Button: 52px size, large Menu bars */}
+                <button 
+                  id="mobile-nav-hamburger"
+                  type="button"
+                  onClick={() => setMobileMenuOpen(true)}
+                  className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 rounded-lg shadow-sm transition-all duration-200 active:scale-95 flex-shrink-0"
+                  aria-label="פתח תפריט"
+                  title="תפריט ניווט"
+                >
+                  <Menu size={30} className="stroke-[2.5]" />
+                </button>
+
+                <div className="h-9 w-[1px] bg-gray-300/60 mx-0.5"></div>
+
+                {/* 2. Back Button (ChevronRight for RTL back) */}
+                <button 
+                  id="mobile-nav-back"
+                  type="button"
+                  onClick={() => { if (searchQuery) { setSearchQuery(''); } else { goBack(); } }}
+                  className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                  aria-label="אחורה"
+                  title="חזור אחורה"
+                >
+                  <ChevronRight size={28} className="stroke-[2.5]" />
+                </button>
+
+                {/* 3. Forward Button (ChevronLeft for RTL forward) */}
+                <button 
+                  id="mobile-nav-forward"
+                  type="button"
+                  onClick={() => {
+                    if (window.history.state) {
+                      window.history.forward();
+                    }
+                  }}
+                  className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                  aria-label="קדימה"
+                  title="חזור קדימה"
+                >
+                  <ChevronLeft size={28} className="stroke-[2.5]" />
+                </button>
+
+                {/* 4. Clickable RBS Logo / Home Button */}
+                <button 
+                  id="mobile-nav-home"
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    navigateHome();
+                  }}
+                  className="flex items-center justify-center h-12 px-3 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                  aria-label="דף הבית"
+                  title="דף הבית - RBS"
+                  style={{ minWidth: '5.2rem' }}
+                >
+                  <img 
+                    referrerPolicy="no-referrer" 
+                    src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
+                    alt="RBS Logo" 
+                    className="h-8 w-auto object-contain max-w-[76px] select-none" 
+                  />
+                </button>
+
+              </div>
+
+              {/* DESKTOP ONLY: Standard navigation controls as they were */}
+              <div id="desktop-navigation-controls" className="hidden md:flex flex-row items-center gap-4">
+                {/* כפתור חזור גלובלי - מופיע כשלא בדף הבית או כשיש חיפוש פעיל */}
                 {(currentView !== 'home' || searchQuery) && (
                   <button 
                     id="desktop-back-btn"
                     onClick={() => { if (searchQuery) { setSearchQuery(''); } else { goBack(); } }} 
-                    className="flex flex-row items-center justify-center gap-1 !p-2 !m-0 bg-[#f2f2f2] hover:bg-[#004387] text-[#004387] hover:text-white !rounded-none transition-all border-none cursor-pointer"
+                    className="flex flex-row items-center justify-center gap-1 !p-2 !m-0 bg-[#f2f2f2] hover:bg-[#004387] text-[#004387] hover:text-white !rounded-none transition-all border-none"
                     title="חזור"
                     aria-label="חזור לתצוגה הקודמת"
                   >
@@ -2999,7 +3049,8 @@ export default function App() {
                 )}
               </div>
               
-              <div className="flex items-center text-sm text-[#0c2d57] opacity-85 whitespace-nowrap gap-2">
+              {/* Breadcrumb style path indicator with inline breadcrumbs on desktop */}
+              <div className="hidden sm:flex items-center text-sm text-[#0c2d57] opacity-85 whitespace-nowrap gap-2">
                 <img 
                   referrerPolicy="no-referrer" 
                   src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
@@ -3017,7 +3068,7 @@ export default function App() {
                     setSyncSuccessMsg('');
                     setShowAdminSyncModal(true);
                   }}
-                  className="font-bold px-2 border-r border-[#0c2d57]/20 cursor-pointer select-none hover:text-[#004387] active:scale-95 transition-all text-[#0c2d57]"
+                  className="font-bold px-2 border-r border-[#0c2d57]/20 cursor-pointer select-none hover:text-[#004387] active:scale-95 transition-all"
                   title="מיני-פאנל ניהול וסינכרון"
                 >
                   B2B Portal
@@ -3029,12 +3080,13 @@ export default function App() {
                     {searchQuery ? (
                       <>
                         <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
-                        <span className="text-[#004387] bg-blue-50/60 px-1.5 py-0.5 rounded-sm font-bold">
+                        <span className="text-[#004387] bg-blue-50/60 px-1.5 py-0.5 rounded-sm">
                           חיפוש: {searchQuery}
                         </span>
                       </>
                     ) : (
                       <>
+                        {/* Catalog Link */}
                         {selectedCatalog && (
                           <>
                             <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
@@ -3047,6 +3099,7 @@ export default function App() {
                           </>
                         )}
 
+                        {/* Subcategory Link */}
                         {selectedSubcategory && (currentView === 'nested_subs' || currentView === 'products' || currentView === 'product') && (
                           <>
                             <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
@@ -3059,6 +3112,7 @@ export default function App() {
                           </>
                         )}
 
+                        {/* Nested Subcategory Link */}
                         {selectedNestedSubcategory && (currentView === 'products' || currentView === 'product') && (
                           <>
                             <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
@@ -3071,15 +3125,17 @@ export default function App() {
                           </>
                         )}
 
+                        {/* Product Name (Active Leaf) */}
                         {currentView === 'product' && selectedProduct && (
                           <>
                             <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
-                            <span className="text-[#004387] truncate max-w-[120px] lg:max-w-[200px] font-bold" title={selectedProduct.name}>
+                            <span className="text-[#004387] truncate max-w-[120px] lg:max-w-[200px]" title={selectedProduct.name}>
                               {selectedProduct.name}
                             </span>
                           </>
                         )}
 
+                        {/* Subcategories (Active Leaf) */}
                         {currentView === 'catalog_subs' && (
                           <>
                             <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
@@ -3089,6 +3145,7 @@ export default function App() {
                           </>
                         )}
 
+                        {/* Nested Subcategories (Active Leaf) */}
                         {currentView === 'nested_subs' && (
                           <>
                             <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
@@ -3098,6 +3155,7 @@ export default function App() {
                           </>
                         )}
 
+                        {/* Products View (Active Leaf) */}
                         {currentView === 'products' && !selectedNestedSubcategory && (
                           <>
                             <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
@@ -3107,6 +3165,7 @@ export default function App() {
                           </>
                         )}
 
+                        {/* Checkout (Active Leaf) */}
                         {currentView === 'checkout' && (
                           <>
                             <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
@@ -3121,21 +3180,21 @@ export default function App() {
                 )}
 
                 {hasMoreProducts && (
-                  <div className="flex items-center gap-1.5 text-xs text-[#fe8d00] bg-orange-50 px-2 py-0.5 animate-pulse select-none font-bold border border-orange-100 mr-2 rounded-sm">
+                  <div className="flex items-center gap-1.5 text-xs text-[#fe8d00] bg-orange-50 px-2 py-0.5 animate-pulse select-none font-medium border border-orange-100 font-bold">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#fe8d00] animate-ping"></span>
                     <span>בסנכרון...</span>
                   </div>
                 )}
               </div>
             </div>
-
+            
             {/* CENTER SIDE: Search (Protected from collapsing) */}
-            <div className="flex-grow min-w-0 max-w-xl mx-2 flex items-center bg-[#f2f2f2] px-4 py-2 border border-transparent focus-within:border-[#004387] focus-within:bg-white transition-all rounded-sm">
+            <div className="flex-grow min-w-0 max-w-xl mx-2 hidden md:flex items-center bg-[#f2f2f2] px-4 py-2 border border-transparent focus-within:border-[#004387] focus-within:bg-white transition-all">
               <Search size={18} className="text-gray-400 ml-2 flex-shrink-0" />
               <input 
                 type="text" 
                 placeholder="חיפוש חופשי (מק״ט, שם, מותג)..." 
-                className="bg-transparent border-none outline-none w-full min-w-0 text-base md:text-sm text-gray-700 shadow-none focus:ring-0 !p-0 !m-0 text-right font-medium"
+                className="bg-transparent border-none outline-none w-full min-w-0 text-base md:text-sm text-gray-700 shadow-none focus:ring-0 !p-0 !m-0 text-right"
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
@@ -3146,150 +3205,195 @@ export default function App() {
             {/* LEFT SIDE: Cart (Protected from theme overrides) */}
             <div className="flex-shrink-0">
               <button 
-                className="relative flex flex-row items-center justify-center gap-2 !p-2 !px-3.5 !m-0 h-11 text-[#004387] bg-white border border-[#004387]/60 hover:bg-[#004387] hover:text-white hover:border-[#004387] hover:shadow-xs transition-all whitespace-nowrap rounded-xl box-border active:scale-95 cursor-pointer"
+                className="relative flex flex-row items-center justify-center gap-2 !p-2 !px-3.5 !m-0 h-11 text-[#004387] bg-white border border-[#004387]/60 hover:bg-[#004387] hover:text-white hover:border-[#004387] hover:shadow-sm transition-all whitespace-nowrap rounded-xl box-border active:scale-95"
                 onClick={() => setIsCartOpen(true)}
                 aria-label="פתח עגלת הזמנה"
+                style={{ margin: 0 }}
               >
                 <ShoppingCart size={20} className="flex-shrink-0" />
-                <span className="text-sm font-bold hidden md:block whitespace-nowrap">עגלת הזמנה</span>
+                <span className="text-sm font-bold hidden sm:block whitespace-nowrap">עגלת הזמנה</span>
                 {cart.length > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-[#f7941d] text-white text-[10px] font-bold w-5.5 h-5.5 rounded-full flex items-center justify-center shadow-md border border-white">
+                  <span className="absolute -top-2 -right-2 bg-[#f7941d] text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
                     {cart.reduce((sum, item) => sum + item.quantity, 0)}
                   </span>
                 )}
               </button>
             </div>
+
           </div>
 
-          {/* MOBILE HEADER (Exactly ONE Row at all times, No duplicate bars and No redundant lines) */}
-          <div id="mobile-unified-header" className="flex md:hidden items-center justify-between w-full h-16 bg-white px-4 relative select-none">
-            
-            {/* RIGHT SIDE: Hamburger Menu & Back Button */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {/* Menu Button (RTL Right side) */}
-              <button 
-                id="mobile-nav-hamburger"
-                type="button"
-                onClick={() => setMobileMenuOpen(true)}
-                className="flex items-center justify-center w-11 h-11 bg-gray-50 text-gray-800 border border-gray-200 rounded-xl active:scale-95 transition-all duration-200 cursor-pointer"
-                aria-label="פתח תפריט"
-                title="תפריט ניווט"
-              >
-                <Menu size={24} className="stroke-[2.5]" />
-              </button>
-
-              {/* Contextual Back Button (RTL back arrow) - shown when not on home page or search is active */}
-              {(currentView !== 'home' || searchQuery) && (
-                <button 
-                  id="mobile-nav-back"
-                  type="button"
-                  onClick={() => { 
-                    if (searchQuery) { 
-                      setSearchQuery(''); 
-                      setIsMobileSearchActive(false); 
-                    } else { 
-                      goBack(); 
-                    } 
+          {/* MOBILE SEARCH BAR INTEGRATED INTO STICKY HEADER */}
+          <div className={`md:hidden bg-white px-4 py-2.5 w-full block transition-all ${isSearchFocused ? 'pt-3 pb-2 shadow-xs' : 'pb-3'}`}>
+            <div className="flex items-center gap-2">
+              <div className="flex-grow flex items-center bg-[#f2f2f2] px-3.5 py-2 border border-transparent focus-within:border-[#004387] focus-within:bg-white rounded-xl transition-all">
+                <Search size={18} className="text-gray-400 ml-2 flex-shrink-0" />
+                <input 
+                  type="text" 
+                  placeholder="חיפוש חופשי (מק״ט, שם, מותג)..." 
+                  className="bg-transparent border-none outline-none w-full min-w-0 text-base shadow-none focus:ring-0 !p-0 !m-0 text-right text-gray-700"
+                  value={searchQuery}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => {
+                    // Small delay to allow clicking cancel or clears before they are unmounted
+                    setTimeout(() => setIsSearchFocused(false), 220);
                   }}
-                  className="flex items-center justify-center w-11 h-11 bg-blue-50/80 text-[#004387] border border-blue-100 rounded-xl active:scale-90 transition-all duration-200 cursor-pointer"
-                  aria-label="חזור אחורה"
-                  title="חזור"
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                  }}
+                />
+                {searchQuery && (
+                  <button 
+                    type="button" 
+                    onMouseDown={(e) => { e.preventDefault(); }}
+                    onClick={() => setSearchQuery('')}
+                    className="p-1 text-gray-400 hover:text-gray-700 focus:outline-none flex-shrink-0"
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+              {isSearchFocused && (
+                <button 
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                  }}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setIsSearchFocused(false);
+                    if (document.activeElement instanceof HTMLElement) {
+                      document.activeElement.blur();
+                    }
+                  }}
+                  className="text-sm font-bold text-[#004387] px-2 py-1.5 focus:outline-none shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                 >
-                  <ChevronRight size={24} className="stroke-[2.5]" />
+                  биטול
                 </button>
               )}
             </div>
+          </div>
 
-            {/* CENTER: Logo or Inline Search Field */}
-            <div className="flex-grow flex items-center justify-center px-1.5 min-w-0 h-full">
-              {isMobileSearchActive ? (
-                <div className="w-full flex items-center bg-[#f2f2f2] px-3 py-1.5 border border-[#004387]/20 rounded-xl focus-within:border-[#004387] focus-within:bg-white transition-all">
-                  <Search size={16} className="text-gray-400 ml-1.5 flex-shrink-0" />
-                  <input 
-                    type="text"
-                    ref={mobileSearchRef}
-                    placeholder="חיפוש חופשי (מק״ט, שם)..."
-                    className="bg-transparent border-none outline-none w-full min-w-0 text-sm text-gray-700 focus:ring-0 !p-0 !m-0 text-right font-medium"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onFocus={() => setIsSearchFocused(true)}
-                    onBlur={() => {
-                      setIsSearchFocused(false);
-                    }}
-                  />
-                  {searchQuery && (
-                    <button 
-                      type="button" 
-                      onClick={() => { setSearchQuery(''); mobileSearchRef.current?.focus(); }}
-                      className="p-1 text-gray-400 hover:text-gray-700 flex-shrink-0"
-                      aria-label="נקה טקסט"
-                    >
-                      <X size={15} />
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <img 
-                  referrerPolicy="no-referrer" 
-                  src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
-                  alt="RBS Logo" 
-                  className="h-9 w-auto object-contain cursor-pointer active:scale-95 transition-all max-w-[120px] select-none" 
+          {/* MOBILE ONLY DYNAMIC BREADCRUMB BAR (INTEGRATED AND COMPACT - NO DUPLICATE LOGOS) */}
+          {(currentView !== 'home' || searchQuery) && (
+            <div className={`md:hidden bg-white px-4 pb-2 w-full text-right transition-all ${isSearchFocused ? 'hidden' : 'block'}`}>
+              <div className="flex flex-row items-center justify-start gap-1 text-[11px] text-gray-500 overflow-x-auto py-0.5" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                
+                {/* Clean Home Icon instead of duplicate Logo */}
+                <button 
                   onClick={() => {
                     setSearchQuery('');
                     navigateHome();
-                  }}
+                  }} 
+                  className="hover:opacity-85 text-gray-400 p-1 flex items-center gap-1 font-bold cursor-pointer flex-shrink-0 transition-all hover:scale-105 active:scale-95"
                   title="ראשי - חזור לדף הבית"
-                />
-              )}
-            </div>
-
-            {/* LEFT SIDE: Search Action Toggle & Shopping Cart */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {/* Search Trigger or Cancel Button */}
-              {isMobileSearchActive ? (
-                <button 
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setIsMobileSearchActive(false);
-                  }}
-                  className="text-sm font-black text-[#004387] hover:text-[#f7941d] px-1 transition-colors cursor-pointer select-none"
                 >
-                  ביטול
+                  <Home size={14} className="text-[#004387]" />
+                  <span className="text-[11px] font-bold text-[#004387]">ראשי</span>
                 </button>
-              ) : (
-                <button 
-                  type="button"
-                  onClick={() => {
-                    setIsMobileSearchActive(true);
-                    setTimeout(() => {
-                      mobileSearchRef.current?.focus();
-                    }, 120);
-                  }}
-                  className="flex items-center justify-center w-11 h-11 bg-gray-50 text-[#0c2d57] border border-gray-200 rounded-xl active:scale-95 transition-all duration-200 cursor-pointer"
-                  aria-label="פתח חיפוש"
-                  title="חיפוש"
-                >
-                  <Search size={20} className="stroke-[2.2]" />
-                </button>
-              )}
 
-              {/* Shopping Cart Trigger */}
-              <button 
-                className="relative flex items-center justify-center w-11 h-11 text-[#004387] bg-white border border-[#004387]/60 hover:bg-[#004387] hover:text-white rounded-xl active:scale-95 transition-all duration-200 cursor-pointer"
-                onClick={() => setIsCartOpen(true)}
-                aria-label="פתח עגלת הזמנה"
-                title="עגלה"
-              >
-                <ShoppingCart size={20} className="stroke-[2.2]" />
-                {cart.length > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-[#f7941d] text-white text-[10px] font-black w-5.5 h-5.5 rounded-full flex items-center justify-center shadow-md border border-white animate-fade-in">
-                    {cart.reduce((sum, item) => sum + item.quantity, 0)}
-                  </span>
+                {searchQuery ? (
+                  <>
+                    <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                    <span className="font-semibold text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded-sm">
+                      חיפוש: <strong className="text-[#004387]">{searchQuery}</strong>
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    {/* Catalog Link */}
+                    {selectedCatalog && (
+                      <>
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <button 
+                          onClick={() => navigateToCatalog(selectedCatalog)} 
+                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-600"
+                        >
+                          {selectedCatalog}
+                        </button>
+                      </>
+                    )}
+
+                    {/* Subcategory Link */}
+                    {selectedSubcategory && (currentView === 'nested_subs' || currentView === 'products' || currentView === 'product') && (
+                      <>
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <button 
+                          onClick={() => navigateToSubcategory(selectedSubcategory)} 
+                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-600"
+                        >
+                          {selectedSubcategory}
+                        </button>
+                      </>
+                    )}
+
+                    {/* Nested Subcategory Link */}
+                    {selectedNestedSubcategory && (currentView === 'products' || currentView === 'product') && (
+                      <>
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <button 
+                          onClick={() => navigateToNestedSubcategory(selectedNestedSubcategory)} 
+                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-600"
+                        >
+                          {selectedNestedSubcategory}
+                        </button>
+                      </>
+                    )}
+
+                    {/* Product Name (Active Leaf) */}
+                    {currentView === 'product' && selectedProduct && (
+                      <>
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-semibold text-[#004387] truncate max-w-[150px]">
+                          {selectedProduct.name}
+                        </span>
+                      </>
+                    )}
+
+                    {/* Subcategories (Active Leaf) */}
+                    {currentView === 'catalog_subs' && (
+                      <>
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-semibold text-gray-700">
+                          קטגוריות
+                        </span>
+                      </>
+                    )}
+
+                    {/* Nested Subcategories (Active Leaf) */}
+                    {currentView === 'nested_subs' && (
+                      <>
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-semibold text-gray-700">
+                          תתי קטגוריה
+                        </span>
+                      </>
+                    )}
+
+                    {/* Products View (Active Leaf) */}
+                    {currentView === 'products' && !selectedNestedSubcategory && (
+                      <>
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-semibold text-gray-700">
+                          מוצרים
+                        </span>
+                      </>
+                    )}
+
+                    {/* Checkout (Active Leaf) */}
+                    {currentView === 'checkout' && (
+                      <>
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-semibold text-gray-700">
+                          קופה
+                        </span>
+                      </>
+                    )}
+                  </>
                 )}
-              </button>
+              </div>
             </div>
-          </div>
+          )}
+
         </div>
 
         {/* Spacer not needed for sticky layout as browser handles flow spacing natively, preserved at 0px to maintain node structure */}
@@ -3546,7 +3650,6 @@ export default function App() {
 
           </main>
         </div>
-      </div>
 
       {/* SHOPPING CART OVERLAY */}
       {isCartOpen && (
