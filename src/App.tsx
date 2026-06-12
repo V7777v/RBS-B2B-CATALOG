@@ -2959,7 +2959,7 @@ export default function App() {
     <div id="rbs-b2b-app" className="min-h-screen bg-slate-50 flex flex-col font-sans" dir="rtl">
         {/* SECONDARY TOOLBAR INSTEAD OF MAIN HEADER */}
         <div ref={headerRef} className="sticky top-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header">
-          <div className={`container mx-auto px-4 min-h-[56px] flex flex-row items-center justify-between flex-nowrap gap-2 sm:gap-4 ${isSearchFocused ? 'hidden md:flex' : 'flex'}`}>
+          <div className="container mx-auto px-4 min-h-[56px] flex flex-row items-center justify-between flex-nowrap gap-2 sm:gap-4">
             
             {/* RIGHT SIDE: Menu & Back (Mobile optimized browser controls & Desktop standard) */}
             <div className="flex flex-row items-center gap-2 md:gap-4 flex-shrink-0">
