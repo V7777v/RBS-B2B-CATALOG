@@ -3918,7 +3918,7 @@ export default function App() {
                 {isAdminAuth ? (
                   <div className="bg-blue-50/70 p-3 border border-blue-100 text-[11px] text-[#004387] leading-relaxed mb-1">
                     <p className="font-bold mb-1">✓ מכשיר זה מאומת למשך שעה</p>
-                    <p className="text-gray-500 font-normal">אינך צריך להקליד שוב את הסיסמה.</p>
+                    <p className="text-gray-500 font-normal">אינך צריך להקליד שוב את סיסמת Vlad1107.</p>
                   </div>
                 ) : (
                   <div>
