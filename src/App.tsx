@@ -2960,12 +2960,12 @@ export default function App() {
 
         :root {
           --header-height-home: 104px;
-          --header-height-sub: 140px;
+          --header-height-sub: 130px;
         }
         @media (min-width: 768px) {
           :root {
             --header-height-home: 56px;
-            --header-height-sub: 92px;
+            --header-height-sub: 56px;
           }
         }
         .fixed-header {
@@ -3066,8 +3066,8 @@ export default function App() {
                 )}
               </div>
               
-              {/* Breadcrumb style path indicator */}
-              <div className="hidden sm:flex items-center text-sm text-[#0c2d57] opacity-80 whitespace-nowrap gap-3">
+              {/* Breadcrumb style path indicator with inline breadcrumbs on desktop */}
+              <div className="hidden sm:flex items-center text-sm text-[#0c2d57] opacity-85 whitespace-nowrap gap-2">
                 <img 
                   referrerPolicy="no-referrer" 
                   src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
@@ -3085,15 +3085,121 @@ export default function App() {
                     setSyncSuccessMsg('');
                     setShowAdminSyncModal(true);
                   }}
-                  className="font-semibold px-2 border-r border-[#0c2d57]/20 cursor-pointer select-none hover:text-[#004387] active:scale-95 transition-all"
+                  className="font-bold px-2 border-r border-[#0c2d57]/20 cursor-pointer select-none hover:text-[#004387] active:scale-95 transition-all"
                   title="מיני-פאנל ניהול וסינכרון"
                 >
                   B2B Portal
                 </span>
+
+                {/* Desktop Inline Breadcrumbs */}
+                {(currentView !== 'home' || searchQuery) && (
+                  <div className="flex items-center gap-1.5 text-xs font-semibold pl-2">
+                    {searchQuery ? (
+                      <>
+                        <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                        <span className="text-[#004387] bg-blue-50/60 px-1.5 py-0.5 rounded-sm">
+                          חיפוש: {searchQuery}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        {/* Catalog Link */}
+                        {selectedCatalog && (
+                          <>
+                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                            <button 
+                              onClick={() => navigateToCatalog(selectedCatalog)} 
+                              className="hover:text-[#004387] hover:underline font-semibold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-[#0c2d57]"
+                            >
+                              {selectedCatalog}
+                            </button>
+                          </>
+                        )}
+
+                        {/* Subcategory Link */}
+                        {selectedSubcategory && (currentView === 'nested_subs' || currentView === 'products' || currentView === 'product') && (
+                          <>
+                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                            <button 
+                              onClick={() => navigateToSubcategory(selectedSubcategory)} 
+                              className="hover:text-[#004387] hover:underline font-semibold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-[#0c2d57]"
+                            >
+                              {selectedSubcategory}
+                            </button>
+                          </>
+                        )}
+
+                        {/* Nested Subcategory Link */}
+                        {selectedNestedSubcategory && (currentView === 'products' || currentView === 'product') && (
+                          <>
+                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                            <button 
+                              onClick={() => navigateToNestedSubcategory(selectedNestedSubcategory)} 
+                              className="hover:text-[#004387] hover:underline font-semibold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-[#0c2d57]"
+                            >
+                              {selectedNestedSubcategory}
+                            </button>
+                          </>
+                        )}
+
+                        {/* Product Name (Active Leaf) */}
+                        {currentView === 'product' && selectedProduct && (
+                          <>
+                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                            <span className="text-[#004387] truncate max-w-[120px] lg:max-w-[200px]" title={selectedProduct.name}>
+                              {selectedProduct.name}
+                            </span>
+                          </>
+                        )}
+
+                        {/* Subcategories (Active Leaf) */}
+                        {currentView === 'catalog_subs' && (
+                          <>
+                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                            <span className="text-[#0c2d57] font-semibold">
+                              קטגוריות
+                            </span>
+                          </>
+                        )}
+
+                        {/* Nested Subcategories (Active Leaf) */}
+                        {currentView === 'nested_subs' && (
+                          <>
+                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                            <span className="text-[#0c2d57] font-semibold">
+                              תתי קטגוריה
+                            </span>
+                          </>
+                        )}
+
+                        {/* Products View (Active Leaf) */}
+                        {currentView === 'products' && !selectedNestedSubcategory && (
+                          <>
+                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                            <span className="text-[#0c2d57] font-semibold">
+                              מוצרים
+                            </span>
+                          </>
+                        )}
+
+                        {/* Checkout (Active Leaf) */}
+                        {currentView === 'checkout' && (
+                          <>
+                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                            <span className="text-[#0c2d57] font-semibold">
+                              סיכום הזמנה ושליחה
+                            </span>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {hasMoreProducts && (
-                  <div className="flex items-center gap-1.5 text-xs text-[#fe8d00] bg-orange-50 px-2 py-0.5 animate-pulse select-none font-medium border border-orange-100">
+                  <div className="flex items-center gap-1.5 text-xs text-[#fe8d00] bg-orange-50 px-2 py-0.5 animate-pulse select-none font-medium border border-orange-100 font-bold">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#fe8d00] animate-ping"></span>
-                    <span>בסנכרון נתונים...</span>
+                    <span>בסנכרון...</span>
                   </div>
                 )}
               </div>
@@ -3183,34 +3289,29 @@ export default function App() {
             </div>
           </div>
 
-          {/* DYNAMIC, UNIFIED STICKY BREADCRUMB BAR (FROZEN TO TOP) */}
+          {/* MOBILE ONLY DYNAMIC BREADCRUMB BAR (INTEGRATED AND COMPACT - NO DUPLICATE LOGOS) */}
           {(currentView !== 'home' || searchQuery) && (
-            <div className={`bg-[#fafafa] border-t border-b border-gray-200/60 py-1.5 px-4 w-full text-right transition-all ${isSearchFocused ? 'hidden md:block' : 'block'}`}>
-              <div className="container mx-auto flex flex-row items-center justify-start flex-wrap gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm text-gray-500 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div className={`md:hidden bg-white px-4 pb-2 w-full text-right transition-all ${isSearchFocused ? 'hidden' : 'block'}`}>
+              <div className="flex flex-row items-center justify-start gap-1 text-[11px] text-gray-500 overflow-x-auto py-0.5" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 
-                {/* Home Indicator - Clickable RBS Logo for Home navigation */}
+                {/* Clean Home Icon instead of duplicate Logo */}
                 <button 
                   onClick={() => {
                     setSearchQuery('');
                     navigateHome();
                   }} 
-                  className="hover:opacity-85 p-1.5 sm:p-1 flex items-center gap-1.5 font-bold bg-[#004387]/5 sm:bg-transparent border border-[#004387]/15 sm:border-none rounded-xl sm:rounded-none cursor-pointer flex-shrink-0 transition-all hover:scale-105 active:scale-95"
+                  className="hover:opacity-85 text-gray-400 p-1 flex items-center gap-1 font-bold cursor-pointer flex-shrink-0 transition-all hover:scale-105 active:scale-95"
                   title="ראשי - חזור לדף הבית"
                 >
-                  <img 
-                    referrerPolicy="no-referrer" 
-                    src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
-                    alt="RBS Logo" 
-                    className="h-5 sm:h-6 w-auto object-contain select-none max-w-[64px]" 
-                  />
-                  <span className="text-[11px] sm:text-xs font-bold text-[#004387]">ראשי</span>
+                  <Home size={14} className="text-[#004387]" />
+                  <span className="text-[11px] font-bold text-[#004387]">ראשי</span>
                 </button>
 
                 {searchQuery ? (
                   <>
-                    <ChevronLeft size={14} className="text-gray-400 flex-shrink-0" />
-                    <span className="font-semibold text-[#0c2d57] bg-blue-50/50 px-2 py-0.5 rounded-sm">
-                      תוצאות חיפוש ל: <strong className="text-[#004387]">{searchQuery}</strong>
+                    <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                    <span className="font-semibold text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded-sm">
+                      חיפוש: <strong className="text-[#004387]">{searchQuery}</strong>
                     </span>
                   </>
                 ) : (
@@ -3218,10 +3319,10 @@ export default function App() {
                     {/* Catalog Link */}
                     {selectedCatalog && (
                       <>
-                        <ChevronLeft size={14} className="text-gray-400 flex-shrink-0" />
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
                         <button 
                           onClick={() => navigateToCatalog(selectedCatalog)} 
-                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity"
+                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-600"
                         >
                           {selectedCatalog}
                         </button>
@@ -3231,10 +3332,10 @@ export default function App() {
                     {/* Subcategory Link */}
                     {selectedSubcategory && (currentView === 'nested_subs' || currentView === 'products' || currentView === 'product') && (
                       <>
-                        <ChevronLeft size={14} className="text-gray-400 flex-shrink-0" />
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
                         <button 
                           onClick={() => navigateToSubcategory(selectedSubcategory)} 
-                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity"
+                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-600"
                         >
                           {selectedSubcategory}
                         </button>
@@ -3244,10 +3345,10 @@ export default function App() {
                     {/* Nested Subcategory Link */}
                     {selectedNestedSubcategory && (currentView === 'products' || currentView === 'product') && (
                       <>
-                        <ChevronLeft size={14} className="text-gray-400 flex-shrink-0" />
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
                         <button 
                           onClick={() => navigateToNestedSubcategory(selectedNestedSubcategory)} 
-                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity"
+                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-600"
                         >
                           {selectedNestedSubcategory}
                         </button>
@@ -3257,8 +3358,8 @@ export default function App() {
                     {/* Product Name (Active Leaf) */}
                     {currentView === 'product' && selectedProduct && (
                       <>
-                        <ChevronLeft size={14} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-[#0c2d57] bg-blue-50/10 text-[#004387] px-2 py-0.5 rounded-none truncate max-w-[150px] sm:max-w-[250px] md:max-w-[400px]">
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-semibold text-[#004387] truncate max-w-[150px]">
                           {selectedProduct.name}
                         </span>
                       </>
@@ -3267,8 +3368,8 @@ export default function App() {
                     {/* Subcategories (Active Leaf) */}
                     {currentView === 'catalog_subs' && (
                       <>
-                        <ChevronLeft size={14} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-[#0c2d57] bg-blue-50/50 px-2 py-0.5 rounded-none">
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-semibold text-gray-700">
                           קטגוריות
                         </span>
                       </>
@@ -3277,8 +3378,8 @@ export default function App() {
                     {/* Nested Subcategories (Active Leaf) */}
                     {currentView === 'nested_subs' && (
                       <>
-                        <ChevronLeft size={14} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-[#0c2d57] bg-blue-50/50 px-2 py-0.5 rounded-none">
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-semibold text-gray-700">
                           תתי קטגוריה
                         </span>
                       </>
@@ -3287,8 +3388,8 @@ export default function App() {
                     {/* Products View (Active Leaf) */}
                     {currentView === 'products' && !selectedNestedSubcategory && (
                       <>
-                        <ChevronLeft size={14} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-[#0c2d57] bg-blue-50/50 px-2 py-0.5 rounded-none">
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-semibold text-gray-700">
                           מוצרים
                         </span>
                       </>
@@ -3297,8 +3398,8 @@ export default function App() {
                     {/* Checkout (Active Leaf) */}
                     {currentView === 'checkout' && (
                       <>
-                        <ChevronLeft size={14} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-[#0c2d57] bg-blue-50/50 px-2 py-0.5 rounded-none">
+                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-semibold text-gray-700">
                           סיכום הזמנה ושליחה
                         </span>
                       </>
