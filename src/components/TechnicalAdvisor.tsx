@@ -212,7 +212,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
       {/* Slide-in sidebar advisor interface */}
       <AnimatePresence>
         {isOpen && (
-          <div className="fixed inset-0 z-50 flex justify-end" style={{ direction: 'rtl' }}>
+          <div className="fixed inset-0 z-50 flex justify-end h-[100dvh]" style={{ direction: 'rtl' }}>
             {/* Backdrop */}
             <motion.div 
               initial={{ opacity: 0 }}
@@ -228,7 +228,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className="bg-gray-50 w-full sm:max-w-md h-full relative z-10 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.15)] overflow-hidden border-r border-[#004387]/15"
+              className="bg-gray-50 w-full sm:max-w-md h-[100dvh] relative z-10 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.15)] overflow-hidden border-r border-[#004387]/15"
               ref={containerRef}
             >
               {/* AI Disclaimer Dialog Popup Overlay */}

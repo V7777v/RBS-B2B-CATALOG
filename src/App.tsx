@@ -1095,6 +1095,7 @@ export default function App() {
     });
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [cart, setCart] = useState<any[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
@@ -2969,7 +2970,7 @@ export default function App() {
       <div id="rbs-b2b-app">
         {/* SECONDARY TOOLBAR INSTEAD OF MAIN HEADER */}
         <div ref={headerRef} className="sticky top-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header">
-          <div className="container mx-auto px-4 min-h-[56px] flex flex-row items-center justify-between flex-nowrap gap-2 sm:gap-4">
+          <div className={`container mx-auto px-4 min-h-[56px] flex flex-row items-center justify-between flex-nowrap gap-2 sm:gap-4 ${isSearchFocused ? 'hidden md:flex' : 'flex'}`}>
             
             {/* RIGHT SIDE: Menu & Back (Mobile optimized browser controls & Desktop standard) */}
             <div className="flex flex-row items-center gap-2 md:gap-4 flex-shrink-0">
@@ -3126,24 +3127,59 @@ export default function App() {
           </div>
 
           {/* MOBILE SEARCH BAR INTEGRATED INTO STICKY HEADER */}
-          <div className="md:hidden bg-white px-4 pb-3 w-full block">
-            <div className="flex items-center bg-[#f2f2f2] px-4 py-2 border border-transparent focus-within:border-[#004387] focus-within:bg-white transition-all w-full">
-              <Search size={18} className="text-gray-400 ml-2 flex-shrink-0" />
-              <input 
-                type="text" 
-                placeholder="חיפוש חופשי..." 
-                className="bg-transparent border-none outline-none w-full min-w-0 text-base shadow-none focus:ring-0 !p-0 !m-0 text-right"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                }}
-              />
+          <div className={`md:hidden bg-white px-4 py-2.5 w-full block transition-all ${isSearchFocused ? 'pt-3 pb-2 shadow-xs' : 'pb-3'}`}>
+            <div className="flex items-center gap-2">
+              <div className="flex-grow flex items-center bg-[#f2f2f2] px-3.5 py-2 border border-transparent focus-within:border-[#004387] focus-within:bg-white rounded-xl transition-all">
+                <Search size={18} className="text-gray-400 ml-2 flex-shrink-0" />
+                <input 
+                  type="text" 
+                  placeholder="חיפוש חופשי (מק״ט, שם, מותג)..." 
+                  className="bg-transparent border-none outline-none w-full min-w-0 text-base shadow-none focus:ring-0 !p-0 !m-0 text-right text-gray-700"
+                  value={searchQuery}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => {
+                    // Small delay to allow clicking cancel or clears before they are unmounted
+                    setTimeout(() => setIsSearchFocused(false), 220);
+                  }}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                  }}
+                />
+                {searchQuery && (
+                  <button 
+                    type="button" 
+                    onMouseDown={(e) => { e.preventDefault(); }}
+                    onClick={() => setSearchQuery('')}
+                    className="p-1 text-gray-400 hover:text-gray-700 focus:outline-none flex-shrink-0"
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+              {isSearchFocused && (
+                <button 
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                  }}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setIsSearchFocused(false);
+                    if (document.activeElement instanceof HTMLElement) {
+                      document.activeElement.blur();
+                    }
+                  }}
+                  className="text-sm font-bold text-[#004387] px-2 py-1.5 focus:outline-none shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                >
+                  ביטול
+                </button>
+              )}
             </div>
           </div>
 
           {/* DYNAMIC, UNIFIED STICKY BREADCRUMB BAR (FROZEN TO TOP) */}
           {(currentView !== 'home' || searchQuery) && (
-            <div className="bg-[#fafafa] border-t border-b border-gray-200/60 py-1.5 px-4 w-full text-right transition-all">
+            <div className={`bg-[#fafafa] border-t border-b border-gray-200/60 py-1.5 px-4 w-full text-right transition-all ${isSearchFocused ? 'hidden md:block' : 'block'}`}>
               <div className="container mx-auto flex flex-row items-center justify-start flex-wrap gap-1 md:gap-1.5 text-[11px] sm:text-xs md:text-sm text-gray-500 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 
                 {/* Home Indicator - Clickable RBS Logo for Home navigation */}
