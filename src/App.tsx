@@ -2114,7 +2114,7 @@ export default function App() {
   };
 
   const goBack = () => {
-    if (searchQuery) {
+    if (searchQuery && currentView !== 'product' && currentView !== 'checkout') {
        setSearchQuery('');
        return;
     }
@@ -3171,7 +3171,7 @@ export default function App() {
                 <button 
                   id="mobile-nav-back"
                   type="button"
-                  onClick={() => { if (searchQuery) { setSearchQuery(''); } else { goBack(); } }}
+                  onClick={() => { if (searchQuery && currentView !== 'product' && currentView !== 'checkout') { setSearchQuery(''); } else { goBack(); } }}
                   className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
                   aria-label="אחורה"
                   title="חזור אחורה"
@@ -3224,7 +3224,7 @@ export default function App() {
                 {(currentView !== 'home' || searchQuery) && (
                   <button 
                     id="desktop-back-btn"
-                    onClick={() => { if (searchQuery) { setSearchQuery(''); } else { goBack(); } }} 
+                    onClick={() => { if (searchQuery && currentView !== 'product' && currentView !== 'checkout') { setSearchQuery(''); } else { goBack(); } }} 
                     className="flex flex-row items-center justify-center gap-1 !p-2 !m-0 bg-[#f2f2f2] hover:bg-[#004387] text-[#004387] hover:text-white !rounded-none transition-all border-none"
                     title="חזור"
                     aria-label="חזור לתצוגה הקודמת"
@@ -3634,7 +3634,7 @@ export default function App() {
                  <Loader2 size={48} className="animate-spin mb-4 text-[#fe8d00]" />
                  <h2 className="text-xl font-bold">טוען נתונים מהמערכת...</h2>
                </div>
-            ) : searchQuery ? (
+            ) : (searchQuery && currentView !== 'product' && currentView !== 'checkout') ? (
                // SEARCH RESULTS
                <>
 

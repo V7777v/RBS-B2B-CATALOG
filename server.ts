@@ -196,6 +196,14 @@ ${catalogSummaryString}
 `;
 }
 
+interface RateLimitInfo {
+  count: number;
+  resetTime: number;
+}
+const chatRateLimits = new Map<string, RateLimitInfo>();
+const LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const MAX_REQUESTS = 30; // 30 queries per hour
+
 // API endpoint to serve chat requests safely
 app.post("/api/advisor/chat", async (req, res) => {
   try {
@@ -203,6 +211,31 @@ app.post("/api/advisor/chat", async (req, res) => {
     if (!message) {
       return res.status(400).json({ error: "Message content is required" });
     }
+
+    // Rate Limiting to protect tokens
+    const ip = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || 'unknown-ip').split(',')[0].trim();
+    const now = Date.now();
+    let userLimit = chatRateLimits.get(ip);
+    
+    if (!userLimit || now > userLimit.resetTime) {
+      userLimit = {
+        count: 0,
+        resetTime: now + LIMIT_WINDOW_MS
+      };
+      chatRateLimits.set(ip, userLimit);
+    }
+    
+    if (userLimit.count >= MAX_REQUESTS) {
+      const remainingMinutes = Math.max(1, Math.ceil((userLimit.resetTime - now) / 60000));
+      return res.json({
+        type: "ai_response",
+        text: `⚠️ **הגעת למכסת השאלות המותרת ב-RBS Expert לסבב זה.**\n\nעל מנת לשמור על יציבות המערכת ולמנוע עומס על משאבי השרת ומפתחות ה-API, השימוש ביועץ ההנדסי מוגבל לעד ${MAX_REQUESTS} פניות בשעה לכל משתמש.\n\nמכסת הפניות שלך תתאפס אוטומטית בעוד כ-**${remainingMinutes} דקות**. תודה על ההבנה והסבלנות! ⏱️`,
+        sources: []
+      });
+    }
+    
+    // Increment count
+    userLimit.count += 1;
 
     // Check if GEMINI_API_KEY is defined and is valid
     const apiKey = process.env.GEMINI_API_KEY;
