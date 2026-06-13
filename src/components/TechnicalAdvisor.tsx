@@ -53,7 +53,6 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
   const [calcResultWh, setCalcResultWh] = useState<number>(0);
 
   const [viewportHeight, setViewportHeight] = useState<string>('100dvh');
-  const [keyboardHeight, setKeyboardHeight] = useState<number>(0);
 
   // Dynamic visualViewport adjustments for mobile keyboards & PWA height shifts
   useEffect(() => {
@@ -63,9 +62,6 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
       const vv = window.visualViewport;
       if (vv) {
         setViewportHeight(`${vv.height}px`);
-        // Calculate the height covered by native keyboard/helper bars
-        const kh = Math.max(0, window.innerHeight - vv.height);
-        setKeyboardHeight(kh);
       }
     };
 
@@ -85,13 +81,22 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
     };
   }, [isOpen]);
 
+  // Lock background page scroll while the Expert panel is open (prevents scroll-bleed on mobile)
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isOpen]);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll messages
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    const el = messagesEndRef.current;
+    if (el && el.parentElement) {
+      el.parentElement.scrollTop = el.parentElement.scrollHeight;
     }
   }, [messages, isLoading]);
 
@@ -264,8 +269,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
               className="bg-gray-50 w-full sm:max-w-md relative z-10 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.15)] overflow-hidden border-r border-[#004387]/15"
               style={{ 
                 height: viewportHeight,
-                maxHeight: viewportHeight,
-                paddingBottom: `${keyboardHeight}px`
+                maxHeight: viewportHeight
               }}
               ref={containerRef}
             >
