@@ -2535,9 +2535,20 @@ export default function App() {
                 מק"ט: <span className="font-mono text-gray-800">{selectedProduct.sku}</span>
               </div>
               
-              <p className="text-gray-700 mb-6 sm:mb-8 leading-relaxed bg-[#f2f2f2] p-3 sm:p-4 text-sm sm:text-base rounded-none border-none whitespace-pre-line">
-                {selectedProduct.description}
-              </p>
+              <div className="mb-6 sm:mb-8 bg-white border-2 border-slate-100 p-5 sm:p-6 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_25px_rgba(0,0,0,0.06)] hover:border-[#004387]/25 transition-all duration-300 relative overflow-hidden text-right">
+                {/* Brand colored vertical accent bar on the right (RTL start) */}
+                <span className="absolute top-0 right-0 bottom-0 w-[5px] bg-gradient-to-b from-[#004387] via-[#004387] to-[#fe8d00]"></span>
+                
+                {/* Section Header with Icon */}
+                <div className="flex items-center gap-2 mb-3 pb-2.5 border-b border-gray-100 text-[#0c2d57] font-extrabold text-sm sm:text-base select-none">
+                  <FileText size={18} className="text-[#fe8d00]" />
+                  <span>מידע ומפרט המוצר</span>
+                </div>
+
+                <p className="text-gray-800 text-sm sm:text-base font-bold leading-relaxed whitespace-pre-line pr-1 select-text">
+                  {selectedProduct.description}
+                </p>
+              </div>
 
               {/* DOCUMENTATION & LINKS SECTION */}
               {(selectedProduct.specsLink || selectedProduct.manualLink || selectedProduct.videoLink || (selectedProduct.labCerts && selectedProduct.labCerts.length > 0)) && (
