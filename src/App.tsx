@@ -2263,7 +2263,7 @@ export default function App() {
     const [isSpecsHovered, setIsSpecsHovered] = useState(false);
     const [isManualHovered, setIsManualHovered] = useState(false);
     const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
-    const [activePreview, setActivePreview] = useState<'specs' | 'manual' | 'video' | null>(null);
+    const [activePreview, setActivePreview] = useState<string | null>(null);
     const hoverTimeoutRef = useRef<any>(null);
     const theme = getBrandTheme(selectedProduct?.brand);
     const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 1024;
@@ -2633,7 +2633,12 @@ export default function App() {
                         </button>
                         <span className="text-xs sm:text-sm font-bold text-[#0c2d57] flex items-center gap-1.5">
                           <Eye size={14} className="text-[#fe8d00]" />
-                          <span>תצוגה מקדימה מהירה: {activePreview === 'specs' ? 'מפרט טכני' : activePreview === 'manual' ? 'מדריך למשתמש' : 'סרטון מוצר'}</span>
+                          <span>תצוגה מקדימה מהירה: {
+                            activePreview === 'specs' ? 'מפרט טכני' : 
+                            activePreview === 'manual' ? 'מדריך למשתמש' : 
+                            activePreview === 'video' ? 'סרטון מוצר' : 
+                            `אישור בטיחות ותקן #${parseInt(activePreview.split('_')[1], 10) + 1}`
+                          }</span>
                         </span>
                       </div>
                       
@@ -2664,6 +2669,18 @@ export default function App() {
                             loading="lazy"
                           />
                         )}
+                        {activePreview.startsWith('labCert_') && (() => {
+                          const certIdx = parseInt(activePreview.split('_')[1], 10);
+                          const certUrl = selectedProduct.labCerts?.[certIdx];
+                          return certUrl ? (
+                            <iframe 
+                              title={`Lab Cert ${certIdx + 1} Preview`}
+                              src={getPdfPreviewUrl(certUrl) || certUrl} 
+                              className="w-full h-full border-none"
+                              loading="lazy"
+                            />
+                          ) : null;
+                        })()}
                       </div>
                     </div>
                   )}
@@ -2675,7 +2692,7 @@ export default function App() {
                         <ShieldCheck size={20} className="text-emerald-600" />
                         <span>אישורי מעבדה ותקנים רשמיים ({selectedProduct.labCerts.length})</span>
                       </h4>
-                      <div className="flex flex-wrap items-center gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {selectedProduct.labCerts.map((certLink: string, idx: number) => {
                           return (
                             <a 
@@ -2683,13 +2700,44 @@ export default function App() {
                               href={certLink} 
                               target="_blank" 
                               rel="noreferrer" 
-                              className="group flex flex-row items-center gap-3 bg-white text-emerald-800 border-2 border-emerald-100 hover:border-emerald-500 hover:bg-emerald-50/70 p-3 px-4 rounded-xl transition-all hover:shadow-md cursor-pointer flex-grow sm:flex-grow-0"
+                              onMouseEnter={() => {
+                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                                hoverTimeoutRef.current = setTimeout(() => {
+                                  setActivePreview(`labCert_${idx}`);
+                                }, 250);
+                              }}
+                              onMouseLeave={() => {
+                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                              }}
+                              className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${activePreview === `labCert_${idx}` ? 'border-[#004387]' : 'border-gray-200 hover:border-[#004387]'}`} 
+                              style={{ minHeight: '80px' }}
                             >
-                              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all">
-                                <Link size={16} />
+                              <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                                <img 
+                                  referrerPolicy="no-referrer" 
+                                  src={transformImageLink("https://drive.google.com/file/d/1n3f9nEnEOj6CycKjFzuH7XRCTNN55Hl7/view?usp=drive_link", 120)} 
+                                  alt="PDF" 
+                                  className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110" 
+                                />
                               </div>
-                              <span className="text-sm font-bold text-emerald-900">אישור בטיחות ותקן #{idx + 1}</span>
-                              <Download size={16} className="text-emerald-600 opacity-70 group-hover:opacity-100 mr-1" />
+                              <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center text-right">
+                                <div className="text-sm sm:text-base font-bold text-gray-800 group-hover:text-[#004387] transition-all">אישור בטיחות ותקן #{idx + 1}</div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setActivePreview(activePreview === `labCert_${idx}` ? null : `labCert_${idx}`);
+                                  }}
+                                  className="mt-1 text-[10px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                                >
+                                  <Eye size={12} />
+                                  <span>{activePreview === `labCert_${idx}` ? 'הסתר תצוגה' : 'תצוגה מהירה'}</span>
+                                </button>
+                              </div>
+                              <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-[#004387] group-hover:text-white transition-all duration-250 flex-shrink-0 shadow-sm">
+                                <Download size={18} />
+                              </div>
                             </a>
                           )
                         })}
