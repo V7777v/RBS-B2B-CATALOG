@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -310,15 +310,16 @@ const parseProductRow = (row: any) => {
   const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
   const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
   const hotSaleKey = Object.keys(row).find((k: string) => {
-      const clean = k.trim().replace(/s+/g, ' ').toLowerCase();
+      const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
+      if (clean.includes('מחיר') || clean.includes('price') || clean.includes('צרכן') || clean.includes('retail') || clean.includes('ש"ח') || clean.includes('₪') || clean.includes('old') || clean.includes('קוד')) return false;
       return clean.includes('מבצע חם') || clean.includes('מבצע_חם') || clean.includes('hot sale') || clean.includes('hotsale') || clean === 'מבצע' || clean === 'מבצעים';
   });
   const saleTypeKey = Object.keys(row).find((k: string) => {
-      const clean = k.trim().replace(/s+/g, ' ').toLowerCase();
+      const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
       return clean.includes('סוג מבצע') || clean.includes('sale type') || clean.includes('saletype') || clean.includes('סוג המבצע');
   });
   const saleValueKey = Object.keys(row).find((k: string) => {
-      const clean = k.trim().replace(/s+/g, ' ').toLowerCase();
+      const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
       return clean.includes('ערך מבצע') || clean.includes('sale value') || clean.includes('salevalue') || clean.includes('ערך המבצע') || clean.includes('מחיר מבצע');
   });
 
@@ -329,7 +330,8 @@ const parseProductRow = (row: any) => {
 
   const clearanceKey = Object.keys(row).find((k: string) => {
       const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
-      return clean.includes('מציאון');
+      if (clean.includes('מחיר') || clean.includes('price') || clean.includes('צרכן') || clean.includes('retail') || clean.includes('ש"ח') || clean.includes('₪') || clean.includes('old') || clean.includes('קוד')) return false;
+      return clean.includes('מציאון') || clean.includes('clearance');
   });
   const clearancePriceKey = Object.keys(row).find((k: string) => {
       const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -529,8 +531,9 @@ interface SubcategoryCardProps {
 const SubcategoryCard: React.FC<SubcategoryCardProps> = ({sub, onClick, navigateToSubcategory}) => (
   <div onClick={onClick || (() => navigateToSubcategory && navigateToSubcategory(sub.name))} className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 relative border border-gray-100">
     {sub.isComingSoon && (
-      <div className="absolute top-2 left-[-30px] z-10 w-32 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50">
-        בקרוב!
+      <div className="absolute top-3.5 left-[-33px] z-10 w-32 py-1 bg-gradient-to-r from-slate-900 via-red-600 to-slate-900 text-white text-[9px] sm:text-[10px] font-extrabold text-center uppercase tracking-widest transform -rotate-45 shadow-[0_4px_10px_rgba(220,38,38,0.45)] border-y border-red-500/50 flex items-center justify-center gap-1.5 select-none">
+        <Fingerprint size={10} className="text-red-200 animate-pulse" />
+        <span>בקרוב!</span>
       </div>
     )}
     <div className="relative aspect-square w-full p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
@@ -611,21 +614,12 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
   
   return (
     <div onClick={() => navigateToProduct(product)} className={`group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}>
-      {product.isClearance ? (
-        <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-teal-500 to-emerald-400 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-teal-600/50 flex items-center justify-center gap-1">
-          <Tag size={12} className="text-white" />
-          מציאון
+      {product.isComingSoon && (
+        <div className="absolute top-3.5 left-[-33px] z-20 w-32 py-1 bg-gradient-to-r from-slate-900 via-red-600 to-slate-900 text-white text-[9px] sm:text-[10px] font-extrabold text-center uppercase tracking-widest transform -rotate-45 shadow-[0_4px_10px_rgba(220,38,38,0.45)] border-y border-red-500/50 flex items-center justify-center gap-1.5 select-none">
+          <Fingerprint size={10} className="text-red-200 animate-pulse" />
+          <span>בקרוב!</span>
         </div>
-      ) : product.isHotSale ? (
-        <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-red-600 to-orange-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50 flex items-center justify-center gap-1">
-          <Flame size={12} className="text-yellow-300" />
-          מבצע חם!
-        </div>
-      ) : product.isComingSoon ? (
-        <div className="absolute top-2 left-[-30px] z-20 w-32 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white text-[10px] sm:text-xs font-bold text-center uppercase tracking-wider transform -rotate-45 shadow-sm border-b border-red-700/50">
-          בקרוב!
-        </div>
-      ) : null}
+      )}
 
       {onBulkSelectionChange && !product.isComingSoon && (
         <div 
@@ -633,15 +627,62 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
           onClick={handleCheckboxClick}
           title={isSelectedForBulk ? "הסר מהוספה מרובה" : "סמן להוספה מרובה"}
         >
-          <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded border flex items-center justify-center transition-all ${isSelectedForBulk ? 'bg-[#004387] border-[#004387]' : 'bg-white border-gray-300 hover:border-[#004387] shadow-sm'}`}>
-            {isSelectedForBulk && <CheckCircle size={14} className="text-white sm:w-4 sm:h-4" />}
+          <div 
+            className={`w-[24px] h-[24px] sm:w-[28px] sm:h-[28px] rounded-md border-[2.5px] flex items-center justify-center transition-all duration-200 transform active:scale-95 ${
+              isSelectedForBulk 
+                ? 'bg-gradient-to-b from-[#005fb8] via-[#004387] to-[#002f5e] border-[#001c3c] shadow-[0_3px_6px_rgba(0,67,135,0.35),_inset_0_1.5px_1px_rgba(255,255,255,0.6),_inset_0_-2.5px_0_rgba(0,0,0,0.3)]' 
+                : 'bg-gradient-to-b from-white via-slate-50 to-slate-100 border-slate-800 hover:border-[#004387] shadow-[0_3px_6px_rgba(0,0,0,0.2),_inset_0_-2px_0_rgba(0,0,0,0.15),_inset_0_1.5px_1px_rgba(255,255,255,0.95)]'
+            }`}
+          >
+            {isSelectedForBulk && (
+              <motion.div
+                initial={{ scale: 0, rotate: -20 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 15 }}
+                className="flex items-center justify-center"
+              >
+                <Check className="text-white stroke-[4.5] w-[14px] h-[14px] sm:w-[16px] sm:h-[16px]" />
+              </motion.div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic Premium Badges (Slanted and Animated) positioned cleanly under the checkbox */}
+      {product.isClearance && (
+        <motion.div 
+          className={`absolute left-2.5 z-20 transition-all duration-200 ${onBulkSelectionChange && !product.isComingSoon ? 'top-13 sm:top-15' : 'top-3.5'}`}
+          animate={{
+            scale: [1, 1.12, 1.02, 1.14, 1],
+          }}
+          transition={{
+            duration: 1.5,
+            repeat: Infinity,
+            repeatDelay: 0.1,
+            ease: "easeInOut"
+          }}
+        >
+          <div className="bg-gradient-to-r from-emerald-600 to-green-500 text-white border border-emerald-400 text-[10px] sm:text-xs font-extrabold px-2.5 py-1 sm:py-1.5 rounded-md shadow-[0_4px_12px_rgba(16,185,129,0.35),_inset_0_1px_0_rgba(255,255,255,0.3)] flex items-center gap-1.5 select-none font-sans transform -rotate-[12deg] origin-center">
+            <Tag size={10} className="text-emerald-100 transform -rotate-12 animate-pulse" />
+            <span>מציאון</span>
+          </div>
+        </motion.div>
+      )}
+      
+      {product.isHotSale && (
+        <div className={`absolute left-3 z-20 transition-all duration-200 ${onBulkSelectionChange && !product.isComingSoon ? 'top-12 sm:top-14' : 'top-3'}`}>
+          <div className="bg-white text-red-600 border-2 border-red-500 text-[10px] sm:text-xs font-bold px-2 py-0.5 sm:py-1 rounded-md shadow-md flex items-center gap-1.5 select-none font-sans">
+            <Flame size={10} className="text-red-500 animate-bounce" />
+            <span>מבצע חם!</span>
           </div>
         </div>
       )}
       
       <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square w-full relative border-b border-gray-100 overflow-hidden`}>
         <img referrerPolicy="no-referrer" src={transformImageLink(product.images[0], 350)} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105 ${product.isComingSoon ? 'opacity-70' : ''}`} />
-        <div className={`absolute top-2 right-2 z-10`}>
+        
+        {/* BrandBadge stays peaceful and elegant on the top right */}
+        <div className="absolute top-2 right-2 z-10 transition-all duration-200">
           <BrandBadge brand={product.brand} />
         </div>
       </div>
@@ -667,12 +708,14 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
               {product.price > 0 ? (
                 <div className="flex flex-col items-center leading-tight w-full text-center opacity-70">
                   {product.retailPrice && (
-                    <span className="text-[9px] sm:text-[10px] text-gray-500 font-medium leading-[1.2] w-full block line-through">
+                    <span className="text-[9px] sm:text-[10px] text-gray-500 font-semibold leading-[1.2] w-full block">
                       צרכן: ₪{product.retailPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                      <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block mr-1">(כולל מע"מ)</span>
                     </span>
                   )}
                   <span className="text-xs sm:text-sm font-bold text-gray-500 leading-none block mt-0.5">
                     מתקין: ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    <span className="text-[9px] text-gray-400 font-normal inline-block mr-1">(ללא מע"מ)</span>
                   </span>
                 </div>
               ) : (
@@ -684,19 +727,21 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
           ) : product.retailPrice || product.oldPrice ? (
             <div className="flex flex-col items-center leading-tight mb-2 w-full text-center">
               {product.retailPrice && (
-                <span className="text-[9px] sm:text-xs text-gray-600 font-medium leading-[1.2] mb-1 w-full block">
+                <span className="text-[9px] sm:text-xs text-gray-600 font-semibold leading-[1.2] mb-1 w-full block">
                   צרכן: ₪{product.retailPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block">(כולל מע"מ)</span>
+                  <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block mr-1">(כולל מע"מ)</span>
                 </span>
               )}
               {product.oldPrice && (
-                <span className="text-[9px] sm:text-xs text-red-500 font-medium leading-[1.2] mb-0 w-full block line-through">
-                  מחירון מתקין: ₪{product.oldPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                <span className="text-[9px] sm:text-xs text-red-500 font-medium leading-[1.2] mb-1 w-full block line-through">
+                  מחירון מתקין מקורי (ללא מע"מ): ₪{product.oldPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </span>
               )}
               <span className={`text-base sm:text-lg font-bold ${product.isClearance ? 'text-teal-600' : 'text-[#f7941d]'} leading-none block`}>
                 ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">{product.isClearance ? 'מבצע מציאון' : 'מחיר מומלץ למתקין'}</span>
+                <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
+                  {product.isClearance ? 'מבצע מציאון (ללא מע"מ)' : 'מחיר מומלץ למתקין (ללא מע"מ)'}
+                </span>
               </span>
             </div>
           ) : (
@@ -704,7 +749,9 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
               <span className={`text-base sm:text-lg font-bold ${product.isClearance ? 'text-teal-600' : 'text-[#f7941d]'} leading-none`}>
                 ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
               </span>
-              <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">{product.isClearance ? 'מחיר מבצע מציאון' : 'מחיר מומלץ למתקין'}</span>
+              <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
+                {product.isClearance ? 'מבצע מציאון (ללא מע"מ)' : 'מחיר מומלץ למתקין (ללא מע"מ)'}
+              </span>
             </div>
           )}
           
@@ -807,6 +854,11 @@ const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) 
   // Check support for Touch ID / Face ID
   useEffect(() => {
     const checkSupport = async () => {
+      // Browser safety: WebAuthn/Biometrics are blocked inside cross-origin iframes (like the AI Studio preview window).
+      if (window.self !== window.top) {
+        setBiometricSupported(false);
+        return;
+      }
       if (window.PublicKeyCredential) {
         try {
           const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
@@ -816,7 +868,7 @@ const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) 
           setIsBiometricSaved(saved);
           
           // Auto-trigger biometric login on mount after a small delay if saved and not inside iframe
-          if (saved && window.self === window.top) {
+          if (saved) {
             setTimeout(() => {
               handleBiometricLogin();
             }, 600);
@@ -831,6 +883,10 @@ const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) 
 
   const enrollBiometric = async () => {
     try {
+      if (window.self !== window.top) {
+        console.warn("Skipping biometric enrollment because app is running in an iframe.");
+        return false;
+      }
       const challenge = new Uint8Array(32);
       window.crypto.getRandomValues(challenge);
       
@@ -1131,6 +1187,13 @@ export default function App() {
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<Record<string, { product: any, quantity: number }>>({});
+  const [isBulkExpanded, setIsBulkExpanded] = useState(false);
+
+  useEffect(() => {
+    if (Object.keys(bulkSelection).length === 0) {
+      setIsBulkExpanded(false);
+    }
+  }, [bulkSelection]);
 
   const handleBulkSelectionChange = (productId: string, product: any, quantity: number) => {
     setBulkSelection(prev => {
@@ -1166,6 +1229,59 @@ export default function App() {
   } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(50);
+
+  // Promo Banner State for Hot Sales & Clearance/Metsian items
+  const [showPromoBanner, setShowPromoBanner] = useState(false);
+
+  const hotSaleCount = useMemo(() => {
+    return catalogData.filter(p => p.active !== 'FALSE' && p.isHotSale).length;
+  }, [catalogData]);
+
+  const clearanceCount = useMemo(() => {
+    return catalogData.filter(p => p.active !== 'FALSE' && p.isClearance).length;
+  }, [catalogData]);
+
+  // Trigger Promo Banner with a polished delay once data is loaded
+  useEffect(() => {
+    if (!isLoading && catalogData.length > 0 && currentView === 'home') {
+      const hasPromos = catalogData.some(p => p.active !== 'FALSE' && (p.isHotSale || p.isClearance));
+      const hasSeen = sessionStorage.getItem('dismissed_promo_banner') === 'true';
+      if (hasPromos && !hasSeen) {
+        const timer = setTimeout(() => {
+          setShowPromoBanner(true);
+        }, 1200); // 1.2s delay for a highly native & elegant pop-in effect
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isLoading, catalogData, currentView]);
+
+  const handleGoToPromos = () => {
+    sessionStorage.setItem('dismissed_promo_banner', 'true');
+    setShowPromoBanner(false);
+    
+    // Find a catalog folder targeting Hot Sales or Campaign:
+    const hotSaleCat = catalogFolders.find(c => 
+      (c.brand && c.brand.trim().toUpperCase() === 'HOT SALE') ||
+      c.name.includes('מבצע') ||
+      c.name.includes('מבצעים') ||
+      c.name.toLowerCase().includes('sale')
+    );
+    
+    if (hotSaleCat) {
+      navigateToCatalog(hotSaleCat.name);
+    } else {
+      // Fallback: search for first product with promo and navigate to its catalog
+      const firstPromoProduct = catalogData.find(p => p.active !== 'FALSE' && (p.isHotSale || p.isClearance));
+      if (firstPromoProduct && firstPromoProduct.category) {
+        navigateToCatalog(firstPromoProduct.category);
+      }
+    }
+  };
+
+  const handleDismissPromos = () => {
+    sessionStorage.setItem('dismissed_promo_banner', 'true');
+    setShowPromoBanner(false);
+  };
 
   // Admin Sync configuration & Authorization (1 hour window, with option to save password)
   const [isAdminAuth, setIsAdminAuth] = useState(false);
@@ -2207,14 +2323,14 @@ export default function App() {
                       <button 
                         className="absolute top-1/2 left-0 -translate-y-[calc(50%+8px)] -ml-2 sm:-ml-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#004387] hover:bg-gray-50 active:scale-95 transition-all z-20 flex items-center justify-center cursor-pointer"
                         onClick={handlePrevImage}
-                        aria-label="גלול שמאל"
+                        aria-label="גלול שמאל cursor-pointer"
                       >
                         <ChevronLeft size={18} />
                       </button>
                       <button 
                         className="absolute top-1/2 right-0 -translate-y-[calc(50%+8px)] -mr-2 sm:-mr-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#004387] hover:bg-gray-50 active:scale-95 transition-all z-20 flex items-center justify-center cursor-pointer"
                         onClick={handleNextImage}
-                        aria-label="גלול ימין"
+                        aria-label="גלול ימין cursor-pointer"
                       >
                         <ChevronRight size={18} />
                       </button>
@@ -2244,110 +2360,111 @@ export default function App() {
 
               {/* DOCUMENTATION & LINKS SECTION */}
               {(selectedProduct.specsLink || selectedProduct.manualLink || selectedProduct.videoLink || (selectedProduct.labCerts && selectedProduct.labCerts.length > 0)) && (
-                <div className="mb-6 sm:mb-8">
-                  <h3 className="font-semibold text-[#0c2d57] mb-3 sm:mb-4 text-base sm:text-lg border-b pb-2">מידע נוסף ומסמכים</h3>
-                  <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 mb-4">
+                <div className="mb-6 sm:mb-8 font-sans">
+                  <h3 className="font-bold text-[#0c2d57] mb-4 text-base sm:text-lg border-[#004387]/15 border-b pb-2">מידע נוסף ומסמכים להורדה</h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                    {/* SPECS LINK */}
                     {selectedProduct.specsLink && (
-                      <div 
-                        className="flex-1 min-w-[140px] relative flex"
-                        onMouseEnter={() => setIsSpecsHovered(true)}
-                        onMouseLeave={() => setIsSpecsHovered(false)}
-                      >
-                        <a href={selectedProduct.specsLink} target="_blank" rel="noreferrer" className="w-full flex items-center justify-center gap-2 sm:gap-3 bg-white text-[#004387] border border-[#004387] hover:bg-[#004387] hover:text-white py-2 sm:py-3 px-3 sm:px-4 rounded-none transition-all font-bold text-sm sm:text-base group">
-                          <FileText size={24} className="text-[#004387] group-hover:text-white transition-colors group-hover:scale-110 duration-200" />
-                          מפרט טכני
-                        </a>
-
-                        {/* Specs Preview Popup */}
-                        {isSpecsHovered && !isMobileDevice && getPdfPreviewUrl(selectedProduct.specsLink) && (
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-72 sm:w-80 aspect-[1/1.4] bg-white z-50 rounded-lg overflow-hidden shadow-2xl border border-gray-200 pointer-events-none animate-in fade-in zoom-in-95 duration-200">
-                            <iframe 
-                              width="100%" 
-                              height="100%" 
-                              src={getPdfPreviewUrl(selectedProduct.specsLink)!} 
-                              title="Specs Preview" 
-                              frameBorder="0" 
-                            ></iframe>
+                      <div className="relative flex flex-col w-full">
+                        <a 
+                          href={selectedProduct.specsLink} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="flex items-center gap-3.5 bg-[#fcfcfc] border-2 border-gray-200 hover:border-[#004387] p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right" 
+                          style={{ minHeight: '80px' }}
+                        >
+                          <div className="w-12 h-12 bg-red-50 text-red-600 border border-red-200 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-red-600 group-hover:text-white transition-all shadow-xs duration-250">
+                            <span className="text-[11px] font-black uppercase tracking-wider select-none leading-none">PDF</span>
                           </div>
-                        )}
+                          <div className="flex-grow min-w-0">
+                            <div className="text-sm sm:text-base font-bold text-gray-800 group-hover:text-[#004387] transition-all">מפרט טכני</div>
+                          </div>
+                          <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-[#004387] group-hover:text-white transition-all duration-250 flex-shrink-0 shadow-sm">
+                            <Download size={18} />
+                          </div>
+                        </a>
                       </div>
                     )}
 
+                    {/* MANUAL LINK */}
                     {selectedProduct.manualLink && (
-                      <div 
-                        className="flex-1 min-w-[140px] relative flex"
-                        onMouseEnter={() => setIsManualHovered(true)}
-                        onMouseLeave={() => setIsManualHovered(false)}
-                      >
-                        <a href={selectedProduct.manualLink} target="_blank" rel="noreferrer" className="w-full flex items-center justify-center gap-2 sm:gap-3 bg-white text-[#004387] border border-[#004387] hover:bg-[#004387] hover:text-white py-2 sm:py-3 px-3 sm:px-4 rounded-none transition-all font-bold text-sm sm:text-base group">
-                          <BookOpen size={24} className="text-[#004387] group-hover:text-white transition-colors group-hover:scale-110 duration-200" />
-                          מדריך למשתמש
-                        </a>
-
-                        {/* Manual Preview Popup */}
-                        {isManualHovered && !isMobileDevice && getPdfPreviewUrl(selectedProduct.manualLink) && (
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-72 sm:w-80 aspect-[1/1.4] bg-white z-50 rounded-lg overflow-hidden shadow-2xl border border-gray-200 pointer-events-none animate-in fade-in zoom-in-95 duration-200">
-                            <iframe 
-                              width="100%" 
-                              height="100%" 
-                              src={getPdfPreviewUrl(selectedProduct.manualLink)!} 
-                              title="Manual Preview" 
-                              frameBorder="0" 
-                            ></iframe>
+                      <div className="relative flex flex-col w-full">
+                        <a 
+                          href={selectedProduct.manualLink} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="flex items-center gap-3.5 bg-[#fcfcfc] border-2 border-gray-200 hover:border-[#004387] p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right" 
+                          style={{ minHeight: '80px' }}
+                        >
+                          <div className="w-12 h-12 bg-red-50 text-red-600 border border-red-200 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-red-600 group-hover:text-white transition-all shadow-xs duration-250">
+                            <span className="text-[11px] font-black uppercase tracking-wider select-none leading-none">PDF</span>
                           </div>
-                        )}
+                          <div className="flex-grow min-w-0">
+                            <div className="text-sm sm:text-base font-bold text-gray-800 group-hover:text-[#004387] transition-all">מדריך למשתמש</div>
+                          </div>
+                          <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-[#004387] group-hover:text-white transition-all duration-250 flex-shrink-0 shadow-sm">
+                            <Download size={18} />
+                          </div>
+                        </a>
                       </div>
                     )}
 
+                    {/* VIDEO LINK */}
                     {selectedProduct.videoLink && (
-                      <div 
-                        className="flex-1 min-w-[140px] relative flex" 
-                        onMouseEnter={() => setIsVideoHovered(true)} 
-                        onMouseLeave={() => setIsVideoHovered(false)}
-                      >
-                        <a href={selectedProduct.videoLink} target="_blank" rel="noreferrer" className="w-full flex items-center justify-center gap-2 sm:gap-3 bg-white text-[#004387] border border-[#004387] hover:bg-[#004387] hover:text-white py-2 sm:py-3 px-3 sm:px-4 rounded-none transition-all font-bold text-sm sm:text-base group">
-                          <Youtube size={24} className="text-[#004387] group-hover:text-white transition-colors group-hover:scale-110 duration-200" />
-                          סרטון הדרכה
-                        </a>
-                        
-                        {/* Video Preview Popup */}
-                        {isVideoHovered && !isMobileDevice && getVideoEmbedUrl(selectedProduct.videoLink) && (
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-72 sm:w-80 aspect-video bg-black z-50 rounded-lg overflow-hidden shadow-2xl border border-gray-200 animate-in fade-in zoom-in-95 duration-200">
-                            <iframe 
-                              width="100%" 
-                              height="100%" 
-                              src={getVideoEmbedUrl(selectedProduct.videoLink)!} 
-                              title="Video Preview" 
-                              frameBorder="0" 
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                            ></iframe>
-                          </div>
-                        )}
+                      <div className="relative flex flex-col w-full">
+                        {(() => {
+                          const isYouTube = selectedProduct.videoLink.toLowerCase().includes('youtube.com') || selectedProduct.videoLink.toLowerCase().includes('youtu.be');
+                          return (
+                            <a 
+                              href={selectedProduct.videoLink} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 border-gray-200 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${isYouTube ? 'hover:border-[#ff0000]' : 'hover:border-[#004387]'}`}
+                              style={{ minHeight: '80px' }}
+                            >
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all shadow-xs duration-250 ${isYouTube ? 'bg-red-50 text-[#ff0000] border border-red-200 group-hover:bg-[#ff0000] group-hover:text-white' : 'bg-blue-50 text-blue-600 border border-blue-200 group-hover:bg-blue-600 group-hover:text-white'}`}>
+                                {isYouTube ? (
+                                  <Youtube size={26} className="transition-transform duration-200 group-hover:scale-110" />
+                                ) : (
+                                  <Video size={24} className="transition-transform duration-200 group-hover:scale-110" />
+                                )}
+                              </div>
+                              <div className="flex-grow min-w-0">
+                                <div className={`text-sm sm:text-base font-bold text-gray-800 transition-all ${isYouTube ? 'group-hover:text-[#ff0000]' : 'group-hover:text-blue-600'}`}>סרטון</div>
+                              </div>
+                              <div className={`w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 transition-all duration-250 flex-shrink-0 shadow-sm ${isYouTube ? 'group-hover:bg-[#ff0000] group-hover:text-white' : 'group-hover:bg-blue-600 group-hover:text-white'}`}>
+                                <PlayCircle size={18} />
+                              </div>
+                            </a>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
 
                   {/* LAB CERTIFICATES SECTION */}
                   {selectedProduct.labCerts && selectedProduct.labCerts.length > 0 && (
-                    <div className="mt-4 sm:mt-6 pt-4">
-                      <h4 className="font-semibold text-gray-700 mb-3 sm:mb-4 text-sm sm:text-base flex items-center justify-center gap-2">
-                         אישורי מעבדה ותקנים ({selectedProduct.labCerts.length}) <ShieldCheck size={20} className="text-emerald-500" />
+                    <div className="mt-6 pt-4 border-t border-gray-100">
+                      <h4 className="font-bold text-[#0c2d57] mb-3 text-sm sm:text-base flex items-center justify-start gap-2">
+                        <ShieldCheck size={20} className="text-emerald-600" />
+                        <span>אישורי מעבדה ותקנים רשמיים ({selectedProduct.labCerts.length})</span>
                       </h4>
-                      <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+                      <div className="flex flex-wrap items-center gap-3">
                         {selectedProduct.labCerts.map((certLink: string, idx: number) => {
-                          const isPdf = certLink.toLowerCase().includes('.pdf');
-                          
                           return (
                             <a 
                               key={idx}
                               href={certLink} 
                               target="_blank" 
                               rel="noreferrer" 
-                              className="group flex flex-row items-center gap-3 bg-white text-emerald-700 border border-emerald-200 hover:border-emerald-500 hover:bg-emerald-50 py-2 px-4 rounded-full transition-all hover:shadow-sm"
+                              className="group flex flex-row items-center gap-3 bg-white text-emerald-800 border-2 border-emerald-100 hover:border-emerald-500 hover:bg-emerald-50/70 p-3 px-4 rounded-xl transition-all hover:shadow-md cursor-pointer flex-grow sm:flex-grow-0"
                             >
-                              <Link size={16} className="text-emerald-600" />
-                              <span className="text-sm font-medium text-emerald-800">אישור #{idx + 1}</span>
-                              <Download size={16} className="text-emerald-600 opacity-70 group-hover:opacity-100" />
+                              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                                <Link size={16} />
+                              </div>
+                              <span className="text-sm font-bold text-emerald-900">אישור בטיחות ותקן #{idx + 1}</span>
+                              <Download size={16} className="text-emerald-600 opacity-70 group-hover:opacity-100 mr-1" />
                             </a>
                           )
                         })}
@@ -2440,13 +2557,13 @@ export default function App() {
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
                     <div className="flex flex-col w-full sm:w-auto text-center sm:text-right">
                        {selectedProduct.retailPrice && currentOptionals.length === 0 && (
-                          <span className="text-sm sm:text-base text-gray-800 font-medium mb-1 line-through">
+                          <span className="text-sm sm:text-base text-gray-800 font-bold mb-1 block">
                             מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
                           </span>
                        )}
                        {selectedProduct.oldPrice && currentOptionals.length === 0 && (
-                          <span className="text-sm sm:text-base text-red-500 font-medium mb-1 line-through">
-                            מחירון מתקין: ₪{selectedProduct.oldPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <span className="text-sm sm:text-base text-red-500 font-medium mb-1 line-through block">
+                            מחירון מתקין מקורי (ללא מע"מ): ₪{selectedProduct.oldPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                        )}
                        {currentOptionals.length === 0 && (
@@ -3098,11 +3215,11 @@ export default function App() {
 
                 {/* Desktop Inline Breadcrumbs */}
                 {(currentView !== 'home' || searchQuery) && (
-                  <div className="flex items-center gap-1.5 text-xs font-semibold pl-2">
+                  <div className="flex flex-wrap items-center gap-2 text-sm sm:text-base font-bold pl-2">
                     {searchQuery ? (
                       <>
-                        <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
-                        <span className="text-[#004387] bg-blue-50/60 px-1.5 py-0.5 rounded-sm">
+                        <ChevronLeft size={14} className="text-[#0c2d57] opacity-80 flex-shrink-0" />
+                        <span className="text-[#004387] bg-blue-50/60 px-2 py-0.5 rounded-sm">
                           חיפוש: {searchQuery}
                         </span>
                       </>
@@ -3111,10 +3228,10 @@ export default function App() {
                         {/* Catalog Link */}
                         {selectedCatalog && (
                           <>
-                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                            <ChevronLeft size={14} className="text-[#0c2d57] opacity-80 flex-shrink-0" />
                             <button 
                               onClick={() => navigateToCatalog(selectedCatalog)} 
-                              className="hover:text-[#004387] hover:underline font-semibold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-[#0c2d57]"
+                              className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-[#0c2d57] text-sm sm:text-[15px]"
                             >
                               {selectedCatalog}
                             </button>
@@ -3124,10 +3241,10 @@ export default function App() {
                         {/* Subcategory Link */}
                         {selectedSubcategory && (currentView === 'nested_subs' || currentView === 'products' || currentView === 'product') && (
                           <>
-                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                            <ChevronLeft size={14} className="text-[#0c2d57] opacity-80 flex-shrink-0" />
                             <button 
                               onClick={() => navigateToSubcategory(selectedSubcategory)} 
-                              className="hover:text-[#004387] hover:underline font-semibold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-[#0c2d57]"
+                              className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-[#0c2d57] text-sm sm:text-[15px]"
                             >
                               {selectedSubcategory}
                             </button>
@@ -3137,10 +3254,10 @@ export default function App() {
                         {/* Nested Subcategory Link */}
                         {selectedNestedSubcategory && (currentView === 'products' || currentView === 'product') && (
                           <>
-                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                            <ChevronLeft size={14} className="text-[#0c2d57] opacity-80 flex-shrink-0" />
                             <button 
                               onClick={() => navigateToNestedSubcategory(selectedNestedSubcategory)} 
-                              className="hover:text-[#004387] hover:underline font-semibold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-[#0c2d57]"
+                              className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-[#0c2d57] text-sm sm:text-[15px]"
                             >
                               {selectedNestedSubcategory}
                             </button>
@@ -3150,8 +3267,8 @@ export default function App() {
                         {/* Product Name (Active Leaf) */}
                         {currentView === 'product' && selectedProduct && (
                           <>
-                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
-                            <span className="text-[#004387] truncate max-w-[120px] lg:max-w-[200px]" title={selectedProduct.name}>
+                            <ChevronLeft size={14} className="text-[#0c2d57] opacity-80 flex-shrink-0" />
+                            <span className="text-[#004387] font-bold text-sm sm:text-[15px] max-w-[400px] lg:max-w-none break-words" title={selectedProduct.name}>
                               {selectedProduct.name}
                             </span>
                           </>
@@ -3160,8 +3277,8 @@ export default function App() {
                         {/* Subcategories (Active Leaf) */}
                         {currentView === 'catalog_subs' && (
                           <>
-                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
-                            <span className="text-[#0c2d57] font-semibold">
+                            <ChevronLeft size={14} className="text-[#0c2d57] opacity-80 flex-shrink-0" />
+                            <span className="text-[#0c2d57] font-bold text-sm sm:text-[15px]">
                               קטגוריות
                             </span>
                           </>
@@ -3170,8 +3287,8 @@ export default function App() {
                         {/* Nested Subcategories (Active Leaf) */}
                         {currentView === 'nested_subs' && (
                           <>
-                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
-                            <span className="text-[#0c2d57] font-semibold">
+                            <ChevronLeft size={14} className="text-[#0c2d57] opacity-80 flex-shrink-0" />
+                            <span className="text-[#0c2d57] font-bold text-sm sm:text-[15px]">
                               תתי קטגוריה
                             </span>
                           </>
@@ -3180,8 +3297,8 @@ export default function App() {
                         {/* Products View (Active Leaf) */}
                         {currentView === 'products' && !selectedNestedSubcategory && (
                           <>
-                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
-                            <span className="text-[#0c2d57] font-semibold">
+                            <ChevronLeft size={14} className="text-[#0c2d57] opacity-80 flex-shrink-0" />
+                            <span className="text-[#0c2d57] font-bold text-sm sm:text-[15px]">
                               מוצרים
                             </span>
                           </>
@@ -3190,8 +3307,8 @@ export default function App() {
                         {/* Checkout (Active Leaf) */}
                         {currentView === 'checkout' && (
                           <>
-                            <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
-                            <span className="text-[#0c2d57] font-semibold">
+                            <ChevronLeft size={14} className="text-[#0c2d57] opacity-80 flex-shrink-0" />
+                            <span className="text-[#0c2d57] font-bold text-sm sm:text-[15px]">
                               סיכום הזמנה ושליחה
                             </span>
                           </>
@@ -3298,7 +3415,7 @@ export default function App() {
           {/* MOBILE ONLY DYNAMIC BREADCRUMB BAR (INTEGRATED AND COMPACT - NO DUPLICATE LOGOS) */}
           {(currentView !== 'home' || searchQuery) && (
             <div className={`md:hidden bg-white px-4 pb-2 w-full text-right transition-all ${isSearchFocused ? 'hidden' : 'block'}`}>
-              <div className="flex flex-row items-center justify-start gap-1 text-[11px] text-gray-500 overflow-x-auto py-0.5" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              <div className="flex flex-row items-center justify-start gap-1.5 text-xs text-gray-600 overflow-x-auto py-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 
                 {/* Clean Home Icon instead of duplicate Logo */}
                 <button 
@@ -3306,17 +3423,17 @@ export default function App() {
                     setSearchQuery('');
                     navigateHome();
                   }} 
-                  className="hover:opacity-85 text-gray-400 p-1 flex items-center gap-1 font-bold cursor-pointer flex-shrink-0 transition-all hover:scale-105 active:scale-95"
+                  className="hover:opacity-85 text-gray-700 p-1 flex items-center gap-1 font-bold cursor-pointer flex-shrink-0 transition-all hover:scale-105 active:scale-95"
                   title="ראשי - חזור לדף הבית"
                 >
-                  <Home size={14} className="text-[#004387]" />
-                  <span className="text-[11px] font-bold text-[#004387]">ראשי</span>
+                  <Home size={15} className="text-[#004387]" />
+                  <span className="text-xs font-bold text-[#004387]">ראשי</span>
                 </button>
 
                 {searchQuery ? (
                   <>
-                    <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                    <span className="font-semibold text-gray-700 bg-gray-100 px-1.5 py-0.5 rounded-sm">
+                    <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                    <span className="font-bold text-gray-800 bg-gray-100 px-1.5 py-0.5 rounded-sm">
                       חיפוש: <strong className="text-[#004387]">{searchQuery}</strong>
                     </span>
                   </>
@@ -3325,10 +3442,10 @@ export default function App() {
                     {/* Catalog Link */}
                     {selectedCatalog && (
                       <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
                         <button 
                           onClick={() => navigateToCatalog(selectedCatalog)} 
-                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-600"
+                          className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-800 text-xs"
                         >
                           {selectedCatalog}
                         </button>
@@ -3338,10 +3455,10 @@ export default function App() {
                     {/* Subcategory Link */}
                     {selectedSubcategory && (currentView === 'nested_subs' || currentView === 'products' || currentView === 'product') && (
                       <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
                         <button 
                           onClick={() => navigateToSubcategory(selectedSubcategory)} 
-                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-600"
+                          className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-800 text-xs"
                         >
                           {selectedSubcategory}
                         </button>
@@ -3351,10 +3468,10 @@ export default function App() {
                     {/* Nested Subcategory Link */}
                     {selectedNestedSubcategory && (currentView === 'products' || currentView === 'product') && (
                       <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
+                        <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
                         <button 
                           onClick={() => navigateToNestedSubcategory(selectedNestedSubcategory)} 
-                          className="hover:text-[#004387] hover:underline font-medium bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-600"
+                          className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-800 text-xs"
                         >
                           {selectedNestedSubcategory}
                         </button>
@@ -3364,8 +3481,8 @@ export default function App() {
                     {/* Product Name (Active Leaf) */}
                     {currentView === 'product' && selectedProduct && (
                       <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-[#004387] truncate max-w-[150px]">
+                        <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-bold text-[#004387] whitespace-nowrap">
                           {selectedProduct.name}
                         </span>
                       </>
@@ -3374,8 +3491,8 @@ export default function App() {
                     {/* Subcategories (Active Leaf) */}
                     {currentView === 'catalog_subs' && (
                       <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-gray-700">
+                        <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-bold text-gray-800">
                           קטגוריות
                         </span>
                       </>
@@ -3384,8 +3501,8 @@ export default function App() {
                     {/* Nested Subcategories (Active Leaf) */}
                     {currentView === 'nested_subs' && (
                       <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-gray-700">
+                        <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-bold text-gray-800">
                           תתי קטגוריה
                         </span>
                       </>
@@ -3394,8 +3511,8 @@ export default function App() {
                     {/* Products View (Active Leaf) */}
                     {currentView === 'products' && !selectedNestedSubcategory && (
                       <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-gray-700">
+                        <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-bold text-gray-800">
                           מוצרים
                         </span>
                       </>
@@ -3404,8 +3521,8 @@ export default function App() {
                     {/* Checkout (Active Leaf) */}
                     {currentView === 'checkout' && (
                       <>
-                        <ChevronLeft size={12} className="text-gray-400 flex-shrink-0" />
-                        <span className="font-semibold text-gray-700">
+                        <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                        <span className="font-bold text-gray-800">
                           קופה
                         </span>
                       </>
@@ -3883,6 +4000,109 @@ export default function App() {
         </div>
       )}
 
+      {/* PROMOTIONAL POPUP BANNER MODAL */}
+      <AnimatePresence>
+        {showPromoBanner && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md" dir="rtl">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.92, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -10 }}
+              transition={{ type: "spring", duration: 0.45, bounce: 0.2 }}
+              className="bg-white/95 backdrop-blur-md w-full max-w-sm p-5 sm:p-6 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.3)] relative rounded-2xl border border-orange-500/30 overflow-hidden"
+            >
+              {/* Background gradient flares */}
+              <div className="absolute -top-10 -right-10 w-40 h-40 bg-orange-500/10 rounded-full blur-2xl pointer-events-none" />
+              <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
+
+              {/* Close Button */}
+              <button 
+                onClick={handleDismissPromos} 
+                className="absolute top-3 left-3 p-1.5 bg-slate-100/80 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-all rounded-full border-none shadow-xs active:scale-95 flex items-center justify-center cursor-pointer"
+                title="סגור והמשך לקטלוג"
+                type="button"
+              >
+                <X size={15} />
+              </button>
+
+              {/* Elegant Glowing Circular Indicator */}
+              <div className="flex justify-center mb-4">
+                <div className="relative">
+                  <motion.div 
+                    animate={{ scale: [1, 1.08, 1] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    className="p-3 bg-gradient-to-tr from-[#fe8d00] to-red-500 text-white rounded-full shadow-md relative z-10 flex items-center justify-center"
+                  >
+                    <Flame size={22} className="animate-pulse" />
+                  </motion.div>
+                  <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 z-20">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-orange-500"></span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Content Header */}
+              <div className="text-center mb-4">
+                <span className="inline-block bg-[#fe8d00]/10 text-[#fe8d00] font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1.5">
+                  הזדמנות מיוחדת עבורך
+                </span>
+                <h3 className="text-lg sm:text-xl font-bold text-[#0c2d57] leading-snug mb-1">
+                  המבצעים שאסור לך לפספס! ⚡
+                </h3>
+                <p className="text-xs text-gray-500 leading-relaxed max-w-xs mx-auto">
+                  מצאנו מחירים יוצאי דופן במחלקת המבצעים ובמציאון (עודפי מלאי).
+                </p>
+              </div>
+
+              {/* Dynamic Counts Status Cards - Exact Counts WITHOUT Fallbacks */}
+              <div className="grid grid-cols-2 gap-2.5 mb-5">
+                <div className="bg-gradient-to-b from-red-50/50 to-orange-50/20 border border-orange-100 rounded-xl p-3 text-center flex flex-col justify-center items-center shadow-2xs">
+                  <Flame size={18} className="text-red-500 mb-1" />
+                  <span className="text-xl font-black text-red-600 leading-none">
+                    {hotSaleCount}
+                  </span>
+                  <span className="text-[10px] text-gray-500 font-bold mt-1">
+                    מבצעים חמים
+                  </span>
+                </div>
+                
+                <div className="bg-gradient-to-b from-emerald-50/50 to-teal-50/20 border border-emerald-100 rounded-xl p-3 text-center flex flex-col justify-center items-center shadow-2xs">
+                  <Tag size={16} className="text-emerald-600 mb-1 transform -rotate-12" />
+                  <span className="text-xl font-black text-emerald-600 leading-none">
+                    {clearanceCount}
+                  </span>
+                  <span className="text-[10px] text-gray-500 font-bold mt-1">
+                    פריטים במציאון
+                  </span>
+                </div>
+              </div>
+
+              {/* User Action Buttons */}
+              <div className="space-y-2">
+                <motion.button
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={handleGoToPromos}
+                  className="w-full bg-gradient-to-r from-[#fe8d00] to-orange-500 hover:from-orange-500 hover:to-red-500 text-white font-bold py-2.5 px-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 text-xs sm:text-sm cursor-pointer border-none"
+                >
+                  <Flame size={14} />
+                  <span>מעבר מהיר למבצעים ומציאון</span>
+                </motion.button>
+
+                <button
+                  onClick={handleDismissPromos}
+                  className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2 px-3 rounded-lg text-[11px] border border-slate-200 transition-colors cursor-pointer text-center"
+                  type="button"
+                >
+                  המשך לקטלוג הרגיל
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* ADMIN SYNC MODAL OVERLAY */}
       {showAdminSyncModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" dir="rtl">
@@ -4007,35 +4227,193 @@ export default function App() {
         </div>
       )}
 
-      {/* Floating Action Bar for Bulk Selection */}
-      {Object.keys(bulkSelection).length > 0 && (
-        <div className="fixed bottom-4 left-3 right-3 sm:left-1/2 sm:right-auto sm:transform sm:-translate-x-1/2 z-[100] mx-auto w-[92%] sm:w-full max-w-sm sm:max-w-md bg-white border-2 border-[#004387] shadow-[0_10px_35px_rgba(0,67,135,0.22)] rounded-2xl p-3.5 sm:p-5 flex items-center justify-between gap-2.5 sm:gap-5 flex-row bulk-floating-bar">
-          <div className="flex flex-col text-right">
-            <span className="text-[#0c2d57] font-extrabold text-sm sm:text-base leading-tight">
-              {Object.keys(bulkSelection).length} מוצרים סומנו
-            </span>
-            <span className="text-xs text-gray-500 font-bold leading-tight mt-1 whitespace-nowrap">
-              סה"כ {Object.values(bulkSelection).reduce((sum, item) => sum + item.quantity, 0)} פריטים
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
-            <button
-              onClick={clearBulkSelection}
-              className="px-3 py-2 text-xs sm:text-sm font-bold text-red-500 hover:bg-red-50 hover:text-red-700 transition-all rounded-xl border border-transparent hover:border-red-200 active:scale-95 whitespace-nowrap"
-              title="נקה בחירה"
-            >
-              איפוס
-            </button>
-            <button
-              onClick={handleAddBulkToCart}
-              className="bg-[#004387] hover:bg-[#fe8d00] text-white px-4 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-extrabold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 rounded-xl active:scale-95 flex-nowrap whitespace-nowrap"
-            >
-              <ShoppingCart size={16} className="w-4 h-4 flex-shrink-0" />
-              <span className="whitespace-nowrap">הוסף לעגלה</span>
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Floating Action Bar / Expandable Bottom Sheet for Bulk Selection */}
+      <AnimatePresence>
+        {Object.keys(bulkSelection).length > 0 && (
+          <motion.div 
+            initial={{ y: 120, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 120, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 280, damping: 26 }}
+            className={`fixed bottom-4 left-3 right-3 sm:left-1/2 sm:right-auto sm:transform sm:-translate-x-1/2 z-[100] mx-auto w-[92%] sm:w-full max-w-sm sm:max-w-md bg-white border-2 border-[#004387] shadow-[0_15px_45px_rgba(0,67,135,0.25)] rounded-2xl overflow-hidden transition-all duration-300 bulk-floating-bar ${
+              isBulkExpanded ? 'p-4 sm:p-5' : 'p-3 sm:p-4'
+            }`}
+          >
+            {!isBulkExpanded ? (
+              <div className="flex items-center justify-between gap-3 flex-row w-full" dir="rtl">
+                {/* Clicking on info part toggles expanded mode */}
+                <div 
+                  onClick={() => setIsBulkExpanded(true)}
+                  className="flex items-center gap-3 cursor-pointer select-none group flex-1 text-right"
+                >
+                  <div className="relative">
+                    <span className="flex h-3.5 w-3.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#fe8d00] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-[#fe8d00]"></span>
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[#0c2d57] font-black text-xs sm:text-sm leading-tight flex items-center gap-1.5 group-hover:text-[#fe8d00] transition-colors">
+                      {Object.keys(bulkSelection).length} מוצרים סומנו
+                      <ChevronUp size={14} className="text-gray-400 group-hover:translate-y-[-2px] transition-transform animate-bounce" />
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-bold leading-none mt-0.5">
+                      לחץ כאן לצפייה בפירוט ועריכה ↴
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={clearBulkSelection}
+                    className="px-2.5 py-1.5 text-xs font-bold text-red-500 hover:bg-red-50 hover:text-red-700 transition-all rounded-xl border border-transparent hover:border-red-200 active:scale-95 whitespace-nowrap cursor-pointer"
+                    title="נקה בחירה"
+                  >
+                    איפוס
+                  </button>
+                  <button
+                    onClick={handleAddBulkToCart}
+                    className="bg-gradient-to-r from-[#004387] to-[#0a5bbb] hover:from-[#fe8d00] hover:to-orange-500 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-extrabold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 rounded-xl active:scale-95 whitespace-nowrap cursor-pointer border-none"
+                  >
+                    <ShoppingCart size={14} />
+                    <span>הוסף לעגלה</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col w-full text-right" dir="rtl">
+                {/* Expand Header */}
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-3">
+                  <div className="flex flex-col">
+                    <h4 className="text-[#0c2d57] font-black text-sm sm:text-base leading-tight flex items-center gap-1.5">
+                       מוצרים שסומנו ({Object.keys(bulkSelection).length})
+                    </h4>
+                    <p className="text-[10px] text-gray-400 font-bold mt-0.5">ערוך כמות או הסר מוצרים לפני ההוספה</p>
+                  </div>
+                  
+                  {/* Collapse Button */}
+                  <button 
+                    onClick={() => setIsBulkExpanded(false)}
+                    className="p-1 px-2.5 bg-slate-100 hover:bg-[#004387]/10 hover:text-[#004387] text-gray-600 transition-all rounded-xl border-none flex items-center gap-1 text-xs font-black cursor-pointer active:scale-95"
+                    title="כווץ לבאנר"
+                  >
+                    <ChevronDown size={14} />
+                    <span>כווץ</span>
+                  </button>
+                </div>
+
+                {/* Selected Products List */}
+                <div className="max-h-52 sm:max-h-60 overflow-y-auto pl-1 space-y-2 custom-scrollbar scroll-smooth">
+                  {Object.entries(bulkSelection).map(([productId, item]) => {
+                    const price = parsePrice(item.product.retailPrice || item.product.price);
+                    return (
+                      <div 
+                        key={productId}
+                        className="flex items-center justify-between gap-3 bg-slate-50 hover:bg-slate-100/90 p-2 rounded-xl border border-gray-100 transition-all"
+                      >
+                        {/* Image & Text Info */}
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          {item.product.image ? (
+                            <img 
+                              src={item.product.image} 
+                              alt={item.product.name} 
+                              className="w-9 h-9 object-contain rounded-lg bg-white border border-gray-100 p-0.5 flex-shrink-0"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-lg bg-slate-200 flex items-center justify-center text-[9px] text-gray-400 font-bold flex-shrink-0">
+                              אין
+                            </div>
+                          )}
+                          <div className="flex flex-col min-w-0 text-right flex-1">
+                            <span className="text-xs font-extrabold text-[#0c2d57] leading-snug break-words whitespace-normal block mb-1">
+                              {item.product.name}
+                            </span>
+                            
+                            {/* SKU / Model details with clean wrapping */}
+                            {((item.product.sku || item.product['מק"ט'] || item.product.id) || item.product.model) && (
+                              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[9px] text-gray-400 font-bold font-mono mt-0.5 leading-tight break-words whitespace-normal">
+                                {(item.product.sku || item.product['מק"ט'] || item.product.id) && (
+                                  <span>
+                                    מק״ט: <span className="text-[#004387] font-extrabold">{item.product.sku || item.product['מק"ט'] || item.product.id}</span>
+                                  </span>
+                                )}
+                                {item.product.model && (
+                                  <span className="text-gray-400">
+                                    • דגם: <span className="text-gray-600 font-sans">{item.product.model}</span>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Quantity Controller & Delete Button */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <div className="flex items-center bg-white border border-gray-200 rounded-lg p-0.5 shadow-2xs">
+                            <button
+                              onClick={() => handleBulkSelectionChange(productId, item.product, item.quantity - 1)}
+                              className="w-5 h-5 rounded hover:bg-slate-100 text-gray-500 font-extrabold border-none flex items-center justify-center cursor-pointer text-[10px]"
+                              type="button"
+                            >
+                              <Minus size={10} />
+                            </button>
+                            <span className="w-5 font-black text-xs text-center text-slate-800">
+                              {item.quantity}
+                            </span>
+                            <button
+                              onClick={() => handleBulkSelectionChange(productId, item.product, item.quantity + 1)}
+                              className="w-5 h-5 rounded hover:bg-slate-100 text-gray-500 font-extrabold border-none flex items-center justify-center cursor-pointer text-[10px]"
+                              type="button"
+                            >
+                              <Plus size={10} />
+                            </button>
+                          </div>
+                          
+                          <button
+                            onClick={() => handleBulkSelectionChange(productId, item.product, 0)}
+                            className="p-1 text-gray-400 hover:text-red-500 rounded hover:bg-red-50 border-none transition-colors active:scale-90 cursor-pointer"
+                            title="הסר מוצר זה"
+                            type="button"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Footer Totals & Action Buttons */}
+                <div className="mt-3 border-t border-gray-100 pt-3 flex flex-col gap-2">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] font-bold text-gray-400">סה"כ מוצרים:</span>
+                    <span className="text-xs font-black text-[#0c2d57]">
+                      {Object.keys(bulkSelection).length} סוגים / {Object.values(bulkSelection).reduce((sum, item) => sum + item.quantity, 0)} יחידות
+                    </span>
+                  </div>
+                  
+                  <div className="flex gap-2 w-full mt-1">
+                    <button
+                      onClick={clearBulkSelection}
+                      className="w-1/4 py-2 text-xs font-bold text-red-500 hover:bg-red-50 active:bg-red-100 transition-colors rounded-xl border border-red-200 text-center cursor-pointer bg-white"
+                    >
+                      איפוס
+                    </button>
+                    <button
+                      onClick={handleAddBulkToCart}
+                      className="flex-1 bg-gradient-to-r from-[#fe8d00] to-orange-500 hover:from-orange-500 hover:to-red-500 text-white font-extrabold py-2 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 text-xs sm:text-sm cursor-pointer border-none"
+                    >
+                      <ShoppingCart size={14} />
+                      <span>הוסף {Object.values(bulkSelection).reduce((sum, item) => sum + item.quantity, 0)} פריטים לעגלה</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Global Style for slide-up animation if tailwind animate-in is not present */}
       <style>{`
