@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { 
   ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown
 } from 'lucide-react';
@@ -1173,6 +1173,7 @@ export default function App() {
     });
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
   const mobileSearchRef = useRef<HTMLInputElement>(null);
@@ -1883,8 +1884,8 @@ export default function App() {
     let filtered = catalogData.filter(item => item.active !== 'FALSE');
 
     // Search override - Smart Token-Based & Fuzzy Search
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    if (deferredSearchQuery) {
+      const query = deferredSearchQuery.toLowerCase();
       // מפצל את החיפוש למילים נפרדות על בסיס רווחים, מקפים או קווים נטויים
       const queryTokens = query.split(/[\s\-/,]+/).filter(Boolean);
 
@@ -1958,7 +1959,7 @@ export default function App() {
     }
     
     return filtered;
-  }, [selectedCatalog, selectedSubcategory, selectedNestedSubcategory, currentView, searchQuery, catalogData]);
+  }, [selectedCatalog, selectedSubcategory, selectedNestedSubcategory, currentView, deferredSearchQuery, catalogData]);
 
   // Automatically fetch remaining chunks of products in the background after the initial instant render
   // This ensures that all categories, subcategories, counts, and search queries are fully populated and work perfectly.
@@ -4180,7 +4181,7 @@ export default function App() {
                 {isAdminAuth ? (
                   <div className="bg-blue-50/70 p-3 border border-blue-100 text-[11px] text-[#004387] leading-relaxed mb-1">
                     <p className="font-bold mb-1">✓ מכשיר זה מאומת למשך שעה</p>
-                    <p className="text-gray-500 font-normal">אינך צריך להקליד שוב את סיסמת Vlad1107.</p>
+                    <p className="text-gray-500 font-normal">אינך צריך להקליד שוב את הסיסמה.</p>
                   </div>
                 ) : (
                   <div>
