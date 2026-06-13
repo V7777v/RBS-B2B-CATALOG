@@ -1184,7 +1184,6 @@ export default function App() {
     });
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
-  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
   const mobileSearchRef = useRef<HTMLInputElement>(null);
@@ -1621,10 +1620,22 @@ export default function App() {
     return () => window.removeEventListener('focus', handleFocus);
   }, [loadData]);
 
-  // Scroll to top on every view change or search query change
+  // Scroll to top on view changes, or when search is cleared/initiated (avoiding jumps while typing on mobile)
+  const prevSearchEmptyRef = useRef(true);
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'instant' });
-  }, [currentView, selectedProduct, searchQuery]);
+    const isEmpty = searchQuery === '';
+    const wasEmpty = prevSearchEmptyRef.current;
+    
+    // Only scroll to top if view changed, product changed, or search query transitioned from/to empty
+    if (wasEmpty !== isEmpty) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      document.getElementById('rbs-b2b-app')?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    } else if (currentView || selectedProduct) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+    
+    prevSearchEmptyRef.current = isEmpty;
+  }, [currentView, selectedProduct, searchQuery === '']);
 
   const getFallbackImage = (subName: string): string | null => {
     if (!subName) return null;
@@ -1895,8 +1906,8 @@ export default function App() {
     let filtered = catalogData.filter(item => item.active !== 'FALSE');
 
     // Search override - Smart Token-Based & Fuzzy Search
-    if (deferredSearchQuery) {
-      const query = deferredSearchQuery.toLowerCase();
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
       // מפצל את החיפוש למילים נפרדות על בסיס רווחים, מקפים או קווים נטויים
       const queryTokens = query.split(/[\s\-/,]+/).filter(Boolean);
 
@@ -1970,7 +1981,7 @@ export default function App() {
     }
     
     return filtered;
-  }, [selectedCatalog, selectedSubcategory, selectedNestedSubcategory, currentView, deferredSearchQuery, catalogData]);
+  }, [selectedCatalog, selectedSubcategory, selectedNestedSubcategory, currentView, searchQuery, catalogData]);
 
   // Automatically fetch remaining chunks of products in the background after the initial instant render
   // This ensures that all categories, subcategories, counts, and search queries are fully populated and work perfectly.
@@ -2074,6 +2085,16 @@ export default function App() {
   }, 0);
   const cartTotalWithVat = cartTotal * 1.18; // חישוב מע"מ סטנדרטי (18% נכון ל-2025)
 
+  // Real-time update of window.history.state for the current view, so that browser back actions restore the search query properly
+  useEffect(() => {
+    if (window.history.state) {
+      window.history.replaceState({
+        ...window.history.state,
+        searchQuery: searchQuery
+      }, '');
+    }
+  }, [searchQuery]);
+
   // --- NAVIGATION ---
   useEffect(() => {
     if (!window.history.state) {
@@ -2082,7 +2103,8 @@ export default function App() {
         selectedCatalog: null,
         selectedSubcategory: null,
         selectedNestedSubcategory: null,
-        selectedProduct: null
+        selectedProduct: null,
+        searchQuery: ''
       }, '');
     }
 
@@ -2093,8 +2115,10 @@ export default function App() {
         setSelectedSubcategory(e.state.selectedSubcategory || null);
         setSelectedNestedSubcategory(e.state.selectedNestedSubcategory || null);
         setSelectedProduct(e.state.selectedProduct || null);
+        setSearchQuery(e.state.searchQuery !== undefined ? e.state.searchQuery : '');
       } else {
         setCurrentView('home');
+        setSearchQuery('');
       }
     };
     
@@ -2103,12 +2127,21 @@ export default function App() {
   }, []);
 
   const navigateForward = useCallback((updates: any) => {
+    // Move layout states into current replace state before push
+    if (window.history.state) {
+      window.history.replaceState({
+        ...window.history.state,
+        searchQuery: searchQuery
+      }, '');
+    }
+
     const nextState = {
       currentView,
       selectedCatalog,
       selectedSubcategory,
       selectedNestedSubcategory,
       selectedProduct,
+      searchQuery,
       ...updates
     };
     window.history.pushState(nextState, '');
@@ -2117,7 +2150,7 @@ export default function App() {
     if (updates.selectedSubcategory !== undefined) setSelectedSubcategory(nextState.selectedSubcategory);
     if (updates.selectedNestedSubcategory !== undefined) setSelectedNestedSubcategory(nextState.selectedNestedSubcategory);
     if (updates.selectedProduct !== undefined) setSelectedProduct(nextState.selectedProduct);
-  }, [currentView, selectedCatalog, selectedSubcategory, selectedNestedSubcategory, selectedProduct]);
+  }, [currentView, selectedCatalog, selectedSubcategory, selectedNestedSubcategory, selectedProduct, searchQuery]);
 
   const navigateHome = () => {
     navigateForward({
@@ -2125,15 +2158,18 @@ export default function App() {
       selectedCatalog: null,
       selectedSubcategory: null,
       selectedNestedSubcategory: null,
-      selectedProduct: null
+      selectedProduct: null,
+      searchQuery: ''
     });
-    setSearchQuery('');
     setMobileMenuOpen(false);
   };
 
   const goBack = () => {
     if (searchQuery && currentView !== 'product' && currentView !== 'checkout') {
        setSearchQuery('');
+       if (window.history.state) {
+         window.history.replaceState({ ...window.history.state, searchQuery: '' }, '');
+       }
        return;
     }
     
@@ -3215,7 +3251,7 @@ export default function App() {
                 <button 
                   id="mobile-nav-back"
                   type="button"
-                  onClick={() => { if (searchQuery && currentView !== 'product' && currentView !== 'checkout') { setSearchQuery(''); } else { goBack(); } }}
+                  onClick={() => goBack()}
                   className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
                   aria-label="אחורה"
                   title="חזור אחורה"
@@ -3268,7 +3304,7 @@ export default function App() {
                 {(currentView !== 'home' || searchQuery) && (
                   <button 
                     id="desktop-back-btn"
-                    onClick={() => { if (searchQuery && currentView !== 'product' && currentView !== 'checkout') { setSearchQuery(''); } else { goBack(); } }} 
+                    onClick={() => goBack()} 
                     className="flex flex-row items-center justify-center gap-1 !p-2 !m-0 bg-[#f2f2f2] hover:bg-[#004387] text-[#004387] hover:text-white !rounded-none transition-all border-none"
                     title="חזור"
                     aria-label="חזור לתצוגה הקודמת"
@@ -3852,7 +3888,7 @@ export default function App() {
                     }>
                       {filteredProducts.slice(0, visibleCount).map(product => (
                         <VirtualProductCard key={product.id} product={product}>
-                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} onNavigateToCategory={navigateToCategoryAndSub} />
+                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} />
                         </VirtualProductCard>
                       ))}
                     </div>
