@@ -1616,6 +1616,7 @@ export default function App() {
 
   const getFallbackImage = (subName: string): string | null => {
     if (!subName) return null;
+    if (subName.includes('מציאון') || subName.toLowerCase().includes('clearance')) return transformImageLink('https://drive.google.com/file/d/1syFF_mZv1-0vg-tiW3PoA4_dGDpm4vdJ/view?usp=drive_link');
     if (subName === 'מצלמות חשמל WIFI' || subName === 'מצלמות WIFI חשמל') return transformImageLink('https://drive.google.com/file/d/1EQnAA-b_ez8dHTDbfcb5dETBnHSF5HeO/view?usp=drive_link');
     if (subName.includes('סלולריים') || subName.toLowerCase().includes('cellular')) return 'https://robustelanz.com.au/wp-content/uploads/2021/06/Robustel_R1520_1.jpg';
     if (subName.includes('POE')) return transformImageLink('https://drive.google.com/file/d/17Im3ggLiWxPTfrDberOwwKWyMgf2D6A6/view?usp=drive_link');
@@ -1685,13 +1686,48 @@ export default function App() {
       const clearanceProducts = catalogData.filter(item => item.active !== 'FALSE' && item.isClearance);
       const clearanceCount = clearanceProducts.length;
       if (clearanceCount > 0) {
-         const clearanceDef = subcategoriesGlobalData.find(s => s.category === selectedCatalog && s.subcategory && s.subcategory.includes('מציאון') && s.active !== false);
+         // Priority 1: Find matched subcategory under this specific catalog
+         let clearanceDef = subcategoriesGlobalData.find(s => 
+           s.category === selectedCatalog && 
+           s.subcategory && 
+           (s.subcategory.includes('מציאון') || s.subcategory.toLowerCase().includes('clearance')) && 
+           s.active !== false
+         );
+         
+         // Priority 2: Try to find in subcategories tab ANYWHERE with a defined image URL
+         if (!clearanceDef || !clearanceDef.image) {
+           const anySubClearance = subcategoriesGlobalData.find(s => 
+             s.subcategory && 
+             (s.subcategory.includes('מציאון') || s.subcategory.toLowerCase().includes('clearance')) && 
+             s.image && 
+             s.active !== false
+           );
+           if (anySubClearance) {
+              clearanceDef = anySubClearance;
+           }
+         }
+
+         // Priority 3: Try to find in Catalogs (main folders) for a folder named "מציאון"
+         const clearanceFolder = catalogFolders.find(c => 
+           c.name && 
+           (c.name.includes('מציאון') || c.name.toLowerCase().includes('clearance'))
+         );
+
+         const finalLabel = clearanceDef ? clearanceDef.subcategory : (clearanceFolder ? clearanceFolder.name : 'מציאון');
+         const finalImage = (clearanceDef && clearanceDef.image)
+           ? clearanceDef.image
+           : ((clearanceFolder && clearanceFolder.image && !clearanceFolder.image.includes('placehold.co'))
+               ? clearanceFolder.image
+               : (getFallbackImage('מציאון') || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent('מציאון'))
+             );
+         const finalBrand = clearanceDef ? clearanceDef.brand : (clearanceFolder ? clearanceFolder.brand : undefined);
+
          results.unshift({
-           name: clearanceDef ? clearanceDef.subcategory : 'מציאון',
+           name: finalLabel,
            count: clearanceCount,
            isComingSoon: false,
-           image: (clearanceDef && clearanceDef.image) ? clearanceDef.image : 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent('מציאון'),
-           brand: clearanceDef ? clearanceDef.brand : undefined
+           image: finalImage,
+           brand: finalBrand
          });
       }
 
