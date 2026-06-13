@@ -28,8 +28,7 @@
     "react-markdown": "^10.1.0",
     "react-zoom-pan-pinch": "^4.0.3",
     "remark-gfm": "^4.0.1",
-    "vite": "^6.2.3",
-    "xlsx": "^0.18.5"
+    "vite": "^6.2.3"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
