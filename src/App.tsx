@@ -866,8 +866,8 @@ const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) 
               handleBiometricLogin();
             }, 600);
           }
-        } catch (e) {
-          console.log('Biometric evaluation skipped/not supported:', e);
+        } catch {
+          // biometric not supported on this device
         }
       }
     };
@@ -1348,8 +1348,8 @@ export default function App() {
           localStorage.removeItem('rbs_b2b_admin_auth_time');
         }
       }
-    } catch (e) {
-      console.log('Error checking admin auth time:', e);
+    } catch {
+      // ignore admin auth time parse errors
     }
   }, []);
 
@@ -2343,7 +2343,7 @@ export default function App() {
                         }}
                         className={`w-20 h-20 sm:w-28 sm:h-28 bg-white p-1 sm:p-2 rounded-none border-2 overflow-hidden flex-shrink-0 transition-all snap-start ${mainImage === img ? 'border-[#004387] shadow-md scale-[1.02]' : 'border-gray-200 hover:border-gray-300'}`}
                       >
-                        <img referrerPolicy="no-referrer" src={transformImageLink(img, 300)} alt={`תמונה ${idx + 1} של המוצר`} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
+                        <img referrerPolicy="no-referrer" loading="lazy" src={transformImageLink(img, 300)} alt={`תמונה ${idx + 1} של המוצר`} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
                       </button>
                     ))}
                   </div>
@@ -2965,7 +2965,7 @@ export default function App() {
               <div className="space-y-4">
                 {cart.map(item => (
                   <div key={item.id} className="flex gap-4 items-center border-b border-gray-100 pb-4 last:border-0">
-                    <img referrerPolicy="no-referrer" src={transformImageLink(item.images[0], 120)} alt={item.name} onError={handleImageError} className="w-16 h-16 object-contain bg-[#f2f2f2] p-1" />
+                    <img referrerPolicy="no-referrer" loading="lazy" src={transformImageLink(item.images[0], 120)} alt={item.name} onError={handleImageError} className="w-16 h-16 object-contain bg-[#f2f2f2] p-1" />
                     <div className="flex-grow">
                       <div className="font-semibold text-[#0c2d57]">{item.name}</div>
                       <div className="text-xs text-gray-500 mb-2">מק"ט: {item.sku}</div>
@@ -3817,7 +3817,7 @@ export default function App() {
                   {cart.map(item => (
                     <div key={item.id} className="flex gap-4 border-b border-gray-100 pb-4">
                       <div className="w-20 h-20 bg-[#f2f2f2] p-1 flex-shrink-0 border border-gray-200">
-                        <img referrerPolicy="no-referrer" src={transformImageLink(item.images[0], 150)} alt={item.name} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply" />
+                        <img referrerPolicy="no-referrer" loading="lazy" src={transformImageLink(item.images[0], 150)} alt={item.name} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply" />
                       </div>
                       <div className="flex-col flex flex-grow">
                         <div className="font-semibold text-sm text-[#0c2d57] line-clamp-2">{item.name}</div>
@@ -4343,9 +4343,9 @@ export default function App() {
                       >
                         {/* Image & Text Info */}
                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                          {item.product.image ? (
+                          {((item.product.images && item.product.images[0]) || item.product.image) ? (
                             <img 
-                              src={item.product.image} 
+                              src={(item.product.images && item.product.images[0]) || item.product.image} 
                               alt={item.product.name} 
                               className="w-9 h-9 object-contain rounded-lg bg-white border border-gray-100 p-0.5 flex-shrink-0"
                               referrerPolicy="no-referrer"
