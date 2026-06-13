@@ -573,8 +573,9 @@ interface ProductCardProps {
   addToCart: (product: any, quantity?: number, optionals?: any[]) => void;
   bulkSelection?: Record<string, { product: any, quantity: number }>;
   onBulkSelectionChange?: (productId: string, product: any, quantity: number) => void;
+  onNavigateToCategory?: (catName: string, subName: string) => void;
 }
-const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSelection, onBulkSelectionChange}: ProductCardProps) => {
+const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSelection, onBulkSelectionChange, onNavigateToCategory}: ProductCardProps) => {
   const theme = getBrandTheme(product.brand);
   const [isAdded, setIsAdded] = useState(false);
   
@@ -681,7 +682,24 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
       </div>
       
       <div className="p-3 sm:p-4 flex flex-col flex-grow text-center">
-        <div className="text-[10px] sm:text-xs text-gray-400 mb-1 line-clamp-1">{product.sku}</div>
+        <div className="text-[10px] sm:text-xs text-gray-400 mb-1.5 flex flex-row items-center justify-between gap-1 w-full flex-wrap">
+          <span>{product.sku}</span>
+          {onNavigateToCategory && product.category && product.subcategory && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onNavigateToCategory(product.category, product.subcategory);
+              }}
+              className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-[#004387]/10 text-[10px] sm:text-xs text-[#004387] hover:text-[#fe8d00] font-bold transition-all border-none flex items-center gap-0.5 cursor-pointer active:scale-95"
+              title={`עבור לקטגוריית ${product.subcategory} בקטלוג`}
+            >
+              <FolderOpen size={11} className="text-[#fe8d00]" />
+              <span>המשך בקטלוג</span>
+            </button>
+          )}
+        </div>
         <div className="min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center mb-2">
           <h3 className="text-[#0c2d57] text-xs sm:text-base font-semibold line-clamp-2 leading-tight text-center w-full">{product.name}</h3>
         </div>
@@ -1603,10 +1621,10 @@ export default function App() {
     return () => window.removeEventListener('focus', handleFocus);
   }, [loadData]);
 
-  // Scroll to top on every view change
+  // Scroll to top on every view change or search query change
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
-  }, [currentView, selectedProduct]);
+  }, [currentView, selectedProduct, searchQuery]);
 
   const getFallbackImage = (subName: string): string | null => {
     if (!subName) return null;
@@ -2162,6 +2180,32 @@ export default function App() {
     });
     setSearchQuery('');
   };
+
+  const navigateToCategoryAndSub = useCallback((catName: string, subName: string) => {
+    const isHotSaleMode = catName && (
+      catName.trim().toUpperCase() === 'HOT SALE' ||
+      catName.includes('מבצע') ||
+      catName.toLowerCase().includes('sale')
+    );
+
+    let hasNested = false;
+    if (!isHotSaleMode) {
+      hasNested = catalogData.some(p => p.category === catName && p.subcategory === subName && !!p.nestedSubcategory);
+      if (subName === 'Inginium Full Channel' || subName === 'מתגי ליבה ורשת מנוהלים' || subName === 'ספקי כוח ומתח') {
+         hasNested = true;
+      }
+    }
+
+    navigateForward({
+      currentView: hasNested ? 'nested_subs' : 'products',
+      selectedCatalog: catName,
+      selectedSubcategory: subName,
+      selectedNestedSubcategory: null,
+      selectedProduct: null
+    });
+    setSearchQuery('');
+    setMobileMenuOpen(false);
+  }, [catalogData, navigateForward]);
 
   const navigateToNestedSubcategory = (nestedName: string | null) => {
     navigateForward({
@@ -2731,7 +2775,7 @@ export default function App() {
                 : "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6"
               }>
                 {similar.map(product => (
-                  <ProductCard key={product.id} product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} />
+                  <ProductCard key={product.id} product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} onNavigateToCategory={navigateToCategoryAndSub} />
                 ))}
               </div>
             </div>
@@ -3375,17 +3419,27 @@ export default function App() {
               </div>
             
             {/* CENTER SIDE: Search (Protected from collapsing) */}
-            <div className="flex-grow min-w-0 max-w-xl mx-2 hidden md:flex items-center bg-[#f2f2f2] px-4 py-2 border border-transparent focus-within:border-[#004387] focus-within:bg-white transition-all">
+            <div className="flex-grow min-w-0 max-w-xl mx-2 hidden md:flex items-center bg-[#f2f2f2] px-4 py-2 border border-transparent focus-within:border-[#004387] focus-within:bg-white transition-all relative">
               <Search size={18} className="text-gray-400 ml-2 flex-shrink-0" />
               <input 
                 type="text" 
                 placeholder="חיפוש חופשי (מק״ט, שם, מותג)..." 
-                className="bg-transparent border-none outline-none w-full min-w-0 text-base md:text-sm text-gray-700 shadow-none focus:ring-0 !p-0 !m-0 text-right"
+                className="bg-transparent border-none outline-none w-full min-w-0 text-base md:text-sm text-gray-700 shadow-none focus:ring-0 !p-0 !m-0 text-right pl-8"
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                 }}
               />
+              {searchQuery && (
+                <button 
+                  type="button" 
+                  onClick={() => setSearchQuery('')}
+                  className="absolute left-3 text-gray-400 hover:text-gray-700 focus:outline-none flex items-center justify-center p-1 cursor-pointer transition-colors"
+                  title="נקה חיפוש"
+                >
+                  <X size={16} />
+                </button>
+              )}
             </div>
 
             {/* LEFT SIDE: Cart (Protected from theme overrides) */}
@@ -3644,20 +3698,40 @@ export default function App() {
                     <h3 className="text-xl font-bold text-[#0c2d57]">מבצע חיפוש...</h3>
                   </div>
                 ) : filteredProducts.length === 0 ? (
-                  <div className="text-center py-20 bg-white border border-gray-100">
+                  <div className="text-center py-20 bg-white border border-gray-100 flex flex-col items-center justify-center p-6">
                     <div className="text-gray-300 mb-4 flex justify-center"><Search size={48} /></div>
                     <h3 className="text-xl font-bold text-[#0c2d57]">לא נמצאו מוצרים</h3>
-                    <p className="text-gray-500 mt-2">נסה לשנות את מילות החיפוש.</p>
+                    <p className="text-gray-500 mt-2 mb-6">נסה לשנות את מילות החיפוש.</p>
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="bg-[#004387] hover:bg-[#fe8d00] text-white font-bold py-2.5 px-6 rounded-xl transition-all shadow-md active:scale-95 text-sm cursor-pointer"
+                    >
+                      נקה חיפוש וחזור
+                    </button>
                   </div>
                 ) : (
                   <>
+                    <div className="flex flex-col sm:flex-row items-center justify-between mb-6 bg-white p-4 border border-gray-100 shadow-xs rounded-xl gap-3 w-full">
+                      <span className="text-sm sm:text-base text-gray-700 font-bold text-center sm:text-right">
+                        נמצאו <strong className="text-[#004387]">{filteredProducts.length}</strong> מוצרים עבור החיפוש: "<strong className="text-[#fe8d00]">{searchQuery}</strong>"
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        className="flex items-center gap-1.5 bg-gray-100 hover:bg-red-50 hover:text-red-500 text-gray-700 font-bold py-2 px-4 rounded-xl text-xs sm:text-sm border border-gray-200 transition-all cursor-pointer"
+                      >
+                        <X size={14} className="stroke-[3]" />
+                        <span>נקה חיפוש וחזור</span>
+                      </button>
+                    </div>
                     <div className={filteredProducts.length === 1 
                       ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6" 
                       : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6"
                     }>
                       {filteredProducts.slice(0, visibleCount).map(product => (
                         <VirtualProductCard key={product.id} product={product}>
-                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} />
+                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} onNavigateToCategory={navigateToCategoryAndSub} />
                         </VirtualProductCard>
                       ))}
                     </div>
@@ -3778,7 +3852,7 @@ export default function App() {
                     }>
                       {filteredProducts.slice(0, visibleCount).map(product => (
                         <VirtualProductCard key={product.id} product={product}>
-                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} />
+                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} onNavigateToCategory={navigateToCategoryAndSub} />
                         </VirtualProductCard>
                       ))}
                     </div>

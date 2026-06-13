@@ -261,10 +261,10 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className="bg-gray-50 w-full sm:max-w-md relative z-10 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.15)] overflow-hidden border-r border-[#004387]/15 h-full"
+              className="bg-gray-50 w-full sm:max-w-md relative z-10 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.15)] overflow-hidden border-r border-[#004387]/15"
               style={{ 
-                height: '100%',
-                maxHeight: '100dvh',
+                height: viewportHeight,
+                maxHeight: viewportHeight,
                 paddingBottom: `${keyboardHeight}px`
               }}
               ref={containerRef}
