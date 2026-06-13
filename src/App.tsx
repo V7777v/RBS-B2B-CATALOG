@@ -2404,8 +2404,13 @@ export default function App() {
                           className="flex items-center gap-3.5 bg-[#fcfcfc] border-2 border-gray-200 hover:border-[#004387] p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right" 
                           style={{ minHeight: '80px' }}
                         >
-                          <div className="w-12 h-12 bg-red-50 text-red-600 border border-red-200 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-red-600 group-hover:text-white transition-all shadow-xs duration-250">
-                            <span className="text-[11px] font-black uppercase tracking-wider select-none leading-none">PDF</span>
+                          <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                            <img 
+                              referrerPolicy="no-referrer" 
+                              src={transformImageLink("https://drive.google.com/file/d/1n3f9nEnEOj6CycKjFzuH7XRCTNN55Hl7/view?usp=drive_link", 120)} 
+                              alt="PDF" 
+                              className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110" 
+                            />
                           </div>
                           <div className="flex-grow min-w-0">
                             <div className="text-sm sm:text-base font-bold text-gray-800 group-hover:text-[#004387] transition-all">מפרט טכני</div>
@@ -2427,8 +2432,13 @@ export default function App() {
                           className="flex items-center gap-3.5 bg-[#fcfcfc] border-2 border-gray-200 hover:border-[#004387] p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right" 
                           style={{ minHeight: '80px' }}
                         >
-                          <div className="w-12 h-12 bg-red-50 text-red-600 border border-red-200 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-red-600 group-hover:text-white transition-all shadow-xs duration-250">
-                            <span className="text-[11px] font-black uppercase tracking-wider select-none leading-none">PDF</span>
+                          <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                            <img 
+                              referrerPolicy="no-referrer" 
+                              src={transformImageLink("https://drive.google.com/file/d/1n3f9nEnEOj6CycKjFzuH7XRCTNN55Hl7/view?usp=drive_link", 120)} 
+                              alt="PDF" 
+                              className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110" 
+                            />
                           </div>
                           <div className="flex-grow min-w-0">
                             <div className="text-sm sm:text-base font-bold text-gray-800 group-hover:text-[#004387] transition-all">מדריך למשתמש</div>
@@ -2453,13 +2463,20 @@ export default function App() {
                               className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 border-gray-200 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${isYouTube ? 'hover:border-[#ff0000]' : 'hover:border-[#004387]'}`}
                               style={{ minHeight: '80px' }}
                             >
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all shadow-xs duration-250 ${isYouTube ? 'bg-red-50 text-[#ff0000] border border-red-200 group-hover:bg-[#ff0000] group-hover:text-white' : 'bg-blue-50 text-blue-600 border border-blue-200 group-hover:bg-blue-600 group-hover:text-white'}`}>
-                                {isYouTube ? (
-                                  <Youtube size={26} className="transition-transform duration-200 group-hover:scale-110" />
-                                ) : (
+                              {isYouTube ? (
+                                <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                                  <img 
+                                    referrerPolicy="no-referrer" 
+                                    src={transformImageLink("https://drive.google.com/file/d/1cXAUJdtw9rAkP1XiF2p5RKeDZ4wRXg_u/view?usp=drive_link", 120)} 
+                                    alt="YouTube" 
+                                    className="w-12 h-12 object-contain transition-transform duration-200 group-hover:scale-110" 
+                                  />
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all shadow-xs duration-250 bg-blue-50 text-blue-600 border border-blue-200 group-hover:bg-blue-600 group-hover:text-white">
                                   <Video size={24} className="transition-transform duration-200 group-hover:scale-110" />
-                                )}
-                              </div>
+                                </div>
+                              )}
                               <div className="flex-grow min-w-0">
                                 <div className={`text-sm sm:text-base font-bold text-gray-800 transition-all ${isYouTube ? 'group-hover:text-[#ff0000]' : 'group-hover:text-blue-600'}`}>סרטון</div>
                               </div>
