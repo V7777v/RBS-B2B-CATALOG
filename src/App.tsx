@@ -567,6 +567,87 @@ const SubcategoryCard: React.FC<SubcategoryCardProps> = ({sub, onClick, navigate
   </div>
 );
 
+// --- DETECT NETWORK CABLE ROLLS ---
+const isNetworkCableRoll = (product: any): boolean => {
+  if (!product) return false;
+  
+  const name = (product.name || '').toLowerCase();
+  const subcat = (product.subcategory || '').toLowerCase();
+  const cat = (product.category || '').toLowerCase();
+  
+  // EXCLUSIONS: Not patch cords, not pigtails, not optical connectors, not HDMI/Coax/Audio, not PDU, not sockets/plugs, not tools/supplies
+  if (
+    name.includes('מגשר') || 
+    subcat.includes('מגשר') || 
+    name.includes('patch') || 
+    subcat.includes('patch') ||
+    name.includes('פיגטייל') ||
+    subcat.includes('פיגטייל') ||
+    name.includes('אופטי') ||
+    subcat.includes('אופטי') ||
+    name.includes('מחבר') ||
+    name.includes('קונקטור') ||
+    name.includes('תקע') ||
+    name.includes('שקע') ||
+    name.includes('ראש') ||
+    name.includes('פנל') ||
+    name.includes('מדבקה') ||
+    name.includes('כלי עבודה') ||
+    subcat.includes('כלי עבודה') ||
+    name.includes('ספק כוח') ||
+    subcat.includes('ספקי כח') ||
+    subcat.includes('ספקי כוח')
+  ) {
+    return false;
+  }
+  
+  // INCLUSIONS:
+  // Is a copper network cable category/subcategory OR name mentions network cable
+  const isNetworkCable = 
+    cat.includes('תשתיות') ||
+    cat.includes('hikvision') ||
+    name.includes('hikvision') ||
+    (product.brand && String(product.brand).toLowerCase().includes('hikvision')) ||
+    subcat.includes('כבלי רשת') ||
+    subcat.includes('כבלים ואביזרים') ||
+    subcat.includes('cat5') ||
+    subcat.includes('cat6') ||
+    subcat.includes('cat7') ||
+    subcat.includes('cat8') ||
+    subcat.includes('recber') ||
+    subcat.includes('inginium') ||
+    name.includes('כבל רשת') ||
+    name.includes('lan cable') ||
+    name.includes('utp') ||
+    name.includes('ftp') ||
+    name.includes('s-ftp') ||
+    name.includes('sftp');
+    
+  if (!isNetworkCable) return false;
+
+  // Is it a roll/drum?
+  // Check if subcategory states "גלילים" or name mentions "גליל" or "תוף" or length indicators
+  const isRoll = 
+    subcat.includes('גליל') ||
+    subcat.includes('גלילים') ||
+    name.includes('גליל') ||
+    name.includes('גלילים') ||
+    name.includes('תוף') ||
+    name.includes('box') ||
+    name.includes('drum') ||
+    name.includes('roll') ||
+    name.includes('305') ||
+    name.includes('500') ||
+    name.includes('100');
+    
+  return isRoll || 
+    subcat.includes('כבלי רשת') || 
+    subcat.includes('recber') || 
+    subcat.includes('inginium') ||
+    (cat.includes('hikvision') && subcat.includes('כבלים ואביזרים') && (name.includes('כבל') || name.includes('cable') || name.includes('utp') || name.includes('ftp') || name.includes('sftp') || name.includes('cat6') || name.includes('cat5') || name.includes('cat6a') || name.includes('cat5e') || name.includes('lan'))) ||
+    ((name.includes('כבל') || name.includes('cable') || name.includes('utp') || name.includes('ftp') || name.includes('sftp') || name.includes('cat6') || name.includes('cat5') || name.includes('cat6a') || name.includes('cat5e')) && (cat.includes('hikvision') || name.includes('hikvision') || (product.brand && String(product.brand).toLowerCase().includes('hikvision'))));
+};
+
 interface ProductCardProps {
   product: any;
   navigateToProduct: (product: any) => void;
@@ -711,6 +792,7 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
                   )}
                   <span className="text-xs sm:text-sm font-bold text-gray-500 leading-none block mt-0.5">
                     מתקין: ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    {isNetworkCableRoll(product) && <span className="text-[9px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold inline-block align-middle select-none">מחיר למטר</span>}
                     <span className="text-[9px] text-gray-400 font-normal inline-block mr-1">(ללא מע"מ)</span>
                   </span>
                 </div>
@@ -735,6 +817,7 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
               )}
               <span className={`text-base sm:text-lg font-bold ${product.isClearance ? 'text-teal-600' : 'text-[#f7941d]'} leading-none block`}>
                 ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                {isNetworkCableRoll(product) && <span className="inline-block text-[9px] sm:text-[10px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold align-middle select-none">מחיר למטר</span>}
                 <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
                   {product.isClearance ? 'מבצע מציאון (ללא מע"מ)' : 'מחיר מומלץ למתקין (ללא מע"מ)'}
                 </span>
@@ -742,8 +825,9 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
             </div>
           ) : (
             <div className="mb-2 mt-auto flex flex-col items-center leading-none text-center">
-              <span className={`text-base sm:text-lg font-bold ${product.isClearance ? 'text-teal-600' : 'text-[#f7941d]'} leading-none`}>
+              <span className={`text-base sm:text-lg font-bold ${product.isClearance ? 'text-teal-600' : 'text-[#f7941d]'} leading-none flex items-center justify-center gap-1 flex-wrap`}>
                 ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                {isNetworkCableRoll(product) && <span className="inline-block text-[9px] sm:text-[10px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold align-middle select-none">מחיר למטר</span>}
               </span>
               <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
                 {product.isClearance ? 'מבצע מציאון (ללא מע"מ)' : 'מחיר מומלץ למתקין (ללא מע"מ)'}
@@ -2840,8 +2924,11 @@ export default function App() {
                           </span>
                        )}
                        {currentOptionals.length === 0 && (
-                         <div className={`text-2xl sm:text-3xl font-bold ${selectedProduct.isClearance ? 'text-teal-600' : 'text-[#f7941d]'}`}>
-                            ₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
+                         <div className={`text-2xl sm:text-3xl font-bold ${selectedProduct.isClearance ? 'text-teal-600' : 'text-[#f7941d]'} flex items-center gap-2 flex-wrap justify-center sm:justify-start`}>
+                            <span>₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            {isNetworkCableRoll(selectedProduct) && (
+                              <span className="text-xs sm:text-sm font-black text-[#004387] bg-blue-50 border border-blue-100 rounded px-2 py-0.5 select-none">מחיר למטר</span>
+                            )}
                             <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">{selectedProduct.isClearance ? 'מחיר מבצע מציאון' : 'מחיר מומלץ למתקין'} <span className="hidden sm:inline">(ללא מע"מ)</span></span>
                          </div>
                        )}
