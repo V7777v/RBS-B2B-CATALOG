@@ -684,21 +684,6 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
       <div className="p-3 sm:p-4 flex flex-col flex-grow text-center">
         <div className="text-[10px] sm:text-xs text-gray-400 mb-1.5 flex flex-row items-center justify-between gap-1 w-full flex-wrap">
           <span>{product.sku}</span>
-          {onNavigateToCategory && product.category && product.subcategory && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onNavigateToCategory(product.category, product.subcategory);
-              }}
-              className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-[#004387]/10 text-[10px] sm:text-xs text-[#004387] hover:text-[#fe8d00] font-bold transition-all border-none flex items-center gap-0.5 cursor-pointer active:scale-95"
-              title={`עבור לקטגוריית ${product.subcategory} בקטלוג`}
-            >
-              <FolderOpen size={11} className="text-[#fe8d00]" />
-              <span>המשך בקטלוג</span>
-            </button>
-          )}
         </div>
         <div className="min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center mb-2">
           <h3 className="text-[#0c2d57] text-xs sm:text-base font-semibold line-clamp-2 leading-tight text-center w-full">{product.name}</h3>
@@ -2278,6 +2263,8 @@ export default function App() {
     const [isSpecsHovered, setIsSpecsHovered] = useState(false);
     const [isManualHovered, setIsManualHovered] = useState(false);
     const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
+    const [activePreview, setActivePreview] = useState<'specs' | 'manual' | 'video' | null>(null);
+    const hoverTimeoutRef = useRef<any>(null);
     const theme = getBrandTheme(selectedProduct?.brand);
     const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 1024;
 
@@ -2471,7 +2458,7 @@ export default function App() {
               {/* DOCUMENTATION & LINKS SECTION */}
               {(selectedProduct.specsLink || selectedProduct.manualLink || selectedProduct.videoLink || (selectedProduct.labCerts && selectedProduct.labCerts.length > 0)) && (
                 <div className="mb-6 sm:mb-8 font-sans">
-                  <h3 className="font-bold text-[#0c2d57] mb-4 text-base sm:text-lg border-[#004387]/15 border-b pb-2">מידע נוסף ומסמכים להורדה</h3>
+                  <h3 className="font-bold text-[#0c2d57] mb-4 text-base sm:text-lg border-[#004387]/15 border-b pb-2 text-right">מידע נוסף ומסמכים להורדה</h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                     {/* SPECS LINK */}
@@ -2481,7 +2468,16 @@ export default function App() {
                           href={selectedProduct.specsLink} 
                           target="_blank" 
                           rel="noreferrer" 
-                          className="flex items-center gap-3.5 bg-[#fcfcfc] border-2 border-gray-200 hover:border-[#004387] p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right" 
+                          onMouseEnter={() => {
+                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                            hoverTimeoutRef.current = setTimeout(() => {
+                              setActivePreview('specs');
+                            }, 250);
+                          }}
+                          onMouseLeave={() => {
+                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                          }}
+                          className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${activePreview === 'specs' ? 'border-[#004387]' : 'border-gray-200 hover:border-[#004387]'}`} 
                           style={{ minHeight: '80px' }}
                         >
                           <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
@@ -2492,8 +2488,20 @@ export default function App() {
                               className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110" 
                             />
                           </div>
-                          <div className="flex-grow min-w-0">
+                          <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center">
                             <div className="text-sm sm:text-base font-bold text-gray-800 group-hover:text-[#004387] transition-all">מפרט טכני</div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setActivePreview(activePreview === 'specs' ? null : 'specs');
+                              }}
+                              className="mt-1 text-[10px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                            >
+                              <Eye size={12} />
+                              <span>{activePreview === 'specs' ? 'הסתר תצוגה' : 'תצוגה מהירה'}</span>
+                            </button>
                           </div>
                           <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-[#004387] group-hover:text-white transition-all duration-250 flex-shrink-0 shadow-sm">
                             <Download size={18} />
@@ -2509,7 +2517,16 @@ export default function App() {
                           href={selectedProduct.manualLink} 
                           target="_blank" 
                           rel="noreferrer" 
-                          className="flex items-center gap-3.5 bg-[#fcfcfc] border-2 border-gray-200 hover:border-[#004387] p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right" 
+                          onMouseEnter={() => {
+                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                            hoverTimeoutRef.current = setTimeout(() => {
+                              setActivePreview('manual');
+                            }, 250);
+                          }}
+                          onMouseLeave={() => {
+                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                          }}
+                          className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${activePreview === 'manual' ? 'border-[#004387]' : 'border-gray-200 hover:border-[#004387]'}`} 
                           style={{ minHeight: '80px' }}
                         >
                           <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
@@ -2520,8 +2537,20 @@ export default function App() {
                               className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110" 
                             />
                           </div>
-                          <div className="flex-grow min-w-0">
+                          <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center">
                             <div className="text-sm sm:text-base font-bold text-gray-800 group-hover:text-[#004387] transition-all">מדריך למשתמש</div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setActivePreview(activePreview === 'manual' ? null : 'manual');
+                              }}
+                              className="mt-1 text-[10px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                            >
+                              <Eye size={12} />
+                              <span>{activePreview === 'manual' ? 'הסתר תצוגה' : 'תצוגה מהירה'}</span>
+                            </button>
                           </div>
                           <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-[#004387] group-hover:text-white transition-all duration-250 flex-shrink-0 shadow-sm">
                             <Download size={18} />
@@ -2540,7 +2569,16 @@ export default function App() {
                               href={selectedProduct.videoLink} 
                               target="_blank" 
                               rel="noreferrer" 
-                              className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 border-gray-200 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${isYouTube ? 'hover:border-[#ff0000]' : 'hover:border-[#004387]'}`}
+                              onMouseEnter={() => {
+                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                                hoverTimeoutRef.current = setTimeout(() => {
+                                  setActivePreview('video');
+                                }, 250);
+                              }}
+                              onMouseLeave={() => {
+                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                              }}
+                              className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${activePreview === 'video' ? (isYouTube ? 'border-[#ff0000]' : 'border-[#004387]') : `border-gray-200 ${isYouTube ? 'hover:border-[#ff0000]' : 'hover:border-[#004387]'}`}`}
                               style={{ minHeight: '80px' }}
                             >
                               {isYouTube ? (
@@ -2557,8 +2595,20 @@ export default function App() {
                                   <Video size={24} className="transition-transform duration-200 group-hover:scale-110" />
                                 </div>
                               )}
-                              <div className="flex-grow min-w-0">
+                              <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center">
                                 <div className={`text-sm sm:text-base font-bold text-gray-800 transition-all ${isYouTube ? 'group-hover:text-[#ff0000]' : 'group-hover:text-blue-600'}`}>סרטון</div>
+                                <button 
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setActivePreview(activePreview === 'video' ? null : 'video');
+                                  }}
+                                  className={`mt-1 text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded border transition-all flex items-center gap-1 active:scale-95 cursor-pointer ${isYouTube ? 'text-[#ff0000] border-red-100 bg-red-50 hover:bg-orange-50' : 'text-blue-600 border-blue-100 bg-blue-50 hover:bg-orange-50'}`}
+                                >
+                                  <PlayCircle size={12} />
+                                  <span>{activePreview === 'video' ? 'הסתר סרטון' : 'נגן סרטון'}</span>
+                                </button>
                               </div>
                               <div className={`w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 transition-all duration-250 flex-shrink-0 shadow-sm ${isYouTube ? 'group-hover:bg-[#ff0000] group-hover:text-white' : 'group-hover:bg-blue-600 group-hover:text-white'}`}>
                                 <PlayCircle size={18} />
@@ -2569,6 +2619,54 @@ export default function App() {
                       </div>
                     )}
                   </div>
+
+                  {/* LIVE PREVIEW BOX */}
+                  {activePreview && (
+                    <div className="mb-6 border border-gray-200/80 rounded-2xl bg-slate-50/50 p-3 sm:p-4 shadow-xs animate-in fade-in slide-in-from-top-3 duration-300 relative text-right">
+                      <div className="flex items-center justify-between mb-3 flex-row-reverse">
+                        <button 
+                          onClick={() => setActivePreview(null)}
+                          className="text-gray-500 hover:text-gray-800 bg-white hover:bg-gray-100 p-1 px-2.5 rounded-lg text-xs font-bold transition-all border border-gray-200 cursor-pointer flex items-center gap-1 active:scale-95"
+                        >
+                          <X size={12} />
+                          <span>סגור תצוגה מקדימה</span>
+                        </button>
+                        <span className="text-xs sm:text-sm font-bold text-[#0c2d57] flex items-center gap-1.5">
+                          <Eye size={14} className="text-[#fe8d00]" />
+                          <span>תצוגה מקדימה מהירה: {activePreview === 'specs' ? 'מפרט טכני' : activePreview === 'manual' ? 'מדריך למשתמש' : 'סרטון מוצר'}</span>
+                        </span>
+                      </div>
+                      
+                      <div className="w-full aspect-[16/10] min-h-[320px] sm:min-h-[480px] bg-white rounded-xl overflow-hidden border border-gray-200 shadow-inner flex flex-col items-center justify-center relative">
+                        {activePreview === 'specs' && selectedProduct.specsLink && (
+                          <iframe 
+                            title="Specs Preview"
+                            src={getPdfPreviewUrl(selectedProduct.specsLink) || selectedProduct.specsLink} 
+                            className="w-full h-full border-none"
+                            loading="lazy"
+                          />
+                        )}
+                        {activePreview === 'manual' && selectedProduct.manualLink && (
+                          <iframe 
+                            title="Manual Preview"
+                            src={getPdfPreviewUrl(selectedProduct.manualLink) || selectedProduct.manualLink} 
+                            className="w-full h-full border-none"
+                            loading="lazy"
+                          />
+                        )}
+                        {activePreview === 'video' && selectedProduct.videoLink && (
+                          <iframe 
+                            title="Video Preview"
+                            src={getVideoEmbedUrl(selectedProduct.videoLink) || selectedProduct.videoLink} 
+                            className="w-full h-full border-none"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            loading="lazy"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* LAB CERTIFICATES SECTION */}
                   {selectedProduct.labCerts && selectedProduct.labCerts.length > 0 && (
