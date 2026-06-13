@@ -574,7 +574,7 @@ interface ProductCardProps {
   bulkSelection?: Record<string, { product: any, quantity: number }>;
   onBulkSelectionChange?: (productId: string, product: any, quantity: number) => void;
 }
-const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, addToCart, bulkSelection, onBulkSelectionChange}) => {
+const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSelection, onBulkSelectionChange}: ProductCardProps) => {
   const theme = getBrandTheme(product.brand);
   const [isAdded, setIsAdded] = useState(false);
   
@@ -600,13 +600,6 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
 
   const handleAddClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    // Assuming addToCart is available in scope or we must use original code
-    // Wait, the original had addToCart passed in! Let me fix it...
-    // In move_comp.cjs the replacement was 'export interface ProductCardProps { product: any; navigateToProduct: (product: any) => void; addToCart: (product: any) => void; }'
-    // BUT the prompt said the agent ROLLED IT BACK. Which means it's the ORIGINAL one!
-    // Original one relied on global state or context?
-    // Let me check my reconstruction. `const ProductCard: React.FC<{product: any}> = ({product}) => {`
-    // Yes, this was the original one. addToCart and navigateToProduct were in the same file correctly.
     addToCart(product);
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 1500);
@@ -778,7 +771,7 @@ const ProductCard: React.FC<ProductCardProps> = ({product, navigateToProduct, ad
       </div>
     </div>
   );
-};
+});
 
 const VirtualProductCard: React.FC<VirtualProductCardProps> = ({ product, children }) => {
 
@@ -1196,7 +1189,7 @@ export default function App() {
     }
   }, [bulkSelection]);
 
-  const handleBulkSelectionChange = (productId: string, product: any, quantity: number) => {
+  const handleBulkSelectionChange = useCallback((productId: string, product: any, quantity: number) => {
     setBulkSelection(prev => {
       const next = { ...prev };
       if (quantity <= 0) {
@@ -1206,7 +1199,7 @@ export default function App() {
       }
       return next;
     });
-  };
+  }, []);
 
   const clearBulkSelection = () => setBulkSelection({});
 
@@ -1974,7 +1967,7 @@ export default function App() {
   }, [isLoading, isProductsLoading, hasMoreProducts, isFetchingMore, error, loadMoreProducts]);
 
   // --- CART FUNCTIONS ---
-  const addToCart = (product: any, quantity = 1, optionals: any[] = []) => {
+  const addToCart = useCallback((product: any, quantity = 1, optionals: any[] = []) => {
     setCart(prev => {
       // Find matching item (same ID and same optionals configuration)
       const existing = prev.find(item => 
@@ -1996,7 +1989,7 @@ export default function App() {
       quantity: quantity,
       category: product.category || ""
     });
-  };
+  }, []);
 
   const updateConfirmCartItemQuantity = (qty: number) => {
     if (!addedItemConfirm) return;
@@ -2091,7 +2084,7 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const navigateForward = (updates: any) => {
+  const navigateForward = useCallback((updates: any) => {
     const nextState = {
       currentView,
       selectedCatalog,
@@ -2106,7 +2099,7 @@ export default function App() {
     if (updates.selectedSubcategory !== undefined) setSelectedSubcategory(nextState.selectedSubcategory);
     if (updates.selectedNestedSubcategory !== undefined) setSelectedNestedSubcategory(nextState.selectedNestedSubcategory);
     if (updates.selectedProduct !== undefined) setSelectedProduct(nextState.selectedProduct);
-  };
+  }, [currentView, selectedCatalog, selectedSubcategory, selectedNestedSubcategory, selectedProduct]);
 
   const navigateHome = () => {
     navigateForward({
@@ -2179,13 +2172,13 @@ export default function App() {
     setSearchQuery('');
   };
 
-  const navigateToProduct = (product: any) => {
+  const navigateToProduct = useCallback((product: any) => {
     setCurrentOptionals([]);
     navigateForward({
       currentView: 'product',
       selectedProduct: product
     });
-  };
+  }, [navigateForward]);
 
   const handleCheckout = () => {
     navigateForward({
