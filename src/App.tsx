@@ -3672,8 +3672,8 @@ export default function App() {
                   ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6" 
                   : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6"
                 }>
-                  {catalogFolders.map((catalog, idx) => (
-                    <CatalogCard key={idx} catalog={catalog} navigateToCatalog={navigateToCatalog} />
+                  {catalogFolders.map((catalog) => (
+                    <CatalogCard key={catalog.name} catalog={catalog} navigateToCatalog={navigateToCatalog} />
                   ))}
                 </div>
               </div>
@@ -3701,8 +3701,8 @@ export default function App() {
                         לא נמצאו קטגוריות או מוצרים במחירון זה.
                       </div>
                     ) : (
-                      activeSubcategories.map((sub, idx) => (
-                        <SubcategoryCard key={idx} sub={sub} navigateToSubcategory={navigateToSubcategory} />
+                      activeSubcategories.map((sub) => (
+                        <SubcategoryCard key={sub.name} sub={sub} navigateToSubcategory={navigateToSubcategory} />
                       ))
                     )}
                   </div>
@@ -3727,8 +3727,8 @@ export default function App() {
                     ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6" 
                     : "grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-6 max-w-4xl mx-auto"
                   }>
-                    {nestedSubcategoriesData.map((sub, idx) => (
-                      <SubcategoryCard key={idx} sub={sub} onClick={() => navigateToNestedSubcategory(sub.name)} />
+                    {nestedSubcategoriesData.map((sub) => (
+                      <SubcategoryCard key={sub.name} sub={sub} onClick={() => navigateToNestedSubcategory(sub.name)} />
                     ))}
                   </div>
                 )}
@@ -4349,6 +4349,7 @@ export default function App() {
                               alt={item.product.name} 
                               className="w-9 h-9 object-contain rounded-lg bg-white border border-gray-100 p-0.5 flex-shrink-0"
                               referrerPolicy="no-referrer"
+                              onError={handleImageError}
                             />
                           ) : (
                             <div className="w-9 h-9 rounded-lg bg-slate-200 flex items-center justify-center text-[9px] text-gray-400 font-bold flex-shrink-0">
