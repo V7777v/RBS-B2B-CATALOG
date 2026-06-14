@@ -4303,30 +4303,18 @@ export default function App() {
         <motion.button
           onClick={() => setAdvisorOpen(true)}
           initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ 
-            opacity: 1,
-            scale: [1, 1.06, 1],
-            boxShadow: [
-              "0 15px 30px rgba(0, 67, 135, 0.45)",
-              "0 15px 40px rgba(254, 141, 0, 0.75)",
-              "0 15px 30px rgba(0, 67, 135, 0.45)"
-            ]
-          }}
-          transition={{ 
-            scale: { repeat: Infinity, duration: 2.2, ease: "easeInOut" },
-            boxShadow: { repeat: Infinity, duration: 2.2, ease: "easeInOut" },
-            default: { duration: 0.3 }
-          }}
-          whileHover={{ scale: 1.15 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+          whileHover={{ scale: 1.12 }}
           whileTap={{ scale: 0.95 }}
-          className="fixed bottom-6 right-6 z-40 bg-gradient-to-tr from-[#004387] to-[#0c2d57] hover:from-[#fe8d00] hover:to-[#ffaa44] text-white w-20 h-20 rounded-full flex flex-col items-center justify-center border-4 border-white shadow-[0_15px_30px_rgba(0,67,135,0.45)] relative cursor-pointer group"
+          className="fixed bottom-6 right-6 z-40 bg-gradient-to-tr from-[#004387] to-[#0c2d57] hover:from-[#fe8d00] hover:to-[#ffaa44] text-white w-20 h-20 rounded-full flex flex-col items-center justify-center border-4 border-white shadow-[0_15px_35px_rgba(0,67,135,0.45)] relative cursor-pointer group"
           id="advisor-floating-bubble"
           style={{ direction: 'rtl' }}
           aria-label="פתח יועץ טכני חכם"
         >
-          {/* Multiple pulsing background layers to catch attention */}
-          <span className="absolute inset-0 rounded-full bg-[#fe8d00]/35 animate-ping opacity-75 -z-10" style={{ animationDuration: '3s' }}></span>
-          <span className="absolute inset-[-10px] rounded-full bg-[#004387]/15 animate-pulse -z-10" style={{ animationDuration: '1.8s' }}></span>
+          {/* Multiple pulsing background layers to catch attention without viewport layout recalculations */}
+          <span className="absolute -inset-2.5 rounded-full bg-[#fe8d00]/30 animate-ping opacity-75 -z-10" style={{ animationDuration: '2.5s' }}></span>
+          <span className="absolute -inset-1 rounded-full bg-[#004387]/20 animate-pulse -z-10" style={{ animationDuration: '1.8s' }}></span>
 
           {/* Green Live Indicator Ping */}
           <span className="absolute top-1 right-1 flex h-4 w-4">
