@@ -4300,19 +4300,53 @@ export default function App() {
 
       {!isHumanVerified && <HumanVerification onVerified={() => setIsHumanVerified(true)} />}
       {!advisorOpen && (
-        <button
+        <motion.button
           onClick={() => setAdvisorOpen(true)}
-          className="fixed bottom-6 right-6 z-40 bg-[#004387] hover:bg-[#fe8d00] text-white px-4 py-3 rounded-full shadow-[0_10px_25px_rgba(0,67,135,0.4)] transition-colors flex items-center gap-2 font-bold border-2 border-white/15 relative"
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ 
+            opacity: 1,
+            scale: [1, 1.06, 1],
+            boxShadow: [
+              "0 15px 30px rgba(0, 67, 135, 0.45)",
+              "0 15px 40px rgba(254, 141, 0, 0.75)",
+              "0 15px 30px rgba(0, 67, 135, 0.45)"
+            ]
+          }}
+          transition={{ 
+            scale: { repeat: Infinity, duration: 2.2, ease: "easeInOut" },
+            boxShadow: { repeat: Infinity, duration: 2.2, ease: "easeInOut" },
+            default: { duration: 0.3 }
+          }}
+          whileHover={{ scale: 1.15 }}
+          whileTap={{ scale: 0.95 }}
+          className="fixed bottom-6 right-6 z-40 bg-gradient-to-tr from-[#004387] to-[#0c2d57] hover:from-[#fe8d00] hover:to-[#ffaa44] text-white w-20 h-20 rounded-full flex flex-col items-center justify-center border-4 border-white shadow-[0_15px_30px_rgba(0,67,135,0.45)] relative cursor-pointer group"
+          id="advisor-floating-bubble"
           style={{ direction: 'rtl' }}
           aria-label="פתח יועץ טכני חכם"
         >
-          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#fe8d00] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500 border border-white"></span>
+          {/* Multiple pulsing background layers to catch attention */}
+          <span className="absolute inset-0 rounded-full bg-[#fe8d00]/35 animate-ping opacity-75 -z-10" style={{ animationDuration: '3s' }}></span>
+          <span className="absolute inset-[-10px] rounded-full bg-[#004387]/15 animate-pulse -z-10" style={{ animationDuration: '1.8s' }}></span>
+
+          {/* Green Live Indicator Ping */}
+          <span className="absolute top-1 right-1 flex h-4 w-4">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-4 w-4 bg-green-500 border-2 border-white"></span>
           </span>
-          <Sparkles className="w-5 h-5 text-yellow-300" />
-          <span className="text-sm whitespace-nowrap">יועץ טכני חכם ✨</span>
-        </button>
+
+          <Sparkles className="w-8 h-8 text-yellow-300 group-hover:rotate-12 transition-transform duration-300" />
+          <span className="text-[10px] sm:text-xs font-black mt-1 text-white leading-none whitespace-nowrap drop-shadow-md">
+            יועץ חכם ✨
+          </span>
+          
+          {/* Elegant floating tooltip */}
+          <div className="absolute right-24 bg-gradient-to-r from-[#0c2d57] to-[#004387] text-white px-4 py-2 rounded-xl text-xs sm:text-sm font-black shadow-lg border border-white/20 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 hidden sm:flex items-center gap-1.5" style={{ direction: 'rtl' }}>
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block"></span>
+            <span>צריך עזרה בתכנון? שאל אותי! ⚡</span>
+            {/* Arrow */}
+            <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-[#004387] rotate-45 border-b border-l border-white/20"></div>
+          </div>
+        </motion.button>
       )}
       <InstallBanner />
 
