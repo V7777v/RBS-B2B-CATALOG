@@ -100,8 +100,8 @@ const transformImageLink = (url: string, size?: number) => {
         }
       }
 
-      // use thumbnail endpoint for fast resize and bypassing cookie restrictions in iframes
-      return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${validSize}`;
+      // use lh3.googleusercontent.com direct endpoint for ultra-fast, robust load bypassing cookie restrictions in iframes
+      return `https://lh3.googleusercontent.com/d/${fileId}=w${validSize}`;
     }
 
     return trimmedUrl;
@@ -757,7 +757,7 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
         <img referrerPolicy="no-referrer" src={transformImageLink(product.images[0], 350)} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105 ${product.isComingSoon ? 'opacity-70' : ''}`} />
         
         {/* Visual disclaimer overlay */}
-        <div className="absolute bottom-2 left-2 bg-[#fcfcfc]/80 backdrop-blur-3xs border border-gray-200/60 rounded px-1.5 py-0.5 text-[8px] sm:text-[9px] text-gray-500 font-medium select-none pointer-events-none">
+        <div className="absolute bottom-2 left-2 bg-white/90 border border-gray-200/80 rounded px-1.5 py-0.5 text-[8px] sm:text-[9px] text-gray-500 font-semibold shadow-2xs select-none pointer-events-none">
           תמונות להמחשה בלבד
         </div>
 
@@ -2449,7 +2449,7 @@ export default function App() {
                 />
 
                 {/* Visual disclaimer overlay */}
-                <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-3xs border border-gray-200/80 rounded-md px-2 py-1 text-[10px] sm:text-xs text-slate-500 font-extrabold shadow-xs select-none pointer-events-none z-10">
+                <div className="absolute bottom-3 left-3 bg-white/95 border border-slate-200/90 rounded-md px-2 py-1 text-[10px] sm:text-xs text-slate-500 font-extrabold shadow-sm select-none pointer-events-none z-10">
                   התמונות להמחשה בלבד
                 </div>
 
@@ -3026,7 +3026,7 @@ export default function App() {
             </button>
             <div className="w-full h-full relative flex flex-col items-center justify-center overflow-auto p-4 max-h-screen">
               {/* Disclaimer overlay for illustration-only */}
-              <div className="absolute top-4 left-4 z-[110] bg-white/10 backdrop-blur-3xs text-white/50 border border-white/15 rounded px-2.5 py-1 text-xs select-none pointer-events-none font-medium text-right">
+              <div className="absolute top-4 left-4 z-[110] bg-black/40 text-white/70 border border-white/10 rounded px-2.5 py-1 text-xs select-none pointer-events-none font-semibold text-right">
                 התמונות להמחשה בלבד
               </div>
               <TransformWrapper
