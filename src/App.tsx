@@ -756,6 +756,11 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
       <div className={`p-3 sm:p-6 bg-white flex justify-center items-center aspect-square w-full relative border-b border-gray-100 overflow-hidden`}>
         <img referrerPolicy="no-referrer" src={transformImageLink(product.images[0], 350)} alt={product.name} loading="lazy" decoding="async" onError={handleImageError} className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105 ${product.isComingSoon ? 'opacity-70' : ''}`} />
         
+        {/* Visual disclaimer overlay */}
+        <div className="absolute bottom-2 left-2 bg-[#fcfcfc]/80 backdrop-blur-3xs border border-gray-200/60 rounded px-1.5 py-0.5 text-[8px] sm:text-[9px] text-gray-500 font-medium select-none pointer-events-none">
+          תמונות להמחשה בלבד
+        </div>
+
         {/* BrandBadge stays peaceful and elegant on the top right */}
         <div className="absolute top-2 right-2 z-10 transition-all duration-200">
           <BrandBadge brand={product.brand} />
@@ -2443,6 +2448,11 @@ export default function App() {
                   }}
                 />
 
+                {/* Visual disclaimer overlay */}
+                <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-3xs border border-gray-200/80 rounded-md px-2 py-1 text-[10px] sm:text-xs text-slate-500 font-extrabold shadow-xs select-none pointer-events-none z-10">
+                  התמונות להמחשה בלבד
+                </div>
+
                 {/* Left & Right Chevrons overlaid on main image */}
                 {imagesList.length > 1 && (
                   <>
@@ -3015,6 +3025,10 @@ export default function App() {
               <X size={24} />
             </button>
             <div className="w-full h-full relative flex flex-col items-center justify-center overflow-auto p-4 max-h-screen">
+              {/* Disclaimer overlay for illustration-only */}
+              <div className="absolute top-4 left-4 z-[110] bg-white/10 backdrop-blur-3xs text-white/50 border border-white/15 rounded px-2.5 py-1 text-xs select-none pointer-events-none font-medium text-right">
+                התמונות להמחשה בלבד
+              </div>
               <TransformWrapper
                 initialScale={1}
                 minScale={1}
