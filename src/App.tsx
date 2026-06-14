@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -1259,6 +1259,7 @@ export default function App() {
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [advisorOpen, setAdvisorOpen] = useState(false);
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
   const mobileSearchRef = useRef<HTMLInputElement>(null);
   const [cart, setCart] = useState<any[]>([]);
@@ -2183,6 +2184,7 @@ export default function App() {
     }
 
     const handlePopState = (e: PopStateEvent) => {
+      setAdvisorOpen(false);
       if (e.state) {
         setCurrentView(e.state.currentView || 'home');
         setSelectedCatalog(e.state.selectedCatalog || null);
@@ -2200,7 +2202,15 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Close advisor on active search queries
+  useEffect(() => {
+    if (searchQuery.trim().length > 0) {
+      setAdvisorOpen(false);
+    }
+  }, [searchQuery]);
+
   const navigateForward = useCallback((updates: any) => {
+    setAdvisorOpen(false);
     // Move layout states into current replace state before push
     if (window.history.state) {
       window.history.replaceState({
@@ -2227,6 +2237,7 @@ export default function App() {
   }, [currentView, selectedCatalog, selectedSubcategory, selectedNestedSubcategory, selectedProduct, searchQuery]);
 
   const navigateHome = () => {
+    setAdvisorOpen(false);
     navigateForward({
       currentView: 'home',
       selectedCatalog: null,
@@ -2239,6 +2250,10 @@ export default function App() {
   };
 
   const goBack = () => {
+    if (advisorOpen) {
+      setAdvisorOpen(false);
+      return;
+    }
     if (searchQuery && currentView !== 'product' && currentView !== 'checkout') {
        setSearchQuery('');
        if (window.history.state) {
@@ -2255,6 +2270,7 @@ export default function App() {
   };
 
   const navigateToCatalog = (catalogName: string | null) => {
+    setAdvisorOpen(false);
     navigateForward({
       currentView: 'catalog_subs',
       selectedCatalog: catalogName,
@@ -3977,6 +3993,12 @@ export default function App() {
 
           {/* MAIN CONTENT AREA */}
           <main className="w-full pb-32 md:pb-20">
+            {advisorOpen ? (
+              <React.Suspense fallback={null}>
+                <TechnicalAdvisor catalogData={catalogData} addToCart={addToCart} isAuthenticated={isAuthenticated} onClose={() => setAdvisorOpen(false)} />
+              </React.Suspense>
+            ) : (
+            <>
             {isLoading ? (
                <div className="flex flex-col items-center justify-center p-12 bg-white text-[#0c2d57] min-h-[50vh]">
                  <Loader2 size={48} className="animate-spin mb-4 text-[#fe8d00]" />
@@ -4173,6 +4195,8 @@ export default function App() {
                <CheckoutView />
             ) : null}
 
+            </>
+            )}
           </main>
         </div>
 
@@ -4275,9 +4299,21 @@ export default function App() {
       )}
 
       {!isHumanVerified && <HumanVerification onVerified={() => setIsHumanVerified(true)} />}
-      <React.Suspense fallback={null}>
-        <TechnicalAdvisor catalogData={catalogData} addToCart={addToCart} isAuthenticated={isAuthenticated} />
-      </React.Suspense>
+      {!advisorOpen && (
+        <button
+          onClick={() => setAdvisorOpen(true)}
+          className="fixed bottom-6 right-6 z-40 bg-[#004387] hover:bg-[#fe8d00] text-white px-4 py-3 rounded-full shadow-[0_10px_25px_rgba(0,67,135,0.4)] transition-colors flex items-center gap-2 font-bold border-2 border-white/15 relative"
+          style={{ direction: 'rtl' }}
+          aria-label="פתח יועץ טכני חכם"
+        >
+          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#fe8d00] opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500 border border-white"></span>
+          </span>
+          <Sparkles className="w-5 h-5 text-yellow-300" />
+          <span className="text-sm whitespace-nowrap">יועץ טכני חכם ✨</span>
+        </button>
+      )}
       <InstallBanner />
 
       {/* SHOPPING CART ADDITION CONFIRMATION MODAL */}

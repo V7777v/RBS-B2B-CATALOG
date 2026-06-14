@@ -11,14 +11,16 @@ interface TechnicalAdvisorProps {
   catalogData: any[];
   addToCart: (product: any, quantity?: number) => void;
   isAuthenticated: boolean;
+  onClose: () => void;
 }
 
 export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({ 
   catalogData, 
   addToCart,
-  isAuthenticated
+  isAuthenticated,
+  onClose
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+
   const [disclaimerAccepted, setDisclaimerAccepted] = useState<boolean>(() => {
     try {
       return localStorage.getItem('rbs_advisor_disclaimer_approved') === 'true';
@@ -52,52 +54,13 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
   const [calcHours, setCalcHours] = useState<number>(2);
   const [calcResultWh, setCalcResultWh] = useState<number>(0);
 
-  const [viewportHeight, setViewportHeight] = useState<string>('100dvh');
 
-  // Dynamic visualViewport adjustments for mobile keyboards & PWA height shifts
-  useEffect(() => {
-    if (!isOpen || typeof window === 'undefined' || !window.visualViewport) return;
 
-    const handleViewportChange = () => {
-      const vv = window.visualViewport;
-      if (vv) {
-        setViewportHeight(`${vv.height}px`);
-      }
-    };
-
-    window.visualViewport.addEventListener('resize', handleViewportChange);
-    window.visualViewport.addEventListener('scroll', handleViewportChange);
-    handleViewportChange();
-
-    // Extra triggers slightly later to adapt to keyboard layout transitions
-    const timer1 = setTimeout(handleViewportChange, 100);
-    const timer2 = setTimeout(handleViewportChange, 300);
-
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      window.visualViewport?.removeEventListener('resize', handleViewportChange);
-      window.visualViewport?.removeEventListener('scroll', handleViewportChange);
-    };
-  }, [isOpen]);
-
-  // Lock background page scroll while the Expert panel is open (prevents scroll-bleed on mobile)
-  useEffect(() => {
-    if (!isOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [isOpen]);
-
-  const containerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll messages
   useEffect(() => {
-    const el = messagesEndRef.current;
-    if (el && el.parentElement) {
-      el.parentElement.scrollTop = el.parentElement.scrollHeight;
-    }
+    messagesEndRef.current?.scrollIntoView({ block: 'end' });
   }, [messages, isLoading]);
 
   // Recalculate UPS on inputs alteration
@@ -224,55 +187,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
   };
 
   return (
-    <>
-      {/* Floating Sparkle Action Button */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <motion.button 
-          onClick={() => setIsOpen(true)}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="bg-[#004387] text-white p-4 rounded-full shadow-[0_10px_25px_rgba(0,67,135,0.4)] hover:bg-[#fe8d00] transition-colors flex items-center gap-2 font-bold relative border-2 border-white/10 group overflow-hidden"
-          style={{ direction: 'rtl' }}
-        >
-          <div className="absolute inset-0 bg-white/10 translate-y-[100%] group-hover:translate-y-0 transition-transform duration-300" />
-          <Sparkles className="w-5 h-5 text-yellow-300 animate-pulse" />
-          <span className="max-w-0 overflow-hidden group-hover:max-w-[120px] transition-all duration-350 ease-out whitespace-nowrap text-sm pr-1">
-            יועץ טכני חכם ✨
-          </span>
-          {/* Active pulse effect */}
-          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#fe8d00] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500 border border-white"></span>
-          </span>
-        </motion.button>
-      </div>
-
-      {/* Slide-in sidebar advisor interface */}
-      <AnimatePresence>
-        {isOpen && (
-          <div className="fixed inset-0 z-50 flex justify-end" style={{ direction: 'rtl' }}>
-            {/* Backdrop */}
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
-              className="absolute inset-0 bg-black/40 backdrop-blur-xs"
-            />
-
-            {/* Panel */}
-            <motion.div 
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              className="bg-gray-50 w-full sm:max-w-md relative z-10 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.15)] overflow-hidden border-r border-[#004387]/15"
-              style={{ 
-                height: viewportHeight,
-                maxHeight: viewportHeight
-              }}
-              ref={containerRef}
-            >
+    <div className="bg-gray-50 w-full relative min-h-[100dvh]" style={{ direction: 'rtl' }}>
               {/* AI Disclaimer Dialog Popup Overlay */}
               <AnimatePresence>
                 {!disclaimerAccepted && (
@@ -336,7 +251,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                         קראתי הבנתי ואני מאשר
                       </button>
                       <button 
-                        onClick={() => setIsOpen(false)}
+                        onClick={() => onClose()}
                         className="w-full text-gray-400 hover:text-white transition-colors text-xs text-center mt-3 bg-transparent border-none cursor-pointer underline"
                       >
                         ביטול וחזרה לקטלוג
@@ -363,7 +278,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                   
                   {/* Close button for mobile right in the top corner against the bot name */}
                   <button 
-                    onClick={() => setIsOpen(false)}
+                    onClick={() => onClose()}
                     className="p-1 sm:hidden rounded-full hover:bg-white/10 text-white border-none cursor-pointer shrink-0 ml-1"
                     aria-label="סגור חלון יועץ"
                   >
@@ -392,14 +307,14 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                           : 'border-white/20 bg-white/10 text-white hover:bg-[#fe8d00] hover:border-transparent'
                       }`}
                     >
-                      <Sparkles className={`w-3 h-3 shrink-0 ${calcOpen ? 'text-white' : 'text-yellow-300'}`} />
+                      <Sparkles className="w-3 h-3 shrink-0 text-yellow-300" />
                       <span className="truncate">{calcOpen ? "סגור מחשבון" : "מחשבון UPS"}</span>
                     </button>
                   </div>
 
                   {/* Close button for desktop layout */}
                   <button 
-                    onClick={() => setIsOpen(false)}
+                    onClick={() => onClose()}
                     className="hidden sm:block p-1.5 rounded-full hover:bg-white/10 text-white border-none cursor-pointer shrink-0"
                     aria-label="סגור חלון יועץ"
                   >
@@ -431,7 +346,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
               </div>
 
               {/* Chat View */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 select-text">
+              <div className="p-4 space-y-4 select-text">
                 {messages.map((m, idx) => {
                   const isModel = m.role === 'model';
                     return (
@@ -724,10 +639,6 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                 </p>
               </div>
 
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </>
+    </div>
   );
 };

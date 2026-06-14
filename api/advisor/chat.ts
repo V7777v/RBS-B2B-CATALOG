@@ -17,6 +17,11 @@ interface CachedCatalog {
 let catalogCache: CachedCatalog | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
 
+// Best-effort per-IP rate limit (per warm serverless instance). For robust limiting use a KV store.
+const rateMap = new Map<string, number[]>();
+const RATE_LIMIT = 20;
+const RATE_WINDOW_MS = 60 * 1000;
+
 // Helper to fetch and parse Google Sheet as CSV
 async function fetchSheetCSV(gid: string): Promise<any[]> {
   const url = `${SHEET_URL}/gviz/tq?tqx=out:csv&gid=${gid}&_=${Date.now()}`;
@@ -196,11 +201,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  // Same-origin guard: block cross-origin abuse of the AI endpoint at the server level
+  const reqOrigin = req.headers.origin || "";
+  const reqHost = req.headers.host || "";
+  if (reqOrigin && reqHost && !reqOrigin.endsWith(reqHost)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
+  // Best-effort per-IP rate limit
+  const ip = ((req.headers["x-forwarded-for"] as string) || "").split(",")[0].trim() || "unknown";
+  const nowTs = Date.now();
+  const recentHits = (rateMap.get(ip) || []).filter((t) => nowTs - t < RATE_WINDOW_MS);
+  if (recentHits.length >= RATE_LIMIT) {
+    return res.status(429).json({ error: "יותר מדי בקשות, נסה שוב בעוד רגע." });
+  }
+  recentHits.push(nowTs);
+  rateMap.set(ip, recentHits);
+
   try {
     const { message, history = [], forceAI = false } = req.body;
     if (!message) {
       return res.status(400).json({ error: "Message content is required" });
     }
+    if (typeof message !== "string" || message.length > 2000) {
+      return res.status(400).json({ error: "Message content is invalid or too long" });
+    }
+    const safeHistory = Array.isArray(history) ? history.slice(-12) : [];
 
     // Check if GEMINI_API_KEY is defined and is valid
     const apiKey = process.env.GEMINI_API_KEY;
@@ -262,7 +288,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const contents: any[] = [];
     
     // Add history safely to reinforce context
-    for (const h of history) {
+    for (const h of safeHistory) {
       contents.push({
         role: h.role === "user" ? "user" : "model",
         parts: [{ text: h.text }]
@@ -276,7 +302,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const config: any = {
-      systemInstruction
+      systemInstruction,
+      maxOutputTokens: 4096
     };
 
     let response;
