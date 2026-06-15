@@ -72,6 +72,10 @@ interface CabinetConfiguratorProps {
   initialAccessory?: any;
 }
 
+// Module-level store: survives remounts of the component so the user's selections are not wiped.
+const CABINET_CFG_STORE: Record<string, any[]> = {};
+const CABINET_CFG_INIT = new Set<string>();
+
 export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ product, catalogData, onOptionalsChange, initialAccessory }) => {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -82,7 +86,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   
   const [includedItems, setIncludedItems] = useState<string[]>([]);
   const [compatibleAccessories, setCompatibleAccessories] = useState<Accessory[]>([]);
-  const [selectedOptionals, setSelectedOptionals] = useState<(Accessory & { quantity: number; id: string })[]>([]);
+  const [selectedOptionals, setSelectedOptionals] = useState<(Accessory & { quantity: number; id: string })[]>(() => (CABINET_CFG_STORE[product?.sku] as any) ?? []);
+  useEffect(() => {
+    if (product?.sku) CABINET_CFG_STORE[product.sku] = selectedOptionals;
+  }, [selectedOptionals, product?.sku]);
   
   const [warningModalOpen, setWarningModalOpen] = useState(false);
   const [pendingAccessory, setPendingAccessory] = useState<Accessory | null>(null);
@@ -91,11 +98,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const handleIncrementQuantity = (index: number) => {
     const item = selectedOptionals[index];
     if (!item) return;
-    if (availableU - item.uSize < 0) {
-      setPendingAccessory(item);
-      setWarningModalOpen(true);
-      return;
-    }
     setSelectedOptionals(prev => {
       const newArr = [...prev];
       newArr[index] = { ...newArr[index], quantity: newArr[index].quantity + 1 };
@@ -207,9 +209,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 id: 'initial-' + initialAccessory.sku
              }]);
            } else {
-             setSelectedOptionals([]);
+             if (!CABINET_CFG_INIT.has(product.sku)) setSelectedOptionals([]);
            }
-           setAvailableU(initialAvailableU);
+           CABINET_CFG_INIT.add(product.sku);
+           setAvailableU(initialAvailableU - ((CABINET_CFG_STORE[product.sku] || []).reduce((acc: number, o: any) => acc + (o.uSize || 0) * (o.quantity || 1), 0)));
            setIncludedItems([]);
            setCompatibleAccessories([]);
            setLoading(false);
@@ -230,9 +233,23 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
         setCabinetData(data);
 
-        // Calculate U Capacity
-        const uMatch = data.u.match(/(\d+)/);
-        const parsedTotalU = uMatch ? parseInt(uMatch[1]) : 0;
+        // Robust U capacity. Priority: product name ("42U") > sheet U column > any cell with "NNU" > safe default.
+        const parseUStrict = (txt: any): number => {
+          const m = String(txt ?? '').match(/(\d+)\s*U/i);
+          return m ? parseInt(m[1], 10) : 0;
+        };
+        const parseULoose = (txt: any): number => {
+          const u = parseUStrict(txt);
+          if (u) return u;
+          const n = parseInt(String(txt ?? '').trim(), 10);
+          return (n >= 1 && n <= 60) ? n : 0;
+        };
+        let parsedTotalU = parseUStrict(product.name) || parseUStrict(product.description) || parseULoose(data.u);
+        if (!parsedTotalU && cabRow) {
+          for (const cell of cabRow) { const u = parseUStrict(cell); if (u) { parsedTotalU = u; break; } }
+        }
+        if (!parsedTotalU) parsedTotalU = 42;
+        console.log('[CabinetConfigurator] Resolved cabinet U capacity:', parsedTotalU, 'for SKU', product.sku);
         setTotalU(parsedTotalU);
 
         // Calculate used U from included items
@@ -253,10 +270,11 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
              quantity: 1,
              id: 'initial-' + initialAccessory.sku
           }]);
-        } else {
+        } else if (!CABINET_CFG_INIT.has(product.sku)) {
           setSelectedOptionals([]);
         }
-        setAvailableU(initialAvailableU);
+        CABINET_CFG_INIT.add(product.sku);
+        setAvailableU(initialAvailableU - ((CABINET_CFG_STORE[product.sku] || []).reduce((acc: number, o: any) => acc + (o.uSize || 0) * (o.quantity || 1), 0)));
 
         // Determine "What's in the Box" (Included Accessories)
         const included: string[] = [];
@@ -344,12 +362,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   }, [selectedOptionals]);
 
   const handleAddOptional = (acc: Accessory, idx: number) => {
-    if (availableU - acc.uSize < 0) {
-      setPendingAccessory(acc);
-      setWarningModalOpen(true);
-      return;
-    }
-    
+    // Advisory capacity only: always add. Over-capacity is shown by the red "מקום פנוי" badge, never silently blocked.
     setSelectedOptionals(prev => {
       const existingIdx = prev.findIndex(item => item.pn === acc.pn);
       if (existingIdx >= 0) {

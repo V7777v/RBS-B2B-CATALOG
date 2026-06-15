@@ -1236,6 +1236,1122 @@ const LoginView = ({ setIsAuthenticated }: { setIsAuthenticated: (val: boolean) 
   );
 };
 
+
+/* ===== Hoisted out of App() to give stable identity (prevents remount that wiped configurator state) ===== */
+const ProductDetailsView = (props: any) => {
+  const { addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity } = props;
+    const [mainImage, setMainImage] = useState(selectedProduct?.images[0]);
+    const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
+    const [isZoomed, setIsZoomed] = useState(false);
+    const [isAdded, setIsAdded] = useState(false);
+    const [isVideoHovered, setIsVideoHovered] = useState(false);
+    const [isSpecsHovered, setIsSpecsHovered] = useState(false);
+    const [isManualHovered, setIsManualHovered] = useState(false);
+    const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
+    const [activePreview, setActivePreview] = useState<string | null>(null);
+    const hoverTimeoutRef = useRef<any>(null);
+    const theme = getBrandTheme(selectedProduct?.brand);
+    const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 1024;
+
+    useEffect(() => {
+      if (selectedProduct) {
+        setMainImage(selectedProduct.images[0]);
+      }
+    }, [selectedProduct]);
+
+    const imagesList = selectedProduct?.images || [];
+    const activeIdx = imagesList.indexOf(mainImage);
+
+    const handlePrevImage = (e?: React.MouseEvent) => {
+      if (e) e.stopPropagation();
+      if (imagesList.length <= 1) return;
+      const newIndex = activeIdx > 0 ? activeIdx - 1 : imagesList.length - 1;
+      setMainImage(imagesList[newIndex]);
+      setTimeout(() => {
+        const carousel = document.getElementById('image-carousel');
+        if (carousel) {
+          const activeThumb = carousel.children[newIndex] as HTMLElement;
+          if (activeThumb) {
+             const scrollLeft = activeThumb.offsetLeft - (carousel.clientWidth / 2) + (activeThumb.clientWidth / 2);
+             carousel.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+          }
+        }
+      }, 50);
+    };
+
+    const handleNextImage = (e?: React.MouseEvent) => {
+      if (e) e.stopPropagation();
+      if (imagesList.length <= 1) return;
+      const newIndex = activeIdx < imagesList.length - 1 ? activeIdx + 1 : 0;
+      setMainImage(imagesList[newIndex]);
+      setTimeout(() => {
+        const carousel = document.getElementById('image-carousel');
+        if (carousel) {
+          const activeThumb = carousel.children[newIndex] as HTMLElement;
+          if (activeThumb) {
+             const scrollLeft = activeThumb.offsetLeft - (carousel.clientWidth / 2) + (activeThumb.clientWidth / 2);
+             carousel.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+          }
+        }
+      }, 50);
+    };
+
+    const handleMouseMove = (e: any) => {
+      const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
+      const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+      const x = Math.max(0, Math.min(100, ((clientX - left) / width) * 100));
+      const y = Math.max(0, Math.min(100, ((clientY - top) / height) * 100));
+      setZoomPos({ x, y });
+      setIsZoomed(true);
+    };
+
+    const handleMouseLeave = () => {
+      setZoomPos({ x: 50, y: 50 });
+      setIsZoomed(false);
+    };
+
+    if (!selectedProduct) return null;
+
+    return (
+      <div className="animate-in fade-in duration-300">
+
+
+        <div className="bg-white rounded-none shadow-sm border border-gray-100 mt-2 sm:mt-4">
+
+          <div className="p-4 sm:p-6 md:p-8 flex flex-col lg:flex-row gap-6 sm:gap-8">
+            
+            <div className="w-full lg:w-5/12 flex flex-col gap-3 sm:gap-4">
+              {/* ZOOMABLE IMAGE CONTAINER */}
+              <div 
+                className={`aspect-square rounded-none border border-gray-100 ${theme.bg} p-2 sm:p-4 flex items-center justify-center relative overflow-hidden group cursor-crosshair`}
+                onMouseEnter={() => setIsZoomed(true)}
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+                onTouchStart={() => setIsZoomed(true)}
+                onTouchMove={handleMouseMove}
+                onTouchEnd={handleMouseLeave}
+              >
+                <img referrerPolicy="no-referrer" 
+                  src={transformImageLink(mainImage, 800)} 
+                  alt={selectedProduct.name} 
+                  onError={handleImageError}
+                  className="w-full h-full object-contain mix-blend-multiply pointer-events-none"
+                  style={{ 
+                    transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
+                    transform: isZoomed ? 'scale(2.5)' : 'scale(1)',
+                    transition: isZoomed ? 'transform 0.05s ease-out' : 'transform 0.2s ease-out'
+                  }}
+                />
+
+                {/* Visual disclaimer overlay */}
+                <div className="absolute bottom-3 left-3 bg-white/95 border border-slate-200/90 rounded-md px-2 py-1 text-[10px] sm:text-xs text-slate-500 font-extrabold shadow-sm select-none pointer-events-none z-10">
+                  התמונות להמחשה בלבד
+                </div>
+
+                {/* Left & Right Chevrons overlaid on main image */}
+                {imagesList.length > 1 && (
+                  <>
+                    <button 
+                      onClick={handlePrevImage}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 hover:text-[#004387] border border-gray-100 w-10 h-10 rounded-full shadow-md transition-all active:scale-90 z-20 flex items-center justify-center cursor-pointer"
+                      aria-label="תמונה קודמת"
+                    >
+                      <ChevronLeft size={24} />
+                    </button>
+                    <button 
+                      onClick={handleNextImage}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 hover:text-[#004387] border border-gray-100 w-10 h-10 rounded-full shadow-md transition-all active:scale-90 z-20 flex items-center justify-center cursor-pointer"
+                      aria-label="תמונה הבאה"
+                    >
+                      <ChevronRight size={24} />
+                    </button>
+                  </>
+                )}
+
+                {/* Zoom icon for mobile */}
+                {isMobileDevice && (
+                  <button 
+                    onClick={() => setIsMobileModalOpen(true)}
+                    className="absolute bottom-3 right-3 bg-white/90 text-gray-700 hover:text-[#0c2d57] border border-gray-200 rounded-full p-2.5 shadow-sm active:scale-95 z-20 flex items-center justify-center cursor-pointer"
+                    aria-label="זום"
+                  >
+                    <ZoomIn size={18} />
+                  </button>
+                )}
+              </div>
+
+              {imagesList.length > 1 && (
+                <div className="relative group/carousel mt-1 px-1">
+                  <div id="image-carousel" className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 pt-2 snap-x scroll-smooth" style={{ scrollbarWidth: 'none' }}>
+                    {imagesList.map((img: string, idx: number) => (
+                      <button 
+                        key={idx} 
+                        onClick={() => {
+                          setMainImage(img);
+                          const carousel = document.getElementById('image-carousel');
+                          if (carousel) {
+                            const activeThumb = carousel.children[idx] as HTMLElement;
+                            if (activeThumb) {
+                               const scrollLeft = activeThumb.offsetLeft - (carousel.clientWidth / 2) + (activeThumb.clientWidth / 2);
+                               carousel.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+                            }
+                          }
+                        }}
+                        className={`w-20 h-20 sm:w-28 sm:h-28 bg-white p-1 sm:p-2 rounded-none border-2 overflow-hidden flex-shrink-0 transition-all snap-start ${mainImage === img ? 'border-[#004387] shadow-md scale-[1.02]' : 'border-gray-200 hover:border-gray-300'}`}
+                      >
+                        <img referrerPolicy="no-referrer" loading="lazy" src={transformImageLink(img, 300)} alt={`תמונה ${idx + 1} של המוצר`} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
+                      </button>
+                    ))}
+                  </div>
+
+                  {imagesList.length > 3 && (
+                    <>
+                      <button 
+                        className="absolute top-1/2 left-0 -translate-y-[calc(50%+8px)] -ml-2 sm:-ml-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#004387] hover:bg-gray-50 active:scale-95 transition-all z-20 flex items-center justify-center cursor-pointer"
+                        onClick={handlePrevImage}
+                        aria-label="גלול שמאל cursor-pointer"
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                      <button 
+                        className="absolute top-1/2 right-0 -translate-y-[calc(50%+8px)] -mr-2 sm:-mr-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#004387] hover:bg-gray-50 active:scale-95 transition-all z-20 flex items-center justify-center cursor-pointer"
+                        onClick={handleNextImage}
+                        aria-label="גלול ימין cursor-pointer"
+                      >
+                        <ChevronRight size={18} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="w-full lg:w-7/12 flex flex-col">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2 sm:mb-3">
+                <div className={`text-xs sm:text-sm font-semibold ${theme.accent}`}>{selectedProduct.category} | {selectedProduct.subcategory}</div>
+                {selectedProduct.brand && (
+                  <div className="flex-shrink-0">
+                    <BrandBadge brand={selectedProduct.brand} />
+                  </div>
+                )}
+              </div>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] mb-2 leading-tight">{selectedProduct.name}</h1>
+              <div className="text-gray-500 mb-4 sm:mb-6 text-xs sm:text-sm">
+                מק"ט: <span className="font-mono text-gray-800">{selectedProduct.sku}</span>
+              </div>
+              
+              <div className="mb-6 sm:mb-8 bg-white border-2 border-slate-100 p-5 sm:p-6 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_25px_rgba(0,0,0,0.06)] hover:border-[#004387]/25 transition-all duration-300 relative overflow-hidden text-right">
+                {/* Brand colored vertical accent bar on the right (RTL start) */}
+                <span className="absolute top-0 right-0 bottom-0 w-[5px] bg-gradient-to-b from-[#004387] via-[#004387] to-[#fe8d00]"></span>
+                
+                {/* Section Header with Icon */}
+                <div className="flex items-center gap-2 mb-3 pb-2.5 border-b border-gray-100 text-[#0c2d57] font-extrabold text-sm sm:text-base select-none">
+                  <FileText size={18} className="text-[#fe8d00]" />
+                  <span>מידע ומפרט המוצר</span>
+                </div>
+
+                <p className="text-gray-800 text-sm sm:text-base font-bold leading-relaxed whitespace-pre-line pr-1 select-text">
+                  {selectedProduct.description}
+                </p>
+              </div>
+
+              {/* DOCUMENTATION & LINKS SECTION */}
+              {(selectedProduct.specsLink || selectedProduct.manualLink || selectedProduct.videoLink || (selectedProduct.labCerts && selectedProduct.labCerts.length > 0)) && (
+                <div className="mb-6 sm:mb-8 font-sans">
+                  <h3 className="font-bold text-[#0c2d57] mb-4 text-base sm:text-lg border-[#004387]/15 border-b pb-2 text-right">מידע נוסף ומסמכים להורדה</h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                    {/* SPECS LINK */}
+                    {selectedProduct.specsLink && (
+                      <div className="relative flex flex-col w-full">
+                        <a 
+                          href={selectedProduct.specsLink} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          onMouseEnter={() => {
+                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                            hoverTimeoutRef.current = setTimeout(() => {
+                              setActivePreview('specs');
+                            }, 250);
+                          }}
+                          onMouseLeave={() => {
+                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                          }}
+                          className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${activePreview === 'specs' ? 'border-[#004387]' : 'border-gray-200 hover:border-[#004387]'}`} 
+                          style={{ minHeight: '80px' }}
+                        >
+                          <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                            <img 
+                              referrerPolicy="no-referrer" 
+                              src={transformImageLink("https://drive.google.com/file/d/1n3f9nEnEOj6CycKjFzuH7XRCTNN55Hl7/view?usp=drive_link", 120)} 
+                              alt="PDF" 
+                              className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110" 
+                            />
+                          </div>
+                          <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center">
+                            <div className="text-sm sm:text-base font-bold text-gray-800 group-hover:text-[#004387] transition-all">מפרט טכני</div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setActivePreview(activePreview === 'specs' ? null : 'specs');
+                              }}
+                              className="mt-1 text-[10px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                            >
+                              <Eye size={12} />
+                              <span>{activePreview === 'specs' ? 'הסתר תצוגה' : 'תצוגה מהירה'}</span>
+                            </button>
+                          </div>
+                          <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-[#004387] group-hover:text-white transition-all duration-250 flex-shrink-0 shadow-sm">
+                            <Download size={18} />
+                          </div>
+                        </a>
+                      </div>
+                    )}
+
+                    {/* MANUAL LINK */}
+                    {selectedProduct.manualLink && (
+                      <div className="relative flex flex-col w-full">
+                        <a 
+                          href={selectedProduct.manualLink} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          onMouseEnter={() => {
+                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                            hoverTimeoutRef.current = setTimeout(() => {
+                              setActivePreview('manual');
+                            }, 250);
+                          }}
+                          onMouseLeave={() => {
+                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                          }}
+                          className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${activePreview === 'manual' ? 'border-[#004387]' : 'border-gray-200 hover:border-[#004387]'}`} 
+                          style={{ minHeight: '80px' }}
+                        >
+                          <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                            <img 
+                              referrerPolicy="no-referrer" 
+                              src={transformImageLink("https://drive.google.com/file/d/1n3f9nEnEOj6CycKjFzuH7XRCTNN55Hl7/view?usp=drive_link", 120)} 
+                              alt="PDF" 
+                              className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110" 
+                            />
+                          </div>
+                          <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center">
+                            <div className="text-sm sm:text-base font-bold text-gray-800 group-hover:text-[#004387] transition-all">מדריך למשתמש</div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setActivePreview(activePreview === 'manual' ? null : 'manual');
+                              }}
+                              className="mt-1 text-[10px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                            >
+                              <Eye size={12} />
+                              <span>{activePreview === 'manual' ? 'הסתר תצוגה' : 'תצוגה מהירה'}</span>
+                            </button>
+                          </div>
+                          <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-[#004387] group-hover:text-white transition-all duration-250 flex-shrink-0 shadow-sm">
+                            <Download size={18} />
+                          </div>
+                        </a>
+                      </div>
+                    )}
+
+                    {/* VIDEO LINK */}
+                    {selectedProduct.videoLink && (
+                      <div className="relative flex flex-col w-full">
+                        {(() => {
+                          const isYouTube = selectedProduct.videoLink.toLowerCase().includes('youtube.com') || selectedProduct.videoLink.toLowerCase().includes('youtu.be');
+                          return (
+                            <a 
+                              href={selectedProduct.videoLink} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              onMouseEnter={() => {
+                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                                hoverTimeoutRef.current = setTimeout(() => {
+                                  setActivePreview('video');
+                                }, 250);
+                              }}
+                              onMouseLeave={() => {
+                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                              }}
+                              className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${activePreview === 'video' ? (isYouTube ? 'border-[#ff0000]' : 'border-[#004387]') : `border-gray-200 ${isYouTube ? 'hover:border-[#ff0000]' : 'hover:border-[#004387]'}`}`}
+                              style={{ minHeight: '80px' }}
+                            >
+                              {isYouTube ? (
+                                <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                                  <img 
+                                    referrerPolicy="no-referrer" 
+                                    src={transformImageLink("https://drive.google.com/file/d/1cXAUJdtw9rAkP1XiF2p5RKeDZ4wRXg_u/view?usp=drive_link", 120)} 
+                                    alt="YouTube" 
+                                    className="w-12 h-12 object-contain transition-transform duration-200 group-hover:scale-110" 
+                                  />
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all shadow-xs duration-250 bg-blue-50 text-blue-600 border border-blue-200 group-hover:bg-blue-600 group-hover:text-white">
+                                  <Video size={24} className="transition-transform duration-200 group-hover:scale-110" />
+                                </div>
+                              )}
+                              <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center">
+                                <div className={`text-sm sm:text-base font-bold text-gray-800 transition-all ${isYouTube ? 'group-hover:text-[#ff0000]' : 'group-hover:text-blue-600'}`}>סרטון</div>
+                                <button 
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setActivePreview(activePreview === 'video' ? null : 'video');
+                                  }}
+                                  className={`mt-1 text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded border transition-all flex items-center gap-1 active:scale-95 cursor-pointer ${isYouTube ? 'text-[#ff0000] border-red-100 bg-red-50 hover:bg-orange-50' : 'text-blue-600 border-blue-100 bg-blue-50 hover:bg-orange-50'}`}
+                                >
+                                  <PlayCircle size={12} />
+                                  <span>{activePreview === 'video' ? 'הסתר סרטון' : 'נגן סרטון'}</span>
+                                </button>
+                              </div>
+                              <div className={`w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 transition-all duration-250 flex-shrink-0 shadow-sm ${isYouTube ? 'group-hover:bg-[#ff0000] group-hover:text-white' : 'group-hover:bg-blue-600 group-hover:text-white'}`}>
+                                <PlayCircle size={18} />
+                              </div>
+                            </a>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* LIVE PREVIEW BOX */}
+                  {activePreview && (
+                    <div className="mb-6 border border-gray-200/80 rounded-2xl bg-slate-50/50 p-3 sm:p-4 shadow-xs animate-in fade-in slide-in-from-top-3 duration-300 relative text-right">
+                      <div className="flex items-center justify-between mb-3 flex-row-reverse">
+                        <button 
+                          onClick={() => setActivePreview(null)}
+                          className="text-gray-500 hover:text-gray-800 bg-white hover:bg-gray-100 p-1 px-2.5 rounded-lg text-xs font-bold transition-all border border-gray-200 cursor-pointer flex items-center gap-1 active:scale-95"
+                        >
+                          <X size={12} />
+                          <span>סגור תצוגה מקדימה</span>
+                        </button>
+                        <span className="text-xs sm:text-sm font-bold text-[#0c2d57] flex items-center gap-1.5">
+                          <Eye size={14} className="text-[#fe8d00]" />
+                          <span>תצוגה מקדימה מהירה: {
+                            activePreview === 'specs' ? 'מפרט טכני' : 
+                            activePreview === 'manual' ? 'מדריך למשתמש' : 
+                            activePreview === 'video' ? 'סרטון מוצר' : 
+                            `אישור בטיחות ותקן #${parseInt(activePreview.split('_')[1], 10) + 1}`
+                          }</span>
+                        </span>
+                      </div>
+                      
+                      <div className="w-full aspect-[16/10] min-h-[320px] sm:min-h-[480px] bg-white rounded-xl overflow-hidden border border-gray-200 shadow-inner flex flex-col items-center justify-center relative">
+                        {activePreview === 'specs' && selectedProduct.specsLink && (
+                          <iframe 
+                            title="Specs Preview"
+                            src={getPdfPreviewUrl(selectedProduct.specsLink) || selectedProduct.specsLink} 
+                            className="w-full h-full border-none"
+                            loading="lazy"
+                          />
+                        )}
+                        {activePreview === 'manual' && selectedProduct.manualLink && (
+                          <iframe 
+                            title="Manual Preview"
+                            src={getPdfPreviewUrl(selectedProduct.manualLink) || selectedProduct.manualLink} 
+                            className="w-full h-full border-none"
+                            loading="lazy"
+                          />
+                        )}
+                        {activePreview === 'video' && selectedProduct.videoLink && (
+                          <iframe 
+                            title="Video Preview"
+                            src={getVideoEmbedUrl(selectedProduct.videoLink) || selectedProduct.videoLink} 
+                            className="w-full h-full border-none"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            loading="lazy"
+                          />
+                        )}
+                        {activePreview.startsWith('labCert_') && (() => {
+                          const certIdx = parseInt(activePreview.split('_')[1], 10);
+                          const certUrl = selectedProduct.labCerts?.[certIdx];
+                          return certUrl ? (
+                            <iframe 
+                              title={`Lab Cert ${certIdx + 1} Preview`}
+                              src={getPdfPreviewUrl(certUrl) || certUrl} 
+                              className="w-full h-full border-none"
+                              loading="lazy"
+                            />
+                          ) : null;
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* LAB CERTIFICATES SECTION */}
+                  {selectedProduct.labCerts && selectedProduct.labCerts.length > 0 && (
+                    <div className="mt-6 pt-4 border-t border-gray-100">
+                      <h4 className="font-bold text-[#0c2d57] mb-3 text-sm sm:text-base flex items-center justify-start gap-2">
+                        <ShieldCheck size={20} className="text-emerald-600" />
+                        <span>אישורי מעבדה ותקנים רשמיים ({selectedProduct.labCerts.length})</span>
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {selectedProduct.labCerts.map((certLink: string, idx: number) => {
+                          return (
+                            <a 
+                              key={idx}
+                              href={certLink} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              onMouseEnter={() => {
+                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                                hoverTimeoutRef.current = setTimeout(() => {
+                                  setActivePreview(`labCert_${idx}`);
+                                }, 250);
+                              }}
+                              onMouseLeave={() => {
+                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                              }}
+                              className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${activePreview === `labCert_${idx}` ? 'border-[#004387]' : 'border-gray-200 hover:border-[#004387]'}`} 
+                              style={{ minHeight: '80px' }}
+                            >
+                              <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                                <img 
+                                  referrerPolicy="no-referrer" 
+                                  src={transformImageLink("https://drive.google.com/file/d/1n3f9nEnEOj6CycKjFzuH7XRCTNN55Hl7/view?usp=drive_link", 120)} 
+                                  alt="PDF" 
+                                  className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110" 
+                                />
+                              </div>
+                              <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center text-right">
+                                <div className="text-sm sm:text-base font-bold text-gray-800 group-hover:text-[#004387] transition-all">אישור בטיחות ותקן #{idx + 1}</div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setActivePreview(activePreview === `labCert_${idx}` ? null : `labCert_${idx}`);
+                                  }}
+                                  className="mt-1 text-[10px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                                >
+                                  <Eye size={12} />
+                                  <span>{activePreview === `labCert_${idx}` ? 'הסתר תצוגה' : 'תצוגה מהירה'}</span>
+                                </button>
+                              </div>
+                              <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-[#004387] group-hover:text-white transition-all duration-250 flex-shrink-0 shadow-sm">
+                                <Download size={18} />
+                              </div>
+                            </a>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SPECIFIC CONFIGURATORS (Only for Cabinets, not accessories) */}
+              {((selectedProduct.subcategory === 'ארונות תקשורת ואביזרים' || selectedProduct.subcategory === 'ארונות וארונות הסתעפות') && 
+                !selectedProduct['Nested subcategory']?.includes('אביזרים') && 
+                /ארון|מסד|מארז/i.test(selectedProduct.name)) && (
+                <div className="mb-6">
+                  <React.Suspense fallback={<div className="animate-pulse h-32 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center text-sm text-gray-500">טוען קונפיגורטור...</div>}>
+                    <CabinetConfigurator product={selectedProduct} catalogData={catalogData} onOptionalsChange={handleOptionalsChange} />
+                  </React.Suspense>
+                </div>
+              )}
+
+              {/* COMPATIBLE CABINETS (If this is an accessory) */}
+              {((selectedProduct['Nested subcategory']?.includes('אביזרים') || selectedProduct.subcategory?.includes('אביזרים למסדים') || /מדף|פנל|מאוורר|ברגים|אביזר|KVM/i.test(selectedProduct.name)) && !(/ארון|מסד|מארז/i.test(selectedProduct.name))) && (
+                <React.Suspense fallback={<div className="animate-pulse h-32 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center text-sm text-gray-500">טוען ארונות תואמים...</div>}>
+                  <AccessoryCabinets 
+                    product={selectedProduct} 
+                    catalogData={catalogData} 
+                    ProductCard={ProductCard} 
+                    navigateToProduct={navigateToProduct}
+                    addToCart={addToCart}
+                  />
+                </React.Suspense>
+              )}
+
+              <div className="mt-auto border-t border-gray-200 pt-4 sm:pt-6">
+                {/* OPTIONALS BREAKDOWN */}
+                {currentOptionals.length > 0 && (
+                  <div className="mb-4 bg-gray-50 border border-gray-200 rounded p-4 animate-in fade-in slide-in-from-bottom-2 duration-300 shadow-sm">
+                    <h4 className="text-sm font-bold text-[#0c2d57] mb-3 border-b border-gray-200/60 pb-2">פירוט פריטים (ארון + תוספות שבחרת):</h4>
+                    
+                    <div className="flex justify-between items-center text-sm py-1.5">
+                      <span className="font-semibold text-gray-800 flex-1 pl-2">{selectedProduct.name}</span>
+                      <span className="font-bold whitespace-nowrap text-gray-900">₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    
+                    {currentOptionals.map((opt, i) => {
+                       const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
+                       const optPrice = catItem ? catItem.price : (opt.price || 0);
+                       return (
+                         <div key={i} className="flex justify-between items-center text-sm py-1.5 text-[#004387]">
+                           <span className="flex-1 pl-2 truncate relative pl-4 after:content-['+'] after:absolute after:right-0 after:top-0 after:font-bold after:mr-[-10px]">+ {opt.name || opt.description || opt.pn}</span>
+                           <span className="font-semibold whitespace-nowrap">₪{optPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                         </div>
+                       );
+                    })}
+                    
+                    <div className="flex justify-between items-center text-lg lg:text-xl font-bold text-[#f7941d] pt-3 mt-2 border-t border-gray-200/60 bg-white -mx-4 -mb-4 p-4 rounded-b">
+                      <span>סה"כ לתשלום:</span>
+                      <span>₪{(selectedProduct.price + currentOptionals.reduce((acc, opt) => {
+                         const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
+                         return acc + (catItem ? catItem.price : (opt.price || 0));
+                      }, 0)).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col w-full gap-4 mt-2">
+                  {selectedProduct.isClearance && (
+                    <div className="w-full bg-gradient-to-r from-teal-50 to-emerald-50 border-2 border-teal-200 rounded-lg p-3 sm:p-5 shadow-sm flex flex-col sm:flex-row items-center sm:justify-between gap-3 transform hover:scale-[1.01] transition-transform">
+                      <div className="flex items-center gap-2 text-teal-700 font-black text-xl sm:text-2xl leading-none">
+                        <Tag className="w-7 h-7 sm:w-9 sm:h-9 text-teal-600 fill-teal-600 animate-bounce drop-shadow-md" />
+                        <span>מבצע מציאון</span>
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black text-teal-800 bg-white px-4 sm:px-6 py-2 rounded-md shadow-md border-b-2 border-teal-200 drop-shadow-sm text-center">
+                        מחיר מיוחד
+                      </div>
+                    </div>
+                  )}
+                  {selectedProduct.isHotSale && (
+                    <div className="w-full bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200 rounded-lg p-3 sm:p-5 shadow-sm flex flex-col sm:flex-row items-center sm:justify-between gap-3 transform hover:scale-[1.01] transition-transform">
+                      <div className="flex items-center gap-2 text-red-600 font-black text-xl sm:text-2xl leading-none">
+                        <Flame className="w-7 h-7 sm:w-9 sm:h-9 text-red-500 fill-red-500 animate-pulse drop-shadow-md" />
+                        <span>{selectedProduct.saleType || "מבצע מיוחד"}</span>
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black text-red-700 bg-white px-4 sm:px-6 py-2 rounded-md shadow-md border-b-2 border-red-200 drop-shadow-sm text-center">
+                        {selectedProduct.saleValue || "פרטים בעגלה"}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
+                    <div className="flex flex-col w-full sm:w-auto text-center sm:text-right">
+                       {selectedProduct.retailPrice && currentOptionals.length === 0 && (
+                          <span className="text-sm sm:text-base text-gray-800 font-bold mb-1 block">
+                            מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
+                          </span>
+                       )}
+                       {selectedProduct.oldPrice && currentOptionals.length === 0 && (
+                          <span className="text-sm sm:text-base text-red-500 font-medium mb-1 line-through block">
+                            מחירון מתקין מקורי (ללא מע"מ): ₪{selectedProduct.oldPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                       )}
+                       {currentOptionals.length === 0 && (
+                         <div className={`text-2xl sm:text-3xl font-bold ${selectedProduct.isClearance ? 'text-teal-600' : 'text-[#f7941d]'} flex items-center gap-2 flex-wrap justify-center sm:justify-start`}>
+                            <span>₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            {isNetworkCableRoll(selectedProduct) && (
+                              <span className="text-xs sm:text-sm font-black text-[#004387] bg-blue-50 border border-blue-100 rounded px-2 py-0.5 select-none">מחיר למטר</span>
+                            )}
+                            <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">{selectedProduct.isClearance ? 'מחיר מבצע מציאון' : 'מחיר מומלץ למתקין'} <span className="hidden sm:inline">(ללא מע"מ)</span></span>
+                         </div>
+                       )}
+                    </div>
+                  {selectedProduct.isComingSoon ? (
+                    <div className="w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md text-sm sm:text-base bg-gray-200 text-gray-600 cursor-not-allowed">
+                       <span className="animate-pulse">בקרוב!</span>
+                    </div>
+                  ) : currentOptionals.length > 0 ? (
+                    <div className="flex flex-col gap-3 w-full">
+                      <div className="flex flex-col sm:flex-row gap-3 w-full">
+                        <button 
+                          onClick={() => {
+                            addToCart(selectedProduct, 1, currentOptionals);
+                            setIsAdded(true);
+                            setTimeout(() => setIsAdded(false), 1500);
+                          }}
+                          className={`flex-1 flex items-center justify-center gap-2 px-5 py-4 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base cursor-pointer rounded-none text-white ${isAdded ? 'bg-green-600' : 'bg-[#fe8d00] hover:bg-[#004387]'}`}
+                        >
+                          <ShoppingCart size={18} className={isAdded ? 'animate-bounce' : ''} />
+                          {isAdded ? 'נארז יחד ונוסף! ✓' : 'הוסף כחבילה אחת (מומלץ)'}
+                        </button>
+                        
+                        <button 
+                          onClick={() => {
+                            addToCart(selectedProduct, 1, []);
+                            currentOptionals.forEach((opt: any) => {
+                               const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
+                               if (catItem) {
+                                  addToCart(catItem, 1, []);
+                               }
+                            });
+                            setIsAdded(true);
+                            setTimeout(() => setIsAdded(false), 1550);
+                          }}
+                          className="flex-1 flex items-center justify-center gap-2 px-5 py-4 font-bold text-[#004387] border-2 border-[#004387] bg-white hover:bg-gray-50 transition-all text-sm sm:text-base cursor-pointer rounded-none"
+                        >
+                          <ShoppingCart size={18} />
+                          {isAdded ? 'פריטים נפרדים נוספו! ✓' : 'בחר כפריטים נפרדים'}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-center text-[#004387] font-semibold bg-[#e6f0fa]/40 py-2 border border-[#b3d4f5] rounded-none">
+                        💡 תאימות מושלמת: הוספה כחבילה אחת מקשרת את כל האביזרים ישירות לארון זה בעגלה ומונעת טעויות ייצור והרכבה!
+                      </p>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => {
+                        addToCart(selectedProduct, 1, []);
+                        setIsAdded(true);
+                        setTimeout(() => setIsAdded(false), 1500);
+                      }}
+                      className={`w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base ${isAdded ? 'bg-green-600 hover:bg-green-600 text-white' : theme.button}`}
+                    >
+                      <ShoppingCart size={18} className={`sm:w-5 sm:h-5 ${isAdded ? 'animate-bounce' : ''}`} />
+                      {isAdded ? 'נוסף לעגלה! ✓' : 'הוסף להזמנה'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+        {/* MOBILE FULL SCREEN IMAGE MODAL */}
+        {isMobileModalOpen && (
+          <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-0 m-0">
+            <button 
+              onClick={() => setIsMobileModalOpen(false)}
+              className="absolute top-4 right-4 z-[110] bg-white text-black p-2 rounded-full shadow-lg"
+            >
+              <X size={24} />
+            </button>
+            <div className="w-full h-full relative flex flex-col items-center justify-center overflow-auto p-4 max-h-screen">
+              {/* Disclaimer overlay for illustration-only */}
+              <div className="absolute top-4 left-4 z-[110] bg-black/40 text-white/70 border border-white/10 rounded px-2.5 py-1 text-xs select-none pointer-events-none font-semibold text-right">
+                התמונות להמחשה בלבד
+              </div>
+              <TransformWrapper
+                initialScale={1}
+                minScale={1}
+                maxScale={4}
+                centerOnInit={true}
+              >
+                {({ zoomIn, zoomOut, resetTransform }) => (
+                  <React.Fragment>
+                    <TransformComponent wrapperClass="!w-full !flex !items-center !justify-center" contentClass="!w-full !flex !items-center !justify-center">
+                      <img referrerPolicy="no-referrer" 
+                        src={transformImageLink(mainImage, 1200)} 
+                        alt={selectedProduct.name} 
+                        onError={handleImageError}
+                        className="w-full h-auto max-h-[80vh] object-contain"
+                      />
+                    </TransformComponent>
+                    <div className="mt-6 text-white/70 text-sm flex gap-4 items-center bg-black/50 px-4 py-2 rounded-full backdrop-blur-md">
+                      <button onClick={() => zoomOut()} className="p-2 hover:bg-white/20 rounded-full"><Minus size={18} /></button>
+                      <button onClick={() => resetTransform()} className="p-2 hover:bg-white/20 rounded-full"><Search size={16} /></button>
+                      <button onClick={() => zoomIn()} className="p-2 hover:bg-white/20 rounded-full"><Plus size={18} /></button>
+                    </div>
+                  </React.Fragment>
+                )}
+              </TransformWrapper>
+            </div>
+          </div>
+        )}
+
+        {/* SIMILAR PRODUCTS */}
+        {(() => {
+          const similar = catalogData.filter(p => p.subcategory === selectedProduct.subcategory && p.id !== selectedProduct.id && p.active !== 'FALSE').slice(0, 4);
+          if (similar.length === 0) return null;
+          return (
+            <div className="mt-12 mb-8">
+              <h3 className="text-xl font-bold text-[#0c2d57] mb-6 border-b border-gray-200 pb-2">מוצרים משלימים ומקבילים</h3>
+              <div className={similar.length === 1 
+                ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-4 md:gap-6" 
+                : "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6"
+              }>
+                {similar.map(product => (
+                  <ProductCard key={product.id} product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} onNavigateToCategory={navigateToCategoryAndSub} />
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+      </div>
+    );
+  };
+
+const CheckoutView = (props: any) => {
+  const { addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity } = props;
+    const [orderPlaced, setOrderPlaced] = useState(false);
+    const [lastSentMethod, setLastSentMethod] = useState<'email' | 'whatsapp' | null>(null);
+    const [companyName, setCompanyName] = useState('');
+    const [companyId, setCompanyId] = useState('');
+    const [contactName, setContactName] = useState('');
+    const [phonePrefix, setPhonePrefix] = useState('050');
+    const [phone, setPhone] = useState('');
+    const [secondaryPhone, setSecondaryPhone] = useState('');
+    const [customerEmail, setCustomerEmail] = useState('');
+    const [address, setAddress] = useState('');
+    const [notes, setNotes] = useState('');
+    const [selectedAgent, setSelectedAgent] = useState('');
+    const [errors, setErrors] = useState<any>({});
+
+    const agents = [
+      { name: 'בחר/י סוכן מהרשימה', email: '', phone: '' },
+      { name: 'משרד - נירית', email: 'nirit@rbs-telecom.com', phone: '972545241480' },
+      { name: 'מיכה', email: 'micha@rbs-telecom.com', phone: '972503332497' },
+      { name: 'ניר', email: 'nir@rbs-telecom.com', phone: '972503332116' },
+      { name: 'אברהם', email: 'avraham@rbs-telecom.com', phone: '972503332254' },
+      { name: 'מוטי', email: 'moti@rbs-telecom.com', phone: '972503334259' },
+      { name: 'מאיר', email: 'meir@rbs-telecom.com', phone: '972504530996' }
+    ];
+
+    const phonePrefixes = [
+      '050', '052', '053', '054', '055', '058',
+      '02', '03', '04', '08', '09',
+      '072', '073', '074', '076', '077', '079'
+    ];
+
+    const validateForm = () => {
+        const newErrors: any = {};
+        
+        if (companyId && !/^\d{9}$/.test(companyId.trim().replace(/\D/g, ''))) {
+            newErrors.companyId = 'ח.פ חייב להכיל 9 ספרות';
+        }
+        
+        if (phone && !/^\d{7}$/.test(phone.trim())) {
+            newErrors.phone = 'מספר טלפון חייב להכיל 7 ספרות';
+        }
+        
+        if (!phone && !customerEmail) {
+            newErrors.contact = 'יש להזין לפחות דואר אלקטרוני או מספר טלפון ראשי';
+        }
+
+        if (!companyName) {
+            newErrors.companyName = 'יש להזין שם חברה';
+        }
+
+        if (!selectedAgent) {
+            newErrors.selectedAgent = 'יש לבחור סוכן מטפל';
+        }
+        
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const buildOrderDetailsText = () => {
+      let orderDetails = `הזמנה חדשה מקטלוג B2B
+`;
+      orderDetails += `---------------------------------
+`;
+      orderDetails += `שם חברה/לקוח: ${companyName}
+`;
+      if (companyId) orderDetails += `ח.פ/עוסק מורשה: ${companyId}
+`;
+      if (contactName) orderDetails += `איש קשר: ${contactName}
+`;
+      if (phone) orderDetails += `טלפון: ${phonePrefix}-${phone}
+`;
+      if (secondaryPhone) orderDetails += `טלפון נוסף: ${secondaryPhone}
+`;
+      if (customerEmail) orderDetails += `מייל לקוח: ${customerEmail}
+`;
+      if (address) orderDetails += `כתובת אספקה: ${address}
+`;
+      if (notes) orderDetails += `הערות: ${notes}
+`;
+      orderDetails += `---------------------------------
+
+`;
+      orderDetails += `פריטים:
+
+`;
+      
+      cart.forEach((item, idx) => {
+         orderDetails += `${idx + 1}. ${item.name}
+`;
+         orderDetails += `   מק"ט: ${item.sku}
+`;
+         orderDetails += `   כמות: ${item.quantity}
+`;
+         
+         if (item.isClearance) {
+           orderDetails += `   * מציאון: ${item.clearancePrice ? '₪' + item.clearancePrice : 'מחיר מיוחד'}
+`;
+         } else if (item.isHotSale) {
+           orderDetails += `   * מבצע חם: ${item.saleType ? item.saleType + ' ' : ''}${item.saleValue || ''}
+`;
+         }
+         
+         if (item.optionals && item.optionals.length > 0) {
+           orderDetails += `   תוספות בארון:
+`;
+           item.optionals.forEach((opt: any) => {
+             orderDetails += `     - ${opt.pn} | ${opt.description}
+`;
+           });
+         }
+         orderDetails += `
+`;
+      });
+      
+      orderDetails += `---------------------------------
+`;
+      orderDetails += `סה"כ כמות פריטים: ${cart.reduce((acc, item) => acc + item.quantity, 0)}
+`;
+
+      return orderDetails;
+    };
+
+    const handleSendEmail = () => {
+      if (!validateForm()) return;
+
+      const agentEmail = agents.find(a => a.name === selectedAgent)?.email;
+      if (!agentEmail) return;
+
+      const orderDetails = buildOrderDetailsText();
+      const subject = encodeURIComponent(`הזמנה חדשה (B2B): ${companyName || 'לקוח מזדמן'}`);
+      const body = encodeURIComponent(orderDetails);
+      
+      let mailtoLink = `mailto:${agentEmail}?subject=${subject}&body=${body}`;
+      if (customerEmail) {
+          mailtoLink += `&cc=${customerEmail}`;
+      }
+      
+      window.location.href = mailtoLink;
+      
+      setLastSentMethod('email');
+      setOrderPlaced(true);
+    };
+
+    const handleSendWhatsApp = () => {
+      if (!validateForm()) return;
+      
+      const agentPhone = agents.find(a => a.name === selectedAgent)?.phone;
+      if (!agentPhone) return;
+
+      const orderDetails = buildOrderDetailsText();
+      const text = encodeURIComponent(orderDetails);
+      
+      window.open(`https://wa.me/${agentPhone}?text=${text}`, '_blank');
+      
+      setLastSentMethod('whatsapp');
+      setOrderPlaced(true);
+    };
+
+    const handleBackToSite = () => {
+      navigateHome();
+    };
+
+    const handleLogout = () => {
+      setCart([]);
+      setIsAuthenticated(false);
+      navigateHome();
+    };
+
+    if (orderPlaced) {
+      return (
+        <div className="bg-white rounded-none shadow-sm border border-gray-100 p-8 sm:p-12 text-center max-w-2xl mx-auto mt-10">
+          <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+            <CheckCircle size={40} />
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-4">הבקשה נוסחה והועברה לאפליקציה שבחרת!</h2>
+          <p className="text-gray-600 mb-8 px-4">שים לב: הודעת המייל או הווצאפ נפתחה במכשירך להשלמת השליחה.</p>
+          
+          <div className="border-t border-gray-200 pt-6 mt-4">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">
+              {lastSentMethod === 'email' ? 'מומלץ לשלוח גיבוי גם בוואטסאפ:' : 'מומלץ לשלוח גיבוי גם במייל:'}
+            </h3>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+               {lastSentMethod !== 'email' && (
+                 <button 
+                    onClick={() => handleSendEmail()}
+                    className="bg-white text-[#004387] border border-[#004387] px-6 py-2 font-bold hover:bg-[#004387] hover:text-white transition-colors"
+                 >
+                    שליחת גיבוי ב-Email
+                 </button>
+               )}
+               {lastSentMethod !== 'whatsapp' && (
+                 <button 
+                    onClick={() => handleSendWhatsApp()}
+                    className="bg-green-500 text-white border border-green-500 px-6 py-2 font-bold hover:bg-green-600 transition-colors"
+                 >
+                    שליחת גיבוי ב-WhatsApp
+                 </button>
+               )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 pt-6 bg-gray-50 -mx-8 sm:-mx-12 -mb-8 sm:-mb-12 p-8 sm:p-12 mt-4">
+             <h3 className="text-lg font-bold text-gray-800 mb-4">מה תרצה לעשות עכשיו?</h3>
+             <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <button 
+                  onClick={handleBackToSite}
+                  className="bg-[#004387] text-white px-8 py-3 font-bold hover:bg-[#fe8d00] transition-colors shadow-sm"
+                >
+                  המשך לאתר (שמור על העגלה)
+                </button>
+                <button 
+                  onClick={handleLogout}
+                  className="bg-gray-200 text-gray-800 px-8 py-3 font-bold hover:bg-red-500 hover:text-white transition-colors shadow-sm"
+                >
+                  יציאה מהמערכת (התנתק)
+                </button>
+             </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="max-w-5xl mx-auto mt-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-[#0c2d57]">סיכום הזמנה ושליחה לסוכן</h2>
+          <button onClick={navigateHome} className="flex items-center gap-2 text-[#004387] font-semibold hover:text-[#fe8d00] transition-colors">
+            המשך קניות <ChevronLeft size={18} />
+          </button>
+        </div>
+        <div className="bg-white rounded-none shadow-[0_5px_15px_rgba(0,0,0,0.05)] border border-gray-100 overflow-hidden flex flex-col md:flex-row">
+          
+          <div className="w-full md:w-1/2 lg:w-3/5 p-6 border-b md:border-b-0 md:border-l border-gray-100">
+            <h3 className="text-lg font-bold mb-4 text-[#0c2d57]">פריטים בעגלה ({cart.length})</h3>
+            {cart.length === 0 ? (
+              <p className="text-gray-500">העגלה ריקה.</p>
+            ) : (
+              <div className="space-y-4">
+                {cart.map(item => (
+                  <div key={item.id} className="flex gap-4 items-center border-b border-gray-100 pb-4 last:border-0">
+                    <img referrerPolicy="no-referrer" loading="lazy" src={transformImageLink(item.images[0], 120)} alt={item.name} onError={handleImageError} className="w-16 h-16 object-contain bg-[#f2f2f2] p-1" />
+                    <div className="flex-grow">
+                      <div className="font-semibold text-[#0c2d57]">{item.name}</div>
+                      <div className="text-xs text-gray-500 mb-2">מק"ט: {item.sku}</div>
+                      {item.optionals && item.optionals.length > 0 && (
+                        <div className="text-xs text-gray-600 mb-2 bg-gray-50 border border-gray-200 p-2 rounded">
+                          <strong className="block mb-1">תוספות מצורפות לארון:</strong>
+                          <ul className="list-disc pl-4 pr-1">
+                            {item.optionals.map((opt: any, i: number) => {
+                              const accCatalogItem = catalogData.find(p => p.sku === opt.pn);
+                              return (
+                                <li key={i}>{opt.pn} - {opt.description} {accCatalogItem ? `(₪${accCatalogItem.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ''}</li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center bg-[#f2f2f2] border border-gray-200 overflow-hidden rounded-md">
+                          <button onClick={() => updateCartQuantity(item, -1)} className="p-1 px-3 hover:bg-white text-gray-600 transition-colors" aria-label="הפחת כמות"><Minus size={14}/></button>
+                          <span className="w-8 text-center text-sm font-bold">{item.quantity}</span>
+                          <button onClick={() => updateCartQuantity(item, 1)} className="p-1 px-3 hover:bg-white text-gray-600 transition-colors" aria-label="הוסף כמות"><Plus size={14}/></button>
+                        </div>
+                        <button onClick={() => removeFromCart(item)} className="text-red-500 hover:text-red-600 transition-colors p-2 bg-red-50 hover:bg-red-100 rounded-md" aria-label="הסר מוצר מחשבון">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="w-full md:w-1/2 lg:w-2/5 p-6 bg-[#f2f2f2] flex flex-col">
+            <h3 className="text-lg font-bold mb-4 text-[#0c2d57]">פרטי חברה / לקוח</h3>
+            <div className="space-y-3 mb-6">
+              
+              <div>
+                <input type="text" placeholder="שם חברה / עסק (חובה)" value={companyName} onChange={e => {setCompanyName(e.target.value); setErrors({...errors, companyName: null})}} className={`w-full px-3 py-3 border ${errors.companyName ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm`} />
+                {errors.companyName && <p className="text-red-500 text-xs mt-1">{errors.companyName}</p>}
+              </div>
+
+              <div>
+                <input type="text" placeholder="ח.פ / עוסק מורשה" value={companyId} onChange={e => {setCompanyId(e.target.value); setErrors({...errors, companyId: null})}} className={`w-full px-3 py-3 border ${errors.companyId ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm`} />
+                {errors.companyId && <p className="text-red-500 text-xs mt-1">{errors.companyId}</p>}
+              </div>
+
+              <input type="text" placeholder="איש קשר" value={contactName} onChange={e => setContactName(e.target.value)} className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm" />
+              
+              <div className="flex gap-2 relative">
+                <input type="tel" placeholder="טלפון ראשי (7 ספרות)" value={phone} onChange={e => {setPhone(e.target.value.replace(/\D/g, '')); setErrors({...errors, contact: null, phone: null})}} maxLength={7} className={`flex-grow px-3 py-3 border ${errors.phone || errors.contact ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm`} />
+                <select 
+                  value={phonePrefix} 
+                  onChange={e => setPhonePrefix(e.target.value)}
+                  className="w-24 px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm font-medium"
+                  dir="ltr"
+                >
+                  {phonePrefixes.map(prefix => (
+                    <option key={prefix} value={prefix}>{prefix}</option>
+                  ))}
+                </select>
+              </div>
+              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+
+              <input type="tel" placeholder="טלפון נוסף" value={secondaryPhone} onChange={e => setSecondaryPhone(e.target.value)} className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm" />
+
+              <div>
+                <input type="email" placeholder="דואר אלקטרוני (לחובה עבור העתק הזמנה)" value={customerEmail} onChange={e => {setCustomerEmail(e.target.value); setErrors({...errors, contact: null})}} className={`w-full px-3 py-3 border ${errors.contact ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm`} />
+                {errors.contact && <p className="text-red-500 text-xs mt-1">{errors.contact}</p>}
+                <p className="text-xs text-gray-500 mt-1">כתובת המייל אליה יישלח אישור/העתק כשתשתמשו בשליחה דרך המייל.</p>
+              </div>
+
+              <div className="space-y-4">
+                <label className="block text-sm font-bold text-gray-700">כתובת למשלוח (אינטראקטיבי / בחירה מהירה)</label>
+                <AddressAutocomplete 
+                  value={address} 
+                  onChange={setAddress}
+                  theme={{
+                    bg: 'bg-white',
+                    text: 'text-gray-800',
+                    border: 'border-gray-200',
+                    accent: '#004387',
+                    hover: 'hover:bg-gray-50'
+                  }}
+                />
+              </div>
+
+              <div>
+                <textarea 
+                  placeholder="הערות ודגשים מיוחדים למשלוח..." 
+                  value={notes} 
+                  onChange={e => setNotes(e.target.value)} 
+                  className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm min-h-[100px]" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">בחר סוכן לפניה:</label>
+                <select 
+                  value={selectedAgent} 
+                  onChange={e => {setSelectedAgent(e.target.value); setErrors({...errors, selectedAgent: null})}} 
+                  className={`w-full px-3 py-3 border ${errors.selectedAgent ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm`}
+                >
+                  <option value="">בחר סוכן מכירות...</option>
+                  {agents.map((agent: any, i: number) => (
+                    <option key={i} value={agent.name}>{agent.name} {agent.email ? `(${agent.email})` : ''}</option>
+                  ))}
+                </select>
+                {errors.selectedAgent && <p className="text-red-500 text-xs mt-1">{errors.selectedAgent}</p>}
+              </div>
+
+              <div className="space-y-3 mt-6">
+                <button 
+                  onClick={handleSendEmail} 
+                  className="w-full bg-[#004387] text-white py-3.5 px-4 font-bold hover:bg-[#fe8d00] transition-colors flex items-center justify-center gap-2 text-base shadow-sm"
+                >
+                  שליחת הזמנה וגיבוי במייל סוכן
+                </button>
+                <button 
+                  onClick={handleSendWhatsApp} 
+                  className="w-full bg-green-500 text-white py-3.5 px-4 font-bold hover:bg-green-600 transition-colors flex items-center justify-center gap-2 text-base shadow-sm"
+                >
+                  שליחה ישירה לוואטסאפ סוכן
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+/* ===== end hoisted ===== */
+
 export default function App() {
   // --- STATE ---
   const [catalogFolders, setCatalogFolders] = useState<any[]>([]);
@@ -2237,7 +3353,6 @@ export default function App() {
   }, [currentView, selectedCatalog, selectedSubcategory, selectedNestedSubcategory, selectedProduct, searchQuery]);
 
   const navigateHome = () => {
-    setAdvisorOpen(false);
     navigateForward({
       currentView: 'home',
       selectedCatalog: null,
@@ -2250,10 +3365,6 @@ export default function App() {
   };
 
   const goBack = () => {
-    if (advisorOpen) {
-      setAdvisorOpen(false);
-      return;
-    }
     if (searchQuery && currentView !== 'product' && currentView !== 'checkout') {
        setSearchQuery('');
        if (window.history.state) {
@@ -2270,7 +3381,6 @@ export default function App() {
   };
 
   const navigateToCatalog = (catalogName: string | null) => {
-    setAdvisorOpen(false);
     navigateForward({
       currentView: 'catalog_subs',
       selectedCatalog: catalogName,
@@ -2359,1116 +3469,6 @@ export default function App() {
 
 
 
-  const ProductDetailsView = () => {
-    const [mainImage, setMainImage] = useState(selectedProduct?.images[0]);
-    const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
-    const [isZoomed, setIsZoomed] = useState(false);
-    const [isAdded, setIsAdded] = useState(false);
-    const [isVideoHovered, setIsVideoHovered] = useState(false);
-    const [isSpecsHovered, setIsSpecsHovered] = useState(false);
-    const [isManualHovered, setIsManualHovered] = useState(false);
-    const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
-    const [activePreview, setActivePreview] = useState<string | null>(null);
-    const hoverTimeoutRef = useRef<any>(null);
-    const theme = getBrandTheme(selectedProduct?.brand);
-    const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 1024;
-
-    useEffect(() => {
-      if (selectedProduct) {
-        setMainImage(selectedProduct.images[0]);
-      }
-    }, [selectedProduct]);
-
-    const imagesList = selectedProduct?.images || [];
-    const activeIdx = imagesList.indexOf(mainImage);
-
-    const handlePrevImage = (e?: React.MouseEvent) => {
-      if (e) e.stopPropagation();
-      if (imagesList.length <= 1) return;
-      const newIndex = activeIdx > 0 ? activeIdx - 1 : imagesList.length - 1;
-      setMainImage(imagesList[newIndex]);
-      setTimeout(() => {
-        const carousel = document.getElementById('image-carousel');
-        if (carousel) {
-          const activeThumb = carousel.children[newIndex] as HTMLElement;
-          if (activeThumb) {
-             const scrollLeft = activeThumb.offsetLeft - (carousel.clientWidth / 2) + (activeThumb.clientWidth / 2);
-             carousel.scrollTo({ left: scrollLeft, behavior: 'smooth' });
-          }
-        }
-      }, 50);
-    };
-
-    const handleNextImage = (e?: React.MouseEvent) => {
-      if (e) e.stopPropagation();
-      if (imagesList.length <= 1) return;
-      const newIndex = activeIdx < imagesList.length - 1 ? activeIdx + 1 : 0;
-      setMainImage(imagesList[newIndex]);
-      setTimeout(() => {
-        const carousel = document.getElementById('image-carousel');
-        if (carousel) {
-          const activeThumb = carousel.children[newIndex] as HTMLElement;
-          if (activeThumb) {
-             const scrollLeft = activeThumb.offsetLeft - (carousel.clientWidth / 2) + (activeThumb.clientWidth / 2);
-             carousel.scrollTo({ left: scrollLeft, behavior: 'smooth' });
-          }
-        }
-      }, 50);
-    };
-
-    const handleMouseMove = (e: any) => {
-      const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
-      const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
-      const x = Math.max(0, Math.min(100, ((clientX - left) / width) * 100));
-      const y = Math.max(0, Math.min(100, ((clientY - top) / height) * 100));
-      setZoomPos({ x, y });
-      setIsZoomed(true);
-    };
-
-    const handleMouseLeave = () => {
-      setZoomPos({ x: 50, y: 50 });
-      setIsZoomed(false);
-    };
-
-    if (!selectedProduct) return null;
-
-    return (
-      <div className="animate-in fade-in duration-300">
-
-
-        <div className="bg-white rounded-none shadow-sm border border-gray-100 mt-2 sm:mt-4">
-
-          <div className="p-4 sm:p-6 md:p-8 flex flex-col lg:flex-row gap-6 sm:gap-8">
-            
-            <div className="w-full lg:w-5/12 flex flex-col gap-3 sm:gap-4">
-              {/* ZOOMABLE IMAGE CONTAINER */}
-              <div 
-                className={`aspect-square rounded-none border border-gray-100 ${theme.bg} p-2 sm:p-4 flex items-center justify-center relative overflow-hidden group cursor-crosshair`}
-                onMouseEnter={() => setIsZoomed(true)}
-                onMouseMove={handleMouseMove}
-                onMouseLeave={handleMouseLeave}
-                onTouchStart={() => setIsZoomed(true)}
-                onTouchMove={handleMouseMove}
-                onTouchEnd={handleMouseLeave}
-              >
-                <img referrerPolicy="no-referrer" 
-                  src={transformImageLink(mainImage, 800)} 
-                  alt={selectedProduct.name} 
-                  onError={handleImageError}
-                  className="w-full h-full object-contain mix-blend-multiply pointer-events-none"
-                  style={{ 
-                    transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
-                    transform: isZoomed ? 'scale(2.5)' : 'scale(1)',
-                    transition: isZoomed ? 'transform 0.05s ease-out' : 'transform 0.2s ease-out'
-                  }}
-                />
-
-                {/* Visual disclaimer overlay */}
-                <div className="absolute bottom-3 left-3 bg-white/95 border border-slate-200/90 rounded-md px-2 py-1 text-[10px] sm:text-xs text-slate-500 font-extrabold shadow-sm select-none pointer-events-none z-10">
-                  התמונות להמחשה בלבד
-                </div>
-
-                {/* Left & Right Chevrons overlaid on main image */}
-                {imagesList.length > 1 && (
-                  <>
-                    <button 
-                      onClick={handlePrevImage}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 hover:text-[#004387] border border-gray-100 w-10 h-10 rounded-full shadow-md transition-all active:scale-90 z-20 flex items-center justify-center cursor-pointer"
-                      aria-label="תמונה קודמת"
-                    >
-                      <ChevronLeft size={24} />
-                    </button>
-                    <button 
-                      onClick={handleNextImage}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 hover:text-[#004387] border border-gray-100 w-10 h-10 rounded-full shadow-md transition-all active:scale-90 z-20 flex items-center justify-center cursor-pointer"
-                      aria-label="תמונה הבאה"
-                    >
-                      <ChevronRight size={24} />
-                    </button>
-                  </>
-                )}
-
-                {/* Zoom icon for mobile */}
-                {isMobileDevice && (
-                  <button 
-                    onClick={() => setIsMobileModalOpen(true)}
-                    className="absolute bottom-3 right-3 bg-white/90 text-gray-700 hover:text-[#0c2d57] border border-gray-200 rounded-full p-2.5 shadow-sm active:scale-95 z-20 flex items-center justify-center cursor-pointer"
-                    aria-label="זום"
-                  >
-                    <ZoomIn size={18} />
-                  </button>
-                )}
-              </div>
-
-              {imagesList.length > 1 && (
-                <div className="relative group/carousel mt-1 px-1">
-                  <div id="image-carousel" className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 pt-2 snap-x scroll-smooth" style={{ scrollbarWidth: 'none' }}>
-                    {imagesList.map((img: string, idx: number) => (
-                      <button 
-                        key={idx} 
-                        onClick={() => {
-                          setMainImage(img);
-                          const carousel = document.getElementById('image-carousel');
-                          if (carousel) {
-                            const activeThumb = carousel.children[idx] as HTMLElement;
-                            if (activeThumb) {
-                               const scrollLeft = activeThumb.offsetLeft - (carousel.clientWidth / 2) + (activeThumb.clientWidth / 2);
-                               carousel.scrollTo({ left: scrollLeft, behavior: 'smooth' });
-                            }
-                          }
-                        }}
-                        className={`w-20 h-20 sm:w-28 sm:h-28 bg-white p-1 sm:p-2 rounded-none border-2 overflow-hidden flex-shrink-0 transition-all snap-start ${mainImage === img ? 'border-[#004387] shadow-md scale-[1.02]' : 'border-gray-200 hover:border-gray-300'}`}
-                      >
-                        <img referrerPolicy="no-referrer" loading="lazy" src={transformImageLink(img, 300)} alt={`תמונה ${idx + 1} של המוצר`} onError={handleImageError} className="w-full h-full object-contain mix-blend-multiply drop-shadow-sm" />
-                      </button>
-                    ))}
-                  </div>
-
-                  {imagesList.length > 3 && (
-                    <>
-                      <button 
-                        className="absolute top-1/2 left-0 -translate-y-[calc(50%+8px)] -ml-2 sm:-ml-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#004387] hover:bg-gray-50 active:scale-95 transition-all z-20 flex items-center justify-center cursor-pointer"
-                        onClick={handlePrevImage}
-                        aria-label="גלול שמאל cursor-pointer"
-                      >
-                        <ChevronLeft size={18} />
-                      </button>
-                      <button 
-                        className="absolute top-1/2 right-0 -translate-y-[calc(50%+8px)] -mr-2 sm:-mr-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#004387] hover:bg-gray-50 active:scale-95 transition-all z-20 flex items-center justify-center cursor-pointer"
-                        onClick={handleNextImage}
-                        aria-label="גלול ימין cursor-pointer"
-                      >
-                        <ChevronRight size={18} />
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="w-full lg:w-7/12 flex flex-col">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2 sm:mb-3">
-                <div className={`text-xs sm:text-sm font-semibold ${theme.accent}`}>{selectedProduct.category} | {selectedProduct.subcategory}</div>
-                {selectedProduct.brand && (
-                  <div className="flex-shrink-0">
-                    <BrandBadge brand={selectedProduct.brand} />
-                  </div>
-                )}
-              </div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] mb-2 leading-tight">{selectedProduct.name}</h1>
-              <div className="text-gray-500 mb-4 sm:mb-6 text-xs sm:text-sm">
-                מק"ט: <span className="font-mono text-gray-800">{selectedProduct.sku}</span>
-              </div>
-              
-              <div className="mb-6 sm:mb-8 bg-white border-2 border-slate-100 p-5 sm:p-6 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_25px_rgba(0,0,0,0.06)] hover:border-[#004387]/25 transition-all duration-300 relative overflow-hidden text-right">
-                {/* Brand colored vertical accent bar on the right (RTL start) */}
-                <span className="absolute top-0 right-0 bottom-0 w-[5px] bg-gradient-to-b from-[#004387] via-[#004387] to-[#fe8d00]"></span>
-                
-                {/* Section Header with Icon */}
-                <div className="flex items-center gap-2 mb-3 pb-2.5 border-b border-gray-100 text-[#0c2d57] font-extrabold text-sm sm:text-base select-none">
-                  <FileText size={18} className="text-[#fe8d00]" />
-                  <span>מידע ומפרט המוצר</span>
-                </div>
-
-                <p className="text-gray-800 text-sm sm:text-base font-bold leading-relaxed whitespace-pre-line pr-1 select-text">
-                  {selectedProduct.description}
-                </p>
-              </div>
-
-              {/* DOCUMENTATION & LINKS SECTION */}
-              {(selectedProduct.specsLink || selectedProduct.manualLink || selectedProduct.videoLink || (selectedProduct.labCerts && selectedProduct.labCerts.length > 0)) && (
-                <div className="mb-6 sm:mb-8 font-sans">
-                  <h3 className="font-bold text-[#0c2d57] mb-4 text-base sm:text-lg border-[#004387]/15 border-b pb-2 text-right">מידע נוסף ומסמכים להורדה</h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                    {/* SPECS LINK */}
-                    {selectedProduct.specsLink && (
-                      <div className="relative flex flex-col w-full">
-                        <a 
-                          href={selectedProduct.specsLink} 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          onMouseEnter={() => {
-                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                            hoverTimeoutRef.current = setTimeout(() => {
-                              setActivePreview('specs');
-                            }, 250);
-                          }}
-                          onMouseLeave={() => {
-                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                          }}
-                          className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${activePreview === 'specs' ? 'border-[#004387]' : 'border-gray-200 hover:border-[#004387]'}`} 
-                          style={{ minHeight: '80px' }}
-                        >
-                          <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
-                            <img 
-                              referrerPolicy="no-referrer" 
-                              src={transformImageLink("https://drive.google.com/file/d/1n3f9nEnEOj6CycKjFzuH7XRCTNN55Hl7/view?usp=drive_link", 120)} 
-                              alt="PDF" 
-                              className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110" 
-                            />
-                          </div>
-                          <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center">
-                            <div className="text-sm sm:text-base font-bold text-gray-800 group-hover:text-[#004387] transition-all">מפרט טכני</div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setActivePreview(activePreview === 'specs' ? null : 'specs');
-                              }}
-                              className="mt-1 text-[10px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
-                            >
-                              <Eye size={12} />
-                              <span>{activePreview === 'specs' ? 'הסתר תצוגה' : 'תצוגה מהירה'}</span>
-                            </button>
-                          </div>
-                          <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-[#004387] group-hover:text-white transition-all duration-250 flex-shrink-0 shadow-sm">
-                            <Download size={18} />
-                          </div>
-                        </a>
-                      </div>
-                    )}
-
-                    {/* MANUAL LINK */}
-                    {selectedProduct.manualLink && (
-                      <div className="relative flex flex-col w-full">
-                        <a 
-                          href={selectedProduct.manualLink} 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          onMouseEnter={() => {
-                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                            hoverTimeoutRef.current = setTimeout(() => {
-                              setActivePreview('manual');
-                            }, 250);
-                          }}
-                          onMouseLeave={() => {
-                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                          }}
-                          className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${activePreview === 'manual' ? 'border-[#004387]' : 'border-gray-200 hover:border-[#004387]'}`} 
-                          style={{ minHeight: '80px' }}
-                        >
-                          <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
-                            <img 
-                              referrerPolicy="no-referrer" 
-                              src={transformImageLink("https://drive.google.com/file/d/1n3f9nEnEOj6CycKjFzuH7XRCTNN55Hl7/view?usp=drive_link", 120)} 
-                              alt="PDF" 
-                              className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110" 
-                            />
-                          </div>
-                          <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center">
-                            <div className="text-sm sm:text-base font-bold text-gray-800 group-hover:text-[#004387] transition-all">מדריך למשתמש</div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setActivePreview(activePreview === 'manual' ? null : 'manual');
-                              }}
-                              className="mt-1 text-[10px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
-                            >
-                              <Eye size={12} />
-                              <span>{activePreview === 'manual' ? 'הסתר תצוגה' : 'תצוגה מהירה'}</span>
-                            </button>
-                          </div>
-                          <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-[#004387] group-hover:text-white transition-all duration-250 flex-shrink-0 shadow-sm">
-                            <Download size={18} />
-                          </div>
-                        </a>
-                      </div>
-                    )}
-
-                    {/* VIDEO LINK */}
-                    {selectedProduct.videoLink && (
-                      <div className="relative flex flex-col w-full">
-                        {(() => {
-                          const isYouTube = selectedProduct.videoLink.toLowerCase().includes('youtube.com') || selectedProduct.videoLink.toLowerCase().includes('youtu.be');
-                          return (
-                            <a 
-                              href={selectedProduct.videoLink} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              onMouseEnter={() => {
-                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                                hoverTimeoutRef.current = setTimeout(() => {
-                                  setActivePreview('video');
-                                }, 250);
-                              }}
-                              onMouseLeave={() => {
-                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                              }}
-                              className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${activePreview === 'video' ? (isYouTube ? 'border-[#ff0000]' : 'border-[#004387]') : `border-gray-200 ${isYouTube ? 'hover:border-[#ff0000]' : 'hover:border-[#004387]'}`}`}
-                              style={{ minHeight: '80px' }}
-                            >
-                              {isYouTube ? (
-                                <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
-                                  <img 
-                                    referrerPolicy="no-referrer" 
-                                    src={transformImageLink("https://drive.google.com/file/d/1cXAUJdtw9rAkP1XiF2p5RKeDZ4wRXg_u/view?usp=drive_link", 120)} 
-                                    alt="YouTube" 
-                                    className="w-12 h-12 object-contain transition-transform duration-200 group-hover:scale-110" 
-                                  />
-                                </div>
-                              ) : (
-                                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all shadow-xs duration-250 bg-blue-50 text-blue-600 border border-blue-200 group-hover:bg-blue-600 group-hover:text-white">
-                                  <Video size={24} className="transition-transform duration-200 group-hover:scale-110" />
-                                </div>
-                              )}
-                              <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center">
-                                <div className={`text-sm sm:text-base font-bold text-gray-800 transition-all ${isYouTube ? 'group-hover:text-[#ff0000]' : 'group-hover:text-blue-600'}`}>סרטון</div>
-                                <button 
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setActivePreview(activePreview === 'video' ? null : 'video');
-                                  }}
-                                  className={`mt-1 text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded border transition-all flex items-center gap-1 active:scale-95 cursor-pointer ${isYouTube ? 'text-[#ff0000] border-red-100 bg-red-50 hover:bg-orange-50' : 'text-blue-600 border-blue-100 bg-blue-50 hover:bg-orange-50'}`}
-                                >
-                                  <PlayCircle size={12} />
-                                  <span>{activePreview === 'video' ? 'הסתר סרטון' : 'נגן סרטון'}</span>
-                                </button>
-                              </div>
-                              <div className={`w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 transition-all duration-250 flex-shrink-0 shadow-sm ${isYouTube ? 'group-hover:bg-[#ff0000] group-hover:text-white' : 'group-hover:bg-blue-600 group-hover:text-white'}`}>
-                                <PlayCircle size={18} />
-                              </div>
-                            </a>
-                          );
-                        })()}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* LIVE PREVIEW BOX */}
-                  {activePreview && (
-                    <div className="mb-6 border border-gray-200/80 rounded-2xl bg-slate-50/50 p-3 sm:p-4 shadow-xs animate-in fade-in slide-in-from-top-3 duration-300 relative text-right">
-                      <div className="flex items-center justify-between mb-3 flex-row-reverse">
-                        <button 
-                          onClick={() => setActivePreview(null)}
-                          className="text-gray-500 hover:text-gray-800 bg-white hover:bg-gray-100 p-1 px-2.5 rounded-lg text-xs font-bold transition-all border border-gray-200 cursor-pointer flex items-center gap-1 active:scale-95"
-                        >
-                          <X size={12} />
-                          <span>סגור תצוגה מקדימה</span>
-                        </button>
-                        <span className="text-xs sm:text-sm font-bold text-[#0c2d57] flex items-center gap-1.5">
-                          <Eye size={14} className="text-[#fe8d00]" />
-                          <span>תצוגה מקדימה מהירה: {
-                            activePreview === 'specs' ? 'מפרט טכני' : 
-                            activePreview === 'manual' ? 'מדריך למשתמש' : 
-                            activePreview === 'video' ? 'סרטון מוצר' : 
-                            `אישור בטיחות ותקן #${parseInt(activePreview.split('_')[1], 10) + 1}`
-                          }</span>
-                        </span>
-                      </div>
-                      
-                      <div className="w-full aspect-[16/10] min-h-[320px] sm:min-h-[480px] bg-white rounded-xl overflow-hidden border border-gray-200 shadow-inner flex flex-col items-center justify-center relative">
-                        {activePreview === 'specs' && selectedProduct.specsLink && (
-                          <iframe 
-                            title="Specs Preview"
-                            src={getPdfPreviewUrl(selectedProduct.specsLink) || selectedProduct.specsLink} 
-                            className="w-full h-full border-none"
-                            loading="lazy"
-                          />
-                        )}
-                        {activePreview === 'manual' && selectedProduct.manualLink && (
-                          <iframe 
-                            title="Manual Preview"
-                            src={getPdfPreviewUrl(selectedProduct.manualLink) || selectedProduct.manualLink} 
-                            className="w-full h-full border-none"
-                            loading="lazy"
-                          />
-                        )}
-                        {activePreview === 'video' && selectedProduct.videoLink && (
-                          <iframe 
-                            title="Video Preview"
-                            src={getVideoEmbedUrl(selectedProduct.videoLink) || selectedProduct.videoLink} 
-                            className="w-full h-full border-none"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                            loading="lazy"
-                          />
-                        )}
-                        {activePreview.startsWith('labCert_') && (() => {
-                          const certIdx = parseInt(activePreview.split('_')[1], 10);
-                          const certUrl = selectedProduct.labCerts?.[certIdx];
-                          return certUrl ? (
-                            <iframe 
-                              title={`Lab Cert ${certIdx + 1} Preview`}
-                              src={getPdfPreviewUrl(certUrl) || certUrl} 
-                              className="w-full h-full border-none"
-                              loading="lazy"
-                            />
-                          ) : null;
-                        })()}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* LAB CERTIFICATES SECTION */}
-                  {selectedProduct.labCerts && selectedProduct.labCerts.length > 0 && (
-                    <div className="mt-6 pt-4 border-t border-gray-100">
-                      <h4 className="font-bold text-[#0c2d57] mb-3 text-sm sm:text-base flex items-center justify-start gap-2">
-                        <ShieldCheck size={20} className="text-emerald-600" />
-                        <span>אישורי מעבדה ותקנים רשמיים ({selectedProduct.labCerts.length})</span>
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {selectedProduct.labCerts.map((certLink: string, idx: number) => {
-                          return (
-                            <a 
-                              key={idx}
-                              href={certLink} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              onMouseEnter={() => {
-                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                                hoverTimeoutRef.current = setTimeout(() => {
-                                  setActivePreview(`labCert_${idx}`);
-                                }, 250);
-                              }}
-                              onMouseLeave={() => {
-                                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-                              }}
-                              className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${activePreview === `labCert_${idx}` ? 'border-[#004387]' : 'border-gray-200 hover:border-[#004387]'}`} 
-                              style={{ minHeight: '80px' }}
-                            >
-                              <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
-                                <img 
-                                  referrerPolicy="no-referrer" 
-                                  src={transformImageLink("https://drive.google.com/file/d/1n3f9nEnEOj6CycKjFzuH7XRCTNN55Hl7/view?usp=drive_link", 120)} 
-                                  alt="PDF" 
-                                  className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110" 
-                                />
-                              </div>
-                              <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center text-right">
-                                <div className="text-sm sm:text-base font-bold text-gray-800 group-hover:text-[#004387] transition-all">אישור בטיחות ותקן #{idx + 1}</div>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setActivePreview(activePreview === `labCert_${idx}` ? null : `labCert_${idx}`);
-                                  }}
-                                  className="mt-1 text-[10px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
-                                >
-                                  <Eye size={12} />
-                                  <span>{activePreview === `labCert_${idx}` ? 'הסתר תצוגה' : 'תצוגה מהירה'}</span>
-                                </button>
-                              </div>
-                              <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-[#004387] group-hover:text-white transition-all duration-250 flex-shrink-0 shadow-sm">
-                                <Download size={18} />
-                              </div>
-                            </a>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* SPECIFIC CONFIGURATORS (Only for Cabinets, not accessories) */}
-              {((selectedProduct.subcategory === 'ארונות תקשורת ואביזרים' || selectedProduct.subcategory === 'ארונות וארונות הסתעפות') && 
-                !selectedProduct['Nested subcategory']?.includes('אביזרים') && 
-                /ארון|מסד|מארז/i.test(selectedProduct.name)) && (
-                <div className="mb-6">
-                  <React.Suspense fallback={<div className="animate-pulse h-32 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center text-sm text-gray-500">טוען קונפיגורטור...</div>}>
-                    <CabinetConfigurator product={selectedProduct} catalogData={catalogData} onOptionalsChange={handleOptionalsChange} />
-                  </React.Suspense>
-                </div>
-              )}
-
-              {/* COMPATIBLE CABINETS (If this is an accessory) */}
-              {((selectedProduct['Nested subcategory']?.includes('אביזרים') || selectedProduct.subcategory?.includes('אביזרים למסדים') || /מדף|פנל|מאוורר|ברגים|אביזר|KVM/i.test(selectedProduct.name)) && !(/ארון|מסד|מארז/i.test(selectedProduct.name))) && (
-                <React.Suspense fallback={<div className="animate-pulse h-32 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center text-sm text-gray-500">טוען ארונות תואמים...</div>}>
-                  <AccessoryCabinets 
-                    product={selectedProduct} 
-                    catalogData={catalogData} 
-                    ProductCard={ProductCard} 
-                    navigateToProduct={navigateToProduct}
-                    addToCart={addToCart}
-                  />
-                </React.Suspense>
-              )}
-
-              <div className="mt-auto border-t border-gray-200 pt-4 sm:pt-6">
-                {/* OPTIONALS BREAKDOWN */}
-                {currentOptionals.length > 0 && (
-                  <div className="mb-4 bg-gray-50 border border-gray-200 rounded p-4 animate-in fade-in slide-in-from-bottom-2 duration-300 shadow-sm">
-                    <h4 className="text-sm font-bold text-[#0c2d57] mb-3 border-b border-gray-200/60 pb-2">פירוט פריטים (ארון + תוספות שבחרת):</h4>
-                    
-                    <div className="flex justify-between items-center text-sm py-1.5">
-                      <span className="font-semibold text-gray-800 flex-1 pl-2">{selectedProduct.name}</span>
-                      <span className="font-bold whitespace-nowrap text-gray-900">₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                    
-                    {currentOptionals.map((opt, i) => {
-                       const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
-                       const optPrice = catItem ? catItem.price : (opt.price || 0);
-                       return (
-                         <div key={i} className="flex justify-between items-center text-sm py-1.5 text-[#004387]">
-                           <span className="flex-1 pl-2 truncate relative pl-4 after:content-['+'] after:absolute after:right-0 after:top-0 after:font-bold after:mr-[-10px]">+ {opt.name || opt.description || opt.pn}</span>
-                           <span className="font-semibold whitespace-nowrap">₪{optPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                         </div>
-                       );
-                    })}
-                    
-                    <div className="flex justify-between items-center text-lg lg:text-xl font-bold text-[#f7941d] pt-3 mt-2 border-t border-gray-200/60 bg-white -mx-4 -mb-4 p-4 rounded-b">
-                      <span>סה"כ לתשלום:</span>
-                      <span>₪{(selectedProduct.price + currentOptionals.reduce((acc, opt) => {
-                         const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
-                         return acc + (catItem ? catItem.price : (opt.price || 0));
-                      }, 0)).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex flex-col w-full gap-4 mt-2">
-                  {selectedProduct.isClearance && (
-                    <div className="w-full bg-gradient-to-r from-teal-50 to-emerald-50 border-2 border-teal-200 rounded-lg p-3 sm:p-5 shadow-sm flex flex-col sm:flex-row items-center sm:justify-between gap-3 transform hover:scale-[1.01] transition-transform">
-                      <div className="flex items-center gap-2 text-teal-700 font-black text-xl sm:text-2xl leading-none">
-                        <Tag className="w-7 h-7 sm:w-9 sm:h-9 text-teal-600 fill-teal-600 animate-bounce drop-shadow-md" />
-                        <span>מבצע מציאון</span>
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black text-teal-800 bg-white px-4 sm:px-6 py-2 rounded-md shadow-md border-b-2 border-teal-200 drop-shadow-sm text-center">
-                        מחיר מיוחד
-                      </div>
-                    </div>
-                  )}
-                  {selectedProduct.isHotSale && (
-                    <div className="w-full bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200 rounded-lg p-3 sm:p-5 shadow-sm flex flex-col sm:flex-row items-center sm:justify-between gap-3 transform hover:scale-[1.01] transition-transform">
-                      <div className="flex items-center gap-2 text-red-600 font-black text-xl sm:text-2xl leading-none">
-                        <Flame className="w-7 h-7 sm:w-9 sm:h-9 text-red-500 fill-red-500 animate-pulse drop-shadow-md" />
-                        <span>{selectedProduct.saleType || "מבצע מיוחד"}</span>
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black text-red-700 bg-white px-4 sm:px-6 py-2 rounded-md shadow-md border-b-2 border-red-200 drop-shadow-sm text-center">
-                        {selectedProduct.saleValue || "פרטים בעגלה"}
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
-                    <div className="flex flex-col w-full sm:w-auto text-center sm:text-right">
-                       {selectedProduct.retailPrice && currentOptionals.length === 0 && (
-                          <span className="text-sm sm:text-base text-gray-800 font-bold mb-1 block">
-                            מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
-                          </span>
-                       )}
-                       {selectedProduct.oldPrice && currentOptionals.length === 0 && (
-                          <span className="text-sm sm:text-base text-red-500 font-medium mb-1 line-through block">
-                            מחירון מתקין מקורי (ללא מע"מ): ₪{selectedProduct.oldPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                       )}
-                       {currentOptionals.length === 0 && (
-                         <div className={`text-2xl sm:text-3xl font-bold ${selectedProduct.isClearance ? 'text-teal-600' : 'text-[#f7941d]'} flex items-center gap-2 flex-wrap justify-center sm:justify-start`}>
-                            <span>₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                            {isNetworkCableRoll(selectedProduct) && (
-                              <span className="text-xs sm:text-sm font-black text-[#004387] bg-blue-50 border border-blue-100 rounded px-2 py-0.5 select-none">מחיר למטר</span>
-                            )}
-                            <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">{selectedProduct.isClearance ? 'מחיר מבצע מציאון' : 'מחיר מומלץ למתקין'} <span className="hidden sm:inline">(ללא מע"מ)</span></span>
-                         </div>
-                       )}
-                    </div>
-                  {selectedProduct.isComingSoon ? (
-                    <div className="w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md text-sm sm:text-base bg-gray-200 text-gray-600 cursor-not-allowed">
-                       <span className="animate-pulse">בקרוב!</span>
-                    </div>
-                  ) : currentOptionals.length > 0 ? (
-                    <div className="flex flex-col gap-3 w-full">
-                      <div className="flex flex-col sm:flex-row gap-3 w-full">
-                        <button 
-                          onClick={() => {
-                            addToCart(selectedProduct, 1, currentOptionals);
-                            setIsAdded(true);
-                            setTimeout(() => setIsAdded(false), 1500);
-                          }}
-                          className={`flex-1 flex items-center justify-center gap-2 px-5 py-4 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base cursor-pointer rounded-none text-white ${isAdded ? 'bg-green-600' : 'bg-[#fe8d00] hover:bg-[#004387]'}`}
-                        >
-                          <ShoppingCart size={18} className={isAdded ? 'animate-bounce' : ''} />
-                          {isAdded ? 'נארז יחד ונוסף! ✓' : 'הוסף כחבילה אחת (מומלץ)'}
-                        </button>
-                        
-                        <button 
-                          onClick={() => {
-                            addToCart(selectedProduct, 1, []);
-                            currentOptionals.forEach((opt: any) => {
-                               const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
-                               if (catItem) {
-                                  addToCart(catItem, 1, []);
-                               }
-                            });
-                            setIsAdded(true);
-                            setTimeout(() => setIsAdded(false), 1550);
-                          }}
-                          className="flex-1 flex items-center justify-center gap-2 px-5 py-4 font-bold text-[#004387] border-2 border-[#004387] bg-white hover:bg-gray-50 transition-all text-sm sm:text-base cursor-pointer rounded-none"
-                        >
-                          <ShoppingCart size={18} />
-                          {isAdded ? 'פריטים נפרדים נוספו! ✓' : 'בחר כפריטים נפרדים'}
-                        </button>
-                      </div>
-                      <p className="text-[11px] text-center text-[#004387] font-semibold bg-[#e6f0fa]/40 py-2 border border-[#b3d4f5] rounded-none">
-                        💡 תאימות מושלמת: הוספה כחבילה אחת מקשרת את כל האביזרים ישירות לארון זה בעגלה ומונעת טעויות ייצור והרכבה!
-                      </p>
-                    </div>
-                  ) : (
-                    <button 
-                      onClick={() => {
-                        addToCart(selectedProduct, 1, []);
-                        setIsAdded(true);
-                        setTimeout(() => setIsAdded(false), 1500);
-                      }}
-                      className={`w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base ${isAdded ? 'bg-green-600 hover:bg-green-600 text-white' : theme.button}`}
-                    >
-                      <ShoppingCart size={18} className={`sm:w-5 sm:h-5 ${isAdded ? 'animate-bounce' : ''}`} />
-                      {isAdded ? 'נוסף לעגלה! ✓' : 'הוסף להזמנה'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-        {/* MOBILE FULL SCREEN IMAGE MODAL */}
-        {isMobileModalOpen && (
-          <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-0 m-0">
-            <button 
-              onClick={() => setIsMobileModalOpen(false)}
-              className="absolute top-4 right-4 z-[110] bg-white text-black p-2 rounded-full shadow-lg"
-            >
-              <X size={24} />
-            </button>
-            <div className="w-full h-full relative flex flex-col items-center justify-center overflow-auto p-4 max-h-screen">
-              {/* Disclaimer overlay for illustration-only */}
-              <div className="absolute top-4 left-4 z-[110] bg-black/40 text-white/70 border border-white/10 rounded px-2.5 py-1 text-xs select-none pointer-events-none font-semibold text-right">
-                התמונות להמחשה בלבד
-              </div>
-              <TransformWrapper
-                initialScale={1}
-                minScale={1}
-                maxScale={4}
-                centerOnInit={true}
-              >
-                {({ zoomIn, zoomOut, resetTransform }) => (
-                  <React.Fragment>
-                    <TransformComponent wrapperClass="!w-full !flex !items-center !justify-center" contentClass="!w-full !flex !items-center !justify-center">
-                      <img referrerPolicy="no-referrer" 
-                        src={transformImageLink(mainImage, 1200)} 
-                        alt={selectedProduct.name} 
-                        onError={handleImageError}
-                        className="w-full h-auto max-h-[80vh] object-contain"
-                      />
-                    </TransformComponent>
-                    <div className="mt-6 text-white/70 text-sm flex gap-4 items-center bg-black/50 px-4 py-2 rounded-full backdrop-blur-md">
-                      <button onClick={() => zoomOut()} className="p-2 hover:bg-white/20 rounded-full"><Minus size={18} /></button>
-                      <button onClick={() => resetTransform()} className="p-2 hover:bg-white/20 rounded-full"><Search size={16} /></button>
-                      <button onClick={() => zoomIn()} className="p-2 hover:bg-white/20 rounded-full"><Plus size={18} /></button>
-                    </div>
-                  </React.Fragment>
-                )}
-              </TransformWrapper>
-            </div>
-          </div>
-        )}
-
-        {/* SIMILAR PRODUCTS */}
-        {(() => {
-          const similar = catalogData.filter(p => p.subcategory === selectedProduct.subcategory && p.id !== selectedProduct.id && p.active !== 'FALSE').slice(0, 4);
-          if (similar.length === 0) return null;
-          return (
-            <div className="mt-12 mb-8">
-              <h3 className="text-xl font-bold text-[#0c2d57] mb-6 border-b border-gray-200 pb-2">מוצרים משלימים ומקבילים</h3>
-              <div className={similar.length === 1 
-                ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-4 md:gap-6" 
-                : "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6"
-              }>
-                {similar.map(product => (
-                  <ProductCard key={product.id} product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} onNavigateToCategory={navigateToCategoryAndSub} />
-                ))}
-              </div>
-            </div>
-          );
-        })()}
-
-      </div>
-    );
-  };
-
-  const CheckoutView = () => {
-    const [orderPlaced, setOrderPlaced] = useState(false);
-    const [lastSentMethod, setLastSentMethod] = useState<'email' | 'whatsapp' | null>(null);
-    const [companyName, setCompanyName] = useState('');
-    const [companyId, setCompanyId] = useState('');
-    const [contactName, setContactName] = useState('');
-    const [phonePrefix, setPhonePrefix] = useState('050');
-    const [phone, setPhone] = useState('');
-    const [secondaryPhone, setSecondaryPhone] = useState('');
-    const [customerEmail, setCustomerEmail] = useState('');
-    const [address, setAddress] = useState('');
-    const [notes, setNotes] = useState('');
-    const [selectedAgent, setSelectedAgent] = useState('');
-    const [errors, setErrors] = useState<any>({});
-
-    const agents = [
-      { name: 'בחר/י סוכן מהרשימה', email: '', phone: '' },
-      { name: 'משרד - נירית', email: 'nirit@rbs-telecom.com', phone: '972545241480' },
-      { name: 'מיכה', email: 'micha@rbs-telecom.com', phone: '972503332497' },
-      { name: 'ניר', email: 'nir@rbs-telecom.com', phone: '972503332116' },
-      { name: 'אברהם', email: 'avraham@rbs-telecom.com', phone: '972503332254' },
-      { name: 'מוטי', email: 'moti@rbs-telecom.com', phone: '972503334259' },
-      { name: 'מאיר', email: 'meir@rbs-telecom.com', phone: '972504530996' }
-    ];
-
-    const phonePrefixes = [
-      '050', '052', '053', '054', '055', '058',
-      '02', '03', '04', '08', '09',
-      '072', '073', '074', '076', '077', '079'
-    ];
-
-    const validateForm = () => {
-        const newErrors: any = {};
-        
-        if (companyId && !/^\d{9}$/.test(companyId.trim().replace(/\D/g, ''))) {
-            newErrors.companyId = 'ח.פ חייב להכיל 9 ספרות';
-        }
-        
-        if (phone && !/^\d{7}$/.test(phone.trim())) {
-            newErrors.phone = 'מספר טלפון חייב להכיל 7 ספרות';
-        }
-        
-        if (!phone && !customerEmail) {
-            newErrors.contact = 'יש להזין לפחות דואר אלקטרוני או מספר טלפון ראשי';
-        }
-
-        if (!companyName) {
-            newErrors.companyName = 'יש להזין שם חברה';
-        }
-
-        if (!selectedAgent) {
-            newErrors.selectedAgent = 'יש לבחור סוכן מטפל';
-        }
-        
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
-
-    const buildOrderDetailsText = () => {
-      let orderDetails = `הזמנה חדשה מקטלוג B2B
-`;
-      orderDetails += `---------------------------------
-`;
-      orderDetails += `שם חברה/לקוח: ${companyName}
-`;
-      if (companyId) orderDetails += `ח.פ/עוסק מורשה: ${companyId}
-`;
-      if (contactName) orderDetails += `איש קשר: ${contactName}
-`;
-      if (phone) orderDetails += `טלפון: ${phonePrefix}-${phone}
-`;
-      if (secondaryPhone) orderDetails += `טלפון נוסף: ${secondaryPhone}
-`;
-      if (customerEmail) orderDetails += `מייל לקוח: ${customerEmail}
-`;
-      if (address) orderDetails += `כתובת אספקה: ${address}
-`;
-      if (notes) orderDetails += `הערות: ${notes}
-`;
-      orderDetails += `---------------------------------
-
-`;
-      orderDetails += `פריטים:
-
-`;
-      
-      cart.forEach((item, idx) => {
-         orderDetails += `${idx + 1}. ${item.name}
-`;
-         orderDetails += `   מק"ט: ${item.sku}
-`;
-         orderDetails += `   כמות: ${item.quantity}
-`;
-         
-         if (item.isClearance) {
-           orderDetails += `   * מציאון: ${item.clearancePrice ? '₪' + item.clearancePrice : 'מחיר מיוחד'}
-`;
-         } else if (item.isHotSale) {
-           orderDetails += `   * מבצע חם: ${item.saleType ? item.saleType + ' ' : ''}${item.saleValue || ''}
-`;
-         }
-         
-         if (item.optionals && item.optionals.length > 0) {
-           orderDetails += `   תוספות בארון:
-`;
-           item.optionals.forEach((opt: any) => {
-             orderDetails += `     - ${opt.pn} | ${opt.description}
-`;
-           });
-         }
-         orderDetails += `
-`;
-      });
-      
-      orderDetails += `---------------------------------
-`;
-      orderDetails += `סה"כ כמות פריטים: ${cart.reduce((acc, item) => acc + item.quantity, 0)}
-`;
-
-      return orderDetails;
-    };
-
-    const handleSendEmail = () => {
-      if (!validateForm()) return;
-
-      const agentEmail = agents.find(a => a.name === selectedAgent)?.email;
-      if (!agentEmail) return;
-
-      const orderDetails = buildOrderDetailsText();
-      const subject = encodeURIComponent(`הזמנה חדשה (B2B): ${companyName || 'לקוח מזדמן'}`);
-      const body = encodeURIComponent(orderDetails);
-      
-      let mailtoLink = `mailto:${agentEmail}?subject=${subject}&body=${body}`;
-      if (customerEmail) {
-          mailtoLink += `&cc=${customerEmail}`;
-      }
-      
-      window.location.href = mailtoLink;
-      
-      setLastSentMethod('email');
-      setOrderPlaced(true);
-    };
-
-    const handleSendWhatsApp = () => {
-      if (!validateForm()) return;
-      
-      const agentPhone = agents.find(a => a.name === selectedAgent)?.phone;
-      if (!agentPhone) return;
-
-      const orderDetails = buildOrderDetailsText();
-      const text = encodeURIComponent(orderDetails);
-      
-      window.open(`https://wa.me/${agentPhone}?text=${text}`, '_blank');
-      
-      setLastSentMethod('whatsapp');
-      setOrderPlaced(true);
-    };
-
-    const handleBackToSite = () => {
-      navigateHome();
-    };
-
-    const handleLogout = () => {
-      setCart([]);
-      setIsAuthenticated(false);
-      navigateHome();
-    };
-
-    if (orderPlaced) {
-      return (
-        <div className="bg-white rounded-none shadow-sm border border-gray-100 p-8 sm:p-12 text-center max-w-2xl mx-auto mt-10">
-          <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle size={40} />
-          </div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-4">הבקשה נוסחה והועברה לאפליקציה שבחרת!</h2>
-          <p className="text-gray-600 mb-8 px-4">שים לב: הודעת המייל או הווצאפ נפתחה במכשירך להשלמת השליחה.</p>
-          
-          <div className="border-t border-gray-200 pt-6 mt-4">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">
-              {lastSentMethod === 'email' ? 'מומלץ לשלוח גיבוי גם בוואטסאפ:' : 'מומלץ לשלוח גיבוי גם במייל:'}
-            </h3>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
-               {lastSentMethod !== 'email' && (
-                 <button 
-                    onClick={() => handleSendEmail()}
-                    className="bg-white text-[#004387] border border-[#004387] px-6 py-2 font-bold hover:bg-[#004387] hover:text-white transition-colors"
-                 >
-                    שליחת גיבוי ב-Email
-                 </button>
-               )}
-               {lastSentMethod !== 'whatsapp' && (
-                 <button 
-                    onClick={() => handleSendWhatsApp()}
-                    className="bg-green-500 text-white border border-green-500 px-6 py-2 font-bold hover:bg-green-600 transition-colors"
-                 >
-                    שליחת גיבוי ב-WhatsApp
-                 </button>
-               )}
-            </div>
-          </div>
-
-          <div className="border-t border-gray-200 pt-6 bg-gray-50 -mx-8 sm:-mx-12 -mb-8 sm:-mb-12 p-8 sm:p-12 mt-4">
-             <h3 className="text-lg font-bold text-gray-800 mb-4">מה תרצה לעשות עכשיו?</h3>
-             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <button 
-                  onClick={handleBackToSite}
-                  className="bg-[#004387] text-white px-8 py-3 font-bold hover:bg-[#fe8d00] transition-colors shadow-sm"
-                >
-                  המשך לאתר (שמור על העגלה)
-                </button>
-                <button 
-                  onClick={handleLogout}
-                  className="bg-gray-200 text-gray-800 px-8 py-3 font-bold hover:bg-red-500 hover:text-white transition-colors shadow-sm"
-                >
-                  יציאה מהמערכת (התנתק)
-                </button>
-             </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="max-w-5xl mx-auto mt-6">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-[#0c2d57]">סיכום הזמנה ושליחה לסוכן</h2>
-          <button onClick={navigateHome} className="flex items-center gap-2 text-[#004387] font-semibold hover:text-[#fe8d00] transition-colors">
-            המשך קניות <ChevronLeft size={18} />
-          </button>
-        </div>
-        <div className="bg-white rounded-none shadow-[0_5px_15px_rgba(0,0,0,0.05)] border border-gray-100 overflow-hidden flex flex-col md:flex-row">
-          
-          <div className="w-full md:w-1/2 lg:w-3/5 p-6 border-b md:border-b-0 md:border-l border-gray-100">
-            <h3 className="text-lg font-bold mb-4 text-[#0c2d57]">פריטים בעגלה ({cart.length})</h3>
-            {cart.length === 0 ? (
-              <p className="text-gray-500">העגלה ריקה.</p>
-            ) : (
-              <div className="space-y-4">
-                {cart.map(item => (
-                  <div key={item.id} className="flex gap-4 items-center border-b border-gray-100 pb-4 last:border-0">
-                    <img referrerPolicy="no-referrer" loading="lazy" src={transformImageLink(item.images[0], 120)} alt={item.name} onError={handleImageError} className="w-16 h-16 object-contain bg-[#f2f2f2] p-1" />
-                    <div className="flex-grow">
-                      <div className="font-semibold text-[#0c2d57]">{item.name}</div>
-                      <div className="text-xs text-gray-500 mb-2">מק"ט: {item.sku}</div>
-                      {item.optionals && item.optionals.length > 0 && (
-                        <div className="text-xs text-gray-600 mb-2 bg-gray-50 border border-gray-200 p-2 rounded">
-                          <strong className="block mb-1">תוספות מצורפות לארון:</strong>
-                          <ul className="list-disc pl-4 pr-1">
-                            {item.optionals.map((opt: any, i: number) => {
-                              const accCatalogItem = catalogData.find(p => p.sku === opt.pn);
-                              return (
-                                <li key={i}>{opt.pn} - {opt.description} {accCatalogItem ? `(₪${accCatalogItem.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ''}</li>
-                              );
-                            })}
-                          </ul>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center bg-[#f2f2f2] border border-gray-200 overflow-hidden rounded-md">
-                          <button onClick={() => updateCartQuantity(item, -1)} className="p-1 px-3 hover:bg-white text-gray-600 transition-colors" aria-label="הפחת כמות"><Minus size={14}/></button>
-                          <span className="w-8 text-center text-sm font-bold">{item.quantity}</span>
-                          <button onClick={() => updateCartQuantity(item, 1)} className="p-1 px-3 hover:bg-white text-gray-600 transition-colors" aria-label="הוסף כמות"><Plus size={14}/></button>
-                        </div>
-                        <button onClick={() => removeFromCart(item)} className="text-red-500 hover:text-red-600 transition-colors p-2 bg-red-50 hover:bg-red-100 rounded-md" aria-label="הסר מוצר מחשבון">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="w-full md:w-1/2 lg:w-2/5 p-6 bg-[#f2f2f2] flex flex-col">
-            <h3 className="text-lg font-bold mb-4 text-[#0c2d57]">פרטי חברה / לקוח</h3>
-            <div className="space-y-3 mb-6">
-              
-              <div>
-                <input type="text" placeholder="שם חברה / עסק (חובה)" value={companyName} onChange={e => {setCompanyName(e.target.value); setErrors({...errors, companyName: null})}} className={`w-full px-3 py-3 border ${errors.companyName ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm`} />
-                {errors.companyName && <p className="text-red-500 text-xs mt-1">{errors.companyName}</p>}
-              </div>
-
-              <div>
-                <input type="text" placeholder="ח.פ / עוסק מורשה" value={companyId} onChange={e => {setCompanyId(e.target.value); setErrors({...errors, companyId: null})}} className={`w-full px-3 py-3 border ${errors.companyId ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm`} />
-                {errors.companyId && <p className="text-red-500 text-xs mt-1">{errors.companyId}</p>}
-              </div>
-
-              <input type="text" placeholder="איש קשר" value={contactName} onChange={e => setContactName(e.target.value)} className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm" />
-              
-              <div className="flex gap-2 relative">
-                <input type="tel" placeholder="טלפון ראשי (7 ספרות)" value={phone} onChange={e => {setPhone(e.target.value.replace(/\D/g, '')); setErrors({...errors, contact: null, phone: null})}} maxLength={7} className={`flex-grow px-3 py-3 border ${errors.phone || errors.contact ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm`} />
-                <select 
-                  value={phonePrefix} 
-                  onChange={e => setPhonePrefix(e.target.value)}
-                  className="w-24 px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm font-medium"
-                  dir="ltr"
-                >
-                  {phonePrefixes.map(prefix => (
-                    <option key={prefix} value={prefix}>{prefix}</option>
-                  ))}
-                </select>
-              </div>
-              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
-
-              <input type="tel" placeholder="טלפון נוסף" value={secondaryPhone} onChange={e => setSecondaryPhone(e.target.value)} className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm" />
-
-              <div>
-                <input type="email" placeholder="דואר אלקטרוני (לחובה עבור העתק הזמנה)" value={customerEmail} onChange={e => {setCustomerEmail(e.target.value); setErrors({...errors, contact: null})}} className={`w-full px-3 py-3 border ${errors.contact ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm`} />
-                {errors.contact && <p className="text-red-500 text-xs mt-1">{errors.contact}</p>}
-                <p className="text-xs text-gray-500 mt-1">כתובת המייל אליה יישלח אישור/העתק כשתשתמשו בשליחה דרך המייל.</p>
-              </div>
-
-              <div className="space-y-4">
-                <label className="block text-sm font-bold text-gray-700">כתובת למשלוח (אינטראקטיבי / בחירה מהירה)</label>
-                <AddressAutocomplete 
-                  value={address} 
-                  onChange={setAddress}
-                  theme={{
-                    bg: 'bg-white',
-                    text: 'text-gray-800',
-                    border: 'border-gray-200',
-                    accent: '#004387',
-                    hover: 'hover:bg-gray-50'
-                  }}
-                />
-              </div>
-
-              <div>
-                <textarea 
-                  placeholder="הערות ודגשים מיוחדים למשלוח..." 
-                  value={notes} 
-                  onChange={e => setNotes(e.target.value)} 
-                  className="w-full px-3 py-3 border border-gray-200 bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm min-h-[100px]" 
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1.5">בחר סוכן לפניה:</label>
-                <select 
-                  value={selectedAgent} 
-                  onChange={e => {setSelectedAgent(e.target.value); setErrors({...errors, selectedAgent: null})}} 
-                  className={`w-full px-3 py-3 border ${errors.selectedAgent ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm`}
-                >
-                  <option value="">בחר סוכן מכירות...</option>
-                  {agents.map((agent: any, i: number) => (
-                    <option key={i} value={agent.name}>{agent.name} {agent.email ? `(${agent.email})` : ''}</option>
-                  ))}
-                </select>
-                {errors.selectedAgent && <p className="text-red-500 text-xs mt-1">{errors.selectedAgent}</p>}
-              </div>
-
-              <div className="space-y-3 mt-6">
-                <button 
-                  onClick={handleSendEmail} 
-                  className="w-full bg-[#004387] text-white py-3.5 px-4 font-bold hover:bg-[#fe8d00] transition-colors flex items-center justify-center gap-2 text-base shadow-sm"
-                >
-                  שליחת הזמנה וגיבוי במייל סוכן
-                </button>
-                <button 
-                  onClick={handleSendWhatsApp} 
-                  className="w-full bg-green-500 text-white py-3.5 px-4 font-bold hover:bg-green-600 transition-colors flex items-center justify-center gap-2 text-base shadow-sm"
-                >
-                  שליחה ישירה לוואטסאפ סוכן
-                </button>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   if (error) {
     return (
@@ -4189,10 +4189,10 @@ export default function App() {
                   <h3 className="text-xl font-bold text-[#0c2d57]">טוען את פרטי המוצר...</h3>
                 </div>
               ) : (
-                <ProductDetailsView />
+                <ProductDetailsView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity }} />
               )
             ) : currentView === 'checkout' ? (
-               <CheckoutView />
+               <CheckoutView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity }} />
             ) : null}
 
             </>
@@ -4300,41 +4300,19 @@ export default function App() {
 
       {!isHumanVerified && <HumanVerification onVerified={() => setIsHumanVerified(true)} />}
       {!advisorOpen && (
-        <motion.button
+        <button
           onClick={() => setAdvisorOpen(true)}
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.3 }}
-          whileHover={{ scale: 1.12 }}
-          whileTap={{ scale: 0.95 }}
-          className="fixed bottom-6 right-6 z-40 bg-gradient-to-tr from-[#004387] to-[#0c2d57] hover:from-[#fe8d00] hover:to-[#ffaa44] text-white w-20 h-20 rounded-full flex flex-col items-center justify-center border-4 border-white shadow-[0_15px_35px_rgba(0,67,135,0.45)] relative cursor-pointer group"
-          id="advisor-floating-bubble"
+          className="fixed bottom-6 right-6 z-40 bg-[#004387] hover:bg-[#fe8d00] text-white px-4 py-3 rounded-full shadow-[0_10px_25px_rgba(0,67,135,0.4)] transition-colors flex items-center gap-2 font-bold border-2 border-white/15 relative"
           style={{ direction: 'rtl' }}
           aria-label="פתח יועץ טכני חכם"
         >
-          {/* Multiple pulsing background layers to catch attention without viewport layout recalculations */}
-          <span className="absolute -inset-2.5 rounded-full bg-[#fe8d00]/30 animate-ping opacity-75 -z-10" style={{ animationDuration: '2.5s' }}></span>
-          <span className="absolute -inset-1 rounded-full bg-[#004387]/20 animate-pulse -z-10" style={{ animationDuration: '1.8s' }}></span>
-
-          {/* Green Live Indicator Ping */}
-          <span className="absolute top-1 right-1 flex h-4 w-4">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-4 w-4 bg-green-500 border-2 border-white"></span>
+          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#fe8d00] opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500 border border-white"></span>
           </span>
-
-          <Sparkles className="w-8 h-8 text-yellow-300 group-hover:rotate-12 transition-transform duration-300" />
-          <span className="text-[10px] sm:text-xs font-black mt-1 text-white leading-none whitespace-nowrap drop-shadow-md">
-            יועץ חכם ✨
-          </span>
-          
-          {/* Elegant floating tooltip */}
-          <div className="absolute right-24 bg-gradient-to-r from-[#0c2d57] to-[#004387] text-white px-4 py-2 rounded-xl text-xs sm:text-sm font-black shadow-lg border border-white/20 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 hidden sm:flex items-center gap-1.5" style={{ direction: 'rtl' }}>
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block"></span>
-            <span>צריך עזרה בתכנון? שאל אותי! ⚡</span>
-            {/* Arrow */}
-            <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-[#004387] rotate-45 border-b border-l border-white/20"></div>
-          </div>
-        </motion.button>
+          <Sparkles className="w-5 h-5 text-yellow-300" />
+          <span className="text-sm whitespace-nowrap">יועץ טכני חכם ✨</span>
+        </button>
       )}
       <InstallBanner />
 
