@@ -69,6 +69,7 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
   const [selectedCabinetId, setSelectedCabinetId] = useState<string>('');
   const [bundleAdded, setBundleAdded] = useState(false);
   const [configuredOptionals, setConfiguredOptionals] = useState<any[]>([]);
+  const [dbg, setDbg] = useState<any>(null);
 
   const handleConfiguredOptionalsChange = React.useCallback((optionals: any[]) => {
     setConfiguredOptionals(optionals);
@@ -85,6 +86,15 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
 
         const normalizeSku = (val: any): string => String(val ?? '').trim().toUpperCase();
         const productSkuNorm = normalizeSku(product.sku);
+        const accText = `${productSkuNorm} ${(product.name || '')} ${((product as any).description || '')}`.toLowerCase();
+        const isGeneralAccessory =
+          accText.includes('עיוור') || accText.includes('blank') || accText.includes('מברשת') || accText.includes('שערות') || accText.includes('brush') ||
+          accText.includes('מאוורר') || accText.includes('fan') || accText.includes('מפוח') || accText.includes('איוורור') ||
+          accText.includes('שקע') || accText.includes('pdu') || accText.includes('power') || accText.includes('פס כח') || accText.includes('פס כוח') ||
+          accText.includes('סידור') || accText.includes('כבל') || accText.includes('ניהול') || accText.includes('cable') || accText.includes('organizer') ||
+          accText.includes('בורג') || accText.includes('ברגים') || accText.includes('screw') || accText.includes('cage') ||
+          accText.includes('גלגל') || accText.includes('wheel') || accText.includes('רגליות') || accText.includes('feet') || accText.includes('leveling') ||
+          accText.includes('מגירה') || accText.includes('drawer') || accText.includes('תאורת') || accText.includes('תאורה') || accText.includes('led');
 
         const cabRows = parsed.data as any[][];
         
@@ -103,13 +113,14 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
            const suitableHanging = row[13]?.toString() || '';
            const suitableSliding = row[14]?.toString() || '';
 
+           const splitRobust = (str: string) => String(str || '').split(/[,\s;]+/).map(s => normalizeSku(s)).filter(s => s && s !== 'X');
            const allSuitable = [
-               ...suitableStandard.split(','),
-               ...suitableHanging.split(','),
-               ...suitableSliding.split(',')
-           ].map(s => normalizeSku(s)).filter(s => s && s !== 'X');
+               ...splitRobust(suitableStandard),
+               ...splitRobust(suitableHanging),
+               ...splitRobust(suitableSliding)
+           ];
 
-           if (allSuitable.includes(productSkuNorm)) {
+           if (isGeneralAccessory || allSuitable.includes(productSkuNorm)) {
                const normalizedUnit = normalizeSku(cabSku);
                compatibleSkus.add(normalizedUnit);
                specsMap.set(normalizedUnit, {
@@ -123,7 +134,7 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
         }
 
         const matchedCabinets = catalogData
-          .filter(p => compatibleSkus.has(normalizeSku(p.sku)))
+          .filter(p => p && p.sku && compatibleSkus.has(normalizeSku(p.sku)))
           .map(cab => {
              const key = normalizeSku(cab.sku);
              return {
@@ -132,6 +143,7 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
              };
           });
 
+        setDbg({ sku: productSkuNorm, rows: cabRows.length, suitableHits: compatibleSkus.size, matched: matchedCabinets.length });
         setCompatibleCabinets(matchedCabinets);
         if (matchedCabinets.length > 0) {
           setSelectedCabinetId(matchedCabinets[0].id);
@@ -193,23 +205,9 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
     }
   };
 
-  if (loading) {
-    return (
-      <div className="mb-6 bg-gray-50 border border-gray-200 p-8 flex flex-col items-center justify-center min-h-[160px]" dir="rtl">
-         <Loader2 className="animate-spin text-[#004387] mb-2" size={28} />
-         <p className="text-gray-500 text-sm font-semibold">סורק תאימות ומאפייני ארונות רלוונטיים עבורכם...</p>
-      </div>
-    );
-  }
-
-  if (compatibleCabinets.length === 0) {
-      return null;
-  }
-
   const activeCabinetForBundle = compatibleCabinets.find(c => c.id === selectedCabinetId) || compatibleCabinets[0];
 
-  // Keep the configurator instance stable so a parent re-render cannot unmount/remount it
-  // (which was wiping the user's added accessories). Same element reference => React preserves state.
+  // Hooks must run before any early return (Rules of Hooks). Keeps the configurator instance stable too.
   const cabinetConfiguratorEl = React.useMemo(() => (
     activeCabinetForBundle ? (
       <CabinetConfigurator 
@@ -220,6 +218,23 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
       />
     ) : null
   ), [activeCabinetForBundle?.id, catalogData, product?.sku, handleConfiguredOptionalsChange]);
+
+  if (loading) {
+    return (
+      <div className="mb-6 bg-gray-50 border border-gray-200 p-8 flex flex-col items-center justify-center min-h-[160px]" dir="rtl">
+         <Loader2 className="animate-spin text-[#004387] mb-2" size={28} />
+         <p className="text-gray-500 text-sm font-semibold">סורק תאימות ומאפייני ארונות רלוונטיים עבורכם...</p>
+      </div>
+    );
+  }
+
+  if (compatibleCabinets.length === 0) {
+      return (
+        <div style={{margin:'12px 0',padding:'10px',background:'#111',color:'#00ff66',fontSize:'12px',fontFamily:'monospace',direction:'ltr'}}>
+          AC-DEBUG: sku="{dbg?.sku}" | rows={dbg?.rows} | suitableHits={dbg?.suitableHits} | matched={dbg?.matched} | name="{product?.name}"
+        </div>
+      );
+  }
 
   return (
     <div className="mb-6 bg-gradient-to-br from-[#f8fbff] to-[#f0f6ff] border-2 border-[#b3d4f5] p-5 sm:p-6 shadow-sm rounded-none" dir="rtl">
@@ -492,8 +507,8 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
               <div className="flex items-baseline gap-2 mt-1">
                 <span className="text-xs text-gray-500">מחיר חבילה כולל:</span>
                 <span className="text-xl font-black text-[#fe8d00] font-mono">
-                  ₪{(activeCabinetForBundle.price + configuredOptionals.reduce((accPrice, val) => {
-                    const matchedItem = catalogData.find(item => item.sku === val.pn);
+                  ₪{((activeCabinetForBundle?.price || 0) + configuredOptionals.reduce((accPrice, val) => {
+                    const matchedItem = catalogData.find(item => item && item.sku === val.pn);
                     return accPrice + (matchedItem?.price || 0);
                   }, 0)).toLocaleString('he-IL', { minimumFractionDigits: 2 })}
                 </span>

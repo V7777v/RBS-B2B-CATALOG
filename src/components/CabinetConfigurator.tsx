@@ -9,7 +9,30 @@ interface Accessory {
   sku?: string;
   name?: string;
   price?: number;
+  suitableRange?: string;
 }
+
+// Match a shelf to a cabinet using the accessory sheet's "ארונות מתאימים" range
+// Handles: "כל הארונות" (all) | "NU-MU" (U range) | "...עומק: D" / "בעומק D1-D2" (depth) | U-range guarded by shelf's own depth
+const shelfFitsCabinet = (suitableRange: string, shelfDesc: string, cabU: number, cabDepth: number): boolean => {
+  const str = (suitableRange || '').trim();
+  if (!str) return false;
+  if (str.includes('כל הארונות')) return true;
+  const um = str.match(/(\d+)\s*U?\s*-\s*(\d+)\s*U/i);
+  const uRange = um ? [parseInt(um[1], 10), parseInt(um[2], 10)] : null;
+  if (uRange && !(cabU >= uRange[0] && cabU <= uRange[1])) return false;
+  const deps = ((str.replace(/\d+\s*U/gi, '')).match(/\d{3,4}/g) || []).map(n => parseInt(n, 10));
+  if (deps.length === 1) {
+    if (cabDepth && cabDepth !== deps[0]) return false;
+  } else if (deps.length >= 2) {
+    const lo = Math.min(...deps), hi = Math.max(...deps);
+    if (cabDepth && !(cabDepth >= lo && cabDepth <= hi)) return false;
+  } else if (uRange) {
+    const own = (shelfDesc || '').match(/עומק[:\s]*(\d+)\s*ס/);
+    if (own && cabDepth && cabDepth < parseInt(own[1], 10) * 10) return false;
+  }
+  return uRange !== null || deps.length > 0;
+};
 
 interface CabinetData {
   pn: string;
@@ -147,7 +170,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 accData.push({
                    pn: pn,
                    description: desc,
-                   uSize: determineUSize(pn, desc)
+                   uSize: determineUSize(pn, desc),
+                   suitableRange: row[5]?.toString() || ''
                 });
             }
         }
@@ -155,7 +179,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         // Enrich accessories with catalog data (sku, name, price) for cart integration
         const enrichedAccData: Accessory[] = accData.map(acc => {
           const accSkuNorm = normalizeSku(acc.pn);
-          const catalogMatch = catalogData.find(p => normalizeSku(p.sku) === accSkuNorm);
+          const catalogMatch = catalogData.find(p => p && p.sku && normalizeSku(p.sku) === accSkuNorm);
           if (catalogMatch) {
             return {
               ...acc,
@@ -251,6 +275,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         if (!parsedTotalU) parsedTotalU = 42;
         console.log('[CabinetConfigurator] Resolved cabinet U capacity:', parsedTotalU, 'for SKU', product.sku);
         setTotalU(parsedTotalU);
+        const parsedDepth = parseInt(String(cabRow[4] ?? '').replace(/[^0-9]/g, ''), 10) || 0;
 
         // Calculate used U from included items
         const shelvesQty = parseInt(data.shelvesQty) || 0;
@@ -298,11 +323,16 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
         const filteredAccs = enrichedAccData.filter(acc => {
           const accSkuNorm = normalizeSku(acc.pn);
-          const desc = acc.description.toLowerCase();
+          const desc = String(acc.description || '').toLowerCase();
           const name = (acc.name || '').toLowerCase();
           const text = `${accSkuNorm} ${desc} ${name}`.toLowerCase();
           
           if (allowedPNs.includes(accSkuNorm)) {
+            return true;
+          }
+
+          // Shelf compatibility via the accessory sheet "ארונות מתאימים" range (U + depth) — more complete than manual columns
+          if (acc.suitableRange && shelfFitsCabinet(acc.suitableRange, acc.description, parsedTotalU, parsedDepth)) {
             return true;
           }
           
@@ -312,10 +342,11 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             text.includes('מברשת') || text.includes('שערות') || text.includes('שעירות') || text.includes('brush') ||
             text.includes('מאוורר') || text.includes('fan') || text.includes('מפוח') || text.includes('איוורור') ||
             text.includes('שקע') || text.includes('pdu') || text.includes('power') || text.includes('פס כח') || text.includes('פס כוח') ||
-            text.includes('סידור') || text.includes('כביל') || text.includes('ניהול') || text.includes('cable') || text.includes('organizer') ||
+            text.includes('סידור') || text.includes('כבל') || text.includes('ניהול') || text.includes('cable') || text.includes('organizer') ||
             text.includes('בורג') || text.includes('ברגים') || text.includes('screw') || text.includes('cage nut') ||
             text.includes('גלגל') || text.includes('wheels') || text.includes('wheel') ||
-            text.includes('רגליות') || text.includes('feet') || text.includes('leveling');
+            text.includes('רגליות') || text.includes('feet') || text.includes('leveling') ||
+            text.includes('מגירה') || text.includes('drawer') || text.includes('תאורת') || text.includes('תאורה') || text.includes('led');
 
           if (isGeneralAccessory) {
             // EXCLUSION RULE: DO NOT offer things already included unless they can be multiplied (like fans or shelves)
@@ -740,7 +771,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 </div>
                 <div className="max-h-[140px] overflow-y-auto space-y-1 custom-scrollbar pr-1">
                   {nonUAccessories.map((nonU, index) => {
-                    const nameLower = nonU.name.toLowerCase();
+                    const nameLower = (String(nonU.name || '') + " " + String(nonU.description || '')).toLowerCase();
                     const isScrew = nameLower.includes('בורג') || nameLower.includes('ברגים') || nameLower.includes('screw') || nameLower.includes('nut');
                     const isWheel = nameLower.includes('גלגל') || nameLower.includes('wheel') || nameLower.includes('wheels');
                     const isFeet = nameLower.includes('רגליות') || nameLower.includes('feet');
@@ -912,7 +943,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           {compatibleAccessories.length > 0 ? (
             <div className="space-y-3.5 max-h-[380px] overflow-y-auto pr-1">
               {compatibleAccessories.map((acc, idx) => {
-                const catalogMatch = catalogData.find(p => p.sku === acc.pn || p.sku === acc.sku);
+                const catalogMatch = catalogData.find(p => p && p.sku && (p.sku === acc.pn || p.sku === acc.sku));
                 const showPrice = catalogMatch ? catalogMatch.price : (acc.price || 0);
                 
                 return (

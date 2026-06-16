@@ -1249,6 +1249,7 @@ const ProductDetailsView = (props: any) => {
     const [isManualHovered, setIsManualHovered] = useState(false);
     const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
     const [activePreview, setActivePreview] = useState<string | null>(null);
+    const [quantity, setQuantity] = useState(1);
     const hoverTimeoutRef = useRef<any>(null);
     const theme = getBrandTheme(selectedProduct?.brand);
     const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 1024;
@@ -1760,7 +1761,10 @@ const ProductDetailsView = (props: any) => {
               )}
 
               {/* COMPATIBLE CABINETS (If this is an accessory) */}
-              {((selectedProduct['Nested subcategory']?.includes('אביזרים') || selectedProduct.subcategory?.includes('אביזרים למסדים') || /מדף|פנל|מאוורר|ברגים|אביזר|KVM/i.test(selectedProduct.name)) && !(/ארון|מסד|מארז/i.test(selectedProduct.name))) && (
+              {(((selectedProduct['Nested subcategory']?.includes('אביזר') || selectedProduct.nestedSubcategory?.includes('אביזר')) && 
+                 (selectedProduct.subcategory?.includes('ארונות') || selectedProduct.subcategory?.includes('מסדים') || selectedProduct.subcategory?.includes('אביזר'))) || 
+                selectedProduct.subcategory?.includes('אביזרים למסדים') || 
+                selectedProduct.subcategory?.toLowerCase()?.includes('accessories')) && (
                 <React.Suspense fallback={<div className="animate-pulse h-32 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center text-sm text-gray-500">טוען ארונות תואמים...</div>}>
                   <AccessoryCabinets 
                     product={selectedProduct} 
@@ -1892,17 +1896,39 @@ const ProductDetailsView = (props: any) => {
                       </p>
                     </div>
                   ) : (
-                    <button 
-                      onClick={() => {
-                        addToCart(selectedProduct, 1, []);
-                        setIsAdded(true);
-                        setTimeout(() => setIsAdded(false), 1500);
-                      }}
-                      className={`w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base ${isAdded ? 'bg-green-600 hover:bg-green-600 text-white' : theme.button}`}
-                    >
-                      <ShoppingCart size={18} className={`sm:w-5 sm:h-5 ${isAdded ? 'animate-bounce' : ''}`} />
-                      {isAdded ? 'נוסף לעגלה! ✓' : 'הוסף להזמנה'}
-                    </button>
+                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                      <div className="flex items-center justify-between sm:justify-center bg-white border border-gray-300 shadow-sm h-[48px]">
+                        <button 
+                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                          className="px-4 h-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors border-l border-gray-200"
+                        >
+                          <Minus size={16} />
+                        </button>
+                        <input 
+                          type="text" 
+                          value={quantity}
+                          onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-12 h-full text-center font-bold text-lg text-gray-800 outline-none p-0 focus:ring-0 select-all"
+                        />
+                        <button 
+                          onClick={() => setQuantity(quantity + 1)}
+                          className="px-4 h-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors border-r border-gray-200"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          addToCart(selectedProduct, quantity, []);
+                          setIsAdded(true);
+                          setTimeout(() => { setIsAdded(false); setQuantity(1); }, 1500);
+                        }}
+                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-3 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base h-[48px] ${isAdded ? 'bg-green-600 text-white border-green-600' : theme.button}`}
+                      >
+                        <ShoppingCart size={18} className={`sm:w-5 sm:h-5 ${isAdded ? 'animate-bounce' : ''}`} />
+                        {isAdded ? 'נוסף לעגלה! ✓' : 'הוסף להזמנה'}
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
