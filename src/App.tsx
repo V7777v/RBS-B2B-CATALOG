@@ -308,6 +308,7 @@ const parseProductRow = (row: any) => {
   const categoryName = typeof row.category === 'string' ? row.category.trim() : (row.category || '');
   const subcategoryName = typeof row.subcategory === 'string' ? row.subcategory.trim() : (row.subcategory || '');
   const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
+  const nicheCategoryName = typeof row['Niche Category'] === 'string' ? row['Niche Category'].trim() : (row['Niche Category'] || null);
   const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
   const hotSaleKey = Object.keys(row).find((k: string) => {
       const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -354,6 +355,7 @@ const parseProductRow = (row: any) => {
     category: categoryName,
     subcategory: subcategoryName,
     nestedSubcategory: nestedSubcategoryName,
+    nicheCategory: nicheCategoryName,
     isComingSoon: isComingSoon,
     isHotSale: isHotSale,
     isClearance: isClearance,
@@ -2387,10 +2389,11 @@ export default function App() {
   const [isProductsLoading, setIsProductsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [currentView, setCurrentView] = useState('home'); // 'home', 'catalog_subs', 'nested_subs', 'products', 'product', 'checkout'
+  const [currentView, setCurrentView] = useState('home'); // 'home', 'catalog_subs', 'nested_subs', 'niche_subs', 'products', 'product', 'checkout'
   const [selectedCatalog, setSelectedCatalog] = useState<string | null>(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [selectedNestedSubcategory, setSelectedNestedSubcategory] = useState<string | null>(null);
+  const [selectedNicheCategory, setSelectedNicheCategory] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [currentOptionals, setCurrentOptionals] = useState<any[]>([]);
   const handleOptionalsChange = useCallback((newOptionals: any[]) => {
@@ -2745,6 +2748,9 @@ export default function App() {
          let parentSubcategory = row.parentSubcategory || row['Parent  Subcategory'] || row['Parent Subcategory'] || row['\tParent  Subcategory'] || '';
          parentSubcategory = typeof parentSubcategory === 'string' ? parentSubcategory.trim() : parentSubcategory;
          
+         let nicheCategory = row.nicheCategory || row['Niche Category'] || row['Niche category'] || row['Niche_Category'] || '';
+         nicheCategory = typeof nicheCategory === 'string' ? nicheCategory.trim() : nicheCategory;
+
          const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
 
          // Normalize active to boolean robustly:
@@ -2763,6 +2769,7 @@ export default function App() {
            category: categoryName,
            subcategory: subcategoryName,
            parentSubcategory: parentSubcategory,
+           nicheCategory: nicheCategory,
            isComingSoon: isComingSoon,
            image: subImage,
            active: isActive,
@@ -3180,6 +3187,11 @@ export default function App() {
           if (selectedSubcategory === 'ספקי כוח ומתח') {
              return item.nestedSubcategory === selectedNestedSubcategory || item.subcategory === selectedNestedSubcategory;
           }
+          
+          if (selectedNicheCategory) {
+            return item.subcategory === selectedSubcategory && item.nestedSubcategory === selectedNestedSubcategory && item.nicheCategory === selectedNicheCategory;
+          }
+          
           return item.subcategory === selectedSubcategory && item.nestedSubcategory === selectedNestedSubcategory;
         }
         
@@ -3198,7 +3210,44 @@ export default function App() {
     }
     
     return filtered;
-  }, [selectedCatalog, selectedSubcategory, selectedNestedSubcategory, currentView, searchQuery, catalogData]);
+  }, [selectedCatalog, selectedSubcategory, selectedNestedSubcategory, selectedNicheCategory, currentView, searchQuery, catalogData]);
+
+  const nicheSubcategoriesData = useMemo(() => {
+    if (!selectedNestedSubcategory || !selectedSubcategory || !selectedCatalog) return [];
+    
+    // We only collect niche subcategories associated with the explicit nested subcategory chosen.
+    const productsInNested = catalogData.filter(item => 
+      item.category === selectedCatalog && 
+      item.subcategory === selectedSubcategory && 
+      item.nestedSubcategory === selectedNestedSubcategory && 
+      item.active !== 'FALSE' &&
+      item.nicheCategory
+    );
+    
+    const nicheSubs = [...new Set(productsInNested.map(item => item.nicheCategory).filter(Boolean))] as string[];
+    
+    return nicheSubs.map(nicheName => {
+      // Find matching custom image if configured globally (optional)
+      const sheetSub = subcategoriesGlobalData.find(s => 
+        s.category === selectedCatalog && 
+        s.parentSubcategory === selectedNestedSubcategory && 
+        (s.subcategory === nicheName || s.nicheCategory === nicheName)
+      );
+      
+      let customImage = sheetSub?.image || null;
+      const prods = productsInNested.filter(p => p.nicheCategory === nicheName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם');
+      let count = prods.length;
+      let firstProductImage = prods.find(p => p.images && p.images[0] && !p.images[0].includes('No+Image') && !p.images[0].includes('placehold.co'))?.images[0];
+      
+      return {
+        name: nicheName,
+        count: count,
+        isComingSoon: sheetSub?.isComingSoon === true,
+        image: customImage || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(nicheName),
+        brand: sheetSub?.brand
+      };
+    }).filter(sub => sub.count > 0).sort((a,b) => b.count - a.count);
+  }, [selectedNestedSubcategory, selectedSubcategory, selectedCatalog, catalogData, subcategoriesGlobalData]);
 
   // Automatically fetch remaining chunks of products in the background after the initial instant render
   // This ensures that all categories, subcategories, counts, and search queries are fully populated and work perfectly.
@@ -3320,6 +3369,7 @@ export default function App() {
         selectedCatalog: null,
         selectedSubcategory: null,
         selectedNestedSubcategory: null,
+        selectedNicheCategory: null,
         selectedProduct: null,
         searchQuery: ''
       }, '');
@@ -3332,6 +3382,7 @@ export default function App() {
         setSelectedCatalog(e.state.selectedCatalog || null);
         setSelectedSubcategory(e.state.selectedSubcategory || null);
         setSelectedNestedSubcategory(e.state.selectedNestedSubcategory || null);
+        setSelectedNicheCategory(e.state.selectedNicheCategory || null);
         setSelectedProduct(e.state.selectedProduct || null);
         setSearchQuery(e.state.searchQuery !== undefined ? e.state.searchQuery : '');
       } else {
@@ -3366,6 +3417,7 @@ export default function App() {
       selectedCatalog,
       selectedSubcategory,
       selectedNestedSubcategory,
+      selectedNicheCategory,
       selectedProduct,
       searchQuery,
       ...updates
@@ -3375,8 +3427,9 @@ export default function App() {
     if (updates.selectedCatalog !== undefined) setSelectedCatalog(nextState.selectedCatalog);
     if (updates.selectedSubcategory !== undefined) setSelectedSubcategory(nextState.selectedSubcategory);
     if (updates.selectedNestedSubcategory !== undefined) setSelectedNestedSubcategory(nextState.selectedNestedSubcategory);
+    if (updates.selectedNicheCategory !== undefined) setSelectedNicheCategory(nextState.selectedNicheCategory);
     if (updates.selectedProduct !== undefined) setSelectedProduct(nextState.selectedProduct);
-  }, [currentView, selectedCatalog, selectedSubcategory, selectedNestedSubcategory, selectedProduct, searchQuery]);
+  }, [currentView, selectedCatalog, selectedSubcategory, selectedNestedSubcategory, selectedNicheCategory, selectedProduct, searchQuery]);
 
   const navigateHome = () => {
     navigateForward({
@@ -3384,6 +3437,7 @@ export default function App() {
       selectedCatalog: null,
       selectedSubcategory: null,
       selectedNestedSubcategory: null,
+      selectedNicheCategory: null,
       selectedProduct: null,
       searchQuery: ''
     });
@@ -3412,11 +3466,13 @@ export default function App() {
       selectedCatalog: catalogName,
       selectedSubcategory: null,
       selectedNestedSubcategory: null,
+      selectedNicheCategory: null,
       selectedProduct: null
     });
     setSearchQuery('');
     setMobileMenuOpen(false);
   };
+
 
   const navigateToSubcategory = (subName: string | null) => {
     const activeCatObj = catalogFolders.find(c => c.name === selectedCatalog);
@@ -3438,6 +3494,7 @@ export default function App() {
       currentView: hasNested ? 'nested_subs' : 'products',
       selectedSubcategory: subName,
       selectedNestedSubcategory: null,
+      selectedNicheCategory: null,
       selectedProduct: null
     });
     setSearchQuery('');
@@ -3463,6 +3520,7 @@ export default function App() {
       selectedCatalog: catName,
       selectedSubcategory: subName,
       selectedNestedSubcategory: null,
+      selectedNicheCategory: null,
       selectedProduct: null
     });
     setSearchQuery('');
@@ -3470,9 +3528,24 @@ export default function App() {
   }, [catalogData, navigateForward]);
 
   const navigateToNestedSubcategory = (nestedName: string | null) => {
+    let hasNiche = false;
+    if (selectedCatalog && selectedSubcategory && nestedName) {
+      hasNiche = catalogData.some(p => p.category === selectedCatalog && p.subcategory === selectedSubcategory && p.nestedSubcategory === nestedName && !!p.nicheCategory);
+    }
+    
+    navigateForward({
+      currentView: hasNiche ? 'niche_subs' : 'products',
+      selectedNestedSubcategory: nestedName,
+      selectedNicheCategory: null,
+      selectedProduct: null
+    });
+    setSearchQuery('');
+  };
+
+  const navigateToNicheCategory = (nicheName: string | null) => {
     navigateForward({
       currentView: 'products',
-      selectedNestedSubcategory: nestedName,
+      selectedNicheCategory: nicheName,
       selectedProduct: null
     });
     setSearchQuery('');
@@ -3679,7 +3752,7 @@ export default function App() {
                         )}
 
                         {/* Nested Subcategory Link */}
-                        {selectedNestedSubcategory && (currentView === 'products' || currentView === 'product') && (
+                        {selectedNestedSubcategory && (currentView === 'niche_subs' || currentView === 'products' || currentView === 'product') && (
                           <>
                             <ChevronLeft size={14} className="text-[#0c2d57] opacity-80 flex-shrink-0" />
                             <button 
@@ -3687,6 +3760,19 @@ export default function App() {
                               className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-[#0c2d57] text-sm sm:text-[15px]"
                             >
                               {selectedNestedSubcategory}
+                            </button>
+                          </>
+                        )}
+
+                        {/* Niche Category Link */}
+                        {selectedNicheCategory && (currentView === 'products' || currentView === 'product') && (
+                          <>
+                            <ChevronLeft size={14} className="text-[#0c2d57] opacity-80 flex-shrink-0" />
+                            <button 
+                              onClick={() => navigateToNicheCategory(selectedNicheCategory)} 
+                              className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-[#0c2d57] text-sm sm:text-[15px]"
+                            >
+                              {selectedNicheCategory}
                             </button>
                           </>
                         )}
@@ -3903,7 +3989,7 @@ export default function App() {
                     )}
 
                     {/* Nested Subcategory Link */}
-                    {selectedNestedSubcategory && (currentView === 'products' || currentView === 'product') && (
+                    {selectedNestedSubcategory && (currentView === 'niche_subs' || currentView === 'products' || currentView === 'product') && (
                       <>
                         <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
                         <button 
@@ -3911,6 +3997,19 @@ export default function App() {
                           className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-800 text-xs"
                         >
                           {selectedNestedSubcategory}
+                        </button>
+                      </>
+                    )}
+
+                    {/* Niche Category Link */}
+                    {selectedNicheCategory && (currentView === 'products' || currentView === 'product') && (
+                      <>
+                        <ChevronLeft size={13} className="text-gray-400 flex-shrink-0" />
+                        <button 
+                          onClick={() => navigateToNicheCategory(selectedNicheCategory)} 
+                          className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-800 text-xs"
+                        >
+                          {selectedNicheCategory}
                         </button>
                       </>
                     )}
@@ -4167,13 +4266,38 @@ export default function App() {
                 )}
               </>
 
+            ) : currentView === 'niche_subs' ? (
+              
+              // NICHE SUBCATEGORIES VIEW
+              <>
+
+
+                <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-4 sm:mb-6 text-center w-full">קטגוריית משנה מורחבת</h2>
+                
+                {isProductsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
+                    <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
+                    <h3 className="text-xl font-bold text-[#0c2d57]">טוען נתונים...</h3>
+                  </div>
+                ) : (
+                  <div className={nicheSubcategoriesData.length === 1 
+                    ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6" 
+                    : "grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-6 max-w-4xl mx-auto"
+                  }>
+                    {nicheSubcategoriesData.map((sub) => (
+                      <SubcategoryCard key={sub.name} sub={sub} onClick={() => navigateToNicheCategory(sub.name)} />
+                    ))}
+                  </div>
+                )}
+              </>
+
             ) : currentView === 'products' ? (
               
               // PRODUCTS VIEW
               <>
 
                 <div className="mb-6 sm:mb-8 text-center relative">
-                   <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] inline-block w-full sm:w-auto px-4">{selectedNestedSubcategory || selectedSubcategory}</h2>
+                   <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] inline-block w-full sm:w-auto px-4">{selectedNicheCategory || selectedNestedSubcategory || selectedSubcategory}</h2>
                    {!isProductsLoading && (
                      <div className="mt-3 sm:mt-0 sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2 flex items-center justify-center">
                        <span className="text-gray-600 bg-[#f2f2f2] px-3 py-1 rounded-none text-xs sm:text-sm font-medium whitespace-nowrap border border-gray-100 shadow-sm">{filteredProducts.length} מוצרים</span>
