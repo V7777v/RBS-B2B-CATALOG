@@ -768,8 +768,8 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
       </div>
       
       <div className="p-3 sm:p-4 flex flex-col flex-grow text-center">
-        <div className="text-[10px] sm:text-xs text-gray-400 mb-1.5 flex flex-row items-center justify-between gap-1 w-full flex-wrap">
-          <span>{product.sku}</span>
+        <div className="text-[13px] sm:text-[15.5px] text-gray-600 font-bold mb-1.5 flex flex-row items-center justify-center gap-1 w-full flex-wrap">
+          <span>מק״ט: {product.sku}</span>
         </div>
         <div className="min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center mb-2">
           <h3 className="text-[#0c2d57] text-xs sm:text-base font-semibold line-clamp-2 leading-tight text-center w-full">{product.name}</h3>
@@ -1438,8 +1438,8 @@ const ProductDetailsView = (props: any) => {
                 )}
               </div>
               <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] mb-2 leading-tight">{selectedProduct.name}</h1>
-              <div className="text-gray-500 mb-4 sm:mb-6 text-xs sm:text-sm">
-                מק"ט: <span className="font-mono text-gray-800">{selectedProduct.sku}</span>
+              <div className="text-gray-600 mb-4 sm:mb-6 text-[15px] sm:text-[18px] font-bold text-center bg-gray-50 py-2 border border-gray-200 rounded-md">
+                מק״ט: <span className="font-mono text-gray-800 tracking-wide">{selectedProduct.sku}</span>
               </div>
               
               <div className="mb-6 sm:mb-8 bg-white border-2 border-slate-100 p-5 sm:p-6 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_25px_rgba(0,0,0,0.06)] hover:border-[#004387]/25 transition-all duration-300 relative overflow-hidden text-right">
@@ -2246,7 +2246,7 @@ const CheckoutView = (props: any) => {
                     <img referrerPolicy="no-referrer" loading="lazy" src={transformImageLink(item.images[0], 120)} alt={item.name} onError={handleImageError} className="w-16 h-16 object-contain bg-[#f2f2f2] p-1" />
                     <div className="flex-grow">
                       <div className="font-semibold text-[#0c2d57]">{item.name}</div>
-                      <div className="text-xs text-gray-500 mb-2">מק"ט: {item.sku}</div>
+                      <div className="text-[15px] font-bold text-gray-600 mb-2 text-center bg-gray-50 py-1 rounded border border-gray-100">מק״ט: <span className="font-mono">{item.sku}</span></div>
                       {item.optionals && item.optionals.length > 0 && (
                         <div className="text-xs text-gray-600 mb-2 bg-gray-50 border border-gray-200 p-2 rounded">
                           <strong className="block mb-1">תוספות מצורפות לארון:</strong>
@@ -4256,7 +4256,7 @@ export default function App() {
                       </div>
                       <div className="flex-col flex flex-grow">
                         <div className="font-semibold text-sm text-[#0c2d57] line-clamp-2">{item.name}</div>
-                        <div className="text-xs text-gray-500 mt-1">מק"ט: <span className="font-mono">{item.sku}</span></div>
+                        <div className="text-[15px] font-bold text-gray-700 mt-2 text-center bg-gray-50 py-1.5 rounded border border-gray-100">מק״ט: <span className="font-mono">{item.sku}</span></div>
                         
                         {item.isClearance && (
                           <div className="text-[10px] text-teal-700 font-bold mt-1.5 flex items-center gap-1 bg-teal-50/50 p-1 w-fit rounded border border-teal-100">
@@ -4810,14 +4810,14 @@ export default function App() {
                             
                             {/* SKU / Model details with clean wrapping */}
                             {((item.product.sku || item.product['מק"ט'] || item.product.id) || item.product.model) && (
-                              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[9px] text-gray-400 font-bold font-mono mt-0.5 leading-tight break-words whitespace-normal">
+                              <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[12px] text-gray-600 font-bold font-mono mt-2 leading-tight break-words whitespace-normal w-full bg-gray-50 py-1 border border-gray-100 rounded">
                                 {(item.product.sku || item.product['מק"ט'] || item.product.id) && (
                                   <span>
                                     מק״ט: <span className="text-[#004387] font-extrabold">{item.product.sku || item.product['מק"ט'] || item.product.id}</span>
                                   </span>
                                 )}
                                 {item.product.model && (
-                                  <span className="text-gray-400">
+                                  <span className="text-gray-400 font-bold">
                                     • דגם: <span className="text-gray-600 font-sans">{item.product.model}</span>
                                   </span>
                                 )}

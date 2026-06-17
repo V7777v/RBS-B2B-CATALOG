@@ -501,7 +501,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
   // 3. Optional accessories added by user
   const optionalItemsAssignment: { uIndex: number; name: string; description: string; accessoryRef: any; optionalIdx: number }[] = [];
-  let currentCandidateSlot = 1;
+  let currentCandidateSlot = totalSlotsU;
 
   selectedOptionals.forEach((opt, optIdx) => {
     if (opt.uSize === 0) return; // Skip 0U/side rails accessories (screws, wheels, feet, cable management accessories) from frontal rail slots!
@@ -511,12 +511,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       const allocatedSlots: number[] = [];
       let sizeAssigned = 0;
       
-      while (sizeAssigned < size && currentCandidateSlot <= totalSlotsU) {
+      while (sizeAssigned < size && currentCandidateSlot >= 1) {
         if (!usedIndexes.has(currentCandidateSlot)) {
           allocatedSlots.push(currentCandidateSlot);
           sizeAssigned++;
         }
-        currentCandidateSlot++;
+        currentCandidateSlot--;
       }
       
       allocatedSlots.forEach(slot => {
@@ -614,7 +614,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           </div>
 
           {/* Visual Rack Container */}
-          <div className="relative border-4 border-slate-700 bg-slate-950 p-3 shadow-2xl relative overflow-hidden flex flex-col min-h-[460px] max-h-[500px]">
+          <div className="relative border-4 border-slate-700 bg-slate-950 p-3 shadow-2xl relative overflow-hidden flex flex-col min-h-[140px] max-h-[520px]">
             
             {/* Simulated Glass Door Gloss Effect */}
             <div className="absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-white/5 to-transparent pointer-events-none z-10 select-none"></div>
@@ -686,7 +686,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     </div>
 
                     {/* Left content description */}
-                    <div className="flex-1 pr-3 pl-1 text-right truncate">
+                    <div className="flex-1 min-w-0 pr-3 pl-1 text-right">
                       <div className="flex items-center gap-1.5">
                         {/* Dynamic category icon */}
                         {(isFan || isFanUpgrade) && <span className="inline-block animate-spin text-cyan-400 mr-1" style={{ animationDuration: '5s' }}>🌀</span>}
@@ -695,7 +695,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                         {isBrush && <span className="text-amber-500 font-bold">💈</span>}
                         {isPdu && <span className="text-red-500 animate-pulse">⚡</span>}
                         
-                        <p className="font-semibold tracking-wide truncate">
+                        <p className="font-semibold tracking-wide break-words leading-tight">
                           {slot.name}
                         </p>
                       </div>
@@ -712,7 +712,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                       )}
 
                       {slot.description && !isBrush && !isPdu && (
-                        <p className="text-[10px] text-slate-400 font-normal truncate opacity-85 mt-0.5" title={slot.description}>
+                        <p className="text-[10px] text-slate-400 font-normal line-clamp-2 break-words opacity-85 mt-0.5" title={slot.description}>
                           {slot.description}
                         </p>
                       )}
@@ -954,7 +954,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="font-bold text-sm text-slate-900 group-hover:text-[#004387] transition-colors">{acc.pn}</p>
-                        <p className="text-xs text-gray-500 line-clamp-1 mt-0.5" title={acc.description}>{acc.description}</p>
+                        <p className="text-xs text-gray-500 line-clamp-2 break-words mt-0.5" title={acc.description}>{acc.description}</p>
                       </div>
                       
                       {/* Price badge directly in list */}
