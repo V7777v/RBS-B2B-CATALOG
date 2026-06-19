@@ -11,6 +11,7 @@ import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { loadCart, saveCart } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -2421,8 +2422,10 @@ export default function App() {
     }
   });
   const [isAdmin, setIsAdmin] = useState(false);
-  const [userProfile, setUserProfile] = useState<{ email: string; company: string; customerNumber: string; tier: string; agent: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ email: string; company: string; customerNumber: string; tier: string; agent: string; agentPhone: string; agentEmail: string } | null>(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [userUid, setUserUid] = useState<string | null>(null);
+  const [cartLoaded, setCartLoaded] = useState(false);
   // Firebase auth state is the source of truth: only verified AND approved distributors are authenticated
   useEffect(() => {
     const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // require re-login after 7 days
@@ -2435,7 +2438,7 @@ export default function App() {
           const pdata: any = snap.exists() ? snap.data() : null;
           if (pdata) {
             setIsAdmin(pdata.admin === true);
-            setUserProfile({ email: user.email, company: pdata.company || '', customerNumber: pdata.customerNumber || '', tier: pdata.tier || '', agent: pdata.agent || pdata.Agent || pdata['סוכן'] || '' });
+            setUserProfile({ email: user.email, company: pdata.company || '', customerNumber: pdata.customerNumber || '', tier: pdata.tier || '', agent: pdata.agent || pdata.Agent || pdata['סוכן'] || '', agentPhone: pdata.agentPhone || '', agentEmail: pdata.agentEmail || '' });
           }
         } catch { ok = false; }
         if (ok) {
@@ -2449,6 +2452,7 @@ export default function App() {
         if (!ok) { try { await signOut(auth); } catch {} }
       }
       if (!ok) { setIsAdmin(false); setUserProfile(null); }
+      setUserUid(ok && user ? user.uid : null);
       setIsAuthenticated(ok);
       try {
         if (ok) { localStorage.setItem('rbs_b2b_auth', 'true'); }
@@ -2462,6 +2466,20 @@ export default function App() {
     try { localStorage.removeItem('rbs_b2b_auth'); localStorage.removeItem('rbs_b2b_login_ts'); } catch {}
     setIsAuthenticated(false);
   };
+  // Saved cart: load from Firestore on login, then persist on every change (guarded against empty-overwrite)
+  useEffect(() => {
+    if (!userUid) { setCartLoaded(false); return; }
+    let active = true;
+    loadCart(userUid).then((items) => {
+      if (!active) return;
+      if (items && items.length) setCart(items);
+      setCartLoaded(true);
+    });
+    return () => { active = false; };
+  }, [userUid]);
+  useEffect(() => {
+    if (userUid && cartLoaded) saveCart(userUid, cart);
+  }, [cart, userUid, cartLoaded]);
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<Record<string, { product: any, quantity: number }>>({});
@@ -4797,6 +4815,8 @@ export default function App() {
               <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">מספר לקוח</span><span className="font-semibold text-[#0c2d57]">{userProfile?.customerNumber || '—'}</span></div>
               <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">מדרגת מחיר</span><span className="font-semibold text-[#0c2d57]">{userProfile?.tier || '—'}</span></div>
               <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">סוכן</span><span className="font-semibold text-[#0c2d57]">{userProfile?.agent || '—'}</span></div>
+              {userProfile?.agentPhone && <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">טלפון סוכן</span><a href={`tel:${userProfile.agentPhone}`} className="font-semibold text-[#004387]" dir="ltr">{userProfile.agentPhone}</a></div>}
+              {userProfile?.agentEmail && <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">מייל סוכן</span><a href={`mailto:${userProfile.agentEmail}`} className="font-semibold text-[#004387]" dir="ltr">{userProfile.agentEmail}</a></div>}
             </div>
             <button onClick={() => { setShowProfile(false); handleAppLogout(); }} className="w-full mt-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg flex items-center justify-center gap-2"><LogOut size={18} /> יציאה מהמערכת</button>
           </div>
