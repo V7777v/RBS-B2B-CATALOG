@@ -127,7 +127,10 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
         setInfo('המייל שלך אומת בהצלחה. החשבון ממתין כעת לאישור של RBS — תקבל גישה לאחר האישור.');
         return;
       }
-      try { localStorage.setItem('rbs_b2b_auth', 'true'); } catch {}
+      try { 
+        localStorage.setItem('rbs_b2b_auth', 'true');
+        localStorage.setItem('rbs_b2b_login_ts', Date.now().toString());
+      } catch {}
       setIsAuthenticated(true);
     } catch (e: any) {
       setError(heError(e?.code));
@@ -147,7 +150,10 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
         setInfo('נכנסת עם Google בהצלחה. החשבון ממתין כעת לאישור של RBS — תקבל גישה לאחר האישור.');
         return;
       }
-      try { localStorage.setItem('rbs_b2b_auth', 'true'); } catch {}
+      try { 
+        localStorage.setItem('rbs_b2b_auth', 'true');
+        localStorage.setItem('rbs_b2b_login_ts', Date.now().toString());
+      } catch {}
       setIsAuthenticated(true);
     } catch (e: any) {
       setError(heError(e?.code));

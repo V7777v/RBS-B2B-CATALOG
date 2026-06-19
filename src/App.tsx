@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -9,7 +9,8 @@ import { HumanVerification } from './components/HumanVerification';
 import { AddressAutocomplete } from './components/AddressAutocomplete';
 import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
-import { auth } from './firebase';
+import { auth, db } from './firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -2419,15 +2420,35 @@ export default function App() {
       return false;
     }
   });
-  // Firebase auth state is the source of truth: only verified users are authenticated
+  // Firebase auth state is the source of truth: only verified AND approved distributors are authenticated
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      const ok = !!(user && user.emailVerified);
+    const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // require re-login after 7 days
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      let ok = false;
+      if (user && user.emailVerified && user.email) {
+        try {
+          const snap = await getDoc(doc(db, 'approvedDistributors', user.email.toLowerCase()));
+          ok = snap.exists();
+        } catch { ok = false; }
+        if (ok) {
+          const ts = parseInt(localStorage.getItem('rbs_b2b_login_ts') || '0', 10);
+          if (!ts || Date.now() - ts > SESSION_MAX_AGE_MS) ok = false;
+        }
+        if (!ok) { try { await signOut(auth); } catch {} }
+      }
       setIsAuthenticated(ok);
-      try { ok ? localStorage.setItem('rbs_b2b_auth', 'true') : localStorage.removeItem('rbs_b2b_auth'); } catch {}
+      try {
+        if (ok) { localStorage.setItem('rbs_b2b_auth', 'true'); }
+        else { localStorage.removeItem('rbs_b2b_auth'); localStorage.removeItem('rbs_b2b_login_ts'); }
+      } catch {}
     });
     return () => unsub();
   }, []);
+  const handleAppLogout = () => {
+    signOut(auth).catch(() => {});
+    try { localStorage.removeItem('rbs_b2b_auth'); localStorage.removeItem('rbs_b2b_login_ts'); } catch {}
+    setIsAuthenticated(false);
+  };
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<Record<string, { product: any, quantity: number }>>({});
@@ -3892,6 +3913,19 @@ export default function App() {
                     {cart.reduce((sum, item) => sum + item.quantity, 0)}
                   </span>
                 )}
+              </button>
+            </div>
+
+            {/* Logout button */}
+            <div className="flex-shrink-0">
+              <button
+                onClick={handleAppLogout}
+                aria-label="התנתק"
+                title="התנתק"
+                className="flex items-center justify-center gap-1.5 h-11 !p-2 !px-3 text-gray-500 hover:text-red-600 transition-colors rounded-xl active:scale-95"
+              >
+                <LogOut size={20} className="flex-shrink-0" />
+                <span className="text-sm font-bold hidden sm:block">יציאה</span>
               </button>
             </div>
 
