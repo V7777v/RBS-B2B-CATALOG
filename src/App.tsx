@@ -9,8 +9,9 @@ import { HumanVerification } from './components/HumanVerification';
 import { AddressAutocomplete } from './components/AddressAutocomplete';
 import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
-import { auth } from './firebase';
+import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
 const TechnicalAdvisor = React.lazy(() => import('./components/TechnicalAdvisor').then(module => ({ default: module.TechnicalAdvisor })));
@@ -2419,14 +2420,41 @@ export default function App() {
       return false;
     }
   });
-  // Firebase auth state is the source of truth: only verified users are authenticated
+  // Firebase auth state is the source of truth: only verified and approved users are authenticated
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      const ok = !!(user && user.emailVerified);
-      setIsAuthenticated(ok);
-      try { ok ? localStorage.setItem('rbs_b2b_auth', 'true') : localStorage.removeItem('rbs_b2b_auth'); } catch {}
+    let active = true;
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      // If no user, or user requires email verification but hasn't verified:
+      if (!user || (!user.emailVerified && user.providerData && user.providerData[0]?.providerId === 'password')) {
+        if (active) {
+          setIsAuthenticated(false);
+          try { localStorage.removeItem('rbs_b2b_auth'); } catch {}
+        }
+        return;
+      }
+      
+      // User is logged in and email is verified. Now check if they are approved by RBS:
+      try {
+        const snap = await getDoc(doc(db, 'approvedDistributors', user.email!.toLowerCase()));
+        if (active) {
+          if (snap.exists()) {
+            setIsAuthenticated(true);
+            try { localStorage.setItem('rbs_b2b_auth', 'true'); } catch {}
+          } else {
+            // Log out if they are not approved
+            signOut(auth).catch(() => {});
+            setIsAuthenticated(false);
+            try { localStorage.removeItem('rbs_b2b_auth'); } catch {}
+          }
+        }
+      } catch (err) {
+        if (active) {
+          setIsAuthenticated(false);
+          try { localStorage.removeItem('rbs_b2b_auth'); } catch {}
+        }
+      }
     });
-    return () => unsub();
+    return () => { active = false; unsub(); };
   }, []);
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
