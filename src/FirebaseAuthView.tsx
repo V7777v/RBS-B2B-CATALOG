@@ -10,7 +10,8 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { Lock, Mail, Eye, EyeOff, Loader2, CheckCircle, ShieldCheck } from 'lucide-react';
+import emailjs from '@emailjs/browser';
+import { Lock, Mail, Eye, EyeOff, Loader2, CheckCircle, ShieldCheck, MailCheck } from 'lucide-react';
 
 // EmailJS — notify RBS when a new distributor registers (client-side, free tier)
 const EMAILJS_SERVICE_ID = 'service_ml2hb5b';
@@ -19,20 +20,13 @@ const EMAILJS_PUBLIC_KEY = 'k4hiP8DMsizj-JZLP';
 
 const notifyAdmin = async (distributorEmail: string) => {
   try {
-    await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        service_id: EMAILJS_SERVICE_ID,
-        template_id: EMAILJS_TEMPLATE_ID,
-        user_id: EMAILJS_PUBLIC_KEY,
-        template_params: {
-          distributor_email: distributorEmail,
-          registered_at: new Date().toLocaleString('he-IL')
-        }
-      })
-    });
-  } catch { /* suppress */ }
+    await emailjs.send(
+      EMAILJS_SERVICE_ID,
+      EMAILJS_TEMPLATE_ID,
+      { distributor_email: distributorEmail, registered_at: new Date().toLocaleString('he-IL') },
+      { publicKey: EMAILJS_PUBLIC_KEY }
+    );
+  } catch { /* notification failure must not break registration */ }
 };
 
 const heError = (code: string): string => {
@@ -45,10 +39,8 @@ const heError = (code: string): string => {
     case 'auth/weak-password': return 'הסיסמה חלשה מדי';
     case 'auth/too-many-requests': return 'יותר מדי ניסיונות. נסה שוב בעוד מספר דקות.';
     case 'auth/network-request-failed': return 'בעיית רשת. בדוק את החיבור ונסה שוב.';
-    case 'auth/popup-closed-by-user': return 'חלון הכניסה נסגר על ידך. נסה שוב.';
-    case 'auth/popup-blocked': return 'חלון הכניסה נחסם על ידי הדפדפן. אפשר חלונות קופצים (Pop-ups) ונסה שוב.';
-    case 'auth/cancelled-popup-request': return 'בקשת החלון הקופץ בוטלה. נסה שוב.';
-    default: return 'אירעה שגיאה. ' + (code ? `(${code})` : 'נסה שוב.');
+    case 'auth/popup-closed-by-user': return 'חלון הכניסה נסגר. נסה שוב.';
+    default: return 'אירעה שגיאה. נסה שוב.';
   }
 };
 
@@ -128,22 +120,18 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
         setAwaitingVerify(true);
         await signOut(auth);
         setError('המייל שלך עדיין לא אומת. היכנס לתיבת הדואר (וגם ספאם) ולחץ על הקישור לאימות.');
-        setLoading(false);
         return;
       }
       if (!(await isApproved(cred.user.email))) {
         await signOut(auth);
         setInfo('המייל שלך אומת בהצלחה. החשבון ממתין כעת לאישור של RBS — תקבל גישה לאחר האישור.');
-        setLoading(false);
         return;
       }
       try { localStorage.setItem('rbs_b2b_auth', 'true'); } catch {}
-      setInfo('התחברת בהצלחה! מעביר אותך לקטלוג...');
-      setTimeout(() => {
-        setIsAuthenticated(true);
-      }, 1500);
+      setIsAuthenticated(true);
     } catch (e: any) {
       setError(heError(e?.code));
+    } finally {
       setLoading(false);
     }
   };
@@ -157,16 +145,13 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
       if (!(await isApproved(cred.user.email))) {
         await signOut(auth);
         setInfo('נכנסת עם Google בהצלחה. החשבון ממתין כעת לאישור של RBS — תקבל גישה לאחר האישור.');
-        setLoading(false);
         return;
       }
       try { localStorage.setItem('rbs_b2b_auth', 'true'); } catch {}
-      setInfo('התחברת בהצלחה עם Google! מעביר אותך לקטלוג...');
-      setTimeout(() => {
-        setIsAuthenticated(true);
-      }, 1500);
+      setIsAuthenticated(true);
     } catch (e: any) {
       setError(heError(e?.code));
+    } finally {
       setLoading(false);
     }
   };
@@ -209,7 +194,7 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
       <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0c2d57] to-[#004387] p-4">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8 text-center">
           <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-            <Mail className="w-8 h-8 text-green-600" />
+            <MailCheck className="w-8 h-8 text-green-600" />
           </div>
           <h1 className="text-2xl font-bold text-[#0c2d57] mb-3">בדוק את האימייל שלך</h1>
           <p className="text-sm text-gray-600 mb-2">שלחנו מייל אימות אל</p>
