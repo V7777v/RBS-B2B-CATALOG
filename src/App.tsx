@@ -11,7 +11,7 @@ import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -2149,6 +2149,7 @@ const CheckoutView = (props: any) => {
       
       window.location.href = mailtoLink;
       
+      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, method: 'email' }); }
       setLastSentMethod('email');
       setOrderPlaced(true);
     };
@@ -2164,6 +2165,7 @@ const CheckoutView = (props: any) => {
       
       window.open(`https://wa.me/${agentPhone}?text=${text}`, '_blank');
       
+      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, method: 'whatsapp' }); }
       setLastSentMethod('whatsapp');
       setOrderPlaced(true);
     };
@@ -2426,6 +2428,7 @@ export default function App() {
   const [showProfile, setShowProfile] = useState(false);
   const [userUid, setUserUid] = useState<string | null>(null);
   const [cartLoaded, setCartLoaded] = useState(false);
+  const [orders, setOrders] = useState<any[]>([]);
   // Firebase auth state is the source of truth: only verified AND approved distributors are authenticated
   useEffect(() => {
     const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // require re-login after 7 days
@@ -2480,6 +2483,9 @@ export default function App() {
   useEffect(() => {
     if (userUid && cartLoaded) saveCart(userUid, cart);
   }, [cart, userUid, cartLoaded]);
+  useEffect(() => {
+    if (showProfile && userUid) { loadOrders(userUid).then(setOrders); }
+  }, [showProfile, userUid]);
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<Record<string, { product: any, quantity: number }>>({});
@@ -4436,7 +4442,7 @@ export default function App() {
                 <ProductDetailsView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity }} />
               )
             ) : currentView === 'checkout' ? (
-               <CheckoutView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity }} />
+               <CheckoutView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity, userUid, userProfile }} />
             ) : null}
 
             </>
@@ -4818,6 +4824,22 @@ export default function App() {
               {userProfile?.agentPhone && <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">טלפון סוכן</span><a href={`tel:${userProfile.agentPhone}`} className="font-semibold text-[#004387]" dir="ltr">{userProfile.agentPhone}</a></div>}
               {userProfile?.agentEmail && <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">מייל סוכן</span><a href={`mailto:${userProfile.agentEmail}`} className="font-semibold text-[#004387]" dir="ltr">{userProfile.agentEmail}</a></div>}
             </div>
+            {orders.length > 0 && (
+              <div className="mt-5">
+                <h3 className="text-sm font-bold text-gray-600 mb-2">היסטוריית הזמנות ({orders.length})</h3>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {orders.map((o) => (
+                    <div key={o.id} className="border border-gray-100 rounded-lg p-2.5">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-[#0c2d57] text-sm">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'}</span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
+                      </div>
+                      <div className="text-gray-500 text-xs mt-1">{o.itemCount || (o.items?.length ?? 0)} פריטים{o.company ? ` · ${o.company}` : ''}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <button onClick={() => { setShowProfile(false); handleAppLogout(); }} className="w-full mt-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg flex items-center justify-center gap-2"><LogOut size={18} /> יציאה מהמערכת</button>
           </div>
         </div>
