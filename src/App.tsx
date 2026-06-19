@@ -2432,7 +2432,11 @@ export default function App() {
         } catch { ok = false; }
         if (ok) {
           const ts = parseInt(localStorage.getItem('rbs_b2b_login_ts') || '0', 10);
-          if (!ts || Date.now() - ts > SESSION_MAX_AGE_MS) ok = false;
+          if (ts && Date.now() - ts > SESSION_MAX_AGE_MS) {
+            ok = false; // session expired -> force re-login
+          } else if (!ts) {
+            try { localStorage.setItem('rbs_b2b_login_ts', String(Date.now())); } catch {}
+          }
         }
         if (!ok) { try { await signOut(auth); } catch {} }
       }
