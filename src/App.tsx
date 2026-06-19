@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut, User
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -2420,6 +2420,9 @@ export default function App() {
       return false;
     }
   });
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userProfile, setUserProfile] = useState<{ email: string; company: string; customerNumber: string; tier: string } | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
   // Firebase auth state is the source of truth: only verified AND approved distributors are authenticated
   useEffect(() => {
     const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // require re-login after 7 days
@@ -2429,6 +2432,11 @@ export default function App() {
         try {
           const snap = await getDoc(doc(db, 'approvedDistributors', user.email.toLowerCase()));
           ok = snap.exists();
+          const pdata: any = snap.exists() ? snap.data() : null;
+          if (pdata) {
+            setIsAdmin(pdata.admin === true);
+            setUserProfile({ email: user.email, company: pdata.company || '', customerNumber: pdata.customerNumber || '', tier: pdata.tier || '' });
+          }
         } catch { ok = false; }
         if (ok) {
           const ts = parseInt(localStorage.getItem('rbs_b2b_login_ts') || '0', 10);
@@ -2440,6 +2448,7 @@ export default function App() {
         }
         if (!ok) { try { await signOut(auth); } catch {} }
       }
+      if (!ok) { setIsAdmin(false); setUserProfile(null); }
       setIsAuthenticated(ok);
       try {
         if (ok) { localStorage.setItem('rbs_b2b_auth', 'true'); }
@@ -2554,6 +2563,7 @@ export default function App() {
 
   // Admin Sync configuration & Authorization (1 hour window, with option to save password)
   const [isAdminAuth, setIsAdminAuth] = useState(false);
+  useEffect(() => { if (isAdmin) setIsAdminAuth(true); }, [isAdmin]);
   const [showAdminSyncModal, setShowAdminSyncModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState(() => {
     try {
@@ -3741,6 +3751,7 @@ export default function App() {
                 />
                 <span 
                   onClick={() => {
+                    if (!isAdmin) return;
                     setAdminError('');
                     setSyncSuccessMsg('');
                     setShowAdminSyncModal(true);
@@ -3917,6 +3928,19 @@ export default function App() {
                     {cart.reduce((sum, item) => sum + item.quantity, 0)}
                   </span>
                 )}
+              </button>
+            </div>
+
+            {/* Personal area button */}
+            <div className="flex-shrink-0">
+              <button
+                onClick={() => setShowProfile(true)}
+                aria-label="אזור אישי"
+                title="אזור אישי"
+                className="flex items-center justify-center gap-1.5 h-11 !p-2 !px-3 text-[#004387] hover:text-[#0c2d57] transition-colors rounded-xl active:scale-95"
+              >
+                <User size={20} className="flex-shrink-0" />
+                <span className="text-sm font-bold hidden sm:block">אזור אישי</span>
               </button>
             </div>
 
@@ -4144,6 +4168,7 @@ export default function App() {
                 <h2 
                   onClick={() => {
                     setMobileMenuOpen(false);
+                    if (!isAdmin) return;
                     setAdminError('');
                     setSyncSuccessMsg('');
                     setShowAdminSyncModal(true);
@@ -4756,6 +4781,27 @@ export default function App() {
       </AnimatePresence>
 
       {/* ADMIN SYNC MODAL OVERLAY */}
+      {showProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setShowProfile(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <button onClick={() => setShowProfile(false)} className="absolute top-4 left-4 text-gray-400 hover:text-gray-700"><X size={20} /></button>
+            <div className="flex flex-col items-center mb-5">
+              <div className="w-16 h-16 rounded-full bg-[#004387] flex items-center justify-center mb-2"><User className="w-8 h-8 text-white" /></div>
+              <h2 className="text-xl font-bold text-[#0c2d57]">האזור האישי שלי</h2>
+              {isAdmin && <span className="mt-1 text-xs font-bold text-white bg-[#f7941d] px-2 py-0.5 rounded-full">מנהל מערכת</span>}
+            </div>
+            <div className="space-y-3 text-right">
+              <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">אימייל</span><span className="font-semibold text-[#0c2d57]" dir="ltr">{userProfile?.email || '—'}</span></div>
+              <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">חברה</span><span className="font-semibold text-[#0c2d57]">{userProfile?.company || '—'}</span></div>
+              <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">מספר לקוח</span><span className="font-semibold text-[#0c2d57]">{userProfile?.customerNumber || '—'}</span></div>
+              <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">מדרגת מחיר</span><span className="font-semibold text-[#0c2d57]">{userProfile?.tier || '—'}</span></div>
+            </div>
+            <button onClick={() => { setShowProfile(false); handleAppLogout(); }} className="w-full mt-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg flex items-center justify-center gap-2"><LogOut size={18} /> יציאה מהמערכת</button>
+          </div>
+        </div>
+      )}
+
       {showAdminSyncModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" dir="rtl">
           <div className="bg-white w-full max-w-sm p-6 shadow-2xl relative border-t-4 border-[#004387]">
