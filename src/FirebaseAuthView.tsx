@@ -10,7 +10,24 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import emailjs from '@emailjs/browser';
 import { Lock, Mail, Eye, EyeOff, Loader2, CheckCircle, ShieldCheck, MailCheck } from 'lucide-react';
+
+// EmailJS — notify RBS when a new distributor registers (client-side, free tier)
+const EMAILJS_SERVICE_ID = 'service_ml2hb5b';
+const EMAILJS_TEMPLATE_ID = 'template_okd0fzw';
+const EMAILJS_PUBLIC_KEY = 'k4hiP8DMsizj-JZLP';
+
+const notifyAdmin = async (distributorEmail: string) => {
+  try {
+    await emailjs.send(
+      EMAILJS_SERVICE_ID,
+      EMAILJS_TEMPLATE_ID,
+      { distributor_email: distributorEmail, registered_at: new Date().toLocaleString('he-IL') },
+      { publicKey: EMAILJS_PUBLIC_KEY }
+    );
+  } catch { /* notification failure must not break registration */ }
+};
 
 const heError = (code: string): string => {
   switch (code) {
@@ -80,6 +97,7 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
     try {
       const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
       await sendEmailVerification(cred.user);
+      await notifyAdmin(email.trim());
       await signOut(auth);
       setRegisteredEmail(email.trim());
       setRegistered(true);
