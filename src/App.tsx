@@ -8,6 +8,9 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { HumanVerification } from './components/HumanVerification';
 import { AddressAutocomplete } from './components/AddressAutocomplete';
 import InstallBanner from './components/InstallBanner';
+import { FirebaseAuthView } from './FirebaseAuthView';
+import { auth } from './firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
 const TechnicalAdvisor = React.lazy(() => import('./components/TechnicalAdvisor').then(module => ({ default: module.TechnicalAdvisor })));
@@ -2169,6 +2172,7 @@ const CheckoutView = (props: any) => {
 
     const handleLogout = () => {
       setCart([]);
+      signOut(auth).catch(() => {});
       setIsAuthenticated(false);
       navigateHome();
     };
@@ -2415,6 +2419,15 @@ export default function App() {
       return false;
     }
   });
+  // Firebase auth state is the source of truth: only verified users are authenticated
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      const ok = !!(user && user.emailVerified);
+      setIsAuthenticated(ok);
+      try { ok ? localStorage.setItem('rbs_b2b_auth', 'true') : localStorage.removeItem('rbs_b2b_auth'); } catch {}
+    });
+    return () => unsub();
+  }, []);
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<Record<string, { product: any, quantity: number }>>({});
@@ -3591,7 +3604,7 @@ export default function App() {
   }
 
   if (!isAuthenticated) {
-    return <LoginView setIsAuthenticated={setIsAuthenticated} />;
+    return <FirebaseAuthView setIsAuthenticated={setIsAuthenticated} />;
   }
 
   return (

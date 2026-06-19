@@ -1,0 +1,270 @@
+import React, { useState } from 'react';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  signOut,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from './firebase';
+import { Lock, Mail, Eye, EyeOff, Loader2, CheckCircle, ShieldCheck } from 'lucide-react';
+
+const heError = (code: string): string => {
+  switch (code) {
+    case 'auth/invalid-email': return 'כתובת אימייל לא תקינה';
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential': return 'אימייל או סיסמה שגויים';
+    case 'auth/email-already-in-use': return 'האימייל הזה כבר רשום. נסה להתחבר.';
+    case 'auth/weak-password': return 'הסיסמה חייבת להכיל לפחות 6 תווים';
+    case 'auth/too-many-requests': return 'יותר מדי ניסיונות. נסה שוב בעוד מספר דקות.';
+    case 'auth/network-request-failed': return 'בעיית רשת. בדוק את החיבור ונסה שוב.';
+    case 'auth/popup-closed-by-user': return 'חלון הכניסה נסגר. נסה שוב.';
+    default: return 'אירעה שגיאה. נסה שוב.';
+  }
+};
+
+// Checks the approved-distributors allowlist in Firestore.
+const isApproved = async (email: string | null): Promise<boolean> => {
+  if (!email) return false;
+  try {
+    const snap = await getDoc(doc(db, 'approvedDistributors', email.toLowerCase()));
+    return snap.exists();
+  } catch {
+    return false;
+  }
+};
+
+const PENDING_MSG = 'החשבון שלך ממתין לאישור של RBS. תקבל גישה לאחר שהאימייל שלך יאושר.';
+
+interface Props {
+  setIsAuthenticated: (val: boolean) => void;
+}
+
+export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [awaitingVerify, setAwaitingVerify] = useState(false);
+
+  const resetMessages = () => { setError(''); setInfo(''); };
+
+  const handleRegister = async () => {
+    resetMessages();
+    if (!email || !password) { setError('יש למלא אימייל וסיסמה'); return; }
+    setLoading(true);
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      await sendEmailVerification(cred.user);
+      await signOut(auth);
+      setAwaitingVerify(true);
+      setInfo('נשלח אליך מייל אישור. אשר את המייל, ולאחר שהחשבון יאושר על ידי RBS תוכל להיכנס.');
+      setMode('login');
+      setPassword('');
+    } catch (e: any) {
+      setError(heError(e?.code));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = async () => {
+    resetMessages();
+    if (!email || !password) { setError('יש למלא אימייל וסיסמה'); return; }
+    setLoading(true);
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+      if (!cred.user.emailVerified) {
+        setAwaitingVerify(true);
+        await signOut(auth);
+        setError('המייל שלך עדיין לא אושר. בדוק את תיבת הדואר (וגם ספאם) ולחץ על הקישור.');
+        return;
+      }
+      if (!(await isApproved(cred.user.email))) {
+        await signOut(auth);
+        setError(PENDING_MSG);
+        return;
+      }
+      try { localStorage.setItem('rbs_b2b_auth', 'true'); } catch {}
+      setIsAuthenticated(true);
+    } catch (e: any) {
+      setError(heError(e?.code));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    resetMessages();
+    setLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const cred = await signInWithPopup(auth, provider);
+      if (!(await isApproved(cred.user.email))) {
+        await signOut(auth);
+        setError(PENDING_MSG);
+        return;
+      }
+      try { localStorage.setItem('rbs_b2b_auth', 'true'); } catch {}
+      setIsAuthenticated(true);
+    } catch (e: any) {
+      setError(heError(e?.code));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    resetMessages();
+    if (!email || !password) { setError('הזן אימייל וסיסמה כדי לשלוח שוב את מייל האישור'); return; }
+    setLoading(true);
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+      await sendEmailVerification(cred.user);
+      await signOut(auth);
+      setInfo('מייל אישור נשלח שוב. בדוק את תיבת הדואר.');
+    } catch (e: any) {
+      setError(heError(e?.code));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    resetMessages();
+    if (!email) { setError('הזן את האימייל שלך כדי לאפס סיסמה'); return; }
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setInfo('נשלח מייל לאיפוס סיסמה.');
+    } catch (e: any) {
+      setError(heError(e?.code));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submit = () => { if (mode === 'login') handleLogin(); else handleRegister(); };
+
+  return (
+    <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0c2d57] to-[#004387] p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
+        <div className="flex flex-col items-center mb-6">
+          <div className="w-14 h-14 rounded-full bg-[#004387] flex items-center justify-center mb-3">
+            <ShieldCheck className="w-7 h-7 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-[#0c2d57]">אזור אישי למפיצים</h1>
+          <p className="text-sm text-gray-500 mt-1 text-center">
+            {mode === 'login' ? 'התחבר עם האימייל והסיסמה שלך' : 'הרשמה למפיצים מורשים'}
+          </p>
+        </div>
+
+        <div className="flex rounded-lg bg-gray-100 p-1 mb-6">
+          <button
+            type="button"
+            onClick={() => { setMode('login'); resetMessages(); }}
+            className={`flex-1 py-2 rounded-md text-sm font-semibold transition ${mode === 'login' ? 'bg-white text-[#004387] shadow' : 'text-gray-500'}`}
+          >כניסה</button>
+          <button
+            type="button"
+            onClick={() => { setMode('register'); resetMessages(); }}
+            className={`flex-1 py-2 rounded-md text-sm font-semibold transition ${mode === 'register' ? 'bg-white text-[#004387] shadow' : 'text-gray-500'}`}
+          >הרשמה</button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="relative">
+            <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="email"
+              dir="ltr"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="email@company.co.il"
+              className="w-full pr-10 pl-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#004387] focus:border-transparent outline-none text-right"
+            />
+          </div>
+
+          <div className="relative">
+            <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type={showPassword ? 'text' : 'password'}
+              dir="ltr"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+              placeholder="סיסמה (לפחות 6 תווים)"
+              className="w-full pr-10 pl-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#004387] focus:border-transparent outline-none text-right"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((s) => !s)}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            >
+              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+          </div>
+
+          {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg p-3">{error}</p>}
+          {info && (
+            <p className="text-sm text-green-700 bg-green-50 rounded-lg p-3 flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" /> <span>{info}</span>
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={submit}
+            disabled={loading}
+            className="w-full py-3 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (mode === 'login' ? 'כניסה' : 'הרשמה')}
+          </button>
+
+          <div className="flex items-center gap-3 py-1">
+            <div className="flex-1 h-px bg-gray-200" />
+            <span className="text-xs text-gray-400">או</span>
+            <div className="flex-1 h-px bg-gray-200" />
+          </div>
+
+          <button
+            type="button"
+            onClick={handleGoogle}
+            disabled={loading}
+            className="w-full py-3 border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#FFC107" d="M43.6 20.5h-1.9V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22 22-9.8 22-22c0-1.5-.2-2.6-.4-3.5z"/>
+              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 4.1 29.6 2 24 2 16.3 2 9.7 6.3 6.3 14.7z"/>
+              <path fill="#4CAF50" d="M24 46c5.5 0 10.5-2.1 14.3-5.6l-6.6-5.6C29.5 36.4 26.9 37 24 37c-5.2 0-9.6-3.3-11.3-7.9l-6.6 5.1C9.6 41.6 16.2 46 24 46z"/>
+              <path fill="#1976D2" d="M43.6 20.5H24v8h11.3c-.8 2.2-2.2 4.1-4 5.4l6.6 5.6C41.9 36.1 46 30.6 46 24c0-1.5-.2-2.6-.4-3.5z"/>
+            </svg>
+            כניסה עם Google
+          </button>
+
+          {mode === 'login' && (
+            <div className="flex justify-between text-xs text-gray-500 pt-1">
+              <button type="button" onClick={handleForgotPassword} className="hover:text-[#004387]">שכחת סיסמה?</button>
+              {awaitingVerify && (
+                <button type="button" onClick={handleResendVerification} className="hover:text-[#004387]">שלח שוב מייל אישור</button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <p className="text-[11px] text-gray-400 text-center mt-6">
+          הגישה מיועדת ללקוחות עסקיים ומורשים בלבד.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default FirebaseAuthView;
