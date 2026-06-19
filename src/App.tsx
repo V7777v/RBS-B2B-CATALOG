@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -3877,8 +3877,18 @@ export default function App() {
               )}
             </div>
 
-            {/* LEFT SIDE: Cart (Protected from theme overrides) */}
-            <div className="flex-shrink-0">
+            {/* LEFT SIDE: Cart & Log Out */}
+            <div className="flex-shrink-0 flex items-center gap-2 sm:gap-3">
+              <button
+                className="relative flex flex-row items-center justify-center gap-2 !p-2 !px-3.5 !m-0 h-11 text-gray-600 bg-white border border-gray-300 hover:bg-gray-100 transition-all whitespace-nowrap rounded-xl box-border active:scale-95"
+                onClick={handleLogout}
+                aria-label="יציאה מהמערכת"
+                title="התנתק"
+                style={{ margin: 0 }}
+              >
+                <LogOut size={20} className="flex-shrink-0" />
+                <span className="text-sm font-bold hidden xl:block whitespace-nowrap">יציאה</span>
+              </button>
               <button 
                 className="relative flex flex-row items-center justify-center gap-2 !p-2 !px-3.5 !m-0 h-11 text-[#004387] bg-white border border-[#004387]/60 hover:bg-[#004387] hover:text-white hover:border-[#004387] hover:shadow-sm transition-all whitespace-nowrap rounded-xl box-border active:scale-95"
                 onClick={() => setIsCartOpen(true)}
@@ -4116,7 +4126,7 @@ export default function App() {
                 </h2>
                 <ul className="space-y-4">
                   <li>
-                    <button onClick={navigateHome} className="font-bold text-lg text-[#f7941d] bg-transparent border-none !p-0">כל המחירונים</button>
+                    <button onClick={navigateHome} className="font-bold text-lg text-[#f7941d] bg-transparent border-none !p-0 hover:text-[#004387]">כל המחירונים</button>
                   </li>
                   <hr className="border-gray-100"/>
                   {catalogFolders.map((cat, idx) => (
@@ -4124,6 +4134,19 @@ export default function App() {
                       <button onClick={() => navigateToCatalog(cat.name)} className="text-gray-800 font-medium text-right w-full bg-transparent border-none !p-0">{cat.name}</button>
                     </li>
                   ))}
+                  <hr className="border-gray-100"/>
+                  <li>
+                    <button 
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        handleLogout();
+                      }} 
+                      className="flex items-center gap-2 text-red-600 hover:text-white hover:bg-red-600 font-bold px-4 py-3 rounded-lg w-full transition-colors border border-red-200 bg-red-50"
+                    >
+                      <LogOut size={20} />
+                      יציאה מהמערכת
+                    </button>
+                  </li>
                 </ul>
               </div>
             </div>

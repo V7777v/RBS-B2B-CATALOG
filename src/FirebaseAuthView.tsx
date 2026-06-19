@@ -39,8 +39,10 @@ const heError = (code: string): string => {
     case 'auth/weak-password': return 'הסיסמה חלשה מדי';
     case 'auth/too-many-requests': return 'יותר מדי ניסיונות. נסה שוב בעוד מספר דקות.';
     case 'auth/network-request-failed': return 'בעיית רשת. בדוק את החיבור ונסה שוב.';
-    case 'auth/popup-closed-by-user': return 'חלון הכניסה נסגר. נסה שוב.';
-    default: return 'אירעה שגיאה. נסה שוב.';
+    case 'auth/popup-closed-by-user': return 'חלון הכניסה נסגר על ידך. נסה שוב.';
+    case 'auth/popup-blocked': return 'חלון הכניסה נחסם על ידי הדפדפן. אפשר חלונות קופצים (Pop-ups) ונסה שוב.';
+    case 'auth/cancelled-popup-request': return 'בקשת החלון הקופץ בוטלה. נסה שוב.';
+    default: return 'אירעה שגיאה. ' + (code ? `(${code})` : 'נסה שוב.');
   }
 };
 
@@ -120,18 +122,22 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
         setAwaitingVerify(true);
         await signOut(auth);
         setError('המייל שלך עדיין לא אומת. היכנס לתיבת הדואר (וגם ספאם) ולחץ על הקישור לאימות.');
+        setLoading(false);
         return;
       }
       if (!(await isApproved(cred.user.email))) {
         await signOut(auth);
         setInfo('המייל שלך אומת בהצלחה. החשבון ממתין כעת לאישור של RBS — תקבל גישה לאחר האישור.');
+        setLoading(false);
         return;
       }
       try { localStorage.setItem('rbs_b2b_auth', 'true'); } catch {}
-      setIsAuthenticated(true);
+      setInfo('התחברת בהצלחה! מעביר אותך לקטלוג...');
+      setTimeout(() => {
+        setIsAuthenticated(true);
+      }, 1500);
     } catch (e: any) {
       setError(heError(e?.code));
-    } finally {
       setLoading(false);
     }
   };
@@ -145,13 +151,16 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
       if (!(await isApproved(cred.user.email))) {
         await signOut(auth);
         setInfo('נכנסת עם Google בהצלחה. החשבון ממתין כעת לאישור של RBS — תקבל גישה לאחר האישור.');
+        setLoading(false);
         return;
       }
       try { localStorage.setItem('rbs_b2b_auth', 'true'); } catch {}
-      setIsAuthenticated(true);
+      setInfo('התחברת בהצלחה עם Google! מעביר אותך לקטלוג...');
+      setTimeout(() => {
+        setIsAuthenticated(true);
+      }, 1500);
     } catch (e: any) {
       setError(heError(e?.code));
-    } finally {
       setLoading(false);
     }
   };
