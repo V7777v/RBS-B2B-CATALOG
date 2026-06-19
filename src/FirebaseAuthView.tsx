@@ -10,7 +10,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { Lock, Mail, Eye, EyeOff, Loader2, CheckCircle, ShieldCheck } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, Loader2, CheckCircle, ShieldCheck, MailCheck } from 'lucide-react';
 
 const heError = (code: string): string => {
   switch (code) {
@@ -19,12 +19,22 @@ const heError = (code: string): string => {
     case 'auth/wrong-password':
     case 'auth/invalid-credential': return 'אימייל או סיסמה שגויים';
     case 'auth/email-already-in-use': return 'האימייל הזה כבר רשום. נסה להתחבר.';
-    case 'auth/weak-password': return 'הסיסמה חייבת להכיל לפחות 6 תווים';
+    case 'auth/weak-password': return 'הסיסמה חלשה מדי';
     case 'auth/too-many-requests': return 'יותר מדי ניסיונות. נסה שוב בעוד מספר דקות.';
     case 'auth/network-request-failed': return 'בעיית רשת. בדוק את החיבור ונסה שוב.';
     case 'auth/popup-closed-by-user': return 'חלון הכניסה נסגר. נסה שוב.';
     default: return 'אירעה שגיאה. נסה שוב.';
   }
+};
+
+// Reject non-Latin (e.g. Hebrew) characters and enforce a strong password.
+const validatePassword = (pw: string): string => {
+  if (/[^\u0000-\u007F]/.test(pw)) return 'הסיסמה חייבת להיות באנגלית בלבד (אסור עברית או תווים שאינם לטיניים)';
+  if (pw.length < 8) return 'הסיסמה חייבת להכיל לפחות 8 תווים';
+  if (!/[a-z]/.test(pw)) return 'הסיסמה חייבת לכלול אות קטנה (a-z)';
+  if (!/[A-Z]/.test(pw)) return 'הסיסמה חייבת לכלול אות גדולה (A-Z)';
+  if (!/[0-9]/.test(pw)) return 'הסיסמה חייבת לכלול ספרה (0-9)';
+  return '';
 };
 
 // Checks the approved-distributors allowlist in Firestore.
@@ -37,8 +47,6 @@ const isApproved = async (email: string | null): Promise<boolean> => {
     return false;
   }
 };
-
-const PENDING_MSG = 'החשבון שלך ממתין לאישור של RBS. תקבל גישה לאחר שהאימייל שלך יאושר.';
 
 interface Props {
   setIsAuthenticated: (val: boolean) => void;
@@ -53,20 +61,29 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [awaitingVerify, setAwaitingVerify] = useState(false);
+  const [registered, setRegistered] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
 
   const resetMessages = () => { setError(''); setInfo(''); };
 
+  // Block Hebrew/non-Latin characters from being typed into the password field at all.
+  const onPasswordChange = (val: string) => {
+    setPassword(val.replace(/[^\u0000-\u007F]/g, ''));
+  };
+
   const handleRegister = async () => {
     resetMessages();
-    if (!email || !password) { setError('יש למלא אימייל וסיסמה'); return; }
+    if (!email) { setError('יש למלא כתובת אימייל'); return; }
+    const pwErr = validatePassword(password);
+    if (pwErr) { setError(pwErr); return; }
     setLoading(true);
     try {
       const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
       await sendEmailVerification(cred.user);
       await signOut(auth);
+      setRegisteredEmail(email.trim());
+      setRegistered(true);
       setAwaitingVerify(true);
-      setInfo('נשלח אליך מייל אישור. אשר את המייל, ולאחר שהחשבון יאושר על ידי RBS תוכל להיכנס.');
-      setMode('login');
       setPassword('');
     } catch (e: any) {
       setError(heError(e?.code));
@@ -84,12 +101,12 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
       if (!cred.user.emailVerified) {
         setAwaitingVerify(true);
         await signOut(auth);
-        setError('המייל שלך עדיין לא אושר. בדוק את תיבת הדואר (וגם ספאם) ולחץ על הקישור.');
+        setError('המייל שלך עדיין לא אומת. היכנס לתיבת הדואר (וגם ספאם) ולחץ על הקישור לאימות.');
         return;
       }
       if (!(await isApproved(cred.user.email))) {
         await signOut(auth);
-        setError(PENDING_MSG);
+        setInfo('המייל שלך אומת בהצלחה. החשבון ממתין כעת לאישור של RBS — תקבל גישה לאחר האישור.');
         return;
       }
       try { localStorage.setItem('rbs_b2b_auth', 'true'); } catch {}
@@ -109,7 +126,7 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
       const cred = await signInWithPopup(auth, provider);
       if (!(await isApproved(cred.user.email))) {
         await signOut(auth);
-        setError(PENDING_MSG);
+        setInfo('נכנסת עם Google בהצלחה. החשבון ממתין כעת לאישור של RBS — תקבל גישה לאחר האישור.');
         return;
       }
       try { localStorage.setItem('rbs_b2b_auth', 'true'); } catch {}
@@ -123,13 +140,13 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
 
   const handleResendVerification = async () => {
     resetMessages();
-    if (!email || !password) { setError('הזן אימייל וסיסמה כדי לשלוח שוב את מייל האישור'); return; }
+    if (!email || !password) { setError('הזן אימייל וסיסמה כדי לשלוח שוב את מייל האימות'); return; }
     setLoading(true);
     try {
       const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
       await sendEmailVerification(cred.user);
       await signOut(auth);
-      setInfo('מייל אישור נשלח שוב. בדוק את תיבת הדואר.');
+      setInfo('מייל אימות נשלח שוב. בדוק את תיבת הדואר.');
     } catch (e: any) {
       setError(heError(e?.code));
     } finally {
@@ -152,6 +169,32 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
   };
 
   const submit = () => { if (mode === 'login') handleLogin(); else handleRegister(); };
+
+  // After successful registration: clear "check your email" screen.
+  if (registered) {
+    return (
+      <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0c2d57] to-[#004387] p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8 text-center">
+          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+            <MailCheck className="w-8 h-8 text-green-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-[#0c2d57] mb-3">בדוק את האימייל שלך</h1>
+          <p className="text-sm text-gray-600 mb-2">שלחנו מייל אימות אל</p>
+          <p className="text-sm font-bold text-[#004387] mb-4" dir="ltr">{registeredEmail}</p>
+          <p className="text-sm text-gray-600 mb-2">היכנס לתיבת הדואר (בדוק גם בתיקיית ספאם) ולחץ על הקישור לאימות.</p>
+          <p className="text-sm text-gray-600 mb-6">לאחר אימות המייל, החשבון שלך ימתין לאישור של RBS — תקבל גישה מלאה לאחר האישור.</p>
+          {info && <p className="text-sm text-green-700 bg-green-50 rounded-lg p-3 mb-4">{info}</p>}
+          {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg p-3 mb-4">{error}</p>}
+          <button
+            type="button"
+            onClick={() => { setRegistered(false); setMode('login'); resetMessages(); }}
+            className="w-full py-3 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-lg transition"
+          >חזרה למסך הכניסה</button>
+          <p className="text-[11px] text-gray-400 mt-4">לא קיבלת מייל? במסך הכניסה תוכל ללחוץ על "שלח שוב מייל אימות".</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0c2d57] to-[#004387] p-4">
@@ -198,9 +241,9 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
               type={showPassword ? 'text' : 'password'}
               dir="ltr"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => onPasswordChange(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-              placeholder="סיסמה (לפחות 6 תווים)"
+              placeholder="סיסמה"
               className="w-full pr-10 pl-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#004387] focus:border-transparent outline-none text-right"
             />
             <button
@@ -211,6 +254,12 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
           </div>
+
+          {mode === 'register' && (
+            <p className="text-[11px] text-gray-400 leading-relaxed">
+              הסיסמה: לפחות 8 תווים, אות גדולה, אות קטנה וספרה. באנגלית בלבד.
+            </p>
+          )}
 
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg p-3">{error}</p>}
           {info && (
@@ -253,7 +302,7 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
             <div className="flex justify-between text-xs text-gray-500 pt-1">
               <button type="button" onClick={handleForgotPassword} className="hover:text-[#004387]">שכחת סיסמה?</button>
               {awaitingVerify && (
-                <button type="button" onClick={handleResendVerification} className="hover:text-[#004387]">שלח שוב מייל אישור</button>
+                <button type="button" onClick={handleResendVerification} className="hover:text-[#004387]">שלח שוב מייל אימות</button>
               )}
             </div>
           )}
