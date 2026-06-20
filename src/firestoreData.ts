@@ -128,3 +128,18 @@ export async function saveFavorites(uid: string, items: any[]): Promise<void> {
     await setDoc(doc(db, 'favorites', uid), { items, updatedAt: Date.now() });
   } catch { /* ignore */ }
 }
+
+export async function loadUserProfile(uid: string): Promise<any> {
+  try {
+    const snap = await getDoc(doc(db, 'users', uid));
+    return snap.exists() ? snap.data() : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveUserProfile(uid: string, data: any): Promise<void> {
+  try {
+    await setDoc(doc(db, 'users', uid), data, { merge: true });
+  } catch { /* ignore */ }
+}

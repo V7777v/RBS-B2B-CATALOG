@@ -11,7 +11,7 @@ import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadCustomerQuotes, updateQuoteStatus } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadCustomerQuotes, updateQuoteStatus, loadUserProfile, saveUserProfile } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -2046,6 +2046,23 @@ const CheckoutView = (props: any) => {
       { name: 'מאיר', email: 'meir@rbs-telecom.com', phone: '972504530996' }
     ];
 
+    const billingPrefilled = useRef(false);
+    useEffect(() => {
+      if (billingPrefilled.current) return;
+      if (!props.billingProfile && !props.userProfile) return;
+      billingPrefilled.current = true;
+      const bp = props.billingProfile;
+      if (bp) {
+        if (bp.companyName) setCompanyName(bp.companyName);
+        if (bp.companyId) setCompanyId(bp.companyId);
+        if (bp.phonePrefix) setPhonePrefix(bp.phonePrefix);
+        if (bp.phone) setPhone(bp.phone);
+        if (bp.email) setCustomerEmail(bp.email);
+      }
+      if (props.userProfile?.agent && agents.some((a: any) => a.name === props.userProfile.agent)) {
+        setSelectedAgent(props.userProfile.agent);
+      }
+    }, [props.billingProfile, props.userProfile]);
     const phonePrefixes = [
       '050', '052', '053', '054', '055', '058',
       '02', '03', '04', '08', '09',
@@ -2160,7 +2177,7 @@ const CheckoutView = (props: any) => {
       
       window.location.href = mailtoLink;
       
-      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'email' }); }
+      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'email' }); } if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
       setLastSentMethod('email');
       setOrderPlaced(true);
     };
@@ -2176,7 +2193,7 @@ const CheckoutView = (props: any) => {
       
       window.open(`https://wa.me/${agentPhone}?text=${text}`, '_blank');
       
-      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'whatsapp' }); }
+      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'whatsapp' }); } if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
       setLastSentMethod('whatsapp');
       setOrderPlaced(true);
     };
@@ -2439,6 +2456,8 @@ export default function App() {
   const [showProfile, setShowProfile] = useState(false);
   const [userUid, setUserUid] = useState<string | null>(null);
   const [cartLoaded, setCartLoaded] = useState(false);
+  const [billingProfile, setBillingProfile] = useState<any>(null);
+  const [billingSaved, setBillingSaved] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(() => { try { return localStorage.getItem('rbs_b2b_biometric_enabled') === 'true'; } catch { return false; } });
   const [biometricUnlocked, setBiometricUnlocked] = useState(() => { try { return !!sessionStorage.getItem('rbs_unlocked'); } catch { return false; } });
@@ -2656,6 +2675,10 @@ export default function App() {
   useEffect(() => {
     if (userUid) loadFavorites(userUid).then(setFavorites);
     else setFavorites([]);
+  }, [userUid]);
+  useEffect(() => {
+    if (userUid) loadUserProfile(userUid).then(setBillingProfile);
+    else setBillingProfile(null);
   }, [userUid]);
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -4635,7 +4658,7 @@ export default function App() {
                 <ProductDetailsView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity }} />
               )
             ) : currentView === 'checkout' ? (
-               <CheckoutView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity, userUid, userProfile }} />
+               <CheckoutView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity, userUid, userProfile }} billingProfile={billingProfile} onSaveBilling={(d: any) => { if (userUid) { saveUserProfile(userUid, d); setBillingProfile(d); } }} />
             ) : null}
 
             </>
@@ -5083,6 +5106,17 @@ export default function App() {
               <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">סוכן</span><span className="font-semibold text-[#0c2d57]">{userProfile?.agent || '—'}</span></div>
               {userProfile?.agentPhone && <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">טלפון סוכן</span><a href={`tel:${userProfile.agentPhone}`} className="font-semibold text-[#004387]" dir="ltr">{userProfile.agentPhone}</a></div>}
               {userProfile?.agentEmail && <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">מייל סוכן</span><a href={`mailto:${userProfile.agentEmail}`} className="font-semibold text-[#004387]" dir="ltr">{userProfile.agentEmail}</a></div>}
+            </div>
+            <div className="mt-5 border-t border-gray-100 pt-4">
+              <h3 className="text-sm font-bold text-gray-600 mb-2">פרטי חיוב ליצירת הזמנה</h3>
+              <div className="space-y-2">
+                <input value={billingProfile?.companyName || ''} onChange={(e) => { setBillingProfile((b: any) => ({ ...(b || {}), companyName: e.target.value })); setBillingSaved(false); }} placeholder="שם חברה" className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
+                <input value={billingProfile?.companyId || ''} onChange={(e) => { setBillingProfile((b: any) => ({ ...(b || {}), companyId: e.target.value })); setBillingSaved(false); }} placeholder="ח.פ / עוסק מורשה" className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
+                <input value={billingProfile?.phone || ''} onChange={(e) => { setBillingProfile((b: any) => ({ ...(b || {}), phone: e.target.value })); setBillingSaved(false); }} placeholder="טלפון" className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
+                <input value={billingProfile?.email || ''} onChange={(e) => { setBillingProfile((b: any) => ({ ...(b || {}), email: e.target.value })); setBillingSaved(false); }} placeholder="אימייל ליצירת קשר" className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
+                <button onClick={() => { if (userUid) { saveUserProfile(userUid, billingProfile || {}); setBillingSaved(true); } }} className="w-full py-2 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-lg text-sm font-bold">{billingSaved ? '✓ נשמר' : 'שמור פרטים'}</button>
+                <p className="text-[11px] text-gray-400">הפרטים ימולאו אוטומטית בטופס ההזמנה הבא.</p>
+              </div>
             </div>
             {customerQuotes.length > 0 && (
               <div className="mt-5">
