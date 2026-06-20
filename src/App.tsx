@@ -11,7 +11,7 @@ import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadCustomerQuotes, updateQuoteStatus } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -2466,6 +2466,8 @@ export default function App() {
   const [quoteNote, setQuoteNote] = useState('');
   const [quoteSearch, setQuoteSearch] = useState('');
   const [quoteSaving, setQuoteSaving] = useState(false);
+  const [customerQuotes, setCustomerQuotes] = useState<any[]>([]);
+  const [expandedQuote, setExpandedQuote] = useState<string | null>(null);
   const quoteTotal = useMemo(() => quoteItems.reduce((sum: number, l: any) => sum + (Number(l.quotedPrice) || 0) * (Number(l.qty) || 0), 0), [quoteItems]);
   const openQuoteEditor = (customer: any, existing?: any) => {
     setQuoteEditorCustomer(customer);
@@ -2489,6 +2491,18 @@ export default function App() {
     setQuoteSaving(false);
     setShowQuoteEditor(false);
     if (agentName) loadAgentQuotes(agentName).then(setAgentQuotes);
+  };
+  const approveQuote = async (q: any) => {
+    await updateQuoteStatus(q.id, 'approved');
+    if (userUid) {
+      const detailsText = (q.items || []).map((l: any) => `${l.name} (${l.sku}) x${l.qty} — ₪${l.quotedPrice}`).join('\n') + `\nסה"כ: ₪${Math.round(q.total || 0)}`;
+      addOrderRecord({ uid: userUid, email: userProfile?.email || '', customerNumber: userProfile?.customerNumber || '', company: userProfile?.company || '', itemCount: (q.items || []).reduce((sum: number, l: any) => sum + (l.qty || 0), 0), items: q.items || [], detailsText, total: q.total || 0, agent: userProfile?.agent || '', method: 'quote' });
+    }
+    if (userProfile?.email) loadCustomerQuotes(userProfile.email).then(setCustomerQuotes);
+  };
+  const rejectQuote = async (q: any) => {
+    await updateQuoteStatus(q.id, 'rejected');
+    if (userProfile?.email) loadCustomerQuotes(userProfile.email).then(setCustomerQuotes);
   };
   const [favorites, setFavorites] = useState<any[]>([]);
   const [selectedFavIds, setSelectedFavIds] = useState<Set<string>>(new Set());
@@ -2630,6 +2644,9 @@ export default function App() {
   useEffect(() => {
     if (showProfile && userUid) { loadOrders(userUid).then(setOrders); }
   }, [showProfile, userUid]);
+  useEffect(() => {
+    if (showProfile && userProfile?.email) loadCustomerQuotes(userProfile.email).then(setCustomerQuotes);
+  }, [showProfile, userProfile]);
   useEffect(() => {
     if (!showProfile) return;
     if (userRole === 'sales_manager') loadAllOrders().then(setTeamOrders);
@@ -5067,6 +5084,38 @@ export default function App() {
               {userProfile?.agentPhone && <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">טלפון סוכן</span><a href={`tel:${userProfile.agentPhone}`} className="font-semibold text-[#004387]" dir="ltr">{userProfile.agentPhone}</a></div>}
               {userProfile?.agentEmail && <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">מייל סוכן</span><a href={`mailto:${userProfile.agentEmail}`} className="font-semibold text-[#004387]" dir="ltr">{userProfile.agentEmail}</a></div>}
             </div>
+            {customerQuotes.length > 0 && (
+              <div className="mt-5">
+                <h3 className="text-sm font-bold text-gray-600 mb-2">הצעות מחיר ({customerQuotes.length})</h3>
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {customerQuotes.map((q: any) => (
+                    <div key={q.id} className="border border-gray-100 rounded-lg p-2.5">
+                      <button onClick={() => setExpandedQuote(expandedQuote === q.id ? null : q.id)} className="w-full flex justify-between items-center">
+                        <span className="font-semibold text-[#0c2d57] text-sm">₪{Math.round(q.total || 0)} · {q.items?.length || 0} פריטים</span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${q.status === 'approved' ? 'bg-green-100 text-green-700' : q.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>{q.status === 'approved' ? 'אושר' : q.status === 'rejected' ? 'נדחה' : 'ממתין לאישורך'}</span>
+                      </button>
+                      {expandedQuote === q.id && (
+                        <div className="mt-2 space-y-1">
+                          {(q.items || []).map((l: any, i: number) => (
+                            <div key={i} className="flex justify-between text-xs text-gray-600 border-b border-gray-50 pb-1">
+                              <span className="truncate">{l.name} ×{l.qty}</span>
+                              <span className="font-semibold flex-shrink-0">₪{Math.round((l.quotedPrice || 0) * (l.qty || 0))}</span>
+                            </div>
+                          ))}
+                          {q.note && <p className="text-xs text-gray-500 mt-1">הערה: {q.note}</p>}
+                          {q.status === 'sent' && (
+                            <div className="flex gap-2 mt-2">
+                              <button onClick={() => approveQuote(q)} className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold">אשר הזמנה</button>
+                              <button onClick={() => rejectQuote(q)} className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-sm font-bold">דחה</button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {orders.length > 0 && (
               <div className="mt-5">
                 <h3 className="text-sm font-bold text-gray-600 mb-2">היסטוריית הזמנות ({orders.length})</h3>
