@@ -2439,6 +2439,10 @@ export default function App() {
   const [showProfile, setShowProfile] = useState(false);
   const [userUid, setUserUid] = useState<string | null>(null);
   const [cartLoaded, setCartLoaded] = useState(false);
+  const [biometricSupported, setBiometricSupported] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(() => { try { return localStorage.getItem('rbs_b2b_biometric_enabled') === 'true'; } catch { return false; } });
+  const [biometricUnlocked, setBiometricUnlocked] = useState(() => { try { return !!sessionStorage.getItem('rbs_unlocked'); } catch { return false; } });
+  const [biometricError, setBiometricError] = useState('');
   const [orders, setOrders] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<any[]>([]);
   const favoriteIds = useMemo(() => new Set(favorites.map((f: any) => f.id)), [favorites]);
@@ -2489,8 +2493,71 @@ export default function App() {
   }, []);
   const handleAppLogout = () => {
     signOut(auth).catch(() => {});
-    try { localStorage.removeItem('rbs_b2b_auth'); localStorage.removeItem('rbs_b2b_login_ts'); } catch {}
+    try { localStorage.removeItem('rbs_b2b_auth'); localStorage.removeItem('rbs_b2b_login_ts'); sessionStorage.removeItem('rbs_unlocked'); } catch {}
     setIsAuthenticated(false);
+  };
+  // Biometric (WebAuthn) — device-local unlock over the persisted Firebase session
+  useEffect(() => {
+    if (window.self === window.top && (window as any).PublicKeyCredential) {
+      (PublicKeyCredential as any).isUserVerifyingPlatformAuthenticatorAvailable()
+        .then((available: boolean) => setBiometricSupported(!!available))
+        .catch(() => setBiometricSupported(false));
+    }
+  }, []);
+  useEffect(() => {
+    if (isAuthenticated) { try { setBiometricUnlocked(!!sessionStorage.getItem('rbs_unlocked')); } catch {} }
+  }, [isAuthenticated]);
+  const enrollBiometric = async (): Promise<boolean> => {
+    try {
+      if (window.self !== window.top) { setBiometricError('הפעלה ביומטרית דורשת פתיחת האתר בטאב נפרד (לא בתוך מסגרת AI Studio).'); return false; }
+      const challenge = new Uint8Array(32); window.crypto.getRandomValues(challenge);
+      const id = new Uint8Array(16); window.crypto.getRandomValues(id);
+      const publicKey: PublicKeyCredentialCreationOptions = {
+        challenge,
+        rp: { name: 'RBS B2B Catalog', id: window.location.hostname },
+        user: { id, name: userProfile?.email || 'rbs-b2b-user', displayName: 'RBS B2B User' },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        timeout: 60000,
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
+      };
+      const credential = (await navigator.credentials.create({ publicKey })) as PublicKeyCredential;
+      if (credential && credential.rawId) {
+        const hexId = Array.prototype.map.call(new Uint8Array(credential.rawId), (x: number) => ('00' + x.toString(16)).slice(-2)).join('');
+        localStorage.setItem('rbs_b2b_biometric_raw_id', hexId);
+        localStorage.setItem('rbs_b2b_biometric_enabled', 'true');
+        setBiometricEnabled(true);
+        return true;
+      }
+      return false;
+    } catch (err) { console.error('Biometric enroll failed:', err); return false; }
+  };
+  const handleBiometricUnlock = async () => {
+    try {
+      setBiometricError('');
+      const challenge = new Uint8Array(32); window.crypto.getRandomValues(challenge);
+      const savedRawIdHex = localStorage.getItem('rbs_b2b_biometric_raw_id');
+      const allowCredentials: PublicKeyCredentialDescriptor[] = [];
+      if (savedRawIdHex) {
+        try {
+          const rawIdBytes = new Uint8Array(savedRawIdHex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
+          allowCredentials.push({ type: 'public-key', id: rawIdBytes.buffer });
+        } catch (e) { console.error('parse rawId failed', e); }
+      }
+      const publicKey: PublicKeyCredentialRequestOptions = {
+        challenge, timeout: 60000, rpId: window.location.hostname, userVerification: 'required',
+        allowCredentials: allowCredentials.length ? allowCredentials : undefined,
+      };
+      const credential = await navigator.credentials.get({ publicKey });
+      if (credential) { sessionStorage.setItem('rbs_unlocked', '1'); setBiometricUnlocked(true); }
+    } catch (err: any) {
+      console.error('Biometric unlock error:', err);
+      if (window.self !== window.top) setBiometricError('זיהוי ביומטרי דורש פתיחת האתר בטאב נפרד.');
+      else if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') setBiometricError('האימות נכשל או בוטל. נסה שוב או היכנס עם סיסמה.');
+    }
+  };
+  const disableBiometric = () => {
+    try { localStorage.removeItem('rbs_b2b_biometric_enabled'); localStorage.removeItem('rbs_b2b_biometric_raw_id'); } catch {}
+    setBiometricEnabled(false);
   };
   // Saved cart: load from Firestore on login, then persist on every change (guarded against empty-overwrite)
   useEffect(() => {
@@ -3693,6 +3760,27 @@ export default function App() {
     return <FirebaseAuthView setIsAuthenticated={setIsAuthenticated} />;
   }
 
+  if (biometricEnabled && !biometricUnlocked) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#004387] to-[#0c2d57] flex flex-col items-center justify-center p-6" dir="rtl">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 text-center">
+          <div className="w-20 h-20 mx-auto rounded-full bg-[#004387]/10 flex items-center justify-center mb-4">
+            <Fingerprint size={40} className="text-[#004387]" />
+          </div>
+          <h1 className="text-2xl font-bold text-[#0c2d57] mb-1">כניסה מהירה</h1>
+          <p className="text-gray-500 text-sm mb-6">היכנס באמצעות זיהוי פנים או טביעת אצבע</p>
+          {biometricError && <p className="text-red-600 text-sm mb-4 bg-red-50 rounded-lg p-2">{biometricError}</p>}
+          <button onClick={handleBiometricUnlock} className="w-full py-3.5 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-95">
+            <Fingerprint size={22} /> כניסה עם זיהוי פנים / טביעת אצבע
+          </button>
+          <button onClick={handleAppLogout} className="w-full mt-3 py-2.5 text-gray-500 hover:text-gray-700 font-semibold text-sm">
+            כניסה עם סיסמה
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <FavoritesContext.Provider value={{ favoriteIds, toggleFavorite }}>
     <div id="rbs-b2b-app" className="min-h-screen bg-slate-50 flex flex-col font-sans" dir="rtl">
@@ -4883,6 +4971,22 @@ export default function App() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+            {biometricSupported && (
+              <div className="mt-5 border-t border-gray-100 pt-4">
+                {biometricEnabled ? (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-green-700 flex items-center gap-1.5"><Fingerprint size={16} /> כניסה ביומטרית מופעלת</span>
+                    <button onClick={disableBiometric} className="text-xs text-red-500 font-semibold">כבה</button>
+                  </div>
+                ) : (
+                  <>
+                    <button onClick={async () => { const ok = await enrollBiometric(); if (!ok && !biometricError) { setBiometricError('ההפעלה בוטלה או נכשלה. נסה שוב.'); } }} className="w-full py-2.5 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-lg flex items-center justify-center gap-2"><Fingerprint size={18} /> הפעל כניסה ביומטרית</button>
+                    {biometricError && <p className="text-red-600 text-xs mt-2">{biometricError}</p>}
+                    <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">הזיהוי מתבצע במכשיר שלך בלבד ואינו נשמר אצלנו. ההפעלה היא למכשיר זה. לאחר התנתקות מלאה או אחרי 7 ימים תידרש כניסה עם סיסמה.</p>
+                  </>
+                )}
               </div>
             )}
             <button onClick={() => { setShowProfile(false); handleAppLogout(); }} className="w-full mt-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg flex items-center justify-center gap-2"><LogOut size={18} /> יציאה מהמערכת</button>

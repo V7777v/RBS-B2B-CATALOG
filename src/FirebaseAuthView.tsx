@@ -130,6 +130,7 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
       try { 
         localStorage.setItem('rbs_b2b_auth', 'true');
         localStorage.setItem('rbs_b2b_login_ts', Date.now().toString());
+        sessionStorage.setItem('rbs_unlocked', '1');
       } catch {}
       setIsAuthenticated(true);
     } catch (e: any) {
@@ -153,6 +154,7 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
       try { 
         localStorage.setItem('rbs_b2b_auth', 'true');
         localStorage.setItem('rbs_b2b_login_ts', Date.now().toString());
+        sessionStorage.setItem('rbs_unlocked', '1');
       } catch {}
       setIsAuthenticated(true);
     } catch (e: any) {
