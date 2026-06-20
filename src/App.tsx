@@ -1909,8 +1909,9 @@ const CheckoutView = (props: any) => {
           <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle size={40} />
           </div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-4">הבקשה נוסחה והועברה לאפליקציה שבחרת!</h2>
-          <p className="text-gray-600 mb-8 px-4">שים לב: הודעת המייל או הווצאפ נפתחה במכשירך להשלמת השליחה.</p>
+          <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-3">✓ ההזמנה נשלחה בהצלחה!</h2>
+          <p className="text-gray-700 mb-2 px-4 font-semibold">עותק מלא של ההזמנה נשמר ב«אזור אישי» ← «היסטוריית הזמנות»{selectedAgent ? `, והיא הועברה לסוכן ${selectedAgent}` : ''}. הסוכן יקבל את ההזמנה ויחזור אליך בהקדם.</p>
+          <p className="text-gray-500 mb-8 px-4 text-sm">שים לב: חלון ה{lastSentMethod === 'email' ? 'מייל' : 'וואטסאפ'} נפתח במכשירך — יש לשלוח את ההודעה כדי להשלים את הפנייה.</p>
           
           <div className="border-t border-gray-200 pt-6 mt-4">
             <h3 className="text-lg font-bold text-gray-800 mb-4">
@@ -2088,17 +2089,21 @@ const CheckoutView = (props: any) => {
               </div>
 
               <div className="space-y-3 mt-6">
-                <button 
-                  onClick={handleSendEmail} 
-                  className="w-full bg-[#004387] text-white py-3.5 px-4 font-bold hover:bg-[#fe8d00] transition-colors flex items-center justify-center gap-2 text-base shadow-sm"
-                >
-                  שליחת הזמנה וגיבוי במייל סוכן
-                </button>
+                <div className="bg-[#e6f0fa]/60 border border-[#b3d4f5] rounded-lg p-3">
+                  <p className="text-sm font-bold text-[#0c2d57] flex items-center gap-1.5"><CheckCircle size={16} className="text-[#004387] flex-shrink-0" /> שליחת הזמנה לסוכן{selectedAgent ? ` — ${selectedAgent}` : ''}</p>
+                  <p className="text-xs text-gray-600 mt-1 leading-relaxed">ההזמנה תישמר אוטומטית ב«אזור אישי» ← «היסטוריית הזמנות», ותועבר לסוכן המטפל שיחזור אליך בהקדם. בחר אופן שליחה:</p>
+                </div>
                 <button 
                   onClick={handleSendWhatsApp} 
                   className="w-full bg-green-500 text-white py-3.5 px-4 font-bold hover:bg-green-600 transition-colors flex items-center justify-center gap-2 text-base shadow-sm"
                 >
-                  שליחה ישירה לוואטסאפ סוכן
+                  <span className="text-lg">📲</span> שליחת ההזמנה בוואטסאפ
+                </button>
+                <button 
+                  onClick={handleSendEmail} 
+                  className="w-full bg-[#004387] text-white py-3.5 px-4 font-bold hover:bg-[#fe8d00] transition-colors flex items-center justify-center gap-2 text-base shadow-sm"
+                >
+                  <span className="text-lg">✉️</span> שליחת ההזמנה במייל
                 </button>
               </div>
 
