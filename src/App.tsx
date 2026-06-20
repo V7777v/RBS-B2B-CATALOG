@@ -2448,6 +2448,16 @@ export default function App() {
   const [userRole, setUserRole] = useState<string>('user');
   const [agentName, setAgentName] = useState<string>('');
   const [teamOrders, setTeamOrders] = useState<any[]>([]);
+  const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
+  const customerGroups = useMemo(() => {
+    const map = new Map<string, any>();
+    teamOrders.forEach((o: any) => {
+      const key = String(o.email || o.company || 'לא ידוע').toLowerCase();
+      if (!map.has(key)) map.set(key, { key, name: o.company || o.email || 'לא ידוע', email: o.email || '', orders: [] });
+      map.get(key).orders.push(o);
+    });
+    return Array.from(map.values());
+  }, [teamOrders]);
   const [favorites, setFavorites] = useState<any[]>([]);
   const [selectedFavIds, setSelectedFavIds] = useState<Set<string>>(new Set());
   const favoriteIds = useMemo(() => new Set(favorites.map((f: any) => f.id)), [favorites]);
@@ -4990,19 +5000,38 @@ export default function App() {
                 </div>
               </div>
             )}
-            {(userRole === 'agent' || userRole === 'sales_manager') && teamOrders.length > 0 && (
+            {(userRole === 'agent' || userRole === 'sales_manager') && customerGroups.length > 0 && (
               <div className="mt-5">
-                <h3 className="text-sm font-bold text-gray-600 mb-2">{userRole === 'sales_manager' ? 'כל ההזמנות' : 'הזמנות הלקוחות שלי'} ({teamOrders.length})</h3>
-                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                  {teamOrders.map((o) => (
-                    <div key={o.id} className="border border-gray-100 rounded-lg p-2.5">
-                      <div className="flex justify-between items-center">
-                        <span className="font-semibold text-[#0c2d57] text-sm truncate">{o.company || o.email || '—'}</span>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
-                      </div>
-                      <div className="text-gray-500 text-xs mt-1">
-                        {o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'} · {o.itemCount || (o.items?.length ?? 0)} פריטים{userRole === 'sales_manager' && o.agent ? ` · סוכן: ${o.agent}` : ''}
-                      </div>
+                <h3 className="text-sm font-bold text-gray-600 mb-2">{userRole === 'sales_manager' ? 'תיקיות לקוחות (כל הסוכנים)' : 'תיקיות לקוחות'} ({customerGroups.length})</h3>
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {customerGroups.map((g: any) => (
+                    <div key={g.key} className="border border-gray-100 rounded-lg overflow-hidden">
+                      <button onClick={() => setExpandedCustomer(expandedCustomer === g.key ? null : g.key)} className="w-full flex items-center justify-between p-2.5 bg-gray-50 hover:bg-gray-100">
+                        <span className="flex items-center gap-2 min-w-0">
+                          <FolderOpen size={16} className="text-[#004387] flex-shrink-0" />
+                          <span className="font-semibold text-[#0c2d57] text-sm truncate">{g.name}</span>
+                        </span>
+                        <span className="text-xs text-gray-500 flex-shrink-0 mr-2">{g.orders.length} הזמנות {expandedCustomer === g.key ? '▲' : '▼'}</span>
+                      </button>
+                      {expandedCustomer === g.key && (
+                        <div className="p-2 space-y-2 bg-white">
+                          {g.orders.map((o: any) => (
+                            <div key={o.id} className="border border-gray-100 rounded-lg p-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-[#0c2d57] text-sm font-semibold">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'}</span>
+                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
+                              </div>
+                              <div className="text-gray-500 text-xs mt-1">{o.itemCount || (o.items?.length ?? 0)} פריטים{userRole === 'sales_manager' && o.agent ? ` · סוכן: ${o.agent}` : ''}</div>
+                              {o.detailsText && (
+                                <details className="mt-1">
+                                  <summary className="text-[11px] text-[#004387] cursor-pointer">פרטי הזמנה</summary>
+                                  <pre className="text-[10px] text-gray-600 whitespace-pre-wrap mt-1 bg-gray-50 rounded p-1.5 max-h-32 overflow-y-auto" dir="rtl">{o.detailsText}</pre>
+                                </details>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
