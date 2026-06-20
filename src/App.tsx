@@ -3896,8 +3896,8 @@ export default function App() {
             </>)}
             {isGuest && (
               <div className="flex-shrink-0">
-                <button onClick={() => { try { sessionStorage.removeItem('rbs_guest'); } catch {} setIsGuest(false); }} className="flex items-center justify-center gap-1.5 h-11 !px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl active:scale-95 text-sm whitespace-nowrap">
-                  <User size={18} className="flex-shrink-0" /> התחבר / הירשם
+                <button onClick={() => { try { sessionStorage.removeItem('rbs_guest'); } catch {} setIsGuest(false); }} title="כניסה / רישום למפיצים מורשים בלבד" className="flex items-center justify-center gap-1.5 h-11 !px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl active:scale-95 text-sm whitespace-nowrap">
+                  <Lock size={16} className="flex-shrink-0" /> כניסת מפיצים
                 </button>
               </div>
             )}

@@ -81,6 +81,8 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest 
   const [awaitingVerify, setAwaitingVerify] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState('');
+  const [screen, setScreen] = useState<'landing' | 'form'>(onGuest ? 'landing' : 'form');
+  const [showDistributorPopup, setShowDistributorPopup] = useState(false);
 
   const resetMessages = () => { setError(''); setInfo(''); };
 
@@ -223,9 +225,53 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest 
     );
   }
 
+  if (screen === 'landing') {
+    return (
+      <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0c2d57] to-[#004387] p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
+          <div className="flex flex-col items-center mb-5">
+            <div className="w-14 h-14 rounded-full bg-[#004387] flex items-center justify-center mb-3">
+              <ShieldCheck className="w-7 h-7 text-white" />
+            </div>
+            <h1 className="text-xl font-bold text-[#0c2d57] text-center leading-snug">ברוכים הבאים לקטלוג המוצרים של RBS Telecom</h1>
+          </div>
+
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 mb-5">
+            <p className="text-sm font-bold text-amber-900 text-center leading-relaxed">⚠️ הכניסה וההרשמה מיועדות למפיצים מורשים בלבד</p>
+            <p className="text-[12px] text-amber-800 text-center mt-1 font-semibold leading-relaxed">חשבון נפתח רק לאחר אישור מנהל המערכת. אינך מפיץ? המשך לצפייה בקטלוג כאורח.</p>
+          </div>
+
+          <button type="button" onClick={onGuest} className="w-full py-3.5 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-lg transition flex items-center justify-center gap-2 text-base mb-3">
+            <Eye className="w-5 h-5" /> צפייה בקטלוג המוצרים (אורח)
+          </button>
+
+          <button type="button" onClick={() => setShowDistributorPopup(true)} className="w-full py-3 border-2 border-[#004387]/40 hover:border-[#004387] text-[#004387] font-bold rounded-lg transition">
+            כניסה / רישום — למפיצים מורשים בלבד
+          </button>
+        </div>
+
+        {showDistributorPopup && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowDistributorPopup(false)}>
+            <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-3"><ShieldCheck className="w-6 h-6 text-amber-600" /></div>
+              <h3 className="font-bold text-lg text-[#0c2d57] mb-2">אזור מפיצים מורשים</h3>
+              <p className="text-sm text-gray-600 mb-1 font-bold leading-relaxed">ההרשמה והכניסה מיועדות למפיצים מורשים של RBS Telecom בלבד.</p>
+              <p className="text-[13px] text-gray-500 mb-5 leading-relaxed">פתיחת חשבון חדש מתאפשרת אך ורק לאחר אישור מנהל המערכת. אם אינך מפיץ — חזור ובחר "צפייה כאורח".</p>
+              <button onClick={() => { setShowDistributorPopup(false); setScreen('form'); }} className="w-full py-3 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-lg mb-2">אני מפיץ מורשה — המשך</button>
+              <button onClick={() => setShowDistributorPopup(false)} className="w-full py-2 text-gray-500 text-sm font-semibold">חזרה</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0c2d57] to-[#004387] p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
+        {onGuest && (
+          <button type="button" onClick={() => { setScreen('landing'); resetMessages(); }} className="text-sm text-gray-500 hover:text-[#004387] font-semibold mb-4">‹ חזרה לבחירה</button>
+        )}
         <div className="flex flex-col items-center mb-6">
           <div className="w-14 h-14 rounded-full bg-[#004387] flex items-center justify-center mb-3">
             <ShieldCheck className="w-7 h-7 text-white" />
@@ -335,20 +381,9 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest 
           )}
         </div>
 
-        <div className="mt-6 pt-5 border-t border-gray-100">
-          <p className="text-[12px] text-gray-500 leading-relaxed text-center mb-3">
-            <strong className="text-[#0c2d57]">הרשמה מיועדת למפיצים מורשים בלבד</strong> — והגישה נפתחת רק לאחר אישור מנהל המערכת. אם אינך לקוח מפיץ, ניתן להיכנס במצב אורח ולצפות בקטלוג המוצרים.
-          </p>
-          {onGuest && (
-            <button
-              type="button"
-              onClick={onGuest}
-              className="w-full py-3 border-2 border-[#004387]/30 hover:border-[#004387] hover:bg-[#004387]/5 text-[#004387] font-bold rounded-lg transition flex items-center justify-center gap-2"
-            >
-              <Eye className="w-5 h-5" /> כניסה כאורח — צפייה בלבד
-            </button>
-          )}
-        </div>
+        <p className="text-[12px] text-center mt-6 font-bold text-[#0c2d57] leading-relaxed">
+          הכניסה וההרשמה למפיצים מורשים בלבד — לאחר אישור מנהל המערכת.
+        </p>
       </div>
     </div>
   );
