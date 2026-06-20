@@ -73,6 +73,46 @@ export async function loadAllOrders(): Promise<any[]> {
   }
 }
 
+// ---------- Quotes (quotes/{quoteId}) ----------
+export async function saveQuote(data: Record<string, any>, quoteId?: string | null): Promise<string | null> {
+  try {
+    if (quoteId) {
+      await setDoc(doc(db, 'quotes', quoteId), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+      return quoteId;
+    }
+    const ref = await addDoc(collection(db, 'quotes'), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    return ref.id;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadAgentQuotes(agentName: string): Promise<any[]> {
+  try {
+    const q = query(collection(db, 'quotes'), where('agentName', '==', agentName));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+  } catch {
+    return [];
+  }
+}
+
+export async function loadCustomerQuotes(email: string): Promise<any[]> {
+  try {
+    const q = query(collection(db, 'quotes'), where('customerEmail', '==', email.toLowerCase()));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+  } catch {
+    return [];
+  }
+}
+
+export async function updateQuoteStatus(quoteId: string, status: string): Promise<void> {
+  try {
+    await setDoc(doc(db, 'quotes', quoteId), { status, updatedAt: serverTimestamp() }, { merge: true });
+  } catch { /* ignore */ }
+}
+
 // ---------- Favorites (favorites/{uid}) ----------
 export async function loadFavorites(uid: string): Promise<any[]> {
   try {

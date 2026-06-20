@@ -11,7 +11,7 @@ import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -2458,6 +2458,38 @@ export default function App() {
     });
     return Array.from(map.values());
   }, [teamOrders]);
+  const [agentQuotes, setAgentQuotes] = useState<any[]>([]);
+  const [showQuoteEditor, setShowQuoteEditor] = useState(false);
+  const [quoteEditorCustomer, setQuoteEditorCustomer] = useState<any>(null);
+  const [quoteId, setQuoteId] = useState<string | null>(null);
+  const [quoteItems, setQuoteItems] = useState<any[]>([]);
+  const [quoteNote, setQuoteNote] = useState('');
+  const [quoteSearch, setQuoteSearch] = useState('');
+  const [quoteSaving, setQuoteSaving] = useState(false);
+  const quoteTotal = useMemo(() => quoteItems.reduce((sum: number, l: any) => sum + (Number(l.quotedPrice) || 0) * (Number(l.qty) || 0), 0), [quoteItems]);
+  const openQuoteEditor = (customer: any, existing?: any) => {
+    setQuoteEditorCustomer(customer);
+    setQuoteId(existing?.id || null);
+    setQuoteItems(existing?.items ? existing.items.map((i: any) => ({ ...i })) : []);
+    setQuoteNote(existing?.note || '');
+    setQuoteSearch('');
+    setShowQuoteEditor(true);
+  };
+  const addQuoteLine = (pr: any) => {
+    setQuoteItems((prev) => prev.some((l: any) => l.id === pr.id) ? prev : [...prev, { id: pr.id, sku: pr.sku || '', name: pr.name || '', qty: 1, listPrice: Math.round(parsePrice(pr.price)) || 0, quotedPrice: Math.round(parsePrice(pr.price)) || 0 }]);
+    setQuoteSearch('');
+  };
+  const updateQuoteLine = (idx: number, field: string, value: any) => setQuoteItems((prev) => prev.map((l: any, i: number) => i === idx ? { ...l, [field]: value } : l));
+  const removeQuoteLine = (idx: number) => setQuoteItems((prev) => prev.filter((_: any, i: number) => i !== idx));
+  const submitQuote = async (status: string) => {
+    if (!quoteEditorCustomer || quoteItems.length === 0) return;
+    setQuoteSaving(true);
+    const data = { agentName, agentUid: userUid, customerEmail: String(quoteEditorCustomer.email || '').toLowerCase(), customerCompany: quoteEditorCustomer.company || quoteEditorCustomer.name || '', items: quoteItems, note: quoteNote, total: quoteTotal, status };
+    await saveQuote(data, quoteId);
+    setQuoteSaving(false);
+    setShowQuoteEditor(false);
+    if (agentName) loadAgentQuotes(agentName).then(setAgentQuotes);
+  };
   const [favorites, setFavorites] = useState<any[]>([]);
   const [selectedFavIds, setSelectedFavIds] = useState<Set<string>>(new Set());
   const favoriteIds = useMemo(() => new Set(favorites.map((f: any) => f.id)), [favorites]);
@@ -2601,7 +2633,7 @@ export default function App() {
   useEffect(() => {
     if (!showProfile) return;
     if (userRole === 'sales_manager') loadAllOrders().then(setTeamOrders);
-    else if (userRole === 'agent' && agentName) loadAgentOrders(agentName).then(setTeamOrders);
+    else if (userRole === 'agent' && agentName) { loadAgentOrders(agentName).then(setTeamOrders); loadAgentQuotes(agentName).then(setAgentQuotes); }
     else setTeamOrders([]);
   }, [showProfile, userRole, agentName]);
   useEffect(() => {
@@ -4948,6 +4980,57 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {showQuoteEditor && (
+        <div className="fixed inset-0 z-[60] bg-white flex flex-col" dir="rtl">
+          <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-[#004387] text-white flex-shrink-0">
+            <h2 className="font-bold text-base truncate">הצעת מחיר — {quoteEditorCustomer?.company || quoteEditorCustomer?.name || quoteEditorCustomer?.email}</h2>
+            <button onClick={() => setShowQuoteEditor(false)} aria-label="סגור"><X size={22} /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div>
+              <input value={quoteSearch} onChange={(e) => setQuoteSearch(e.target.value)} placeholder="חיפוש מוצר להוספה (שם / מק״ט)" className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
+              {quoteSearch.trim().length >= 2 && (
+                <div className="border border-gray-200 rounded-lg mt-1 max-h-52 overflow-y-auto">
+                  {catalogData.filter((pr: any) => String(pr.name || '').includes(quoteSearch) || String(pr.sku || '').includes(quoteSearch)).slice(0, 25).map((pr: any) => (
+                    <button key={pr.id} onClick={() => addQuoteLine(pr)} className="w-full text-right p-2 hover:bg-gray-50 border-b border-gray-100 text-sm flex justify-between gap-2">
+                      <span className="truncate text-[#0c2d57]">{pr.name}</span><span className="text-gray-400 text-xs flex-shrink-0">{pr.sku}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              {quoteItems.length === 0 && <p className="text-gray-400 text-sm text-center py-6">הוסף מוצרים להצעה</p>}
+              {quoteItems.map((line: any, idx: number) => (
+                <div key={idx} className="border border-gray-200 rounded-lg p-2.5">
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-[#0c2d57] truncate">{line.name}</div>
+                      <div className="text-xs text-gray-400">מק״ט: {line.sku} · מחירון: ₪{line.listPrice}</div>
+                    </div>
+                    <button onClick={() => removeQuoteLine(idx)} className="text-red-500 flex-shrink-0" aria-label="הסר"><X size={16} /></button>
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 items-center text-sm">
+                    <label className="flex items-center gap-1">כמות<input type="number" min={1} value={line.qty} onChange={(e) => updateQuoteLine(idx, 'qty', Math.max(1, parseInt(e.target.value) || 1))} className="w-14 border border-gray-200 rounded p-1 text-center" /></label>
+                    <label className="flex items-center gap-1">מחיר ₪<input type="number" min={0} value={line.quotedPrice} onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))} className="w-20 border border-gray-200 rounded p-1 text-center" /></label>
+                    <span className="text-gray-500 text-xs">הנחה {line.listPrice > 0 ? Math.round((1 - line.quotedPrice / line.listPrice) * 100) : 0}%</span>
+                    <span className="mr-auto font-bold text-[#004387]">₪{Math.round(line.quotedPrice * line.qty)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <textarea value={quoteNote} onChange={(e) => setQuoteNote(e.target.value)} placeholder="הערה ללקוח (אופציונלי)" rows={2} className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
+          </div>
+          <div className="p-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
+            <div className="flex justify-between font-bold text-lg mb-3"><span>סה״כ</span><span className="text-[#004387]">₪{Math.round(quoteTotal)}</span></div>
+            <div className="flex gap-2">
+              <button onClick={() => submitQuote('draft')} disabled={quoteSaving || quoteItems.length === 0} className="flex-1 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-bold disabled:opacity-50">שמור טיוטה</button>
+              <button onClick={() => submitQuote('sent')} disabled={quoteSaving || quoteItems.length === 0} className="flex-1 py-2.5 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-lg font-bold disabled:opacity-50">שלח ללקוח</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showBiometricOffer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
           <div className="fixed inset-0 bg-black/50" />
@@ -5015,6 +5098,17 @@ export default function App() {
                       </button>
                       {expandedCustomer === g.key && (
                         <div className="p-2 space-y-2 bg-white">
+                          {userRole === 'agent' && (
+                            <div className="pb-1">
+                              <button onClick={() => openQuoteEditor(g)} className="w-full py-2 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-lg text-sm font-bold flex items-center justify-center gap-1.5"><FileText size={14} /> הצעת מחיר חדשה</button>
+                              {agentQuotes.filter((q: any) => String(q.customerEmail || '').toLowerCase() === g.key || (q.customerCompany || '') === g.name).map((q: any) => (
+                                <button key={q.id} onClick={() => openQuoteEditor(g, q)} className="w-full mt-1 flex justify-between items-center border border-gray-100 rounded-lg p-2 text-xs">
+                                  <span className="text-[#0c2d57] font-semibold">הצעה · ₪{Math.round(q.total || 0)} · {q.items?.length || 0} שורות</span>
+                                  <span className={`px-2 py-0.5 rounded-full font-bold ${q.status === 'approved' ? 'bg-green-100 text-green-700' : q.status === 'rejected' ? 'bg-red-100 text-red-700' : q.status === 'sent' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{q.status === 'approved' ? 'אושר' : q.status === 'rejected' ? 'נדחה' : q.status === 'sent' ? 'נשלח' : 'טיוטה'}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                           {g.orders.map((o: any) => (
                             <div key={o.id} className="border border-gray-100 rounded-lg p-2">
                               <div className="flex justify-between items-center">
