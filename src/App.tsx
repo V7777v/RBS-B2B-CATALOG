@@ -2449,6 +2449,7 @@ export default function App() {
   const [agentName, setAgentName] = useState<string>('');
   const [teamOrders, setTeamOrders] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<any[]>([]);
+  const [selectedFavIds, setSelectedFavIds] = useState<Set<string>>(new Set());
   const favoriteIds = useMemo(() => new Set(favorites.map((f: any) => f.id)), [favorites]);
   const toggleFavorite = useCallback((product: any) => {
     setFavorites((prev: any[]) => {
@@ -5009,22 +5010,23 @@ export default function App() {
             )}
             {favorites.length > 0 && (
               <div className="mt-5">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-bold text-gray-600">מועדפים ({favorites.length})</h3>
-                  <button onClick={() => { favorites.forEach((f: any) => { const p = catalogData.find((x: any) => x.id === f.id); if (p) addToCart(p, 1); }); setShowProfile(false); setIsCartOpen(true); }} className="text-xs font-bold text-[#004387] hover:text-[#0c2d57]">הוסף הכל לעגלה</button>
-                </div>
+                <h3 className="text-sm font-bold text-gray-600 mb-2">מועדפים ({favorites.length})</h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {favorites.map((f) => (
                     <div key={f.id} className="flex items-center gap-2 border border-gray-100 rounded-lg p-2">
+                      <input type="checkbox" checked={selectedFavIds.has(f.id)} onChange={() => setSelectedFavIds((prev) => { const n = new Set(prev); if (n.has(f.id)) n.delete(f.id); else n.add(f.id); return n; })} className="w-4 h-4 accent-[#004387] flex-shrink-0" />
                       {f.image && <img src={f.image} alt={f.name} referrerPolicy="no-referrer" className="w-9 h-9 object-contain flex-shrink-0" />}
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-[#0c2d57] text-sm truncate">{f.name}</div>
                         {f.sku && <div className="text-gray-400 text-xs">מק״ט: {f.sku}</div>}
                       </div>
-                      <button onClick={() => { const p = catalogData.find((x: any) => x.id === f.id); if (p) addToCart(p, 1); }} aria-label="הוסף לעגלה" title="הוסף לעגלה" className="text-[#004387] hover:text-[#0c2d57] flex-shrink-0"><ShoppingCart size={16} /></button>
                       <button onClick={() => toggleFavorite(f)} aria-label="הסר ממועדפים" className="text-red-500 flex-shrink-0"><Heart size={16} className="fill-red-500" /></button>
                     </div>
                   ))}
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button disabled={selectedFavIds.size === 0} onClick={() => { favorites.forEach((f: any) => { if (selectedFavIds.has(f.id)) { const p = catalogData.find((x: any) => x.id === f.id); if (p) addToCart(p, 1); } }); setSelectedFavIds(new Set()); setShowProfile(false); setIsCartOpen(true); }} className="flex-1 py-2.5 bg-[#004387] hover:bg-[#0c2d57] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg flex items-center justify-center gap-2 text-sm"><ShoppingCart size={16} /> הוסף נבחרים ({selectedFavIds.size})</button>
+                  <button onClick={() => { favorites.forEach((f: any) => { const p = catalogData.find((x: any) => x.id === f.id); if (p) addToCart(p, 1); }); setSelectedFavIds(new Set()); setShowProfile(false); setIsCartOpen(true); }} className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-sm">הוסף הכל</button>
                 </div>
               </div>
             )}
