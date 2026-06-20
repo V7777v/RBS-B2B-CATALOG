@@ -664,8 +664,9 @@ interface ProductCardProps {
   bulkSelection?: Record<string, { product: any, quantity: number }>;
   onBulkSelectionChange?: (productId: string, product: any, quantity: number) => void;
   onNavigateToCategory?: (catName: string, subName: string) => void;
+  isGuest?: boolean;
 }
-const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSelection, onBulkSelectionChange, onNavigateToCategory}: ProductCardProps) => {
+const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSelection, onBulkSelectionChange, onNavigateToCategory, isGuest}: ProductCardProps) => {
   const { favoriteIds, toggleFavorite } = React.useContext(FavoritesContext);
   const theme = getBrandTheme(product.brand);
   const [isAdded, setIsAdded] = useState(false);
@@ -706,7 +707,7 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
         </div>
       )}
 
-      {onBulkSelectionChange && !product.isComingSoon && (
+      {onBulkSelectionChange && !isGuest && !product.isComingSoon && (
         <div 
           className="absolute top-2 left-2 z-30 flex items-center justify-center p-1 cursor-pointer"
           onClick={handleCheckboxClick}
@@ -858,7 +859,7 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
             </div>
           )}
           
-          {product.isComingSoon ? (
+          {!isGuest && (product.isComingSoon ? (
             <div className="w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200">
               <span className="text-xs sm:text-sm font-bold">בקרוב</span>
             </div>
@@ -876,7 +877,7 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
               <ShoppingCart size={15} className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isAdded ? 'animate-bounce' : ''}`} />
               <span className="text-xs sm:text-sm font-bold">{isAdded ? 'נוסף! ✓' : 'הוספה'}</span>
             </button>
-          )}
+          ))}
         </div>
       </div>
     </div>
@@ -950,7 +951,7 @@ const InfiniteScrollTrigger: React.FC<InfiniteScrollTriggerProps> = ({ onLoadMor
 
 /* ===== Hoisted out of App() to give stable identity (prevents remount that wiped configurator state) ===== */
 const ProductDetailsView = (props: any) => {
-  const { addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity } = props;
+  const { addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity, isGuest } = props;
     const [mainImage, setMainImage] = useState(selectedProduct?.images[0]);
     const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
     const [isZoomed, setIsZoomed] = useState(false);
@@ -1565,7 +1566,7 @@ const ProductDetailsView = (props: any) => {
                          </div>
                        )}
                     </div>
-                  {selectedProduct.isComingSoon ? (
+                  {!isGuest && (selectedProduct.isComingSoon ? (
                     <div className="w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md text-sm sm:text-base bg-gray-200 text-gray-600 cursor-not-allowed">
                        <span className="animate-pulse">בקרוב!</span>
                     </div>
@@ -1640,7 +1641,7 @@ const ProductDetailsView = (props: any) => {
                         {isAdded ? 'נוסף לעגלה! ✓' : 'הוסף להזמנה'}
                       </button>
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
             </div>
@@ -1702,7 +1703,7 @@ const ProductDetailsView = (props: any) => {
                 : "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6"
               }>
                 {similar.map(product => (
-                  <ProductCard key={product.id} product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} onNavigateToCategory={navigateToCategoryAndSub} />
+                  <ProductCard key={product.id} product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} onNavigateToCategory={navigateToCategoryAndSub} isGuest={isGuest} />
                 ))}
               </div>
             </div>
@@ -3598,7 +3599,7 @@ export default function App() {
     return <FirebaseAuthView setIsAuthenticated={setIsAuthenticated} onGuest={() => { try { sessionStorage.setItem('rbs_guest', '1'); } catch {} setIsGuest(true); }} />;
   }
 
-  if (biometricEnabled && !biometricUnlocked) {
+  if (biometricEnabled && !biometricUnlocked && !isGuest) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-[#004387] to-[#0c2d57] flex flex-col items-center justify-center p-6" dir="rtl">
         <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 text-center">
@@ -4238,7 +4239,7 @@ export default function App() {
                     }>
                       {filteredProducts.slice(0, visibleCount).map(product => (
                         <VirtualProductCard key={product.id} product={product}>
-                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} onNavigateToCategory={navigateToCategoryAndSub} />
+                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} onNavigateToCategory={navigateToCategoryAndSub} isGuest={isGuest} />
                         </VirtualProductCard>
                       ))}
                     </div>
@@ -4390,7 +4391,7 @@ export default function App() {
                     }>
                       {filteredProducts.slice(0, visibleCount).map(product => (
                         <VirtualProductCard key={product.id} product={product}>
-                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} />
+                          <ProductCard product={product} navigateToProduct={navigateToProduct} addToCart={addToCart} bulkSelection={bulkSelection} onBulkSelectionChange={handleBulkSelectionChange} isGuest={isGuest} />
                         </VirtualProductCard>
                       ))}
                     </div>
@@ -4411,7 +4412,7 @@ export default function App() {
                   <h3 className="text-xl font-bold text-[#0c2d57]">טוען את פרטי המוצר...</h3>
                 </div>
               ) : (
-                <ProductDetailsView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity }} />
+                <ProductDetailsView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity, isGuest }} />
               )
             ) : currentView === 'checkout' ? (
                <CheckoutView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity, userUid, userProfile }} billingProfile={billingProfile} onSaveBilling={(d: any) => { if (userUid) { saveUserProfile(userUid, d); setBillingProfile(d); } }} />
@@ -4521,7 +4522,7 @@ export default function App() {
       )}
 
       {!isHumanVerified && <HumanVerification onVerified={() => setIsHumanVerified(true)} />}
-      {!advisorOpen && (
+      {!advisorOpen && !isGuest && (
         <button
           onClick={() => setAdvisorOpen(true)}
           className="fixed bottom-6 right-6 z-40 bg-[#004387] hover:bg-[#fe8d00] text-white px-4 py-3 rounded-full shadow-[0_10px_25px_rgba(0,67,135,0.4)] transition-colors flex items-center gap-2 font-bold border-2 border-white/15 relative"
