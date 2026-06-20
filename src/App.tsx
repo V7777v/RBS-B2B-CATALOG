@@ -2443,6 +2443,7 @@ export default function App() {
   const [biometricEnabled, setBiometricEnabled] = useState(() => { try { return localStorage.getItem('rbs_b2b_biometric_enabled') === 'true'; } catch { return false; } });
   const [biometricUnlocked, setBiometricUnlocked] = useState(() => { try { return !!sessionStorage.getItem('rbs_unlocked'); } catch { return false; } });
   const [biometricError, setBiometricError] = useState('');
+  const [showBiometricOffer, setShowBiometricOffer] = useState(false);
   const [orders, setOrders] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<any[]>([]);
   const favoriteIds = useMemo(() => new Set(favorites.map((f: any) => f.id)), [favorites]);
@@ -2507,6 +2508,11 @@ export default function App() {
   useEffect(() => {
     if (isAuthenticated) { try { setBiometricUnlocked(!!sessionStorage.getItem('rbs_unlocked')); } catch {} }
   }, [isAuthenticated]);
+  useEffect(() => {
+    if (isAuthenticated && biometricSupported && !biometricEnabled) {
+      try { if (localStorage.getItem('rbs_b2b_biometric_declined') !== 'true') setShowBiometricOffer(true); } catch {}
+    }
+  }, [isAuthenticated, biometricSupported, biometricEnabled]);
   const enrollBiometric = async (): Promise<boolean> => {
     try {
       if (window.self !== window.top) { setBiometricError('הפעלה ביומטרית דורשת פתיחת האתר בטאב נפרד (לא בתוך מסגרת AI Studio).'); return false; }
@@ -3768,13 +3774,13 @@ export default function App() {
             <Fingerprint size={40} className="text-[#004387]" />
           </div>
           <h1 className="text-2xl font-bold text-[#0c2d57] mb-1">כניסה מהירה</h1>
-          <p className="text-gray-500 text-sm mb-6">היכנס באמצעות זיהוי פנים או טביעת אצבע</p>
+          <p className="text-gray-500 text-sm mb-6">היכנס באמצעות זיהוי פנים, טביעת אצבע או קוד המכשיר</p>
           {biometricError && <p className="text-red-600 text-sm mb-4 bg-red-50 rounded-lg p-2">{biometricError}</p>}
           <button onClick={handleBiometricUnlock} className="w-full py-3.5 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-95">
-            <Fingerprint size={22} /> כניסה עם זיהוי פנים / טביעת אצבע
+            <Fingerprint size={22} /> כניסה עם זיהוי פנים / טביעת אצבע / קוד
           </button>
-          <button onClick={handleAppLogout} className="w-full mt-3 py-2.5 text-gray-500 hover:text-gray-700 font-semibold text-sm">
-            כניסה עם סיסמה
+          <button onClick={handleAppLogout} className="w-full mt-4 py-1 text-gray-300 hover:text-gray-500 text-xs">
+            בעיה בזיהוי? התנתקות מלאה
           </button>
         </div>
       </div>
@@ -4920,6 +4926,20 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {showBiometricOffer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
+          <div className="fixed inset-0 bg-black/50" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
+            <div className="w-16 h-16 mx-auto rounded-full bg-[#004387]/10 flex items-center justify-center mb-3"><Fingerprint size={32} className="text-[#004387]" /></div>
+            <h2 className="text-xl font-bold text-[#0c2d57] mb-1">כניסה מהירה בפעם הבאה?</h2>
+            <p className="text-gray-500 text-sm mb-5 leading-relaxed">הפעל כניסה עם זיהוי פנים / טביעת אצבע / קוד המכשיר — בלי להקליד סיסמה. הזיהוי מתבצע במכשיר שלך בלבד ואינו נשמר אצלנו.</p>
+            {biometricError && <p className="text-red-600 text-sm mb-3">{biometricError}</p>}
+            <button onClick={async () => { const ok = await enrollBiometric(); if (ok) setShowBiometricOffer(false); }} className="w-full py-3 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl flex items-center justify-center gap-2"><Fingerprint size={20} /> הפעל עכשיו</button>
+            <button onClick={() => { try { localStorage.setItem('rbs_b2b_biometric_declined', 'true'); } catch {} setShowBiometricOffer(false); }} className="w-full mt-2 py-2 text-gray-500 font-semibold text-sm">לא עכשיו</button>
+          </div>
+        </div>
+      )}
+
       {/* ADMIN SYNC MODAL OVERLAY */}
       {showProfile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
@@ -4958,7 +4978,10 @@ export default function App() {
             )}
             {favorites.length > 0 && (
               <div className="mt-5">
-                <h3 className="text-sm font-bold text-gray-600 mb-2">מועדפים ({favorites.length})</h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-bold text-gray-600">מועדפים ({favorites.length})</h3>
+                  <button onClick={() => { favorites.forEach((f: any) => { const p = catalogData.find((x: any) => x.id === f.id); if (p) addToCart(p, 1); }); setShowProfile(false); setIsCartOpen(true); }} className="text-xs font-bold text-[#004387] hover:text-[#0c2d57]">הוסף הכל לעגלה</button>
+                </div>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {favorites.map((f) => (
                     <div key={f.id} className="flex items-center gap-2 border border-gray-100 rounded-lg p-2">
@@ -4967,6 +4990,7 @@ export default function App() {
                         <div className="font-semibold text-[#0c2d57] text-sm truncate">{f.name}</div>
                         {f.sku && <div className="text-gray-400 text-xs">מק״ט: {f.sku}</div>}
                       </div>
+                      <button onClick={() => { const p = catalogData.find((x: any) => x.id === f.id); if (p) addToCart(p, 1); }} aria-label="הוסף לעגלה" title="הוסף לעגלה" className="text-[#004387] hover:text-[#0c2d57] flex-shrink-0"><ShoppingCart size={16} /></button>
                       <button onClick={() => toggleFavorite(f)} aria-label="הסר ממועדפים" className="text-red-500 flex-shrink-0"><Heart size={16} className="fill-red-500" /></button>
                     </div>
                   ))}
