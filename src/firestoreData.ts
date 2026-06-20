@@ -1,7 +1,7 @@
 // Firestore data access for the distributor personal area (cart, orders, favorites)
 import { db } from './firebase';
 import {
-  doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, serverTimestamp,
+  doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, serverTimestamp, onSnapshot,
 } from 'firebase/firestore';
 
 // ---------- Saved cart (carts/{uid}) ----------
@@ -70,6 +70,24 @@ export async function loadAllOrders(): Promise<any[]> {
     return sortNewestFirst(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
   } catch {
     return [];
+  }
+}
+
+// ---------- Real-time order notifications (agent/manager) ----------
+export function subscribeAgentOrders(agentName: string, cb: (orders: any[]) => void): () => void {
+  try {
+    const qq = query(collection(db, 'orders'), where('agent', '==', agentName));
+    return onSnapshot(qq, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), () => {});
+  } catch {
+    return () => {};
+  }
+}
+
+export function subscribeAllOrders(cb: (orders: any[]) => void): () => void {
+  try {
+    return onSnapshot(collection(db, 'orders'), (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), () => {});
+  } catch {
+    return () => {};
   }
 }
 

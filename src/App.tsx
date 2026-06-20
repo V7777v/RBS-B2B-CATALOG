@@ -11,7 +11,7 @@ import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadCustomerQuotes, updateQuoteStatus, loadUserProfile, saveUserProfile } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadCustomerQuotes, updateQuoteStatus, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -2181,6 +2181,10 @@ export default function App() {
   const [quoteSearch, setQuoteSearch] = useState('');
   const [quoteSaving, setQuoteSaving] = useState(false);
   const [customerQuotes, setCustomerQuotes] = useState<any[]>([]);
+  const [agentUnread, setAgentUnread] = useState(0);
+  const [notifPerm, setNotifPerm] = useState<string>(() => (typeof Notification !== 'undefined' ? Notification.permission : 'default'));
+  const seenOrderIds = useRef<Set<string>>(new Set());
+  const firstOrderSnap = useRef(true);
   const [expandedQuote, setExpandedQuote] = useState<string | null>(null);
   const quoteTotal = useMemo(() => quoteItems.reduce((sum: number, l: any) => sum + (Number(l.quotedPrice) || 0) * (Number(l.qty) || 0), 0), [quoteItems]);
   const openQuoteEditor = (customer: any, existing?: any) => {
@@ -2361,6 +2365,44 @@ export default function App() {
   useEffect(() => {
     if (showProfile && userProfile?.email) loadCustomerQuotes(userProfile.email).then(setCustomerQuotes);
   }, [showProfile, userProfile]);
+  // Real-time new-order notifications for agents / managers
+  useEffect(() => {
+    const isAgent = userRole === 'agent' && !!agentName;
+    const isMgr = userRole === 'sales_manager';
+    if (!isAgent && !isMgr) return;
+    firstOrderSnap.current = true;
+    seenOrderIds.current = new Set();
+    const handle = (orders: any[]) => {
+      const ids = new Set<string>(orders.map((o) => o.id));
+      if (firstOrderSnap.current) { seenOrderIds.current = ids; firstOrderSnap.current = false; return; }
+      const fresh = orders.filter((o) => !seenOrderIds.current.has(o.id));
+      seenOrderIds.current = ids;
+      if (fresh.length > 0) {
+        setAgentUnread((c) => c + fresh.length);
+        try {
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            new Notification('הזמנה חדשה התקבלה 📦', { body: `התקבלו ${fresh.length} הזמנות חדשות מלקוחות`, icon: '/icons/icon-192.png' });
+          }
+        } catch { /* ignore */ }
+      }
+    };
+    const unsub = isMgr ? subscribeAllOrders(handle) : subscribeAgentOrders(agentName, handle);
+    return () => { try { unsub(); } catch { /* ignore */ } };
+  }, [userRole, agentName]);
+  // Reflect unread count on the installed PWA app icon
+  useEffect(() => {
+    try {
+      const nav: any = navigator;
+      if ('setAppBadge' in nav) {
+        if (agentUnread > 0) nav.setAppBadge(agentUnread);
+        else if (nav.clearAppBadge) nav.clearAppBadge();
+      }
+    } catch { /* ignore */ }
+  }, [agentUnread]);
+  // Clear unread when the agent opens the personal area
+  useEffect(() => {
+    if (showProfile && (userRole === 'agent' || userRole === 'sales_manager')) setAgentUnread(0);
+  }, [showProfile, userRole]);
   useEffect(() => {
     if (!showProfile) return;
     if (userRole === 'sales_manager') loadAllOrders().then(setTeamOrders);
@@ -3874,10 +3916,13 @@ export default function App() {
                 onClick={() => setShowProfile(true)}
                 aria-label="אזור אישי"
                 title="אזור אישי"
-                className="flex items-center justify-center gap-1.5 h-11 !p-2 !px-3 text-[#004387] hover:text-[#0c2d57] transition-colors rounded-xl active:scale-95"
+                className="relative flex items-center justify-center gap-1.5 h-11 !p-2 !px-3.5 text-[#004387] bg-white border border-[#004387]/50 hover:bg-[#004387] hover:text-white hover:border-[#004387] hover:shadow-sm transition-all rounded-xl active:scale-95"
               >
                 <User size={20} className="flex-shrink-0" />
                 <span className="text-sm font-bold hidden sm:block">אזור אישי</span>
+                {agentUnread > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold min-w-[20px] h-5 px-1 rounded-full flex items-center justify-center shadow-sm ring-2 ring-white">{agentUnread > 99 ? '99+' : agentUnread}</span>
+                )}
               </button>
             </div>
 
@@ -4888,6 +4933,11 @@ export default function App() {
                   ))}
                 </div>
               </div>
+            )}
+            {(userRole === 'agent' || userRole === 'sales_manager') && notifPerm !== 'granted' && (
+              <button onClick={async () => { try { if (typeof Notification !== 'undefined') { const pm = await Notification.requestPermission(); setNotifPerm(pm); } } catch { /* ignore */ } }} className="w-full mt-4 py-2.5 bg-amber-50 border border-amber-200 hover:bg-amber-100 text-amber-800 rounded-lg text-sm font-bold flex items-center justify-center gap-2">
+                🔔 הפעל התראות על הזמנות חדשות
+              </button>
             )}
             {(userRole === 'agent' || userRole === 'sales_manager') && customerGroups.length > 0 && (
               <div className="mt-5">
