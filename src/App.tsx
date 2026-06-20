@@ -4856,9 +4856,9 @@ export default function App() {
 
       {/* ADMIN SYNC MODAL OVERLAY */}
       {showProfile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 overflow-y-auto overscroll-contain" dir="rtl" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
           <div className="fixed inset-0 bg-black/50" onClick={() => setShowProfile(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 my-auto">
             <button onClick={() => setShowProfile(false)} className="absolute top-4 left-4 text-gray-400 hover:text-gray-700"><X size={20} /></button>
             <div className="flex flex-col items-center mb-5">
               <div className="w-16 h-16 rounded-full bg-[#004387] flex items-center justify-center mb-2"><User className="w-8 h-8 text-white" /></div>
