@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut, User
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut, User, Heart
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -11,7 +11,7 @@ import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart, addOrderRecord, loadOrders } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -655,6 +655,8 @@ const isNetworkCableRoll = (product: any): boolean => {
     ((name.includes('כבל') || name.includes('cable') || name.includes('utp') || name.includes('ftp') || name.includes('sftp') || name.includes('cat6') || name.includes('cat5') || name.includes('cat6a') || name.includes('cat5e')) && (cat.includes('hikvision') || name.includes('hikvision') || (product.brand && String(product.brand).toLowerCase().includes('hikvision'))));
 };
 
+const FavoritesContext = React.createContext<{ favoriteIds: Set<string>; toggleFavorite: (p: any) => void }>({ favoriteIds: new Set(), toggleFavorite: () => {} });
+
 interface ProductCardProps {
   product: any;
   navigateToProduct: (product: any) => void;
@@ -664,6 +666,7 @@ interface ProductCardProps {
   onNavigateToCategory?: (catName: string, subName: string) => void;
 }
 const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSelection, onBulkSelectionChange, onNavigateToCategory}: ProductCardProps) => {
+  const { favoriteIds, toggleFavorite } = React.useContext(FavoritesContext);
   const theme = getBrandTheme(product.brand);
   const [isAdded, setIsAdded] = useState(false);
   
@@ -772,6 +775,14 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
         <div className="absolute top-2 right-2 z-10 transition-all duration-200">
           <BrandBadge brand={product.brand} />
         </div>
+
+        <button
+          onClick={(e) => { e.stopPropagation(); toggleFavorite(product); }}
+          aria-label="מועדפים"
+          className="absolute bottom-2 right-2 z-20 w-8 h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform"
+        >
+          <Heart size={16} className={favoriteIds.has(product.id) ? 'text-red-500 fill-red-500' : 'text-gray-400'} />
+        </button>
       </div>
       
       <div className="p-3 sm:p-4 flex flex-col flex-grow text-center">
@@ -2429,6 +2440,18 @@ export default function App() {
   const [userUid, setUserUid] = useState<string | null>(null);
   const [cartLoaded, setCartLoaded] = useState(false);
   const [orders, setOrders] = useState<any[]>([]);
+  const [favorites, setFavorites] = useState<any[]>([]);
+  const favoriteIds = useMemo(() => new Set(favorites.map((f: any) => f.id)), [favorites]);
+  const toggleFavorite = useCallback((product: any) => {
+    setFavorites((prev: any[]) => {
+      const exists = prev.some((f) => f.id === product.id);
+      const next = exists
+        ? prev.filter((f) => f.id !== product.id)
+        : [...prev, { id: product.id, name: product.name, sku: product.sku || '', image: product.images?.[0] || '' }];
+      if (userUid) saveFavorites(userUid, next);
+      return next;
+    });
+  }, [userUid]);
   // Firebase auth state is the source of truth: only verified AND approved distributors are authenticated
   useEffect(() => {
     const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // require re-login after 7 days
@@ -2486,6 +2509,10 @@ export default function App() {
   useEffect(() => {
     if (showProfile && userUid) { loadOrders(userUid).then(setOrders); }
   }, [showProfile, userUid]);
+  useEffect(() => {
+    if (userUid) loadFavorites(userUid).then(setFavorites);
+    else setFavorites([]);
+  }, [userUid]);
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<Record<string, { product: any, quantity: number }>>({});
@@ -3667,6 +3694,7 @@ export default function App() {
   }
 
   return (
+    <FavoritesContext.Provider value={{ favoriteIds, toggleFavorite }}>
     <div id="rbs-b2b-app" className="min-h-screen bg-slate-50 flex flex-col font-sans" dir="rtl">
         {/* SECONDARY TOOLBAR INSTEAD OF MAIN HEADER */}
         <div ref={headerRef} className="sticky top-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header">
@@ -4840,6 +4868,23 @@ export default function App() {
                 </div>
               </div>
             )}
+            {favorites.length > 0 && (
+              <div className="mt-5">
+                <h3 className="text-sm font-bold text-gray-600 mb-2">מועדפים ({favorites.length})</h3>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {favorites.map((f) => (
+                    <div key={f.id} className="flex items-center gap-2 border border-gray-100 rounded-lg p-2">
+                      {f.image && <img src={f.image} alt={f.name} referrerPolicy="no-referrer" className="w-9 h-9 object-contain flex-shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-[#0c2d57] text-sm truncate">{f.name}</div>
+                        {f.sku && <div className="text-gray-400 text-xs">מק״ט: {f.sku}</div>}
+                      </div>
+                      <button onClick={() => toggleFavorite(f)} aria-label="הסר ממועדפים" className="text-red-500 flex-shrink-0"><Heart size={16} className="fill-red-500" /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <button onClick={() => { setShowProfile(false); handleAppLogout(); }} className="w-full mt-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg flex items-center justify-center gap-2"><LogOut size={18} /> יציאה מהמערכת</button>
           </div>
         </div>
@@ -5177,5 +5222,6 @@ export default function App() {
         }
       `}</style>
     </div>
+    </FavoritesContext.Provider>
   );
 }
