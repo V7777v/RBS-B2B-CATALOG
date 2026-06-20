@@ -44,6 +44,35 @@ export async function loadOrders(uid: string): Promise<any[]> {
   }
 }
 
+// ---------- Agent / Sales-manager order views ----------
+function sortNewestFirst(list: any[]): any[] {
+  list.sort((a, b) => {
+    const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+    const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+    return tb - ta;
+  });
+  return list;
+}
+
+export async function loadAgentOrders(agentName: string): Promise<any[]> {
+  try {
+    const q = query(collection(db, 'orders'), where('agent', '==', agentName));
+    const snap = await getDocs(q);
+    return sortNewestFirst(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+  } catch {
+    return [];
+  }
+}
+
+export async function loadAllOrders(): Promise<any[]> {
+  try {
+    const snap = await getDocs(collection(db, 'orders'));
+    return sortNewestFirst(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+  } catch {
+    return [];
+  }
+}
+
 // ---------- Favorites (favorites/{uid}) ----------
 export async function loadFavorites(uid: string): Promise<any[]> {
   try {

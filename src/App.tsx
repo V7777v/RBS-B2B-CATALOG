@@ -11,7 +11,7 @@ import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -2160,7 +2160,7 @@ const CheckoutView = (props: any) => {
       
       window.location.href = mailtoLink;
       
-      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, method: 'email' }); }
+      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'email' }); }
       setLastSentMethod('email');
       setOrderPlaced(true);
     };
@@ -2176,7 +2176,7 @@ const CheckoutView = (props: any) => {
       
       window.open(`https://wa.me/${agentPhone}?text=${text}`, '_blank');
       
-      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, method: 'whatsapp' }); }
+      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'whatsapp' }); }
       setLastSentMethod('whatsapp');
       setOrderPlaced(true);
     };
@@ -2445,6 +2445,9 @@ export default function App() {
   const [biometricError, setBiometricError] = useState('');
   const [showBiometricOffer, setShowBiometricOffer] = useState(false);
   const [orders, setOrders] = useState<any[]>([]);
+  const [userRole, setUserRole] = useState<string>('user');
+  const [agentName, setAgentName] = useState<string>('');
+  const [teamOrders, setTeamOrders] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<any[]>([]);
   const favoriteIds = useMemo(() => new Set(favorites.map((f: any) => f.id)), [favorites]);
   const toggleFavorite = useCallback((product: any) => {
@@ -2469,6 +2472,8 @@ export default function App() {
           const pdata: any = snap.exists() ? snap.data() : null;
           if (pdata) {
             setIsAdmin(pdata.admin === true);
+            setUserRole(pdata.role || 'user');
+            setAgentName(pdata.agentName || '');
             setUserProfile({ email: user.email, company: pdata.company || '', customerNumber: pdata.customerNumber || '', tier: pdata.tier || '', agent: pdata.agent || pdata.Agent || pdata['סוכן'] || '', agentPhone: pdata.agentPhone || '', agentEmail: pdata.agentEmail || '' });
           }
         } catch { ok = false; }
@@ -2482,7 +2487,7 @@ export default function App() {
         }
         if (!ok) { try { await signOut(auth); } catch {} }
       }
-      if (!ok) { setIsAdmin(false); setUserProfile(null); }
+      if (!ok) { setIsAdmin(false); setUserProfile(null); setUserRole('user'); setAgentName(''); }
       setUserUid(ok && user ? user.uid : null);
       setIsAuthenticated(ok);
       try {
@@ -2582,6 +2587,12 @@ export default function App() {
   useEffect(() => {
     if (showProfile && userUid) { loadOrders(userUid).then(setOrders); }
   }, [showProfile, userUid]);
+  useEffect(() => {
+    if (!showProfile) return;
+    if (userRole === 'sales_manager') loadAllOrders().then(setTeamOrders);
+    else if (userRole === 'agent' && agentName) loadAgentOrders(agentName).then(setTeamOrders);
+    else setTeamOrders([]);
+  }, [showProfile, userRole, agentName]);
   useEffect(() => {
     if (userUid) loadFavorites(userUid).then(setFavorites);
     else setFavorites([]);
@@ -4950,6 +4961,8 @@ export default function App() {
               <div className="w-16 h-16 rounded-full bg-[#004387] flex items-center justify-center mb-2"><User className="w-8 h-8 text-white" /></div>
               <h2 className="text-xl font-bold text-[#0c2d57]">האזור האישי שלי</h2>
               {isAdmin && <span className="mt-1 text-xs font-bold text-white bg-[#f7941d] px-2 py-0.5 rounded-full">מנהל מערכת</span>}
+              {userRole === 'agent' && <span className="mt-1 mr-1 text-xs font-bold text-white bg-[#004387] px-2 py-0.5 rounded-full">סוכן</span>}
+              {userRole === 'sales_manager' && <span className="mt-1 mr-1 text-xs font-bold text-white bg-purple-600 px-2 py-0.5 rounded-full">מנהל מכירות</span>}
             </div>
             <div className="space-y-3 text-right">
               <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">אימייל</span><span className="font-semibold text-[#0c2d57]" dir="ltr">{userProfile?.email || '—'}</span></div>
@@ -4971,6 +4984,24 @@ export default function App() {
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
                       </div>
                       <div className="text-gray-500 text-xs mt-1">{o.itemCount || (o.items?.length ?? 0)} פריטים{o.company ? ` · ${o.company}` : ''}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(userRole === 'agent' || userRole === 'sales_manager') && teamOrders.length > 0 && (
+              <div className="mt-5">
+                <h3 className="text-sm font-bold text-gray-600 mb-2">{userRole === 'sales_manager' ? 'כל ההזמנות' : 'הזמנות הלקוחות שלי'} ({teamOrders.length})</h3>
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {teamOrders.map((o) => (
+                    <div key={o.id} className="border border-gray-100 rounded-lg p-2.5">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-[#0c2d57] text-sm truncate">{o.company || o.email || '—'}</span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
+                      </div>
+                      <div className="text-gray-500 text-xs mt-1">
+                        {o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'} · {o.itemCount || (o.items?.length ?? 0)} פריטים{userRole === 'sales_manager' && o.agent ? ` · סוכן: ${o.agent}` : ''}
+                      </div>
                     </div>
                   ))}
                 </div>
