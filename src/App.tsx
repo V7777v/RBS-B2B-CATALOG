@@ -1728,6 +1728,7 @@ const CheckoutView = (props: any) => {
     const [address, setAddress] = useState('');
     const [notes, setNotes] = useState('');
     const [selectedAgent, setSelectedAgent] = useState('');
+    const [alsoToOffice, setAlsoToOffice] = useState(false);
     const [errors, setErrors] = useState<any>({});
 
     const agents = [
@@ -1739,6 +1740,11 @@ const CheckoutView = (props: any) => {
       { name: 'מוטי', email: 'moti@rbs-telecom.com', phone: '972503334259' },
       { name: 'מאיר', email: 'meir@rbs-telecom.com', phone: '972504530996' }
     ];
+    const officeAgent = agents.find((a: any) => String(a.name).includes('נירית')) || { name: 'משרד - נירית', email: 'nirit@rbs-telecom.com', phone: '972545241480' };
+    const assignedAgentObj = agents.find((a: any) => a.name === selectedAgent);
+    const recipientEmail = assignedAgentObj?.email || props.userProfile?.agentEmail || officeAgent.email;
+    const recipientPhone = assignedAgentObj?.phone || props.userProfile?.agentPhone || officeAgent.phone;
+    const recipientName = selectedAgent || props.userProfile?.agent || officeAgent.name;
 
     const billingPrefilled = useRef(false);
     useEffect(() => {
@@ -1753,7 +1759,7 @@ const CheckoutView = (props: any) => {
         if (bp.phone) setPhone(bp.phone);
         if (bp.email) setCustomerEmail(bp.email);
       }
-      if (props.userProfile?.agent && agents.some((a: any) => a.name === props.userProfile.agent)) {
+      if (props.userProfile?.agent) {
         setSelectedAgent(props.userProfile.agent);
       }
     }, [props.billingProfile, props.userProfile]);
@@ -1782,9 +1788,7 @@ const CheckoutView = (props: any) => {
             newErrors.companyName = 'יש להזין שם חברה';
         }
 
-        if (!selectedAgent) {
-            newErrors.selectedAgent = 'יש לבחור סוכן מטפל';
-        }
+
         
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -1857,17 +1861,17 @@ const CheckoutView = (props: any) => {
     const handleSendEmail = () => {
       if (!validateForm()) return;
 
-      const agentEmail = agents.find(a => a.name === selectedAgent)?.email;
-      if (!agentEmail) return;
+      if (!recipientEmail) return;
 
       const orderDetails = buildOrderDetailsText();
       const subject = encodeURIComponent(`הזמנה חדשה (B2B): ${companyName || 'לקוח מזדמן'}`);
       const body = encodeURIComponent(orderDetails);
       
-      let mailtoLink = `mailto:${agentEmail}?subject=${subject}&body=${body}`;
-      if (customerEmail) {
-          mailtoLink += `&cc=${customerEmail}`;
-      }
+      const ccList: string[] = [];
+      if (customerEmail) ccList.push(customerEmail);
+      if (alsoToOffice && officeAgent.email && officeAgent.email !== recipientEmail) ccList.push(officeAgent.email);
+      let mailtoLink = `mailto:${recipientEmail}?subject=${subject}&body=${body}`;
+      if (ccList.length) mailtoLink += `&cc=${ccList.join(',')}`;
       
       window.location.href = mailtoLink;
       
@@ -1879,13 +1883,15 @@ const CheckoutView = (props: any) => {
     const handleSendWhatsApp = () => {
       if (!validateForm()) return;
       
-      const agentPhone = agents.find(a => a.name === selectedAgent)?.phone;
-      if (!agentPhone) return;
+      if (!recipientPhone) return;
 
       const orderDetails = buildOrderDetailsText();
       const text = encodeURIComponent(orderDetails);
       
-      window.open(`https://wa.me/${agentPhone}?text=${text}`, '_blank');
+      window.open(`https://wa.me/${recipientPhone}?text=${text}`, '_blank');
+      if (alsoToOffice && officeAgent.phone && officeAgent.phone !== recipientPhone) {
+        setTimeout(() => window.open(`https://wa.me/${officeAgent.phone}?text=${text}`, '_blank'), 700);
+      }
       
       if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'whatsapp' }); } if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
       setLastSentMethod('whatsapp');
@@ -1910,7 +1916,7 @@ const CheckoutView = (props: any) => {
             <CheckCircle size={40} />
           </div>
           <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-3">✓ ההזמנה נשלחה בהצלחה!</h2>
-          <p className="text-gray-700 mb-2 px-4 font-semibold">עותק מלא של ההזמנה נשמר ב«אזור אישי» ← «היסטוריית הזמנות»{selectedAgent ? `, והיא הועברה לסוכן ${selectedAgent}` : ''}. הסוכן יקבל את ההזמנה ויחזור אליך בהקדם.</p>
+          <p className="text-gray-700 mb-2 px-4 font-semibold">עותק מלא של ההזמנה נשמר ב«אזור אישי» ← «היסטוריית הזמנות», והיא הועברה לסוכן {recipientName}{alsoToOffice ? ' ולמשרד (נירית)' : ''}. הסוכן יקבל את ההזמנה ויחזור אליך בהקדם.</p>
           <p className="text-gray-500 mb-8 px-4 text-sm">שים לב: חלון ה{lastSentMethod === 'email' ? 'מייל' : 'וואטסאפ'} נפתח במכשירך — יש לשלוח את ההודעה כדי להשלים את הפנייה.</p>
           
           <div className="border-t border-gray-200 pt-6 mt-4">
@@ -2074,23 +2080,20 @@ const CheckoutView = (props: any) => {
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1.5">בחר סוכן לפניה:</label>
-                <select 
-                  value={selectedAgent} 
-                  onChange={e => {setSelectedAgent(e.target.value); setErrors({...errors, selectedAgent: null})}} 
-                  className={`w-full px-3 py-3 border ${errors.selectedAgent ? 'border-red-500' : 'border-gray-200'} bg-white rounded-none focus:ring-2 focus:ring-[#004387] outline-none text-base md:text-sm`}
-                >
-                  <option value="">בחר סוכן מכירות...</option>
-                  {agents.map((agent: any, i: number) => (
-                    <option key={i} value={agent.name}>{agent.name} {agent.email ? `(${agent.email})` : ''}</option>
-                  ))}
-                </select>
-                {errors.selectedAgent && <p className="text-red-500 text-xs mt-1">{errors.selectedAgent}</p>}
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">הסוכן המטפל שלך:</label>
+                <div className="w-full px-3 py-3 border border-gray-200 bg-gray-50 rounded-none text-base md:text-sm flex items-center justify-between">
+                  <span className="font-bold text-[#0c2d57]">{recipientName}</span>
+                  {recipientPhone && <span className="text-xs text-gray-400" dir="ltr">{recipientPhone}</span>}
+                </div>
+                <label className="flex items-center gap-2 mt-2.5 text-sm text-gray-700 cursor-pointer select-none">
+                  <input type="checkbox" checked={alsoToOffice} onChange={e => setAlsoToOffice(e.target.checked)} className="w-4 h-4 accent-[#004387]" />
+                  שלח עותק גם למשרד (נירית)
+                </label>
               </div>
 
               <div className="space-y-3 mt-6">
                 <div className="bg-[#e6f0fa]/60 border border-[#b3d4f5] rounded-lg p-3">
-                  <p className="text-sm font-bold text-[#0c2d57] flex items-center gap-1.5"><CheckCircle size={16} className="text-[#004387] flex-shrink-0" /> שליחת הזמנה לסוכן{selectedAgent ? ` — ${selectedAgent}` : ''}</p>
+                  <p className="text-sm font-bold text-[#0c2d57] flex items-center gap-1.5"><CheckCircle size={16} className="text-[#004387] flex-shrink-0" /> שליחת הזמנה לסוכן — {recipientName}{alsoToOffice ? ' + עותק למשרד' : ''}</p>
                   <p className="text-xs text-gray-600 mt-1 leading-relaxed">ההזמנה תישמר אוטומטית ב«אזור אישי» ← «היסטוריית הזמנות», ותועבר לסוכן המטפל שיחזור אליך בהקדם. בחר אופן שליחה:</p>
                 </div>
                 <button 
