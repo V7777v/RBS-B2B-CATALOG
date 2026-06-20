@@ -2149,6 +2149,8 @@ export default function App() {
   const [showProfile, setShowProfile] = useState(false);
   const [userUid, setUserUid] = useState<string | null>(null);
   const [cartLoaded, setCartLoaded] = useState(false);
+  const [isGuest, setIsGuest] = useState(() => { try { return sessionStorage.getItem('rbs_guest') === '1'; } catch { return false; } });
+  const [guestPrompt, setGuestPrompt] = useState(false);
   const [billingProfile, setBillingProfile] = useState<any>(null);
   const [billingSaved, setBillingSaved] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
@@ -3222,6 +3224,7 @@ export default function App() {
 
   // --- CART FUNCTIONS ---
   const addToCart = useCallback((product: any, quantity = 1, optionals: any[] = []) => {
+    if (isGuest) { setGuestPrompt(true); return; }
     setCart(prev => {
       // Find matching item (same ID and same optionals configuration)
       const existing = prev.find(item => 
@@ -3243,7 +3246,7 @@ export default function App() {
       quantity: quantity,
       category: product.category || ""
     });
-  }, []);
+  }, [isGuest]);
 
   const updateConfirmCartItemQuantity = (qty: number) => {
     if (!addedItemConfirm) return;
@@ -3549,8 +3552,8 @@ export default function App() {
     );
   }
 
-  if (!isAuthenticated) {
-    return <FirebaseAuthView setIsAuthenticated={setIsAuthenticated} />;
+  if (!isAuthenticated && !isGuest) {
+    return <FirebaseAuthView setIsAuthenticated={setIsAuthenticated} onGuest={() => { try { sessionStorage.setItem('rbs_guest', '1'); } catch {} setIsGuest(true); }} />;
   }
 
   if (biometricEnabled && !biometricUnlocked) {
@@ -3847,6 +3850,7 @@ export default function App() {
             </div>
 
             {/* LEFT SIDE: Cart (Protected from theme overrides) */}
+            {!isGuest && (<>
             <div className="flex-shrink-0">
               <button 
                 className="relative flex flex-row items-center justify-center gap-2 !p-2 !px-3.5 !m-0 h-11 text-[#004387] bg-white border border-[#004387]/60 hover:bg-[#004387] hover:text-white hover:border-[#004387] hover:shadow-sm transition-all whitespace-nowrap rounded-xl box-border active:scale-95"
@@ -3889,6 +3893,14 @@ export default function App() {
                 <span className="text-sm font-bold hidden sm:block">יציאה</span>
               </button>
             </div>
+            </>)}
+            {isGuest && (
+              <div className="flex-shrink-0">
+                <button onClick={() => { try { sessionStorage.removeItem('rbs_guest'); } catch {} setIsGuest(false); }} className="flex items-center justify-center gap-1.5 h-11 !px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl active:scale-95 text-sm whitespace-nowrap">
+                  <User size={18} className="flex-shrink-0" /> התחבר / הירשם
+                </button>
+              </div>
+            )}
 
           </div>
 
@@ -4203,8 +4215,14 @@ export default function App() {
                 <div className="mb-6 sm:mb-8 bg-[#004387] p-6 sm:p-8 text-white relative overflow-hidden flex flex-col items-center justify-center text-center">
                   <div className="relative z-10 w-full">
                     {/* Changed to h2 with explicit !text-white to avoid WP theme overriding color */}
-                    <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 !text-white !text-center w-full block" style={{ color: 'white', textAlign: 'center' }}>ברוכים הבאים לפורטל B2B</h2>
-                    <p className="text-sm sm:text-lg opacity-90 max-w-xl font-light mx-auto !text-white !text-center block" style={{ color: 'white' }}>בחר מחירון כדי להציג את הקטגוריות, להוריד מפרטים ולהרכיב הצעת מחיר / הזמנה בקלות.</p>
+                    {isGuest ? (
+                      <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 !text-white !text-center w-full block" style={{ color: 'white', textAlign: 'center' }}>ברוכים הבאים לקטלוג המוצרים של RBS Telecom</h2>
+                    ) : (
+                      <>
+                        <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 !text-white !text-center w-full block" style={{ color: 'white', textAlign: 'center' }}>ברוכים הבאים לפורטל B2B</h2>
+                        <p className="text-sm sm:text-lg opacity-90 max-w-xl font-light mx-auto !text-white !text-center block" style={{ color: 'white' }}>בחר מחירון כדי להציג את הקטגוריות, להוריד מפרטים ולהרכיב הצעת מחיר / הזמנה בקלות.</p>
+                      </>
+                    )}
                   </div>
                   <Package size={120} className="absolute left-4 bottom-0 opacity-10 rotate-12 text-white pointer-events-none" />
                 </div>
@@ -4760,6 +4778,18 @@ export default function App() {
               <button onClick={() => submitQuote('draft')} disabled={quoteSaving || quoteItems.length === 0} className="flex-1 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-bold disabled:opacity-50">שמור טיוטה</button>
               <button onClick={() => submitQuote('sent')} disabled={quoteSaving || quoteItems.length === 0} className="flex-1 py-2.5 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-lg font-bold disabled:opacity-50">שלח ללקוח</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {guestPrompt && (
+        <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4" dir="rtl" onClick={() => setGuestPrompt(false)}>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="w-12 h-12 rounded-full bg-[#004387]/10 flex items-center justify-center mx-auto mb-3"><Lock className="w-6 h-6 text-[#004387]" /></div>
+            <h3 className="font-bold text-lg text-[#0c2d57] mb-2">התחברות נדרשת</h3>
+            <p className="text-sm text-gray-500 mb-5">ביצוע הזמנות זמין למפיצים מורשים בלבד. התחבר או הירשם כדי להוסיף מוצרים ולבצע הזמנה.</p>
+            <button onClick={() => { try { sessionStorage.removeItem('rbs_guest'); } catch {} setGuestPrompt(false); setIsGuest(false); }} className="w-full py-3 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-lg mb-2">התחבר / הירשם</button>
+            <button onClick={() => setGuestPrompt(false)} className="w-full py-2 text-gray-500 text-sm">המשך לצפות בקטלוג</button>
           </div>
         </div>
       )}

@@ -67,9 +67,10 @@ const isApproved = async (email: string | null): Promise<boolean> => {
 
 interface Props {
   setIsAuthenticated: (val: boolean) => void;
+  onGuest?: () => void;
 }
 
-export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
+export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -334,9 +335,20 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated }) => {
           )}
         </div>
 
-        <p className="text-[11px] text-gray-400 text-center mt-6">
-          הגישה מיועדת ללקוחות עסקיים ומורשים בלבד.
-        </p>
+        <div className="mt-6 pt-5 border-t border-gray-100">
+          <p className="text-[12px] text-gray-500 leading-relaxed text-center mb-3">
+            <strong className="text-[#0c2d57]">הרשמה מיועדת למפיצים מורשים בלבד</strong> — והגישה נפתחת רק לאחר אישור מנהל המערכת. אם אינך לקוח מפיץ, ניתן להיכנס במצב אורח ולצפות בקטלוג המוצרים.
+          </p>
+          {onGuest && (
+            <button
+              type="button"
+              onClick={onGuest}
+              className="w-full py-3 border-2 border-[#004387]/30 hover:border-[#004387] hover:bg-[#004387]/5 text-[#004387] font-bold rounded-lg transition flex items-center justify-center gap-2"
+            >
+              <Eye className="w-5 h-5" /> כניסה כאורח — צפייה בלבד
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
