@@ -5,7 +5,7 @@ import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBXtmBKArqyEm4dweJXQkfZbI78ezfLy8I",
-  authDomain: "rbs-b2b.firebaseapp.com",
+  authDomain: (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") ? window.location.hostname : "rbs-b2b.firebaseapp.com",
   projectId: "rbs-b2b",
   storageBucket: "rbs-b2b.firebasestorage.app",
   messagingSenderId: "224025193925",
