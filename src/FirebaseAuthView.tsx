@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -7,6 +7,8 @@ import {
   signOut,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -86,6 +88,27 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest 
 
   const resetMessages = () => { setError(''); setInfo(''); };
 
+  const isStandalone = () => {
+    try { return window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true; } catch { return false; }
+  };
+
+  // Finalize Google sign-in after a PWA redirect (popup can't return a result in standalone mode).
+  useEffect(() => {
+    getRedirectResult(auth).then(async (result) => {
+      if (result && result.user) {
+        setLoading(true);
+        try {
+          if (!(await isApproved(result.user.email))) {
+            await signOut(auth);
+            setInfo('נכנסת עם Google בהצלחה. החשבון ממתין כעת לאישור של RBS — תקבל גישה לאחר האישור.');
+          }
+        } catch { /* onAuthStateChanged finalizes an approved session */ }
+        setLoading(false);
+      }
+    }).catch((e: any) => { setError(heError(e?.code)); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Block Hebrew/non-Latin characters from being typed into the password field at all.
   const onPasswordChange = (val: string) => {
     setPassword(val.replace(/[^\u0000-\u007F]/g, ''));
@@ -148,6 +171,10 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest 
     setLoading(true);
     try {
       const provider = new GoogleAuthProvider();
+      if (isStandalone()) {
+        await signInWithRedirect(auth, provider);
+        return; // page navigates to Google; result handled on return
+      }
       const cred = await signInWithPopup(auth, provider);
       if (!(await isApproved(cred.user.email))) {
         await signOut(auth);
