@@ -92,20 +92,10 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest 
     try { return window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true; } catch { return false; }
   };
 
-  // Finalize Google sign-in after a PWA redirect (popup can't return a result in standalone mode).
+  // Complete a PWA Google redirect. Approval + session are handled solely by onAuthStateChanged (App.tsx),
+  // so this only surfaces errors — it must NOT sign the user out (that races with onAuthStateChanged).
   useEffect(() => {
-    getRedirectResult(auth).then(async (result) => {
-      if (result && result.user) {
-        setLoading(true);
-        try {
-          if (!(await isApproved(result.user.email))) {
-            await signOut(auth);
-            setInfo('נכנסת עם Google בהצלחה. החשבון ממתין כעת לאישור של RBS — תקבל גישה לאחר האישור.');
-          }
-        } catch { /* onAuthStateChanged finalizes an approved session */ }
-        setLoading(false);
-      }
-    }).catch((e: any) => { setError(heError(e?.code)); });
+    getRedirectResult(auth).catch((e: any) => { setError(heError(e?.code)); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -172,8 +162,13 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest 
     try {
       const provider = new GoogleAuthProvider();
       if (isStandalone()) {
+        try {
+          localStorage.setItem('rbs_b2b_auth', 'true');
+          localStorage.setItem('rbs_b2b_login_ts', Date.now().toString());
+          sessionStorage.setItem('rbs_unlocked', '1');
+        } catch { /* ignore */ }
         await signInWithRedirect(auth, provider);
-        return; // page navigates to Google; result handled on return
+        return; // page navigates to Google; result handled on return by onAuthStateChanged
       }
       const cred = await signInWithPopup(auth, provider);
       if (!(await isApproved(cred.user.email))) {
