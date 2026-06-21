@@ -4920,6 +4920,27 @@ export default function App() {
             </div>
           </div>
           <div className="relative bg-white w-full max-w-2xl mx-auto p-5 sm:p-6 sm:rounded-2xl shadow-sm">
+            {(userRole === 'agent' || userRole === 'sales_manager') ? (
+              <>
+                <div className="bg-gradient-to-l from-[#004387] to-[#0c2d57] text-white rounded-xl p-4 mb-4 -mt-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-white/70 text-xs">שלום,</p>
+                      <h3 className="text-lg font-bold truncate">{agentName || userProfile?.email || 'סוכן'}</h3>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${userRole === 'sales_manager' ? 'bg-purple-500' : 'bg-white/20'}`}>{userRole === 'sales_manager' ? 'מנהל מכירות' : 'סוכן'}</span>
+                  </div>
+                  <p className="text-white/60 text-[11px] mt-2">{userRole === 'sales_manager' ? 'תצוגת כל הסוכנים' : 'הלקוחות והפעילות שלך'}</p>
+                </div>
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-[#004387]">{customerGroups.length}</div><div className="text-[11px] text-gray-500">לקוחות</div></div>
+                  <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-[#004387]">{teamOrders.length}</div><div className="text-[11px] text-gray-500">הזמנות</div></div>
+                  <div className="bg-amber-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-amber-600">{teamOrders.filter((o: any) => !o.status || o.status === 'sent').length}</div><div className="text-[11px] text-gray-500">חדשות</div></div>
+                  <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-[#004387]">{agentQuotes.length}</div><div className="text-[11px] text-gray-500">הצעות</div></div>
+                </div>
+              </>
+            ) : (
+              <>
             <div className="bg-gradient-to-l from-[#004387] to-[#0c2d57] text-white rounded-xl p-4 mb-4 -mt-1">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -4952,6 +4973,9 @@ export default function App() {
                 </div>
               </div>
             )}
+              </>
+            )}
+            {userRole !== 'agent' && userRole !== 'sales_manager' && (
             <div className="mt-5 border-t border-gray-100 pt-4">
               <h3 className="text-sm font-bold text-gray-600 mb-2">פרטי חיוב ליצירת הזמנה</h3>
               <div className="space-y-2">
@@ -4966,6 +4990,7 @@ export default function App() {
                 <p className="text-[11px] text-gray-400">הפרטים ימולאו אוטומטית בטופס ההזמנה הבא.</p>
               </div>
             </div>
+            )}
             {customerQuotes.length > 0 && (
               <div className="mt-5">
                 <h3 className="text-sm font-bold text-gray-600 mb-2">הצעות מחיר ({customerQuotes.length})</h3>
