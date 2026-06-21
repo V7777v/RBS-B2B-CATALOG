@@ -1717,7 +1717,7 @@ const ProductDetailsView = (props: any) => {
 const CheckoutView = (props: any) => {
   const { addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity } = props;
     const [orderPlaced, setOrderPlaced] = useState(false);
-    const [lastSentMethod, setLastSentMethod] = useState<'email' | 'whatsapp' | null>(null);
+    const [lastSentMethod, setLastSentMethod] = useState<'email' | 'whatsapp' | 'saved' | null>(null);
     const [companyName, setCompanyName] = useState('');
     const [companyId, setCompanyId] = useState('');
     const [contactName, setContactName] = useState('');
@@ -1898,6 +1898,16 @@ const CheckoutView = (props: any) => {
       setOrderPlaced(true);
     };
 
+    const handlePlaceOrder = () => {
+      if (!validateForm()) return;
+
+      const orderDetails = buildOrderDetailsText();
+      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'saved' }); }
+      if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
+      setLastSentMethod('saved');
+      setOrderPlaced(true);
+    };
+
     const handleBackToSite = () => {
       navigateHome();
     };
@@ -1915,13 +1925,13 @@ const CheckoutView = (props: any) => {
           <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle size={40} />
           </div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-3">✓ ההזמנה נשלחה בהצלחה!</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-3">✓ ההזמנה התקבלה!</h2>
           <p className="text-gray-700 mb-2 px-4 font-semibold">עותק מלא של ההזמנה נשמר ב«אזור אישי» ← «היסטוריית הזמנות», והיא הועברה לסוכן {recipientName}{alsoToOffice ? ' ולמשרד (נירית)' : ''}. הסוכן יקבל את ההזמנה ויחזור אליך בהקדם.</p>
-          <p className="text-gray-500 mb-8 px-4 text-sm">שים לב: חלון ה{lastSentMethod === 'email' ? 'מייל' : 'וואטסאפ'} נפתח במכשירך — יש לשלוח את ההודעה כדי להשלים את הפנייה.</p>
+          {lastSentMethod !== 'saved' && <p className="text-gray-500 mb-8 px-4 text-sm">שים לב: חלון ה{lastSentMethod === 'email' ? 'מייל' : 'וואטסאפ'} נפתח במכשירך — יש לשלוח את ההודעה כדי להשלים את הפנייה.</p>}
           
           <div className="border-t border-gray-200 pt-6 mt-4">
             <h3 className="text-lg font-bold text-gray-800 mb-4">
-              {lastSentMethod === 'email' ? 'מומלץ לשלוח גיבוי גם בוואטסאפ:' : 'מומלץ לשלוח גיבוי גם במייל:'}
+              {lastSentMethod === 'saved' ? 'אפשר גם לשלוח עותק של ההזמנה:' : (lastSentMethod === 'email' ? 'מומלץ לשלוח גיבוי גם בוואטסאפ:' : 'מומלץ לשלוח גיבוי גם במייל:')}
             </h3>
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
                {lastSentMethod !== 'email' && (
@@ -1990,12 +2000,9 @@ const CheckoutView = (props: any) => {
                         <div className="text-xs text-gray-600 mb-2 bg-gray-50 border border-gray-200 p-2 rounded">
                           <strong className="block mb-1">תוספות מצורפות לארון:</strong>
                           <ul className="list-disc pl-4 pr-1">
-                            {item.optionals.map((opt: any, i: number) => {
-                              const accCatalogItem = catalogData.find(p => p.sku === opt.pn);
-                              return (
-                                <li key={i}>{opt.pn} - {opt.description} {accCatalogItem ? `(₪${accCatalogItem.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ''}</li>
-                              );
-                            })}
+                            {item.optionals.map((opt: any, i: number) => (
+                              <li key={i}>{opt.pn} - {opt.description}</li>
+                            ))}
                           </ul>
                         </div>
                       )}
@@ -2093,21 +2100,27 @@ const CheckoutView = (props: any) => {
 
               <div className="space-y-3 mt-6">
                 <div className="bg-[#e6f0fa]/60 border border-[#b3d4f5] rounded-lg p-3">
-                  <p className="text-sm font-bold text-[#0c2d57] flex items-center gap-1.5"><CheckCircle size={16} className="text-[#004387] flex-shrink-0" /> שליחת הזמנה לסוכן — {recipientName}{alsoToOffice ? ' + עותק למשרד' : ''}</p>
-                  <p className="text-xs text-gray-600 mt-1 leading-relaxed">ההזמנה תישמר אוטומטית ב«אזור אישי» ← «היסטוריית הזמנות», ותועבר לסוכן המטפל שיחזור אליך בהקדם. בחר אופן שליחה:</p>
+                  <p className="text-sm font-bold text-[#0c2d57] flex items-center gap-1.5"><CheckCircle size={16} className="text-[#004387] flex-shrink-0" /> ההזמנה תיכנס למערכת — {recipientName}{alsoToOffice ? ' + עותק למשרד' : ''}</p>
+                  <p className="text-xs text-gray-600 mt-1 leading-relaxed">בלחיצה על «בצע הזמנה» ההזמנה תישמר ב«אזור אישי» ← «היסטוריית הזמנות» והסוכן המטפל יקבל התראה ויחזור אליך עם הצעת מחיר.</p>
                 </div>
-                <button 
-                  onClick={handleSendWhatsApp} 
-                  className="w-full bg-green-500 text-white py-3.5 px-4 font-bold hover:bg-green-600 transition-colors flex items-center justify-center gap-2 text-base shadow-sm"
+                <button
+                  onClick={handlePlaceOrder}
+                  className="w-full bg-[#004387] text-white py-4 px-4 font-bold hover:bg-[#0c2d57] transition-colors flex flex-col items-center justify-center gap-0.5 rounded-lg shadow-[0_4px_14px_rgba(0,67,135,0.28)]"
                 >
-                  <span className="text-lg">📲</span> שליחת ההזמנה בוואטסאפ
+                  <span className="text-lg">בצע הזמנה</span>
+                  <span className="text-xs font-medium opacity-90">ההזמנה תישמר באזור האישי והסוכן יקבל התראה</span>
                 </button>
-                <button 
-                  onClick={handleSendEmail} 
-                  className="w-full bg-[#004387] text-white py-3.5 px-4 font-bold hover:bg-[#fe8d00] transition-colors flex items-center justify-center gap-2 text-base shadow-sm"
-                >
-                  <span className="text-lg">✉️</span> שליחת ההזמנה במייל
-                </button>
+                <div className="pt-1 text-center">
+                  <p className="text-xs text-gray-400 mb-2">רוצה גם לשלוח עותק של ההזמנה?</p>
+                  <div className="flex gap-2 justify-center">
+                    <button onClick={handleSendWhatsApp} className="flex-1 max-w-[160px] flex items-center justify-center gap-1.5 text-sm font-bold text-gray-600 border border-gray-200 bg-white py-2.5 px-3 rounded-lg hover:border-green-400 hover:text-green-600 transition-colors">
+                      שלח עותק בוואטסאפ
+                    </button>
+                    <button onClick={handleSendEmail} className="flex-1 max-w-[160px] flex items-center justify-center gap-1.5 text-sm font-bold text-gray-600 border border-gray-200 bg-white py-2.5 px-3 rounded-lg hover:border-[#004387] hover:text-[#004387] transition-colors">
+                      שלח עותק במייל
+                    </button>
+                  </div>
+                </div>
               </div>
 
             </div>
