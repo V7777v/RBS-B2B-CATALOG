@@ -2190,6 +2190,19 @@ export default function App() {
   const [quoteSearch, setQuoteSearch] = useState('');
   const [quoteSaving, setQuoteSaving] = useState(false);
   const [customerQuotes, setCustomerQuotes] = useState<any[]>([]);
+  const priceHistory = useMemo(() => {
+    const rows: any[] = [];
+    (customerQuotes || []).filter((q: any) => q.status === 'approved').forEach((q: any) => {
+      const date = q.updatedAt || q.createdAt;
+      (q.items || []).forEach((l: any) => rows.push({ name: l.name, sku: l.sku, price: l.quotedPrice, date }));
+    });
+    rows.sort((a, b) => {
+      const ta = a.date?.toMillis?.() ?? (typeof a.date === 'number' ? a.date : 0);
+      const tb = b.date?.toMillis?.() ?? (typeof b.date === 'number' ? b.date : 0);
+      return tb - ta;
+    });
+    return rows;
+  }, [customerQuotes]);
   const [agentUnread, setAgentUnread] = useState(0);
   const [notifPerm, setNotifPerm] = useState<string>(() => (typeof Notification !== 'undefined' ? Notification.permission : 'default'));
   const seenOrderIds = useRef<Set<string>>(new Set());
@@ -4927,6 +4940,23 @@ export default function App() {
                           )}
                         </div>
                       )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {priceHistory.length > 0 && (
+              <div className="mt-5 border-t border-gray-100 pt-4">
+                <h3 className="text-sm font-bold text-gray-600 mb-2">היסטוריית מחירים ({priceHistory.length})</h3>
+                <p className="text-[11px] text-gray-400 mb-2">המחירים המיוחדים שאושרו עבורך בהצעות מחיר.</p>
+                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                  {priceHistory.map((r: any, i: number) => (
+                    <div key={i} className="flex justify-between items-center border border-gray-100 rounded-lg p-2 text-xs">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-[#0c2d57] truncate">{r.name}</div>
+                        <div className="text-gray-400">{r.sku}{r.date?.toDate ? ` · ${r.date.toDate().toLocaleDateString('he-IL')}` : ''}</div>
+                      </div>
+                      <span className="font-bold text-[#004387] flex-shrink-0">₪{Math.round(r.price || 0)}</span>
                     </div>
                   ))}
                 </div>
