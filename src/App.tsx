@@ -2162,6 +2162,7 @@ export default function App() {
   const [guestPrompt, setGuestPrompt] = useState(false);
   const [billingProfile, setBillingProfile] = useState<any>(null);
   const [billingSaved, setBillingSaved] = useState(false);
+  const [showCompleteProfile, setShowCompleteProfile] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(() => { try { return localStorage.getItem('rbs_b2b_biometric_enabled') === 'true'; } catch { return false; } });
   const [biometricUnlocked, setBiometricUnlocked] = useState(() => { try { return !!sessionStorage.getItem('rbs_unlocked'); } catch { return false; } });
@@ -2446,6 +2447,11 @@ export default function App() {
     if (userUid) loadUserProfile(userUid).then(setBillingProfile);
     else setBillingProfile(null);
   }, [userUid]);
+  useEffect(() => {
+    if (isAuthenticated && !isGuest && userUid) {
+      try { if (!localStorage.getItem('rbs_profile_setup_done')) setShowCompleteProfile(true); } catch { /* ignore */ }
+    }
+  }, [isAuthenticated, isGuest, userUid]);
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [bulkSelection, setBulkSelection] = useState<Record<string, { product: any, quantity: number }>>({});
@@ -4882,6 +4888,28 @@ export default function App() {
         </div>
       )}
 
+      {showCompleteProfile && (
+        <div className="fixed inset-0 z-[65] bg-black/50 flex items-start justify-center p-4 overflow-y-auto" dir="rtl" style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 my-auto">
+            <h2 className="text-lg font-bold text-[#0c2d57] mb-1">השלמת פרטי לקוח</h2>
+            <p className="text-sm text-gray-500 mb-4">נשמח להשלים כמה פרטים כדי לייעל את ההזמנות וההצעות עבורך. הפרטים יישמרו באזור האישי וניתן לעדכן בכל עת.</p>
+            <div className="space-y-2.5">
+              <input value={billingProfile?.companyName || ''} onChange={(e) => setBillingProfile((b: any) => ({ ...(b || {}), companyName: e.target.value }))} placeholder="שם חברה" className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" />
+              <input value={billingProfile?.companyId || ''} onChange={(e) => setBillingProfile((b: any) => ({ ...(b || {}), companyId: e.target.value }))} placeholder="ח.פ / עוסק מורשה" className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" />
+              <input value={billingProfile?.address || ''} onChange={(e) => setBillingProfile((b: any) => ({ ...(b || {}), address: e.target.value }))} placeholder="כתובת מלאה (רחוב, עיר, מיקוד)" className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" />
+              <input value={billingProfile?.phone || ''} onChange={(e) => setBillingProfile((b: any) => ({ ...(b || {}), phone: e.target.value }))} placeholder="טלפון ראשי" className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" />
+              <input value={billingProfile?.phone2 || ''} onChange={(e) => setBillingProfile((b: any) => ({ ...(b || {}), phone2: e.target.value }))} placeholder="טלפון נוסף (אופציונלי)" className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" />
+              <input value={billingProfile?.contactName || ''} onChange={(e) => setBillingProfile((b: any) => ({ ...(b || {}), contactName: e.target.value }))} placeholder="איש קשר" className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" />
+              <input value={billingProfile?.email || ''} onChange={(e) => setBillingProfile((b: any) => ({ ...(b || {}), email: e.target.value }))} placeholder="אימייל ליצירת קשר" className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" />
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => { if (userUid) saveUserProfile(userUid, { ...(billingProfile || {}), profileCompleted: true }); try { localStorage.setItem('rbs_profile_setup_done', '1'); } catch { /* ignore */ } setShowCompleteProfile(false); }} className="flex-1 py-2.5 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-lg font-bold">שמירה</button>
+              <button onClick={() => { try { localStorage.setItem('rbs_profile_setup_done', '1'); } catch { /* ignore */ } setShowCompleteProfile(false); }} className="px-4 py-2.5 text-gray-500 text-sm font-semibold">דלג</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ADMIN SYNC MODAL OVERLAY */}
       {showProfile && (
         <div className="fixed inset-0 z-50 bg-gray-100 overflow-y-auto overscroll-contain" dir="rtl" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}>
@@ -4892,22 +4920,38 @@ export default function App() {
             </div>
           </div>
           <div className="relative bg-white w-full max-w-2xl mx-auto p-5 sm:p-6 sm:rounded-2xl shadow-sm">
-            <div className="flex flex-col items-center mb-5">
-              <div className="w-16 h-16 rounded-full bg-[#004387] flex items-center justify-center mb-2"><User className="w-8 h-8 text-white" /></div>
-              <h2 className="text-xl font-bold text-[#0c2d57]">האזור האישי שלי</h2>
-              {isAdmin && <span className="mt-1 text-xs font-bold text-white bg-[#f7941d] px-2 py-0.5 rounded-full">מנהל מערכת</span>}
-              {userRole === 'agent' && <span className="mt-1 mr-1 text-xs font-bold text-white bg-[#004387] px-2 py-0.5 rounded-full">סוכן</span>}
-              {userRole === 'sales_manager' && <span className="mt-1 mr-1 text-xs font-bold text-white bg-purple-600 px-2 py-0.5 rounded-full">מנהל מכירות</span>}
+            <div className="bg-gradient-to-l from-[#004387] to-[#0c2d57] text-white rounded-xl p-4 mb-4 -mt-1">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-lg font-bold truncate">{userProfile?.company || 'הלקוח שלי'}</h3>
+                  <p className="text-white/70 text-xs mt-0.5 truncate" dir="ltr">{userProfile?.email || ''}</p>
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  {isAdmin && <span className="text-[10px] font-bold bg-[#f7941d] px-2 py-0.5 rounded-full">מנהל מערכת</span>}
+                  {userRole === 'agent' && <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">סוכן</span>}
+                  {userRole === 'sales_manager' && <span className="text-[10px] font-bold bg-purple-500 px-2 py-0.5 rounded-full">מנהל מכירות</span>}
+                  {userProfile?.tier && <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">{userProfile.tier}</span>}
+                </div>
+              </div>
+              <div className="flex gap-5 mt-3">
+                {userProfile?.customerNumber && <div><span className="text-white/60 text-[10px] block">מספר לקוח</span><span className="font-bold text-sm">{userProfile.customerNumber}</span></div>}
+                {userProfile?.agent && <div><span className="text-white/60 text-[10px] block">סוכן מטפל</span><span className="font-bold text-sm">{userProfile.agent}</span></div>}
+              </div>
             </div>
-            <div className="space-y-3 text-right">
-              <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">אימייל</span><span className="font-semibold text-[#0c2d57]" dir="ltr">{userProfile?.email || '—'}</span></div>
-              <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">חברה</span><span className="font-semibold text-[#0c2d57]">{userProfile?.company || '—'}</span></div>
-              <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">מספר לקוח</span><span className="font-semibold text-[#0c2d57]">{userProfile?.customerNumber || '—'}</span></div>
-              <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">מדרגת מחיר</span><span className="font-semibold text-[#0c2d57]">{userProfile?.tier || '—'}</span></div>
-              <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">סוכן</span><span className="font-semibold text-[#0c2d57]">{userProfile?.agent || '—'}</span></div>
-              {userProfile?.agentPhone && <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">טלפון סוכן</span><a href={`tel:${userProfile.agentPhone}`} className="font-semibold text-[#004387]" dir="ltr">{userProfile.agentPhone}</a></div>}
-              {userProfile?.agentEmail && <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500 text-sm">מייל סוכן</span><a href={`mailto:${userProfile.agentEmail}`} className="font-semibold text-[#004387]" dir="ltr">{userProfile.agentEmail}</a></div>}
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-[#004387]">{orders.length}</div><div className="text-[11px] text-gray-500">הזמנות</div></div>
+              <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-[#004387]">{customerQuotes.length}</div><div className="text-[11px] text-gray-500">הצעות מחיר</div></div>
+              <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-[#004387]">{favorites.length}</div><div className="text-[11px] text-gray-500">מועדפים</div></div>
             </div>
+            {userProfile?.agent && (userProfile?.agentPhone || userProfile?.agentEmail) && (
+              <div className="bg-gray-50 rounded-xl p-3 mb-4 flex items-center justify-between gap-2">
+                <div className="min-w-0"><span className="text-[11px] text-gray-500 block">הסוכן שלי</span><span className="font-bold text-[#0c2d57] truncate">{userProfile.agent}</span></div>
+                <div className="flex gap-2 flex-shrink-0">
+                  {userProfile.agentPhone && <a href={`tel:${userProfile.agentPhone}`} className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-bold whitespace-nowrap">📞 התקשר</a>}
+                  {userProfile.agentEmail && <a href={`mailto:${userProfile.agentEmail}`} className="px-3 py-1.5 bg-blue-100 text-[#004387] rounded-lg text-xs font-bold whitespace-nowrap">✉️ מייל</a>}
+                </div>
+              </div>
+            )}
             <div className="mt-5 border-t border-gray-100 pt-4">
               <h3 className="text-sm font-bold text-gray-600 mb-2">פרטי חיוב ליצירת הזמנה</h3>
               <div className="space-y-2">
@@ -4915,6 +4959,8 @@ export default function App() {
                 <input value={billingProfile?.companyId || ''} onChange={(e) => { setBillingProfile((b: any) => ({ ...(b || {}), companyId: e.target.value })); setBillingSaved(false); }} placeholder="ח.פ / עוסק מורשה" className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
                 <input value={billingProfile?.address || ''} onChange={(e) => { setBillingProfile((b: any) => ({ ...(b || {}), address: e.target.value })); setBillingSaved(false); }} placeholder="כתובת מלאה (רחוב, עיר)" className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
                 <input value={billingProfile?.phone || ''} onChange={(e) => { setBillingProfile((b: any) => ({ ...(b || {}), phone: e.target.value })); setBillingSaved(false); }} placeholder="טלפון" className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
+                <input value={billingProfile?.phone2 || ''} onChange={(e) => { setBillingProfile((b: any) => ({ ...(b || {}), phone2: e.target.value })); setBillingSaved(false); }} placeholder="טלפון נוסף" className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
+                <input value={billingProfile?.contactName || ''} onChange={(e) => { setBillingProfile((b: any) => ({ ...(b || {}), contactName: e.target.value })); setBillingSaved(false); }} placeholder="איש קשר" className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
                 <input value={billingProfile?.email || ''} onChange={(e) => { setBillingProfile((b: any) => ({ ...(b || {}), email: e.target.value })); setBillingSaved(false); }} placeholder="אימייל ליצירת קשר" className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
                 <button onClick={() => { if (userUid) { saveUserProfile(userUid, billingProfile || {}); setBillingSaved(true); } }} className="w-full py-2 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-lg text-sm font-bold">{billingSaved ? '✓ נשמר' : 'שמור פרטים'}</button>
                 <p className="text-[11px] text-gray-400">הפרטים ימולאו אוטומטית בטופס ההזמנה הבא.</p>
