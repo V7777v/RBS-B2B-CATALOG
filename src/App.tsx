@@ -11,7 +11,7 @@ import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadCustomerQuotes, updateQuoteStatus, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadCustomerQuotes, updateQuoteStatus, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -2203,6 +2203,13 @@ export default function App() {
     });
     return rows;
   }, [customerQuotes]);
+  const orderStatusLabel = (st?: string) => st === 'done' ? 'הושלם' : st === 'processing' ? 'בטיפול' : 'נשלח';
+  const orderStatusClass = (st?: string) => st === 'done' ? 'bg-green-100 text-green-700' : st === 'processing' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700';
+  const advanceOrderStatus = async (orderId: string, status: string) => {
+    await updateOrderStatus(orderId, status);
+    if (userRole === 'sales_manager') loadAllOrders().then(setTeamOrders);
+    else if (userRole === 'agent' && agentName) loadAgentOrders(agentName).then(setTeamOrders);
+  };
   const [agentUnread, setAgentUnread] = useState(0);
   const [notifPerm, setNotifPerm] = useState<string>(() => (typeof Notification !== 'undefined' ? Notification.permission : 'default'));
   const seenOrderIds = useRef<Set<string>>(new Set());
@@ -4968,9 +4975,12 @@ export default function App() {
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {orders.map((o) => (
                     <div key={o.id} className="border border-gray-100 rounded-lg p-2.5">
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center gap-2">
                         <span className="font-semibold text-[#0c2d57] text-sm">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'}</span>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${orderStatusClass(o.status)}`}>{orderStatusLabel(o.status)}</span>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
+                        </div>
                       </div>
                       <div className="text-gray-500 text-xs mt-1">{o.itemCount || (o.items?.length ?? 0)} פריטים{o.company ? ` · ${o.company}` : ''}</div>
                     </div>
@@ -5011,9 +5021,12 @@ export default function App() {
                           )}
                           {g.orders.map((o: any) => (
                             <div key={o.id} className="border border-gray-100 rounded-lg p-2">
-                              <div className="flex justify-between items-center">
+                              <div className="flex justify-between items-center gap-2">
                                 <span className="text-[#0c2d57] text-sm font-semibold">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'}</span>
-                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${orderStatusClass(o.status)}`}>{orderStatusLabel(o.status)}</span>
+                                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
+                                </div>
                               </div>
                               <div className="text-gray-500 text-xs mt-1">{o.itemCount || (o.items?.length ?? 0)} פריטים{userRole === 'sales_manager' && o.agent ? ` · סוכן: ${o.agent}` : ''}</div>
                               {o.detailsText && (
@@ -5022,6 +5035,11 @@ export default function App() {
                                   <pre className="text-[10px] text-gray-600 whitespace-pre-wrap mt-1 bg-gray-50 rounded p-1.5 max-h-32 overflow-y-auto" dir="rtl">{o.detailsText}</pre>
                                 </details>
                               )}
+                              <div className="flex gap-1.5 mt-2">
+                                {o.status !== 'processing' && o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'processing')} className="flex-1 py-1 bg-amber-50 border border-amber-200 text-amber-700 rounded text-[11px] font-bold">סמן בטיפול</button>}
+                                {o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'done')} className="flex-1 py-1 bg-green-50 border border-green-200 text-green-700 rounded text-[11px] font-bold">סמן הושלם</button>}
+                                {o.status === 'done' && <button onClick={() => advanceOrderStatus(o.id, 'sent')} className="flex-1 py-1 bg-gray-50 border border-gray-200 text-gray-500 rounded text-[11px] font-bold">החזר ל׳נשלח׳</button>}
+                              </div>
                             </div>
                           ))}
                         </div>

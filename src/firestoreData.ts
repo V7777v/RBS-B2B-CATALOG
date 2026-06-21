@@ -73,6 +73,12 @@ export async function loadAllOrders(): Promise<any[]> {
   }
 }
 
+export async function updateOrderStatus(orderId: string, status: string): Promise<void> {
+  try {
+    await setDoc(doc(db, 'orders', orderId), { status }, { merge: true });
+  } catch { /* ignore */ }
+}
+
 // ---------- Real-time order notifications (agent/manager) ----------
 export function subscribeAgentOrders(agentName: string, cb: (orders: any[]) => void): () => void {
   try {
