@@ -3659,13 +3659,13 @@ export default function App() {
     <div id="rbs-b2b-app" className="min-h-screen bg-slate-50 flex flex-col font-sans" dir="rtl">
         {/* SECONDARY TOOLBAR INSTEAD OF MAIN HEADER */}
         <div ref={headerRef} className="sticky top-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header">
-          <div className="container mx-auto px-4 min-h-[56px] flex flex-row items-center justify-between flex-nowrap gap-2 sm:gap-4">
+          <div className="container mx-auto px-4 min-h-[56px] flex flex-row items-center justify-between flex-wrap gap-1 sm:gap-4">
             
             {/* RIGHT SIDE: Menu & Back (Mobile optimized browser controls & Desktop standard) */}
             <div className="flex flex-row items-center gap-2 md:gap-4 flex-shrink-0">
               
               {/* MOBILE ONLY: Browser-style Navigation Controls with large touch targets */}
-              <div id="mobile-browser-navigation-bar" className="flex md:hidden items-center gap-2 bg-gray-50 border border-gray-200/80 p-2 rounded-xl shadow-xs">
+              <div id="mobile-browser-navigation-bar" className="flex md:hidden items-center gap-0.5 bg-gray-50 border border-gray-200/80 p-1 rounded-xl shadow-xs">
                 
                 {/* 1. Menu Button: 52px size, large Menu bars */}
                 <button 
@@ -3717,7 +3717,7 @@ export default function App() {
                     setSearchQuery('');
                     navigateHome();
                   }}
-                  className="flex items-center justify-center h-12 px-3 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                  className="flex items-center justify-center h-10 px-1 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
                   aria-label="דף הבית"
                   title="דף הבית - RBS"
                   style={{ minWidth: '5.2rem' }}
@@ -3726,7 +3726,7 @@ export default function App() {
                     referrerPolicy="no-referrer" 
                     src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
                     alt="RBS Logo" 
-                    className="h-8 w-auto object-contain max-w-[76px] select-none" 
+                    className="h-7 w-auto object-contain max-w-[44px] select-none" 
                   />
                 </button>
 
