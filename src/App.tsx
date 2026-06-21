@@ -2169,6 +2169,7 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [userProfile, setUserProfile] = useState<{ email: string; company: string; customerNumber: string; tier: string; agent: string; agentPhone: string; agentEmail: string } | null>(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [userUid, setUserUid] = useState<string | null>(null);
   const [cartLoaded, setCartLoaded] = useState(false);
   const [isGuest, setIsGuest] = useState(() => { try { return sessionStorage.getItem('rbs_guest') === '1'; } catch { return false; } });
@@ -5058,17 +5059,55 @@ export default function App() {
                 <h3 className="text-sm font-bold text-gray-600 mb-2">היסטוריית הזמנות ({orders.length})</h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {orders.map((o) => (
-                    <div key={o.id} className="border border-gray-100 rounded-lg p-2.5">
-                      <div className="flex justify-between items-center gap-2">
-                        <span className="font-semibold text-[#0c2d57] text-sm">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'}</span>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button key={o.id} onClick={() => setSelectedOrder(o)} className="w-full text-right border border-gray-100 rounded-lg p-2.5 hover:bg-gray-50 hover:border-[#cdd9e8] transition-colors flex items-center gap-2">
+                      <div className="flex-grow min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-semibold text-[#0c2d57] text-sm">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'}</span>
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${orderStatusClass(o.status)}`}>{orderStatusLabel(o.status)}</span>
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
                         </div>
+                        <div className="text-gray-500 text-xs mt-1">{o.itemCount || (o.items?.length ?? 0)} פריטים{o.company ? ` · ${o.company}` : ''}</div>
                       </div>
-                      <div className="text-gray-500 text-xs mt-1">{o.itemCount || (o.items?.length ?? 0)} פריטים{o.company ? ` · ${o.company}` : ''}</div>
-                    </div>
+                      <ChevronLeft size={18} className="text-gray-300 flex-shrink-0" />
+                    </button>
                   ))}
+                </div>
+              </div>
+            )}
+            {selectedOrder && (
+              <div className="fixed inset-0 z-[60] bg-black/40 flex items-end sm:items-center justify-center" onClick={() => setSelectedOrder(null)}>
+                <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl max-h-[88vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                  <div className="sticky top-0 bg-[#004387] text-white px-4 py-3 flex items-center justify-between">
+                    <span className="font-bold text-base">פרטי הזמנה</span>
+                    <button onClick={() => setSelectedOrder(null)} className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-sm">✕</button>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-lg font-extrabold text-[#0c2d57]">{selectedOrder.createdAt?.toDate ? selectedOrder.createdAt.toDate().toLocaleDateString('he-IL') : '—'}</div>
+                        <div className="text-xs text-gray-400 truncate">{selectedOrder.company || ''}{selectedOrder.customerNumber ? ` · לקוח ${selectedOrder.customerNumber}` : ''}</div>
+                      </div>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${orderStatusClass(selectedOrder.status)}`}>{orderStatusLabel(selectedOrder.status)}</span>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                      <div className="text-xs font-bold text-[#0c2d57] mb-2 flex items-center gap-1.5"><Package size={14} className="text-[#004387]" /> פריטים ({selectedOrder.itemCount || (selectedOrder.items?.length ?? 0)})</div>
+                      <div className="space-y-2">
+                        {(selectedOrder.items || []).map((it: any, i: number) => (
+                          <div key={i} className="flex items-center gap-2 text-sm">
+                            <span className="flex-grow text-gray-800 font-semibold truncate">{it.name}</span>
+                            <span className="text-[11px] text-gray-400 font-mono flex-shrink-0">{it.sku}</span>
+                            <span className="bg-[#eef4fb] text-[#004387] font-bold text-xs px-2 py-0.5 rounded-full flex-shrink-0">×{it.quantity}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => { setCart((selectedOrder.items || []).map((it: any) => ({ ...it }))); setSelectedOrder(null); setShowProfile(false); handleCheckout(); }}
+                      className="w-full bg-[#004387] text-white py-3.5 font-bold rounded-xl hover:bg-[#0c2d57] transition-colors flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(0,67,135,0.25)]"
+                    >
+                      <RefreshCw size={18} /> הזמן שוב
+                    </button>
+                    <p className="text-center text-[11px] text-gray-400">הפריטים יועברו לעגלה חדשה — הפרטים שלך כבר ממולאים, ללא הקלדה.</p>
+                  </div>
                 </div>
               </div>
             )}
