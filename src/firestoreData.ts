@@ -79,6 +79,12 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
   } catch { /* ignore */ }
 }
 
+export async function updateOrder(orderId: string, fields: Record<string, any>): Promise<void> {
+  try {
+    await setDoc(doc(db, 'orders', orderId), { ...fields, updatedAt: serverTimestamp() }, { merge: true });
+  } catch { /* ignore */ }
+}
+
 // ---------- Real-time order notifications (agent/manager) ----------
 export function subscribeAgentOrders(agentName: string, cb: (orders: any[]) => void): () => void {
   try {

@@ -11,7 +11,7 @@ import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadCustomerQuotes, updateQuoteStatus, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadCustomerQuotes, updateQuoteStatus, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -2170,6 +2170,10 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<{ email: string; company: string; customerNumber: string; tier: string; agent: string; agentPhone: string; agentEmail: string } | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [reorderMode, setReorderMode] = useState(false);
+  const [reorderItems, setReorderItems] = useState<any[]>([]);
+  const [editMode, setEditMode] = useState(false);
+  const [editItems, setEditItems] = useState<any[]>([]);
   const [userUid, setUserUid] = useState<string | null>(null);
   const [cartLoaded, setCartLoaded] = useState(false);
   const [isGuest, setIsGuest] = useState(() => { try { return sessionStorage.getItem('rbs_guest') === '1'; } catch { return false; } });
@@ -5074,11 +5078,11 @@ export default function App() {
               </div>
             )}
             {selectedOrder && (
-              <div className="fixed inset-0 z-[60] bg-black/40 flex items-end sm:items-center justify-center" onClick={() => setSelectedOrder(null)}>
+              <div className="fixed inset-0 z-[60] bg-black/40 flex items-end sm:items-center justify-center" onClick={() => { setSelectedOrder(null); setReorderMode(false); setEditMode(false); }}>
                 <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl max-h-[88vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                   <div className="sticky top-0 bg-[#004387] text-white px-4 py-3 flex items-center justify-between">
-                    <span className="font-bold text-base">פרטי הזמנה</span>
-                    <button onClick={() => setSelectedOrder(null)} className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-sm">✕</button>
+                    <span className="font-bold text-base">{editMode ? 'עריכת הזמנה' : reorderMode ? 'בחר פריטים להזמנה' : 'פרטי הזמנה'}</span>
+                    <button onClick={() => { setSelectedOrder(null); setReorderMode(false); setEditMode(false); }} className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-sm">✕</button>
                   </div>
                   <div className="p-4 space-y-3">
                     <div className="flex items-start justify-between gap-2">
@@ -5088,25 +5092,99 @@ export default function App() {
                       </div>
                       <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${orderStatusClass(selectedOrder.status)}`}>{orderStatusLabel(selectedOrder.status)}</span>
                     </div>
-                    <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
-                      <div className="text-xs font-bold text-[#0c2d57] mb-2 flex items-center gap-1.5"><Package size={14} className="text-[#004387]" /> פריטים ({selectedOrder.itemCount || (selectedOrder.items?.length ?? 0)})</div>
-                      <div className="space-y-2">
-                        {(selectedOrder.items || []).map((it: any, i: number) => (
-                          <div key={i} className="flex items-center gap-2 text-sm">
-                            <span className="flex-grow text-gray-800 font-semibold truncate">{it.name}</span>
-                            <span className="text-[11px] text-gray-400 font-mono flex-shrink-0">{it.sku}</span>
-                            <span className="bg-[#eef4fb] text-[#004387] font-bold text-xs px-2 py-0.5 rounded-full flex-shrink-0">×{it.quantity}</span>
+                    {editMode ? (
+                      <>
+                        <div className="space-y-2">
+                          {editItems.map((it: any, i: number) => (
+                            <div key={i} className="flex items-center gap-2 border border-gray-200 rounded-lg p-2">
+                              <div className="flex-grow min-w-0">
+                                <div className="text-sm font-semibold text-gray-800 truncate">{it.name}</div>
+                                <div className="text-[11px] text-gray-400 font-mono">{it.sku}</div>
+                              </div>
+                              <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                                <button onClick={() => setEditItems(prev => prev.map((p, j) => j === i ? { ...p, quantity: Math.max(1, (p.quantity || 1) - 1) } : p))} className="w-7 h-7 bg-gray-50 text-[#004387] font-bold">−</button>
+                                <span className="w-7 text-center text-sm font-bold text-[#0c2d57]">{it.quantity}</span>
+                                <button onClick={() => setEditItems(prev => prev.map((p, j) => j === i ? { ...p, quantity: (p.quantity || 1) + 1 } : p))} className="w-7 h-7 bg-gray-50 text-[#004387] font-bold">+</button>
+                              </div>
+                              <button onClick={() => setEditItems(prev => prev.filter((_, j) => j !== i))} className="w-8 h-8 flex items-center justify-center flex-shrink-0"><Trash2 size={16} className="text-red-500" /></button>
+                            </div>
+                          ))}
+                          {editItems.length === 0 && <p className="text-center text-sm text-gray-400 py-4">אין פריטים — הוסף או בטל</p>}
+                        </div>
+                        <button
+                          onClick={async () => { const items = editItems.map((it: any) => ({ ...it })); const itemCount = items.reduce((acc: number, it: any) => acc + (it.quantity || 0), 0); const detailsText = 'הזמנה (עודכנה על ידי הלקוח)\n---------------------------------\n' + items.map((it: any) => `${it.name} (${it.sku}) — כמות: ${it.quantity}`).join('\n'); await updateOrder(selectedOrder.id, { items, itemCount, detailsText, edited: true }); setOrders(prev => prev.map((o: any) => o.id === selectedOrder.id ? { ...o, items, itemCount, detailsText, edited: true } : o)); setEditMode(false); setSelectedOrder(null); }}
+                          disabled={editItems.length === 0}
+                          className="w-full bg-[#004387] text-white py-3.5 font-bold rounded-xl hover:bg-[#0c2d57] transition-colors flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(0,67,135,0.25)] disabled:opacity-50"
+                        >
+                          <CheckCircle size={18} /> שמור שינויים
+                        </button>
+                        <button onClick={() => setEditMode(false)} className="w-full text-gray-500 py-2 font-semibold text-sm">ביטול</button>
+                        <p className="text-center text-[11px] text-gray-400">השינויים יעודכנו בהזמנה והסוכן יראה את העדכון.</p>
+                      </>
+                    ) : !reorderMode ? (
+                      <>
+                        <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                          <div className="text-xs font-bold text-[#0c2d57] mb-2 flex items-center gap-1.5"><Package size={14} className="text-[#004387]" /> פריטים ({selectedOrder.itemCount || (selectedOrder.items?.length ?? 0)})</div>
+                          <div className="space-y-2">
+                             {(selectedOrder.items || []).map((it: any, i: number) => (
+                              <div key={i} className="flex items-center gap-2 text-sm">
+                                <span className="flex-grow text-gray-800 font-semibold truncate">{it.name}</span>
+                                <span className="text-[11px] text-gray-400 font-mono flex-shrink-0">{it.sku}</span>
+                                <span className="bg-[#eef4fb] text-[#004387] font-bold text-xs px-2 py-0.5 rounded-full flex-shrink-0">×{it.quantity}</span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => { setCart((selectedOrder.items || []).map((it: any) => ({ ...it }))); setSelectedOrder(null); setShowProfile(false); handleCheckout(); }}
-                      className="w-full bg-[#004387] text-white py-3.5 font-bold rounded-xl hover:bg-[#0c2d57] transition-colors flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(0,67,135,0.25)]"
-                    >
-                      <RefreshCw size={18} /> הזמן שוב
-                    </button>
-                    <p className="text-center text-[11px] text-gray-400">הפריטים יועברו לעגלה חדשה — הפרטים שלך כבר ממולאים, ללא הקלדה.</p>
+                        </div>
+                        <button
+                          onClick={() => { setCart((selectedOrder.items || []).map((it: any) => ({ ...it }))); setSelectedOrder(null); setReorderMode(false); setShowProfile(false); handleCheckout(); }}
+                          className="w-full bg-[#004387] text-white py-3.5 font-bold rounded-xl hover:bg-[#0c2d57] transition-colors flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(0,67,135,0.25)]"
+                        >
+                          <RefreshCw size={18} /> הזמן את הכל שוב
+                        </button>
+                        <button
+                          onClick={() => { setReorderItems((selectedOrder.items || []).map((it: any) => ({ ...it, _include: true }))); setReorderMode(true); }}
+                          className="w-full bg-white border border-[#cdd9e8] text-[#004387] py-3 font-bold rounded-xl hover:bg-gray-50 transition-colors"
+                        >
+                          בחר פריטים מחדש
+                        </button>
+                        <button
+                          onClick={() => { setEditItems((selectedOrder.items || []).map((it: any) => ({ ...it }))); setEditMode(true); }}
+                          className="w-full bg-white border border-gray-200 text-gray-600 py-3 font-bold rounded-xl hover:bg-gray-50 transition-colors"
+                        >
+                          עריכת ההזמנה
+                        </button>
+                        <p className="text-center text-[11px] text-gray-400">הפריטים יועברו לעגלה חדשה — הפרטים שלך כבר ממולאים, ללא הקלדה.</p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          {reorderItems.map((it: any, i: number) => (
+                            <div key={i} className={`flex items-center gap-2 border rounded-lg p-2 transition-colors ${it._include ? 'border-[#cdd9e8] bg-white' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
+                              <button onClick={() => setReorderItems(prev => prev.map((p, j) => j === i ? { ...p, _include: !p._include } : p))} className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${it._include ? 'bg-[#004387] border-[#004387]' : 'border-gray-300 bg-white'}`}>
+                                {it._include && <Check size={12} className="text-white" />}
+                              </button>
+                              <div className="flex-grow min-w-0">
+                                <div className="text-sm font-semibold text-gray-800 truncate">{it.name}</div>
+                                <div className="text-[11px] text-gray-400 font-mono">{it.sku}</div>
+                              </div>
+                              <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                                <button onClick={() => setReorderItems(prev => prev.map((p, j) => j === i ? { ...p, quantity: Math.max(1, (p.quantity || 1) - 1) } : p))} className="w-7 h-7 bg-gray-50 text-[#004387] font-bold">−</button>
+                                <span className="w-7 text-center text-sm font-bold text-[#0c2d57]">{it.quantity}</span>
+                                <button onClick={() => setReorderItems(prev => prev.map((p, j) => j === i ? { ...p, quantity: (p.quantity || 1) + 1 } : p))} className="w-7 h-7 bg-gray-50 text-[#004387] font-bold">+</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => { const chosen = reorderItems.filter((it: any) => it._include && (it.quantity || 0) > 0).map((it: any) => { const { _include, ...rest } = it; return rest; }); if (chosen.length === 0) return; setCart(chosen); setSelectedOrder(null); setReorderMode(false); setShowProfile(false); handleCheckout(); }}
+                          className="w-full bg-[#004387] text-white py-3.5 font-bold rounded-xl hover:bg-[#0c2d57] transition-colors flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(0,67,135,0.25)] disabled:opacity-50"
+                          disabled={reorderItems.filter((it: any) => it._include).length === 0}
+                        >
+                          <RefreshCw size={18} /> הוסף לעגלה ({reorderItems.filter((it: any) => it._include).length})
+                        </button>
+                        <button onClick={() => setReorderMode(false)} className="w-full text-gray-500 py-2 font-semibold text-sm">ביטול</button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
