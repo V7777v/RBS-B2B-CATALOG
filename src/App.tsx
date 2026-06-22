@@ -1957,8 +1957,14 @@ const CheckoutView = (props: any) => {
              <h3 className="text-lg font-bold text-gray-800 mb-4">מה תרצה לעשות עכשיו?</h3>
              <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <button 
+                  onClick={() => { if (props.navigateToOrders) props.navigateToOrders(); }}
+                  className="bg-[#004387] text-white px-8 py-3 font-bold hover:bg-[#0c2d57] transition-colors shadow-sm"
+                >
+                  צפייה בהזמנות שלי
+                </button>
+                <button 
                   onClick={handleBackToSite}
-                  className="bg-[#004387] text-white px-8 py-3 font-bold hover:bg-[#fe8d00] transition-colors shadow-sm"
+                  className="bg-white border-2 border-[#004387] text-[#004387] px-8 py-3 font-bold hover:bg-gray-50 transition-colors shadow-sm"
                 >
                   המשך לאתר (שמור על העגלה)
                 </button>
@@ -2170,6 +2176,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<{ email: string; company: string; customerNumber: string; tier: string; agent: string; agentPhone: string; agentEmail: string } | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [showOrders, setShowOrders] = useState(false);
   const [reorderMode, setReorderMode] = useState(false);
   const [reorderItems, setReorderItems] = useState<any[]>([]);
   const [editMode, setEditMode] = useState(false);
@@ -4467,7 +4474,7 @@ export default function App() {
                 <ProductDetailsView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity, isGuest }} />
               )
             ) : currentView === 'checkout' ? (
-               <CheckoutView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity, userUid, userProfile }} billingProfile={billingProfile} onSaveBilling={(d: any) => { if (userUid) { saveUserProfile(userUid, d); setBillingProfile(d); } }} />
+               <CheckoutView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity, userUid, userProfile }} billingProfile={billingProfile} onSaveBilling={(d: any) => { if (userUid) { saveUserProfile(userUid, d); setBillingProfile(d); } }} navigateToOrders={() => { setShowProfile(true); setShowOrders(true); }} />
             ) : null}
 
             </>
@@ -4978,9 +4985,9 @@ export default function App() {
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2 mb-4">
-              <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-[#004387]">{orders.length}</div><div className="text-[11px] text-gray-500">הזמנות</div></div>
-              <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-[#004387]">{customerQuotes.length}</div><div className="text-[11px] text-gray-500">הצעות מחיר</div></div>
-              <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-[#004387]">{favorites.length}</div><div className="text-[11px] text-gray-500">מועדפים</div></div>
+              <button onClick={() => setShowOrders(true)} className="bg-gray-50 rounded-xl p-3 text-center hover:bg-gray-100 transition-colors w-full"><div className="text-2xl font-bold text-[#004387]">{orders.length}</div><div className="text-[11px] text-gray-500">הזמנות</div></button>
+              <button onClick={() => document.getElementById('sec-quotes')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="bg-gray-50 rounded-xl p-3 text-center hover:bg-gray-100 transition-colors w-full"><div className="text-2xl font-bold text-[#004387]">{customerQuotes.length}</div><div className="text-[11px] text-gray-500">הצעות מחיר</div></button>
+              <button onClick={() => document.getElementById('sec-favorites')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="bg-gray-50 rounded-xl p-3 text-center hover:bg-gray-100 transition-colors w-full"><div className="text-2xl font-bold text-[#004387]">{favorites.length}</div><div className="text-[11px] text-gray-500">מועדפים</div></button>
             </div>
             {userProfile?.agent && (userProfile?.agentPhone || userProfile?.agentEmail) && (
               <div className="bg-gray-50 rounded-xl p-3 mb-4 flex items-center justify-between gap-2">
@@ -5010,7 +5017,7 @@ export default function App() {
             </div>
             )}
             {customerQuotes.length > 0 && (
-              <div className="mt-5">
+              <div id="sec-quotes" className="mt-5 scroll-mt-20">
                 <h3 className="text-sm font-bold text-gray-600 mb-2">הצעות מחיר ({customerQuotes.length})</h3>
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {customerQuotes.map((q: any) => (
@@ -5059,7 +5066,7 @@ export default function App() {
               </div>
             )}
             {orders.length > 0 && (
-              <div className="mt-5">
+              <div id="sec-orders" className="mt-5 scroll-mt-20">
                 <h3 className="text-sm font-bold text-gray-600 mb-2">היסטוריית הזמנות ({orders.length})</h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {orders.map((o) => (
@@ -5074,6 +5081,43 @@ export default function App() {
                       <ChevronLeft size={18} className="text-gray-300 flex-shrink-0" />
                     </button>
                   ))}
+                </div>
+              </div>
+            )}
+            {showOrders && (
+              <div className="fixed inset-0 z-[55] bg-gray-100 overflow-y-auto overscroll-contain">
+                <div className="sticky top-0 bg-[#004387] text-white px-4 py-3 flex items-center justify-between z-10">
+                  <button onClick={() => setShowOrders(false)} className="flex items-center gap-1 text-white/90 hover:text-white text-sm font-bold"><ChevronRight size={20} /> חזרה</button>
+                  <h2 className="text-lg font-bold flex items-center gap-2"><Package className="w-5 h-5" /> ההזמנות שלי</h2>
+                  <span className="w-14"></span>
+                </div>
+                <div className="max-w-2xl mx-auto p-4">
+                  {orders.length === 0 ? (
+                    <div className="text-center py-16 text-gray-400">
+                      <Package className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                      <p className="font-semibold text-gray-500">אין הזמנות עדיין</p>
+                      <p className="text-sm mt-1">ההזמנות שתבצע יישמרו ויופיעו כאן.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs text-gray-400 mb-3">{orders.length} הזמנות · לחיצה על הזמנה פותחת פרטים, הזמנה חוזרת ועריכה</p>
+                      <div className="space-y-2">
+                        {orders.map((o: any) => (
+                          <button key={o.id} onClick={() => setSelectedOrder(o)} className="w-full text-right bg-white border border-gray-100 rounded-xl p-3 hover:border-[#cdd9e8] hover:shadow-sm transition-all flex items-center gap-3">
+                            <div className="w-11 h-11 rounded-lg bg-[#eef4fb] flex items-center justify-center flex-shrink-0"><Package className="w-5 h-5 text-[#004387]" /></div>
+                            <div className="flex-grow min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-[#0c2d57] text-sm">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'}</span>
+                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${orderStatusClass(o.status)}`}>{orderStatusLabel(o.status)}</span>
+                              </div>
+                              <div className="text-gray-500 text-xs mt-0.5">{o.itemCount || (o.items?.length ?? 0)} פריטים{o.company ? ` · ${o.company}` : ''}</div>
+                            </div>
+                            <ChevronLeft size={18} className="text-gray-300 flex-shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -5136,7 +5180,7 @@ export default function App() {
                           </div>
                         </div>
                         <button
-                          onClick={() => { setCart((selectedOrder.items || []).map((it: any) => ({ ...it }))); setSelectedOrder(null); setReorderMode(false); setShowProfile(false); handleCheckout(); }}
+                          onClick={() => { setCart((selectedOrder.items || []).map((it: any) => ({ ...it }))); setSelectedOrder(null); setReorderMode(false); setShowProfile(false); setShowOrders(false); handleCheckout(); }}
                           className="w-full bg-[#004387] text-white py-3.5 font-bold rounded-xl hover:bg-[#0c2d57] transition-colors flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(0,67,135,0.25)]"
                         >
                           <RefreshCw size={18} /> הזמן את הכל שוב
@@ -5176,7 +5220,7 @@ export default function App() {
                           ))}
                         </div>
                         <button
-                          onClick={() => { const chosen = reorderItems.filter((it: any) => it._include && (it.quantity || 0) > 0).map((it: any) => { const { _include, ...rest } = it; return rest; }); if (chosen.length === 0) return; setCart(chosen); setSelectedOrder(null); setReorderMode(false); setShowProfile(false); handleCheckout(); }}
+                          onClick={() => { const chosen = reorderItems.filter((it: any) => it._include && (it.quantity || 0) > 0).map((it: any) => { const { _include, ...rest } = it; return rest; }); if (chosen.length === 0) return; setCart(chosen); setSelectedOrder(null); setReorderMode(false); setShowProfile(false); setShowOrders(false); handleCheckout(); }}
                           className="w-full bg-[#004387] text-white py-3.5 font-bold rounded-xl hover:bg-[#0c2d57] transition-colors flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(0,67,135,0.25)] disabled:opacity-50"
                           disabled={reorderItems.filter((it: any) => it._include).length === 0}
                         >
@@ -5251,7 +5295,7 @@ export default function App() {
               </div>
             )}
             {favorites.length > 0 && (
-              <div className="mt-5">
+              <div id="sec-favorites" className="mt-5 scroll-mt-20">
                 <h3 className="text-sm font-bold text-gray-600 mb-2">מועדפים ({favorites.length})</h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {favorites.map((f) => (
