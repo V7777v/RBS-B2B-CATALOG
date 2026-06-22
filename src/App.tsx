@@ -1898,12 +1898,17 @@ const CheckoutView = (props: any) => {
       setOrderPlaced(true);
     };
 
-    const handlePlaceOrder = () => {
+    const handlePlaceOrder = async () => {
       if (!validateForm()) return;
+      if (!props.userUid) return;
 
       const orderDetails = buildOrderDetailsText();
-      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'saved' }); }
+      const itemCount = cart.reduce((acc: number, item: any) => acc + item.quantity, 0);
+      const orderData = { uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount, items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'saved' };
+      const newId = await addOrderRecord(orderData);
+      if (!newId) { alert('שמירת ההזמנה נכשלה. נסה שוב או בדוק את החיבור לאינטרנט.'); return; }
       if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
+      if (props.onOrderPlaced) props.onOrderPlaced({ id: newId, ...orderData, status: 'sent', createdAt: { toDate: () => new Date() } });
       setLastSentMethod('saved');
       setOrderPlaced(true);
     };
@@ -4474,7 +4479,7 @@ export default function App() {
                 <ProductDetailsView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity, isGuest }} />
               )
             ) : currentView === 'checkout' ? (
-               <CheckoutView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity, userUid, userProfile }} billingProfile={billingProfile} onSaveBilling={(d: any) => { if (userUid) { saveUserProfile(userUid, d); setBillingProfile(d); } }} navigateToOrders={() => { setShowProfile(true); setShowOrders(true); }} />
+               <CheckoutView {...{ addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity, userUid, userProfile }} billingProfile={billingProfile} onSaveBilling={(d: any) => { if (userUid) { saveUserProfile(userUid, d); setBillingProfile(d); } }} navigateToOrders={() => { setShowProfile(true); setShowOrders(true); }} onOrderPlaced={(o: any) => setOrders((prev: any[]) => [o, ...prev.filter((x: any) => x.id !== o.id)])} />
             ) : null}
 
             </>

@@ -21,10 +21,11 @@ export async function saveCart(uid: string, items: any[]): Promise<void> {
 }
 
 // ---------- Orders (orders/{auto-id}) ----------
-export async function addOrderRecord(order: { uid: string; email: string } & Record<string, any>): Promise<void> {
+export async function addOrderRecord(order: { uid: string; email: string } & Record<string, any>): Promise<string | null> {
   try {
-    await addDoc(collection(db, 'orders'), { ...order, status: 'sent', createdAt: serverTimestamp() });
-  } catch { /* ignore */ }
+    const ref = await addDoc(collection(db, 'orders'), { ...order, status: 'sent', createdAt: serverTimestamp() });
+    return ref.id;
+  } catch (e) { console.error('addOrderRecord failed:', e); return null; }
 }
 
 export async function loadOrders(uid: string): Promise<any[]> {
@@ -82,7 +83,7 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
 export async function updateOrder(orderId: string, fields: Record<string, any>): Promise<void> {
   try {
     await setDoc(doc(db, 'orders', orderId), { ...fields, updatedAt: serverTimestamp() }, { merge: true });
-  } catch { /* ignore */ }
+  } catch (e) { console.error('updateOrder failed:', e); }
 }
 
 // ---------- Real-time order notifications (agent/manager) ----------
