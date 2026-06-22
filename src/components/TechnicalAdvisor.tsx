@@ -50,6 +50,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
   
   // Interactive UPS Calculator State
   const [calcOpen, setCalcOpen] = useState(false);
+  const [compareList, setCompareList] = useState<any[]>([]);
   const [calcWatts, setCalcWatts] = useState<number>(30);
   const [calcHours, setCalcHours] = useState<number>(2);
   const [calcResultWh, setCalcResultWh] = useState<number>(0);
@@ -495,8 +496,8 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          const skus = m.directProducts.map((p: any) => p.sku).join(', ');
-                                          handleSend(`אנא השווה בין המוצרים הבאים בטבלה הנדסית ופרט את ההבדלים ביניהם מבחינת מפרט, הספקים ופונקציות: ${skus}`, true);
+                                          const full = m.directProducts.map((p: any) => catalogData.find((c: any) => c.sku === p.sku) || p);
+                                          setCompareList(full);
                                         }}
                                         className="text-[11px] font-semibold text-[#004387] bg-blue-50 hover:bg-blue-100 border border-blue-200/50 rounded-full px-2.5 py-1.5 transition-colors cursor-pointer flex items-center gap-1"
                                       >
@@ -638,6 +639,70 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                   תשובות מבוססות על שילוב של קטלוג RBSTelecom וחיפוש Google Search זמני.
                 </p>
               </div>
+
+      {compareList.length > 0 && (
+        <div className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-3" onClick={() => setCompareList([])}>
+          <div className="bg-white w-full max-w-3xl max-h-[88vh] rounded-2xl overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()} dir="rtl">
+            <div className="bg-[#004387] text-white px-4 py-3 flex items-center justify-between shrink-0">
+              <span className="font-bold flex items-center gap-2">📊 השוואת מוצרים ({compareList.length})</span>
+              <button onClick={() => setCompareList([])} className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="overflow-auto p-3">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr>
+                    <th className="sticky right-0 bg-white z-10 w-20 flex-shrink-0"></th>
+                    {compareList.map((p: any, i: number) => (
+                      <th key={i} className="p-2 align-bottom min-w-[140px] border-b-2 border-gray-100">
+                        {p.images?.[0] && <img src={p.images[0]} alt={p.name} className="w-20 h-20 object-contain mx-auto bg-white border border-gray-100 rounded-md p-1" />}
+                        <div className="text-[#004387] font-bold text-xs mt-1.5 leading-tight text-center">{p.name}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-gray-100">
+                    <td className="sticky right-0 bg-gray-50 z-10 p-2 text-xs text-gray-500 font-bold whitespace-nowrap">מק״ט</td>
+                    {compareList.map((p: any, i: number) => (<td key={i} className="p-2 text-center text-[11px] font-mono text-gray-600">{p.sku || '—'}</td>))}
+                  </tr>
+                  <tr className="border-b border-gray-100">
+                    <td className="sticky right-0 bg-gray-50 z-10 p-2 text-xs text-gray-500 font-bold whitespace-nowrap">מחיר מתקין</td>
+                    {compareList.map((p: any, i: number) => (<td key={i} className="p-2 text-center text-xs font-bold text-green-700">{p.price > 0 ? `₪${p.price.toLocaleString('he-IL')}` : 'צור קשר'}</td>))}
+                  </tr>
+                  {compareList.some((p: any) => p.brand) && (
+                    <tr className="border-b border-gray-100">
+                      <td className="sticky right-0 bg-gray-50 z-10 p-2 text-xs text-gray-500 font-bold whitespace-nowrap">מותג</td>
+                      {compareList.map((p: any, i: number) => (<td key={i} className="p-2 text-center text-xs text-gray-700">{p.brand || '—'}</td>))}
+                    </tr>
+                  )}
+                  {compareList.some((p: any) => p.model) && (
+                    <tr className="border-b border-gray-100">
+                      <td className="sticky right-0 bg-gray-50 z-10 p-2 text-xs text-gray-500 font-bold whitespace-nowrap">דגם</td>
+                      {compareList.map((p: any, i: number) => (<td key={i} className="p-2 text-center text-xs text-gray-700">{p.model || '—'}</td>))}
+                    </tr>
+                  )}
+                  <tr className="border-b border-gray-100">
+                    <td className="sticky right-0 bg-gray-50 z-10 p-2 text-xs text-gray-500 font-bold whitespace-nowrap">קטגוריה</td>
+                    {compareList.map((p: any, i: number) => (<td key={i} className="p-2 text-center text-xs text-gray-700">{p.subcategory || p.category || '—'}</td>))}
+                  </tr>
+                  {compareList.some((p: any) => p.description) && (
+                    <tr className="border-b border-gray-100">
+                      <td className="sticky right-0 bg-gray-50 z-10 p-2 text-xs text-gray-500 font-bold whitespace-nowrap align-top">תיאור</td>
+                      {compareList.map((p: any, i: number) => (<td key={i} className="p-2 text-right text-[11px] text-gray-600 align-top leading-snug">{p.description || '—'}</td>))}
+                    </tr>
+                  )}
+                  {compareList.some((p: any) => p.specsLink) && (
+                    <tr>
+                      <td className="sticky right-0 bg-gray-50 z-10 p-2 text-xs text-gray-500 font-bold whitespace-nowrap">מפרט טכני</td>
+                      {compareList.map((p: any, i: number) => (<td key={i} className="p-2 text-center text-xs">{p.specsLink ? <a href={p.specsLink} target="_blank" rel="noopener noreferrer" className="text-[#004387] underline font-semibold">קישור</a> : '—'}</td>))}
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
