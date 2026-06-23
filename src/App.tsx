@@ -4252,7 +4252,7 @@ export default function App() {
           <main className="w-full pb-32 md:pb-20">
             {advisorOpen ? (
               <React.Suspense fallback={null}>
-                <TechnicalAdvisor catalogData={catalogData} addToCart={addToCart} isAuthenticated={isAuthenticated || isGuest} onClose={() => setAdvisorOpen(false)} />
+                <TechnicalAdvisor catalogData={catalogData} addToCart={addToCart} isAuthenticated={isAuthenticated || isGuest} isGuest={isGuest} onClose={() => setAdvisorOpen(false)} />
               </React.Suspense>
             ) : (
             <>

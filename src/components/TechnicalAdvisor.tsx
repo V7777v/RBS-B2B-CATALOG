@@ -11,6 +11,7 @@ interface TechnicalAdvisorProps {
   catalogData: any[];
   addToCart: (product: any, quantity?: number) => void;
   isAuthenticated: boolean;
+  isGuest?: boolean;
   onClose: () => void;
 }
 
@@ -18,6 +19,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
   catalogData, 
   addToCart,
   isAuthenticated,
+  isGuest,
   onClose
 }) => {
 
@@ -333,7 +335,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                     exit={{ height: 0, opacity: 0 }}
                     className="bg-white border-b border-gray-200 overflow-hidden text-sm relative z-20 shadow-sm"
                   >
-                    <UPSCalculator catalogData={catalogData} onAddToCart={addToCart} onAskAdvisor={handleSend} />
+                    <UPSCalculator catalogData={catalogData} onAddToCart={isGuest ? undefined : addToCart} onAskAdvisor={handleSend} />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -396,7 +398,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                                               </div>
                                               
                                               <div className="flex flex-wrap items-center gap-2 mt-2 w-full justify-center sm:justify-start">
-                                                <button
+                                                {!isGuest && (<button
                                                   onClick={(e) => {
                                                     e.preventDefault();
                                                     addToCart(product, 1);
@@ -406,7 +408,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                                                 >
                                                   <ShoppingCart className="w-3.5 h-3.5" />
                                                   <span>הוסף לעגלה</span>
-                                                </button>
+                                                </button>)}
                                                 {product.specsLink && (
                                                   <a
                                                     href={product.specsLink}
@@ -459,7 +461,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                                     </div>
                                     
                                     <div className="flex flex-wrap items-center gap-2 mt-2 w-full justify-center sm:justify-start">
-                                      <button
+                                      {!isGuest && (<button
                                         onClick={(e) => {
                                           e.preventDefault();
                                           addToCart(product, 1);
@@ -469,7 +471,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                                       >
                                         <ShoppingCart className="w-3.5 h-3.5" />
                                         <span>הוסף לעגלה</span>
-                                      </button>
+                                      </button>)}
                                       {product.specsLink && (
                                         <a
                                           href={product.specsLink}
