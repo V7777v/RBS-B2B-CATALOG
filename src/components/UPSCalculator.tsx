@@ -301,13 +301,16 @@ export const UPSCalculator: React.FC<{ catalogData?: any[], onAddToCart?: (produ
                          <PackageOpen size={14} /> הוסף לעגלה
                        </button>
                      )}
-                     {onAskAdvisor && (
-                       <button
-                         onClick={() => onAskAdvisor(`היי, תוכל לתת לי חוות דעת על מערכת האל-פסק מדגם ${r.model} עבור עומס של ${load}W?`)}
-                         className="flex-1 bg-amber-50 border border-amber-200 text-amber-900 hover:bg-amber-100 font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 text-xs shadow-sm cursor-pointer"
+                     {r.matchingCatalogItem?.specsLink && (
+                       <a
+                         href={r.matchingCatalogItem.specsLink}
+                         target="_blank"
+                         rel="noopener noreferrer"
+                         className="flex-1 bg-amber-50 border border-amber-200 text-amber-900 hover:bg-amber-100 font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 text-xs shadow-sm cursor-pointer no-underline"
+                         style={{ textDecoration: 'none' }}
                        >
-                         <Info size={14} className="text-amber-600" /> שאל יועץ
-                       </button>
+                         <Info size={14} className="text-amber-600" /> מפרט טכני
+                       </a>
                      )}
                    </div>
                 </div>

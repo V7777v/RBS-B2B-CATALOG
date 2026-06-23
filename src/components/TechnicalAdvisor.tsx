@@ -398,7 +398,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                                               </div>
                                               
                                               <div className="flex flex-wrap items-center gap-2 mt-2 w-full justify-center sm:justify-start">
-                                                {!isGuest && (<button
+                                                {!isGuest ? (<button
                                                   onClick={(e) => {
                                                     e.preventDefault();
                                                     addToCart(product, 1);
@@ -408,7 +408,17 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                                                 >
                                                   <ShoppingCart className="w-3.5 h-3.5" />
                                                   <span>הוסף לעגלה</span>
-                                                </button>)}
+                                                </button>) : (product.manualLink && (<a
+                                                  href={product.manualLink}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="flex items-center justify-center gap-1.5 p-1.5 px-3 text-xs font-bold text-white bg-[#004387] hover:bg-[#fe8d00] rounded-md transition-colors shadow-sm no-underline"
+                                                  style={{ textDecoration: 'none' }}
+                                                  title="מדריך למשתמש"
+                                                >
+                                                  <HelpCircle className="w-3.5 h-3.5" />
+                                                  <span>מדריך למשתמש</span>
+                                                </a>))}
                                                 {product.specsLink && (
                                                   <a
                                                     href={product.specsLink}
@@ -461,7 +471,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                                     </div>
                                     
                                     <div className="flex flex-wrap items-center gap-2 mt-2 w-full justify-center sm:justify-start">
-                                      {!isGuest && (<button
+                                      {!isGuest ? (<button
                                         onClick={(e) => {
                                           e.preventDefault();
                                           addToCart(product, 1);
@@ -471,7 +481,17 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                                       >
                                         <ShoppingCart className="w-3.5 h-3.5" />
                                         <span>הוסף לעגלה</span>
-                                      </button>)}
+                                      </button>) : (product.manualLink && (<a
+                                        href={product.manualLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center justify-center gap-1.5 p-1.5 px-3 text-xs font-bold text-white bg-[#004387] hover:bg-[#fe8d00] rounded-md transition-colors shadow-sm no-underline"
+                                        style={{ textDecoration: 'none' }}
+                                        title="מדריך למשתמש"
+                                      >
+                                        <HelpCircle className="w-3.5 h-3.5" />
+                                        <span>מדריך למשתמש</span>
+                                      </a>))}
                                       {product.specsLink && (
                                         <a
                                           href={product.specsLink}
