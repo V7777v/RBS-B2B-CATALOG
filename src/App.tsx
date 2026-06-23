@@ -2308,8 +2308,8 @@ export default function App() {
           if (pdata) {
             setIsAdmin(pdata.admin === true);
             setUserRole(pdata.role || 'user');
-            setAgentName(pdata.agentName || '');
-            setUserProfile({ email: user.email, company: pdata.company || '', customerNumber: pdata.customerNumber || '', tier: pdata.tier || '', agent: pdata.agent || pdata.Agent || pdata['סוכן'] || '', agentPhone: pdata.agentPhone || '', agentEmail: pdata.agentEmail || '' });
+            setAgentName((pdata.agentName || '').trim());
+            setUserProfile({ email: user.email, company: pdata.company || '', customerNumber: pdata.customerNumber || '', tier: pdata.tier || '', agent: (pdata.agent || pdata.Agent || pdata['סוכן'] || '').trim(), agentPhone: pdata.agentPhone || '', agentEmail: pdata.agentEmail || '' });
           }
         } catch { ok = false; }
         if (ok) {
