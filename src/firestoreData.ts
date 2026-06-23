@@ -21,13 +21,33 @@ export async function saveCart(uid: string, items: any[]): Promise<void> {
 }
 
 // ---------- Orders (orders/{auto-id}) ----------
+function sanitizeForFirestore(value: any): any {
+  if (value === undefined || value === null) return null;
+  if (value instanceof Date) return value;
+  if (Array.isArray(value)) {
+    return value.map((v) => (Array.isArray(v) ? JSON.stringify(v) : sanitizeForFirestore(v)));
+  }
+  if (typeof value === 'object') {
+    const out: Record<string, any> = {};
+    for (const k of Object.keys(value)) {
+      if (!k) continue;
+      const v = (value as any)[k];
+      if (v === undefined || typeof v === 'function') continue;
+      out[k] = sanitizeForFirestore(v);
+    }
+    return out;
+  }
+  if (typeof value === 'number' && !isFinite(value)) return null;
+  return value;
+}
+
 let lastOrderError = '';
 export function getLastOrderError(): string { return lastOrderError; }
 
 export async function addOrderRecord(order: { uid: string; email: string } & Record<string, any>): Promise<string | null> {
   try {
     lastOrderError = '';
-    const clean = JSON.parse(JSON.stringify(order));
+    const clean = sanitizeForFirestore(order);
     const ref = await addDoc(collection(db, 'orders'), { ...clean, status: 'sent', createdAt: serverTimestamp() });
     return ref.id;
   } catch (e: any) {
@@ -91,7 +111,7 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
 
 export async function updateOrder(orderId: string, fields: Record<string, any>): Promise<void> {
   try {
-    await setDoc(doc(db, 'orders', orderId), { ...fields, updatedAt: serverTimestamp() }, { merge: true });
+    await setDoc(doc(db, 'orders', orderId), { ...sanitizeForFirestore(fields), updatedAt: serverTimestamp() }, { merge: true });
   } catch (e) { console.error('updateOrder failed:', e); }
 }
 
