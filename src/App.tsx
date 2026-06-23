@@ -4252,7 +4252,7 @@ export default function App() {
           <main className="w-full pb-32 md:pb-20">
             {advisorOpen ? (
               <React.Suspense fallback={null}>
-                <TechnicalAdvisor catalogData={catalogData} addToCart={addToCart} isAuthenticated={isAuthenticated} onClose={() => setAdvisorOpen(false)} />
+                <TechnicalAdvisor catalogData={catalogData} addToCart={addToCart} isAuthenticated={isAuthenticated || isGuest} onClose={() => setAdvisorOpen(false)} />
               </React.Suspense>
             ) : (
             <>
@@ -4587,7 +4587,7 @@ export default function App() {
       )}
 
       {!isHumanVerified && <HumanVerification onVerified={() => setIsHumanVerified(true)} />}
-      {!advisorOpen && !isGuest && (
+      {!advisorOpen && (
         <button
           onClick={() => setAdvisorOpen(true)}
           className="fixed bottom-6 right-6 z-40 bg-[#004387] hover:bg-[#fe8d00] text-white px-4 py-3 rounded-full shadow-[0_10px_25px_rgba(0,67,135,0.4)] transition-colors flex items-center gap-2 font-bold border-2 border-white/15 relative"
