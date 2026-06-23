@@ -2433,6 +2433,7 @@ export default function App() {
     firstOrderSnap.current = true;
     seenOrderIds.current = new Set();
     const handle = (orders: any[]) => {
+      setTeamOrders(orders);
       const ids = new Set<string>(orders.map((o) => o.id));
       if (firstOrderSnap.current) { seenOrderIds.current = ids; firstOrderSnap.current = false; return; }
       const fresh = orders.filter((o) => !seenOrderIds.current.has(o.id));
