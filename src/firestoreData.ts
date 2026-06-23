@@ -47,7 +47,17 @@ export function getLastOrderError(): string { return lastOrderError; }
 export async function addOrderRecord(order: { uid: string; email: string } & Record<string, any>): Promise<string | null> {
   try {
     lastOrderError = '';
-    const clean = sanitizeForFirestore(order);
+    const slimItems = Array.isArray(order.items) ? order.items.map((it: any) => ({
+      id: it.id || it.sku || '',
+      sku: it.sku || '',
+      name: it.name || '',
+      description: it.description || '',
+      images: (it.images && it.images[0]) ? [it.images[0]] : [],
+      price: Number(it.price) || 0,
+      quantity: it.quantity || 1,
+      optionals: Array.isArray(it.optionals) ? it.optionals.map((o: any) => ({ id: o.id || o.sku || '', sku: o.sku || '', name: o.name || '', price: Number(o.price) || 0, quantity: o.quantity || 1 })) : [],
+    })) : order.items;
+    const clean = sanitizeForFirestore({ ...order, items: slimItems });
     const ref = await addDoc(collection(db, 'orders'), { ...clean, status: 'sent', createdAt: serverTimestamp() });
     return ref.id;
   } catch (e: any) {
