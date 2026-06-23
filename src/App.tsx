@@ -11,7 +11,7 @@ import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadCustomerQuotes, updateQuoteStatus, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadCustomerQuotes, updateQuoteStatus, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder, getLastOrderError } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -1906,7 +1906,7 @@ const CheckoutView = (props: any) => {
       const itemCount = cart.reduce((acc: number, item: any) => acc + item.quantity, 0);
       const orderData = { uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount, items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'saved' };
       const newId = await addOrderRecord(orderData);
-      if (!newId) { alert('שמירת ההזמנה נכשלה. נסה שוב או בדוק את החיבור לאינטרנט.'); return; }
+      if (!newId) { alert('שמירת ההזמנה נכשלה (' + (getLastOrderError() || 'שגיאה לא ידועה') + '). נסה שוב.'); return; }
       if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
       if (props.onOrderPlaced) props.onOrderPlaced({ id: newId, ...orderData, status: 'sent', createdAt: { toDate: () => new Date() } });
       setLastSentMethod('saved');

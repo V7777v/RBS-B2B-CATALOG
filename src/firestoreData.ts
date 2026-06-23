@@ -21,11 +21,20 @@ export async function saveCart(uid: string, items: any[]): Promise<void> {
 }
 
 // ---------- Orders (orders/{auto-id}) ----------
+let lastOrderError = '';
+export function getLastOrderError(): string { return lastOrderError; }
+
 export async function addOrderRecord(order: { uid: string; email: string } & Record<string, any>): Promise<string | null> {
   try {
-    const ref = await addDoc(collection(db, 'orders'), { ...order, status: 'sent', createdAt: serverTimestamp() });
+    lastOrderError = '';
+    const clean = JSON.parse(JSON.stringify(order));
+    const ref = await addDoc(collection(db, 'orders'), { ...clean, status: 'sent', createdAt: serverTimestamp() });
     return ref.id;
-  } catch (e) { console.error('addOrderRecord failed:', e); return null; }
+  } catch (e: any) {
+    lastOrderError = e && e.code ? String(e.code) : String((e && e.message) || e);
+    console.error('addOrderRecord failed:', e);
+    return null;
+  }
 }
 
 export async function loadOrders(uid: string): Promise<any[]> {
