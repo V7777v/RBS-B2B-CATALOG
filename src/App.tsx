@@ -2307,9 +2307,10 @@ export default function App() {
           const pdata: any = snap.exists() ? snap.data() : null;
           if (pdata) {
             setIsAdmin(pdata.admin === true);
-            setUserRole(pdata.role || 'user');
+            setUserRole((pdata.role || 'user').trim().toLowerCase());
             setAgentName((pdata.agentName || '').trim());
             setUserProfile({ email: user.email, company: pdata.company || '', customerNumber: pdata.customerNumber || '', tier: pdata.tier || '', agent: (pdata.agent || pdata.Agent || pdata['סוכן'] || '').trim(), agentPhone: pdata.agentPhone || '', agentEmail: pdata.agentEmail || '' });
+            console.log('[RBS] role raw:', JSON.stringify(pdata.role), '→', JSON.stringify((pdata.role || 'user').trim().toLowerCase()), '| agentName:', JSON.stringify((pdata.agentName || '').trim()));
           }
         } catch { ok = false; }
         if (ok) {

@@ -98,8 +98,11 @@ export async function loadAgentOrders(agentName: string): Promise<any[]> {
   try {
     const q = query(collection(db, 'orders'), where('agent', '==', agentName));
     const snap = await getDocs(q);
-    return sortNewestFirst(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
-  } catch {
+    const res = sortNewestFirst(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+    console.log('[RBS] loadAgentOrders agent=', JSON.stringify(agentName), '→', res.length, 'orders');
+    return res;
+  } catch (e) {
+    console.error('loadAgentOrders failed:', e);
     return [];
   }
 }
@@ -129,8 +132,9 @@ export async function updateOrder(orderId: string, fields: Record<string, any>):
 export function subscribeAgentOrders(agentName: string, cb: (orders: any[]) => void): () => void {
   try {
     const qq = query(collection(db, 'orders'), where('agent', '==', agentName));
-    return onSnapshot(qq, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), () => {});
-  } catch {
+    return onSnapshot(qq, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), (e) => console.error('subscribeAgentOrders error:', e));
+  } catch (e) {
+    console.error('subscribeAgentOrders failed:', e);
     return () => {};
   }
 }
