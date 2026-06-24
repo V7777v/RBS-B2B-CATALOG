@@ -2284,6 +2284,8 @@ export default function App() {
   };
   const [favorites, setFavorites] = useState<any[]>([]);
   const [selectedFavIds, setSelectedFavIds] = useState<Set<string>>(new Set());
+  const [favQuantities, setFavQuantities] = useState<Record<string, number>>({});
+  const [guestPhoneDest, setGuestPhoneDest] = useState('');
   const favoriteIds = useMemo(() => new Set(favorites.map((f: any) => f.id)), [favorites]);
   const toggleFavorite = useCallback((product: any) => {
     setFavorites((prev: any[]) => {
@@ -4007,7 +4009,20 @@ export default function App() {
             </div>
             </>)}
             {isGuest && (
-              <div className="flex-shrink-0">
+              <div className="flex-shrink-0 flex items-center gap-2">
+                <button
+                  onClick={() => setShowProfile(true)}
+                  aria-label="מועדפים"
+                  title="מועדפים"
+                  className="relative flex items-center justify-center gap-1.5 h-11 !px-4 bg-white border border-gray-200 hover:border-gray-300 text-red-500 font-bold rounded-xl active:scale-95 text-sm whitespace-nowrap"
+                >
+                  <Heart size={16} className="flex-shrink-0 fill-red-500" /> מועדפים
+                  {favorites.length > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold min-w-[20px] h-5 px-1 rounded-full flex items-center justify-center shadow-sm ring-2 ring-white">
+                      {favorites.length}
+                    </span>
+                  )}
+                </button>
                 <button onClick={() => { try { sessionStorage.removeItem('rbs_guest'); } catch {} setIsGuest(false); }} title="כניסה / רישום למפיצים מורשים בלבד" className="flex items-center justify-center gap-1.5 h-11 !px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl active:scale-95 text-sm whitespace-nowrap">
                   <Lock size={16} className="flex-shrink-0" /> כניסת מפיצים
                 </button>
@@ -4947,12 +4962,61 @@ export default function App() {
         <div className="fixed inset-0 z-50 bg-gray-100 overflow-y-auto overscroll-contain" dir="rtl" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}>
           <div className="sticky top-0 z-10 bg-[#004387] text-white shadow-md mb-4">
             <div className="max-w-2xl mx-auto flex items-center justify-between px-4 h-14">
-              <h2 className="text-lg font-bold flex items-center gap-2"><User className="w-5 h-5" /> האזור האישי שלי</h2>
+              <h2 className="text-lg font-bold flex items-center gap-2">{isGuest ? <Heart className="w-5 h-5 fill-current" /> : <User className="w-5 h-5" />} {isGuest ? 'המועדפים שלי' : 'האזור האישי שלי'}</h2>
               <button onClick={() => setShowProfile(false)} className="flex items-center gap-1 text-white/90 hover:text-white text-sm font-bold"><X size={18} /> סגור</button>
             </div>
           </div>
           <div className="relative bg-white w-full max-w-2xl mx-auto p-5 sm:p-6 sm:rounded-2xl shadow-sm">
-            {(userRole === 'agent' || userRole === 'sales_manager') ? (
+            {isGuest ? (
+              <div id="sec-favorites" className="mt-1 scroll-mt-20">
+                {favorites.length === 0 ? (
+                  <div className="text-center py-10">
+                    <Heart className="w-12 h-12 text-gray-200 mx-auto mb-3" />
+                    <p className="text-gray-500 font-bold">אין מועדפים עדיין</p>
+                    <p className="text-sm text-gray-400 mt-1">לחץ על הלב ליד מוצרים כדי לשמור אותם כאן.</p>
+                  </div>
+                ) : (
+                  <>
+                    <h3 className="text-sm font-bold text-gray-600 mb-2">מועדפים ({favorites.length})</h3>
+                    <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                      {favorites.map((f) => (
+                        <div key={f.id} className="flex flex-col gap-2 border border-gray-100 rounded-lg p-2">
+                          <div className="flex items-center gap-2">
+                            <input type="checkbox" checked={selectedFavIds.has(f.id)} onChange={() => setSelectedFavIds((prev) => { const n = new Set(prev); if (n.has(f.id)) n.delete(f.id); else n.add(f.id); return n; })} className="w-4 h-4 accent-[#004387] flex-shrink-0" />
+                            {f.image && <img src={f.image} alt={f.name} referrerPolicy="no-referrer" className="w-9 h-9 object-contain flex-shrink-0" />}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-[#0c2d57] text-sm truncate">{f.name}</div>
+                              {f.sku && <div className="text-gray-400 text-xs">מק״ט: {f.sku}</div>}
+                            </div>
+                            <button onClick={() => toggleFavorite(f)} aria-label="הסר ממועדפים" className="text-red-500 flex-shrink-0"><Heart size={16} className="fill-red-500" /></button>
+                          </div>
+                          <div className="flex items-center gap-2 mr-6">
+                            <span className="text-xs text-gray-500 font-bold">כמות:</span>
+                            <div className="flex items-center border border-gray-200 rounded">
+                              <button onClick={() => setFavQuantities(p => ({...p, [f.id]: Math.max(1, (p[f.id] || 1) - 1)}))} className="px-2 py-0.5 text-gray-500 hover:bg-gray-50">-</button>
+                              <span className="px-2 text-xs font-bold w-6 text-center">{favQuantities[f.id] || 1}</span>
+                              <button onClick={() => setFavQuantities(p => ({...p, [f.id]: (p[f.id] || 1) + 1}))} className="px-2 py-0.5 text-gray-500 hover:bg-gray-50">+</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex flex-col gap-2">
+                      <input type="tel" placeholder="מספר טלפון לשליחה (למשל 0501234567)" value={guestPhoneDest} onChange={(e) => setGuestPhoneDest(e.target.value)} className="w-full border border-gray-200 rounded-lg p-2 text-sm text-right" dir="ltr" />
+                      <button disabled={selectedFavIds.size === 0 || !guestPhoneDest} onClick={() => {
+                        const items = favorites.filter((f: any) => selectedFavIds.has(f.id)).map((f: any) => `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ''} - כמות: ${favQuantities[f.id] || 1}`);
+                        const text = encodeURIComponent(`שלום רב,\n\nהזמנה:\n${items.join('\n')}`);
+                        let phone = guestPhoneDest.replace(/\D/g, '');
+                        if (phone.startsWith('0')) phone = '972' + phone.slice(1);
+                        window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
+                      }} className="w-full py-2.5 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg flex items-center justify-center gap-2 text-sm">
+                        שלח נבחרים בוואטסאפ ({selectedFavIds.size})
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (userRole === 'agent' || userRole === 'sales_manager') ? (
               <>
                 <div className="bg-gradient-to-l from-[#004387] to-[#0c2d57] text-white rounded-xl p-4 mb-4 -mt-1">
                   <div className="flex items-center justify-between gap-2">
@@ -5306,14 +5370,16 @@ export default function App() {
                 <h3 className="text-sm font-bold text-gray-600 mb-2">מועדפים ({favorites.length})</h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {favorites.map((f) => (
-                    <div key={f.id} className="flex items-center gap-2 border border-gray-100 rounded-lg p-2">
-                      <input type="checkbox" checked={selectedFavIds.has(f.id)} onChange={() => setSelectedFavIds((prev) => { const n = new Set(prev); if (n.has(f.id)) n.delete(f.id); else n.add(f.id); return n; })} className="w-4 h-4 accent-[#004387] flex-shrink-0" />
-                      {f.image && <img src={f.image} alt={f.name} referrerPolicy="no-referrer" className="w-9 h-9 object-contain flex-shrink-0" />}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-[#0c2d57] text-sm truncate">{f.name}</div>
-                        {f.sku && <div className="text-gray-400 text-xs">מק״ט: {f.sku}</div>}
+                    <div key={f.id} className="flex flex-col gap-2 border border-gray-100 rounded-lg p-2">
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" checked={selectedFavIds.has(f.id)} onChange={() => setSelectedFavIds((prev) => { const n = new Set(prev); if (n.has(f.id)) n.delete(f.id); else n.add(f.id); return n; })} className="w-4 h-4 accent-[#004387] flex-shrink-0" />
+                        {f.image && <img src={f.image} alt={f.name} referrerPolicy="no-referrer" className="w-9 h-9 object-contain flex-shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-[#0c2d57] text-sm truncate">{f.name}</div>
+                          {f.sku && <div className="text-gray-400 text-xs">מק״ט: {f.sku}</div>}
+                        </div>
+                        <button onClick={() => toggleFavorite(f)} aria-label="הסר ממועדפים" className="text-red-500 flex-shrink-0"><Heart size={16} className="fill-red-500" /></button>
                       </div>
-                      <button onClick={() => toggleFavorite(f)} aria-label="הסר ממועדפים" className="text-red-500 flex-shrink-0"><Heart size={16} className="fill-red-500" /></button>
                     </div>
                   ))}
                 </div>
