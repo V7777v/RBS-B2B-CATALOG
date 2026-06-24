@@ -171,6 +171,15 @@ export async function loadAgentQuotes(agentName: string): Promise<any[]> {
   }
 }
 
+export async function loadAllQuotes(): Promise<any[]> {
+  try {
+    const snap = await getDocs(collection(db, 'quotes'));
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+  } catch {
+    return [];
+  }
+}
+
 export async function loadCustomerQuotes(email: string): Promise<any[]> {
   try {
     const q = query(collection(db, 'quotes'), where('customerEmail', '==', email.toLowerCase()));
@@ -185,6 +194,12 @@ export async function updateQuoteStatus(quoteId: string, status: string): Promis
   try {
     await setDoc(doc(db, 'quotes', quoteId), { status, updatedAt: serverTimestamp() }, { merge: true });
   } catch { /* ignore */ }
+}
+
+export async function updateQuote(quoteId: string, fields: Record<string, any>): Promise<void> {
+  try {
+    await setDoc(doc(db, 'quotes', quoteId), { ...sanitizeForFirestore(fields), updatedAt: serverTimestamp() }, { merge: true });
+  } catch (e) { console.error('updateQuote failed:', e); }
 }
 
 // ---------- Favorites (favorites/{uid}) ----------

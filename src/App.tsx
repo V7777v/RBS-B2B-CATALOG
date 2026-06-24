@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut, User, Heart
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut, User, Heart, Calculator, Percent, TrendingUp, PenTool
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -11,7 +11,7 @@ import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadCustomerQuotes, updateQuoteStatus, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder, getLastOrderError } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadAllQuotes, loadCustomerQuotes, updateQuoteStatus, updateQuote, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder, getLastOrderError } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -2220,6 +2220,85 @@ export default function App() {
   const [quoteNote, setQuoteNote] = useState('');
   const [quoteSearch, setQuoteSearch] = useState('');
   const [quoteSaving, setQuoteSaving] = useState(false);
+
+  // Custom/Free-text Item States for Quote Editor
+  const [customItemName, setCustomItemName] = useState('');
+  const [customItemSku, setCustomItemSku] = useState('');
+  const [customItemListPrice, setCustomItemListPrice] = useState('');
+  const [customItemQuotedPrice, setCustomItemQuotedPrice] = useState('');
+  const [customItemCostPrice, setCustomItemCostPrice] = useState('');
+  const [customItemQty, setCustomItemQty] = useState('1');
+
+  // Profit margin dashboard toggle
+  const [showProfitCalculator, setShowProfitCalculator] = useState(false);
+
+  // Quote signing state
+  const [signingQuote, setSigningQuote] = useState<any | null>(null);
+  const [signingName, setSigningName] = useState('');
+  const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isDrawingSignature = useRef(false);
+
+  const startDrawingSig = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    isDrawingSignature.current = true;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#004387';
+    const rect = canvas.getBoundingClientRect();
+    let clientX = 0;
+    let clientY = 0;
+    if ('touches' in e) {
+      if (e.touches.length === 0) return;
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    const x = (clientX - rect.left) * (canvas.width / rect.width);
+    const y = (clientY - rect.top) * (canvas.height / rect.height);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+
+  const drawSig = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawingSignature.current) return;
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    if (e.cancelable) e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    let clientX = 0;
+    let clientY = 0;
+    if ('touches' in e) {
+      if (e.touches.length === 0) return;
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    const x = (clientX - rect.left) * (canvas.width / rect.width);
+    const y = (clientY - rect.top) * (canvas.height / rect.height);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const stopDrawingSig = () => {
+    isDrawingSignature.current = false;
+  };
+
+  const clearSigCanvas = () => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
   const [customerQuotes, setCustomerQuotes] = useState<any[]>([]);
   const priceHistory = useMemo(() => {
     const rows: any[] = [];
@@ -2247,37 +2326,199 @@ export default function App() {
   const firstOrderSnap = useRef(true);
   const [expandedQuote, setExpandedQuote] = useState<string | null>(null);
   const quoteTotal = useMemo(() => quoteItems.reduce((sum: number, l: any) => sum + (Number(l.quotedPrice) || 0) * (Number(l.qty) || 0), 0), [quoteItems]);
+  const convertOrderToQuote = (order: any, customerGroup: any) => {
+    const mappedItems = (order.items || []).map((it: any) => {
+      const catProd = catalogData.find((cp: any) => cp.sku === it.sku || cp.id === it.id);
+      const listP = catProd ? (Math.round(parsePrice(catProd.price)) || 0) : (Number(it.price) || 0);
+      const quotedP = Number(it.price) || listP;
+      return {
+        id: it.id || it.sku || Math.random().toString(),
+        sku: it.sku || '',
+        name: it.name || '',
+        qty: it.quantity || 1,
+        listPrice: listP,
+        quotedPrice: quotedP,
+        costPrice: Math.round(quotedP * 0.6) || 0,
+        discountPercent: listP > 0 ? Math.round((1 - quotedP / listP) * 100) : 0
+      };
+    });
+
+    setQuoteEditorCustomer({
+      email: order.email || customerGroup?.email || '',
+      company: order.company || customerGroup?.name || '',
+      name: order.contactName || customerGroup?.name || '',
+    });
+    setQuoteId(null);
+    setQuoteItems(mappedItems);
+    setQuoteNote(`הופק מהזמנה מתאריך ${order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('he-IL') : '—'}`);
+    setQuoteSearch('');
+    setShowQuoteEditor(true);
+  };
+
   const openQuoteEditor = (customer: any, existing?: any) => {
     setQuoteEditorCustomer(customer);
     setQuoteId(existing?.id || null);
-    setQuoteItems(existing?.items ? existing.items.map((i: any) => ({ ...i })) : []);
+    setQuoteItems(existing?.items ? existing.items.map((i: any) => ({
+      ...i,
+      costPrice: i.costPrice !== undefined ? i.costPrice : Math.round((i.quotedPrice || i.listPrice || 0) * 0.6),
+      discountPercent: i.discountPercent !== undefined ? i.discountPercent : (i.listPrice > 0 ? Math.round((1 - (i.quotedPrice || 0) / i.listPrice) * 100) : 0)
+    })) : []);
     setQuoteNote(existing?.note || '');
     setQuoteSearch('');
     setShowQuoteEditor(true);
   };
+
   const addQuoteLine = (pr: any) => {
-    setQuoteItems((prev) => prev.some((l: any) => l.id === pr.id) ? prev : [...prev, { id: pr.id, sku: pr.sku || '', name: pr.name || '', qty: 1, listPrice: Math.round(parsePrice(pr.price)) || 0, quotedPrice: Math.round(parsePrice(pr.price)) || 0 }]);
+    const listPrice = Math.round(parsePrice(pr.price)) || 0;
+    setQuoteItems((prev) => {
+      if (prev.some((l: any) => l.id === pr.id)) return prev;
+      return [
+        ...prev,
+        {
+          id: pr.id,
+          sku: pr.sku || '',
+          name: pr.name || '',
+          qty: 1,
+          listPrice: listPrice,
+          quotedPrice: listPrice,
+          costPrice: Math.round(listPrice * 0.6) || 0,
+          discountPercent: 0
+        }
+      ];
+    });
     setQuoteSearch('');
   };
-  const updateQuoteLine = (idx: number, field: string, value: any) => setQuoteItems((prev) => prev.map((l: any, i: number) => i === idx ? { ...l, [field]: value } : l));
+
+  const addCustomQuoteLine = () => {
+    if (!customItemName.trim()) return;
+    const listP = parseFloat(customItemListPrice) || 0;
+    const quotedP = parseFloat(customItemQuotedPrice) || listP || 0;
+    const costP = parseFloat(customItemCostPrice) || 0;
+    const qtyVal = parseInt(customItemQty) || 1;
+    
+    setQuoteItems((prev) => [
+      ...prev,
+      {
+        id: 'custom_' + Date.now(),
+        sku: customItemSku.trim() || 'CUSTOM',
+        name: customItemName.trim(),
+        qty: qtyVal,
+        listPrice: listP,
+        quotedPrice: quotedP,
+        costPrice: costP,
+        discountPercent: listP > 0 ? Math.round((1 - quotedP / listP) * 100) : 0,
+        isCustom: true
+      }
+    ]);
+    
+    setCustomItemName('');
+    setCustomItemSku('');
+    setCustomItemListPrice('');
+    setCustomItemQuotedPrice('');
+    setCustomItemCostPrice('');
+    setCustomItemQty('1');
+  };
+
+  const updateQuoteLine = (idx: number, field: string, value: any) => {
+    setQuoteItems((prev) => prev.map((l: any, i: number) => {
+      if (i !== idx) return l;
+      let updated = { ...l, [field]: value };
+      
+      if (field === 'quotedPrice') {
+        const listPrice = Number(updated.listPrice) || 0;
+        const quotedPrice = Number(value) || 0;
+        updated.discountPercent = listPrice > 0 ? Math.round((1 - quotedPrice / listPrice) * 100) : 0;
+      } else if (field === 'discountPercent') {
+        const listPrice = Number(updated.listPrice) || 0;
+        const discount = Number(value) || 0;
+        updated.quotedPrice = Math.round(listPrice * (1 - discount / 100));
+      } else if (field === 'listPrice') {
+        const listPrice = Number(value) || 0;
+        const discount = Number(updated.discountPercent) || 0;
+        updated.quotedPrice = Math.round(listPrice * (1 - discount / 100));
+      }
+      return updated;
+    }));
+  };
+
   const removeQuoteLine = (idx: number) => setQuoteItems((prev) => prev.filter((_: any, i: number) => i !== idx));
+
   const submitQuote = async (status: string) => {
     if (!quoteEditorCustomer || quoteItems.length === 0) return;
     setQuoteSaving(true);
-    const data = { agentName, agentUid: userUid, customerEmail: String(quoteEditorCustomer.email || '').toLowerCase(), customerCompany: quoteEditorCustomer.company || quoteEditorCustomer.name || '', items: quoteItems, note: quoteNote, total: quoteTotal, status };
+    const data = { 
+      agentName, 
+      agentUid: userUid, 
+      customerEmail: String(quoteEditorCustomer.email || '').toLowerCase(), 
+      customerCompany: quoteEditorCustomer.company || quoteEditorCustomer.name || '', 
+      items: quoteItems, 
+      note: quoteNote, 
+      total: quoteTotal, 
+      status 
+    };
     await saveQuote(data, quoteId);
     setQuoteSaving(false);
     setShowQuoteEditor(false);
-    if (agentName) loadAgentQuotes(agentName).then(setAgentQuotes);
-  };
-  const approveQuote = async (q: any) => {
-    await updateQuoteStatus(q.id, 'approved');
-    if (userUid) {
-      const detailsText = (q.items || []).map((l: any) => `${l.name} (${l.sku}) x${l.qty} — ₪${l.quotedPrice}`).join('\n') + `\nסה"כ: ₪${Math.round(q.total || 0)}`;
-      addOrderRecord({ uid: userUid, email: userProfile?.email || '', customerNumber: userProfile?.customerNumber || '', company: userProfile?.company || '', itemCount: (q.items || []).reduce((sum: number, l: any) => sum + (l.qty || 0), 0), items: q.items || [], detailsText, total: q.total || 0, agent: userProfile?.agent || '', method: 'quote' });
+    if (userRole === 'sales_manager') {
+      loadAllQuotes().then(setAgentQuotes);
+    } else if (agentName) {
+      loadAgentQuotes(agentName).then(setAgentQuotes);
     }
-    if (userProfile?.email) loadCustomerQuotes(userProfile.email).then(setCustomerQuotes);
   };
+
+  const approveQuote = async (q: any, signatureDataUrl?: string, signerName?: string) => {
+    setQuoteSaving(true);
+    const updateFields: any = { status: 'approved' };
+    if (signatureDataUrl) {
+      updateFields.signature = signatureDataUrl;
+      updateFields.signedBy = signerName || 'לקוח';
+    }
+    await updateQuote(q.id, updateFields);
+
+    const orderItems = (q.items || []).map((it: any) => ({
+      id: it.id || it.sku || '',
+      sku: it.sku || '',
+      name: it.name || '',
+      price: Number(it.quotedPrice) || 0,
+      quantity: Number(it.qty) || 1,
+      optionals: []
+    }));
+
+    const signer = signerName || userProfile?.company || 'לקוח';
+    const detailsText = `הזמנה מאושרת דיגיטלית (מבוסס הצעת מחיר סוכן)\n---------------------------------\n` +
+      `אושר ונחתם ע"י: ${signer}\n` +
+      `הצעת מחיר מזהה: ${q.id}\n\n` +
+      orderItems.map((it: any) => `${it.name} (${it.sku}) — כמות: ${it.quantity} — מחיר יח׳: ₪${it.price}`).join('\n') +
+      `\n\nסה"כ לתשלום: ₪${Math.round(q.total || 0)}`;
+
+    await addOrderRecord({
+      uid: userUid || '',
+      email: q.customerEmail || userProfile?.email || '',
+      customerNumber: userProfile?.customerNumber || '',
+      company: q.customerCompany || userProfile?.company || 'לקוח מפיץ',
+      itemCount: orderItems.reduce((acc: number, it: any) => acc + (it.quantity || 1), 0),
+      items: orderItems,
+      detailsText,
+      total: q.total || 0,
+      agent: q.agentName || '',
+      status: 'done', // auto marked as done/approved!
+      method: 'quote',
+      signature: signatureDataUrl || '',
+      signerName: signer || '',
+      sourceQuoteId: q.id
+    });
+
+    setQuoteSaving(false);
+    if (userProfile?.email) loadCustomerQuotes(userProfile.email).then(setCustomerQuotes);
+    if (userRole === 'sales_manager') {
+      loadAllOrders().then(setTeamOrders);
+      loadAllQuotes().then(setAgentQuotes);
+    } else if (agentName) {
+      loadAgentOrders(agentName).then(setTeamOrders);
+      loadAgentQuotes(agentName).then(setAgentQuotes);
+    }
+  };
+
   const rejectQuote = async (q: any) => {
     await updateQuoteStatus(q.id, 'rejected');
     if (userProfile?.email) loadCustomerQuotes(userProfile.email).then(setCustomerQuotes);
@@ -2469,8 +2710,14 @@ export default function App() {
   }, [showProfile, userRole]);
   useEffect(() => {
     if (!showProfile) return;
-    if (userRole === 'sales_manager') loadAllOrders().then(setTeamOrders);
-    else if (userRole === 'agent' && agentName) { loadAgentOrders(agentName).then(setTeamOrders); loadAgentQuotes(agentName).then(setAgentQuotes); }
+    if (userRole === 'sales_manager') {
+      loadAllOrders().then(setTeamOrders);
+      loadAllQuotes().then(setAgentQuotes);
+    }
+    else if (userRole === 'agent' && agentName) {
+      loadAgentOrders(agentName).then(setTeamOrders);
+      loadAgentQuotes(agentName).then(setAgentQuotes);
+    }
     else setTeamOrders([]);
   }, [showProfile, userRole, agentName]);
   useEffect(() => {
@@ -4859,51 +5106,333 @@ export default function App() {
       </AnimatePresence>
 
       {showQuoteEditor && (
-        <div className="fixed inset-0 z-[60] bg-white flex flex-col" dir="rtl">
-          <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-[#004387] text-white flex-shrink-0">
-            <h2 className="font-bold text-base truncate">הצעת מחיר — {quoteEditorCustomer?.company || quoteEditorCustomer?.name || quoteEditorCustomer?.email}</h2>
-            <button onClick={() => setShowQuoteEditor(false)} aria-label="סגור"><X size={22} /></button>
+        <div className="fixed inset-0 z-[60] bg-gray-100 flex flex-col" dir="rtl">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 bg-[#004387] text-white flex-shrink-0 shadow-md">
+            <div className="min-w-0">
+              <span className="text-[10px] uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full font-bold">הצעת מחיר סוכן</span>
+              <h2 className="font-extrabold text-base truncate mt-1">
+                {quoteEditorCustomer?.company || quoteEditorCustomer?.name || quoteEditorCustomer?.email}
+              </h2>
+            </div>
+            <button onClick={() => setShowQuoteEditor(false)} className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all" aria-label="סגור">
+              <X size={20} />
+            </button>
           </div>
+
+          {/* Main Workspace */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <div>
-              <input value={quoteSearch} onChange={(e) => setQuoteSearch(e.target.value)} placeholder="חיפוש מוצר להוספה (שם / מק״ט)" className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
+            
+            {/* 1. Search Catalog to Add Items */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+              <h3 className="text-xs font-bold text-gray-500 mb-2 flex items-center gap-1.5">
+                <Search size={14} className="text-[#004387]" /> הוספת מוצרים מהקטלוג
+              </h3>
+              <input 
+                value={quoteSearch} 
+                onChange={(e) => setQuoteSearch(e.target.value)} 
+                placeholder="הקלד שם מוצר או מק״ט..." 
+                className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" 
+              />
               {quoteSearch.trim().length >= 2 && (
-                <div className="border border-gray-200 rounded-lg mt-1 max-h-52 overflow-y-auto">
+                <div className="border border-gray-200 rounded-lg mt-2 max-h-52 overflow-y-auto divide-y divide-gray-100 bg-white shadow-lg">
                   {catalogData.filter((pr: any) => String(pr.name || '').includes(quoteSearch) || String(pr.sku || '').includes(quoteSearch)).slice(0, 25).map((pr: any) => (
-                    <button key={pr.id} onClick={() => addQuoteLine(pr)} className="w-full text-right p-2 hover:bg-gray-50 border-b border-gray-100 text-sm flex justify-between gap-2">
-                      <span className="truncate text-[#0c2d57]">{pr.name}</span><span className="text-gray-400 text-xs flex-shrink-0">{pr.sku}</span>
+                    <button 
+                      key={pr.id} 
+                      onClick={() => addQuoteLine(pr)} 
+                      className="w-full text-right p-3 hover:bg-gray-50 text-sm flex justify-between items-center transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <span className="font-semibold text-[#0c2d57] block truncate">{pr.name}</span>
+                        <span className="text-gray-400 text-xs font-mono">מק״ט: {pr.sku}</span>
+                      </div>
+                      <span className="font-bold text-[#004387] flex-shrink-0 bg-blue-50 px-2 py-1 rounded">₪{Math.round(parsePrice(pr.price))}</span>
                     </button>
                   ))}
                 </div>
               )}
             </div>
-            <div className="space-y-2">
-              {quoteItems.length === 0 && <p className="text-gray-400 text-sm text-center py-6">הוסף מוצרים להצעה</p>}
-              {quoteItems.map((line: any, idx: number) => (
-                <div key={idx} className="border border-gray-200 rounded-lg p-2.5">
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm text-[#0c2d57] truncate">{line.name}</div>
-                      <div className="text-xs text-gray-400">מק״ט: {line.sku} · מחירון: ₪{line.listPrice}</div>
-                    </div>
-                    <button onClick={() => removeQuoteLine(idx)} className="text-red-500 flex-shrink-0" aria-label="הסר"><X size={16} /></button>
+
+            {/* 2. Add Custom Item (סנדלים / שירותים / אביזרים וכו׳) */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+              <details className="group">
+                <summary className="text-xs font-bold text-gray-500 cursor-pointer flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-amber-600 font-extrabold">
+                    <Plus size={14} /> הוספת שורה חופשית (סנדלים / עבודה / פריט ידני)
+                  </span>
+                  <span className="text-gray-400 transition-transform group-open:rotate-180">▼</span>
+                </summary>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="col-span-2">
+                    <label className="block text-gray-400 mb-0.5 font-semibold">שם הפריט או השירות *</label>
+                    <input 
+                      value={customItemName} 
+                      onChange={(e) => setCustomItemName(e.target.value)} 
+                      placeholder="לדוגמא: סנדלים, כבלים, התקנה, תוספות..." 
+                      className="w-full border border-gray-200 rounded-lg p-2 text-sm" 
+                    />
                   </div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 items-center text-sm">
-                    <label className="flex items-center gap-1">כמות<input type="number" min={1} value={line.qty} onChange={(e) => updateQuoteLine(idx, 'qty', Math.max(1, parseInt(e.target.value) || 1))} className="w-14 border border-gray-200 rounded p-1 text-center" /></label>
-                    <label className="flex items-center gap-1">מחיר ₪<input type="number" min={0} value={line.quotedPrice} onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))} className="w-20 border border-gray-200 rounded p-1 text-center" /></label>
-                    <span className="text-gray-500 text-xs">הנחה {line.listPrice > 0 ? Math.round((1 - line.quotedPrice / line.listPrice) * 100) : 0}%</span>
-                    <span className="mr-auto font-bold text-[#004387]">₪{Math.round(line.quotedPrice * line.qty)}</span>
+                  <div>
+                    <label className="block text-gray-400 mb-0.5 font-semibold">מק״ט (אופציונלי)</label>
+                    <input 
+                      value={customItemSku} 
+                      onChange={(e) => setCustomItemSku(e.target.value)} 
+                      placeholder="לדוגמא: ACC-100" 
+                      className="w-full border border-gray-200 rounded-lg p-2 text-sm" 
+                    />
                   </div>
+                  <div>
+                    <label className="block text-gray-400 mb-0.5 font-semibold">כמות</label>
+                    <input 
+                      type="number" 
+                      value={customItemQty} 
+                      onChange={(e) => setCustomItemQty(e.target.value)} 
+                      className="w-full border border-gray-200 rounded-lg p-2 text-sm text-center" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-400 mb-0.5 font-semibold">מחיר מחירון ₪</label>
+                    <input 
+                      type="number" 
+                      value={customItemListPrice} 
+                      onChange={(e) => setCustomItemListPrice(e.target.value)} 
+                      placeholder="₪0" 
+                      className="w-full border border-gray-200 rounded-lg p-2 text-sm text-center" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-400 mb-0.5 font-semibold">מחיר מוצע ללקוח ₪</label>
+                    <input 
+                      type="number" 
+                      value={customItemQuotedPrice} 
+                      onChange={(e) => setCustomItemQuotedPrice(e.target.value)} 
+                      placeholder="₪0" 
+                      className="w-full border border-gray-200 rounded-lg p-2 text-sm text-center bg-amber-50" 
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-gray-400 mb-0.5 font-semibold">מחיר עלות (סודי לסוכן - לצורך רווחיות)</label>
+                    <input 
+                      type="number" 
+                      value={customItemCostPrice} 
+                      onChange={(e) => setCustomItemCostPrice(e.target.value)} 
+                      placeholder="₪0" 
+                      className="w-full border border-gray-200 rounded-lg p-2 text-sm text-center bg-gray-50" 
+                    />
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={addCustomQuoteLine} 
+                    disabled={!customItemName.trim()} 
+                    className="col-span-2 mt-2 w-full py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Plus size={16} /> הוסף שורה להצעה
+                  </button>
                 </div>
-              ))}
+              </details>
             </div>
-            <textarea value={quoteNote} onChange={(e) => setQuoteNote(e.target.value)} placeholder="הערה ללקוח (אופציונלי)" rows={2} className="w-full border border-gray-200 rounded-lg p-2 text-sm" />
+
+            {/* 3. Items Table / Card Feed */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-gray-500 flex justify-between items-center px-1">
+                <span>פריטים בהצעה ({quoteItems.length})</span>
+                <span className="text-gray-400 font-normal">לגרור או להקליד ערכים לשינוי מיידי</span>
+              </h3>
+
+              {quoteItems.length === 0 ? (
+                <div className="bg-white rounded-xl p-8 border border-gray-200 text-center text-gray-400">
+                  <FileText className="w-10 h-10 mx-auto opacity-30 mb-2" />
+                  <p className="font-semibold text-sm">אין פריטים עדיין</p>
+                  <p className="text-xs mt-1">חפש בקטלוג או הוסף שורה ידנית למעלה כדי להתחיל.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {quoteItems.map((line: any, idx: number) => {
+                    const margin = line.quotedPrice > 0 ? Math.round(((line.quotedPrice - (line.costPrice || 0)) / line.quotedPrice) * 100) : 0;
+                    const isMarginNegative = margin < 0;
+                    const marginColorClass = isMarginNegative ? 'text-red-600 bg-red-50' : margin >= 40 ? 'text-green-700 bg-green-50' : 'text-amber-700 bg-amber-50';
+
+                    return (
+                      <div key={line.id} className="bg-white rounded-xl p-3.5 shadow-sm border border-gray-200 relative">
+                        {/* Remove line */}
+                        <button 
+                          onClick={() => removeQuoteLine(idx)} 
+                          className="absolute top-3 left-3 w-7 h-7 rounded-full hover:bg-red-50 flex items-center justify-center text-red-500 transition-colors border-none"
+                          title="הסר שורה"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+
+                        <div className="pl-6">
+                          <span className="text-[10px] font-bold text-gray-400 block tracking-wider font-mono">שורה {idx + 1} {line.isCustom && '· ידני/סנדלים'}</span>
+                          <span className="font-bold text-sm text-[#0c2d57] block truncate mt-0.5">{line.name}</span>
+                          <span className="text-[11px] text-gray-400 font-mono">מק״ט: {line.sku}</span>
+                        </div>
+
+                        {/* Calculations Row */}
+                        <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-gray-100 text-center">
+                          {/* Qty */}
+                          <div>
+                            <span className="text-[10px] text-gray-400 block mb-1">כמות</span>
+                            <input 
+                              type="number" 
+                              min={1} 
+                              value={line.qty} 
+                              onChange={(e) => updateQuoteLine(idx, 'qty', Math.max(1, parseInt(e.target.value) || 1))} 
+                              className="w-full border border-gray-200 rounded-lg p-1 text-center font-bold text-sm"
+                            />
+                          </div>
+
+                          {/* List Price */}
+                          <div>
+                            <span className="text-[10px] text-gray-400 block mb-1">מחירון (₪)</span>
+                            <input 
+                              type="number" 
+                              min={0} 
+                              value={line.listPrice} 
+                              onChange={(e) => updateQuoteLine(idx, 'listPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
+                              className="w-full border border-gray-200 rounded-lg p-1 text-center text-xs"
+                            />
+                          </div>
+
+                          {/* Discount % */}
+                          <div>
+                            <span className="text-[10px] text-gray-400 block mb-1">הנחה (%)</span>
+                            <input 
+                              type="number" 
+                              value={line.discountPercent || 0} 
+                              onChange={(e) => updateQuoteLine(idx, 'discountPercent', parseFloat(e.target.value) || 0)} 
+                              className="w-full border border-blue-200 text-[#004387] bg-blue-50 rounded-lg p-1 text-center text-xs font-bold"
+                            />
+                          </div>
+
+                          {/* Quoted Price */}
+                          <div>
+                            <span className="text-[10px] text-gray-400 block mb-1">מחיר הצעה (₪)</span>
+                            <input 
+                              type="number" 
+                              min={0} 
+                              value={line.quotedPrice} 
+                              onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
+                              className="w-full border border-amber-300 bg-amber-50 text-amber-900 rounded-lg p-1 text-center font-extrabold text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Cost & Margins (Agent Confidential) */}
+                        <div className="grid grid-cols-3 gap-2 mt-2 bg-gray-50/50 p-2 rounded-lg text-right text-xs items-center">
+                          <div>
+                            <span className="text-[10px] text-gray-400 block">עלות יח׳ ₪ (סודי סוכן)</span>
+                            <input 
+                              type="number" 
+                              min={0} 
+                              value={line.costPrice || 0} 
+                              onChange={(e) => updateQuoteLine(idx, 'costPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
+                              className="w-18 border border-gray-200 rounded px-1 py-0.5 text-center text-[11px] bg-white mt-0.5"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-gray-400 block">רווח שורה</span>
+                            <span className="font-bold text-gray-700 block mt-0.5">
+                              ₪{Math.round((line.quotedPrice - (line.costPrice || 0)) * line.qty)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-gray-400 block">רווחיות (%)</span>
+                            <span className={`inline-block font-extrabold px-1.5 py-0.5 rounded text-[11px] mt-0.5 ${marginColorClass}`}>
+                              {margin}%
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center mt-2.5 text-xs">
+                          <span className="text-gray-400">מחיר מחירון כולל: ₪{Math.round(line.listPrice * line.qty)}</span>
+                          <span className="font-extrabold text-[#004387] text-sm">סה״כ מוצע: ₪{Math.round(line.quotedPrice * line.qty)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 4. Notes */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 flex items-center gap-1">הערות ללקוח (יופיעו בהצעה)</label>
+              <textarea 
+                value={quoteNote} 
+                onChange={(e) => setQuoteNote(e.target.value)} 
+                placeholder="רשום תוקף הצעה, הסכמים מיוחדים או הערות אספקה..." 
+                rows={2} 
+                className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" 
+              />
+            </div>
+
+            {/* 5. Secret Profitability / Margin Dashboard */}
+            {quoteItems.length > 0 && (
+              <div className="bg-[#eef4fb] rounded-xl p-4 border border-[#cdd9e8] shadow-sm">
+                <button 
+                  onClick={() => setShowProfitCalculator(!showProfitCalculator)} 
+                  className="w-full flex items-center justify-between text-xs font-bold text-[#004387] border-none"
+                >
+                  <span className="flex items-center gap-1.5"><Calculator size={15} /> מחשבון רווחיות לסוכן (סודי בהחלט) 💼</span>
+                  <span>{showProfitCalculator ? '▲ הסתר' : '▼ הצג חישובי רווח'}</span>
+                </button>
+                
+                {showProfitCalculator && (
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs animate-fade-in">
+                    <div className="bg-white p-2 rounded border border-[#cdd9e8]">
+                      <span className="text-gray-400 block text-[10px]">מחזור מחירון סה״כ</span>
+                      <span className="font-bold text-[#0c2d57] text-sm">
+                        ₪{Math.round(quoteItems.reduce((acc, l) => acc + (l.listPrice * l.qty), 0))}
+                      </span>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-[#cdd9e8]">
+                      <span className="text-gray-400 block text-[10px]">עלות רכש כוללת</span>
+                      <span className="font-bold text-gray-600 text-sm">
+                        ₪{Math.round(quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0))}
+                      </span>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-[#cdd9e8]">
+                      <span className="text-gray-400 block text-[10px]">רווח גולמי כולל</span>
+                      <span className={`font-extrabold text-sm ${quoteTotal - quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                        ₪{Math.round(quoteTotal - quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0))}
+                      </span>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-[#cdd9e8]">
+                      <span className="text-gray-400 block text-[10px]">ממוצע רווחיות (Margin)</span>
+                      <span className={`font-extrabold text-sm ${quoteTotal > 0 && (quoteTotal - quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0)) / quoteTotal >= 0.3 ? 'text-green-700' : 'text-amber-700'}`}>
+                        {quoteTotal > 0 ? Math.round(((quoteTotal - quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0)) / quoteTotal) * 100) : 0}%
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <div className="p-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-            <div className="flex justify-between font-bold text-lg mb-3"><span>סה״כ</span><span className="text-[#004387]">₪{Math.round(quoteTotal)}</span></div>
-            <div className="flex gap-2">
-              <button onClick={() => submitQuote('draft')} disabled={quoteSaving || quoteItems.length === 0} className="flex-1 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-bold disabled:opacity-50">שמור טיוטה</button>
-              <button onClick={() => submitQuote('sent')} disabled={quoteSaving || quoteItems.length === 0} className="flex-1 py-2.5 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-lg font-bold disabled:opacity-50">שלח ללקוח</button>
+
+          {/* Sticky Actions Bar */}
+          <div className="p-4 border-t border-gray-200 bg-white flex-shrink-0 flex flex-col gap-2 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+            <div className="flex justify-between items-center font-bold text-base px-1">
+              <span className="text-gray-500">סה״כ הצעה (ללקוח)</span>
+              <span className="text-2xl text-[#004387] font-extrabold">₪{Math.round(quoteTotal)}</span>
+            </div>
+            
+            <div className="flex gap-2.5 mt-2">
+              <button 
+                onClick={() => submitQuote('draft')} 
+                disabled={quoteSaving || quoteItems.length === 0} 
+                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition-colors disabled:opacity-50 border-none"
+              >
+                שמור כטיוטה
+              </button>
+              <button 
+                onClick={() => submitQuote('sent')} 
+                disabled={quoteSaving || quoteItems.length === 0} 
+                className="flex-1 py-3 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-xl font-extrabold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 border-none"
+              >
+                <CheckCircle size={18} /> שלח הצעה ללקוח
+              </button>
             </div>
           </div>
         </div>
@@ -4917,6 +5446,85 @@ export default function App() {
             <p className="text-sm text-gray-500 mb-5">ביצוע הזמנות זמין למפיצים מורשים בלבד. התחבר או הירשם כדי להוסיף מוצרים ולבצע הזמנה.</p>
             <button onClick={() => { try { sessionStorage.removeItem('rbs_guest'); } catch {} setGuestPrompt(false); setIsGuest(false); }} className="w-full py-3 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-lg mb-2">התחבר / הירשם</button>
             <button onClick={() => setGuestPrompt(false)} className="w-full py-2 text-gray-500 text-sm">המשך לצפות בקטלוג</button>
+          </div>
+        </div>
+      )}
+
+      {signingQuote && (
+        <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4 animate-fade-in" dir="rtl" onClick={() => setSigningQuote(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setSigningQuote(null)} className="absolute top-4 left-4 text-gray-400 hover:text-gray-600 border-none bg-transparent">
+              <X size={20} />
+            </button>
+            <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center mb-4 text-green-600 mx-auto">
+              <PenTool size={24} />
+            </div>
+            
+            <h3 className="font-extrabold text-lg text-[#0c2d57] mb-1 text-center">חתימה דיגיטלית ואישור הצעה</h3>
+            <p className="text-xs text-gray-500 mb-4 text-center">הצעת מחיר מס׳ {signingQuote.id?.slice(-6).toUpperCase()} סה״כ: <span className="font-bold text-[#004387]">₪{Math.round(signingQuote.total || 0)}</span></p>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">שם מאשר ההזמנה *</label>
+                <input 
+                  type="text"
+                  value={signingName} 
+                  onChange={(e) => setSigningName(e.target.value)} 
+                  placeholder="הקלד שם מלא של מורשה החתימה..." 
+                  className="w-full border border-gray-200 rounded-lg p-2.5 text-sm font-semibold"
+                />
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-bold text-gray-600">חתימה על גבי המסך (גע וגרור)</label>
+                  <button onClick={clearSigCanvas} className="text-[11px] text-[#004387] font-bold hover:underline border-none bg-transparent">נקה לוח</button>
+                </div>
+                <div className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden bg-gray-50 h-40 relative touch-none">
+                  <canvas 
+                    ref={signatureCanvasRef}
+                    onMouseDown={startDrawingSig}
+                    onMouseMove={drawSig}
+                    onMouseUp={stopDrawingSig}
+                    onMouseLeave={stopDrawingSig}
+                    onTouchStart={startDrawingSig}
+                    onTouchMove={drawSig}
+                    onTouchEnd={stopDrawingSig}
+                    width={380}
+                    height={160}
+                    className="w-full h-full cursor-crosshair"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                    <span className="text-xs text-gray-400">שטח לחתימה ידנית</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 rounded-lg p-3 text-[11px] text-amber-800 leading-relaxed">
+                ⚠️ בלחיצה על "חתום ואשר" אתה מביע הסכמה מלאה למחירים, לכמויות ולתנאים המפורטים בהצעת המחיר הנוכחית. ההזמנה תינעל ותועבר ישירות לטיפול הסוכן ומנהל המערכת.
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button 
+                  onClick={() => setSigningQuote(null)} 
+                  className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl font-bold text-sm border-none"
+                >
+                  ביטול
+                </button>
+                <button 
+                  disabled={!signingName.trim()}
+                  onClick={() => {
+                    const canvas = signatureCanvasRef.current;
+                    const sigDataUrl = canvas ? canvas.toDataURL('image/png') : '';
+                    approveQuote(signingQuote, sigDataUrl, signingName);
+                    setSigningQuote(null);
+                  }}
+                  className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 border-none"
+                >
+                  <CheckCircle size={16} /> חתום ואשר
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -4952,6 +5560,140 @@ export default function App() {
             <div className="flex gap-2 mt-4">
               <button onClick={() => { if (userUid) saveUserProfile(userUid, { ...(billingProfile || {}), profileCompleted: true }); try { localStorage.setItem('rbs_profile_setup_done', '1'); } catch { /* ignore */ } setShowCompleteProfile(false); }} className="flex-1 py-2.5 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-lg font-bold">שמירה</button>
               <button onClick={() => { try { localStorage.setItem('rbs_profile_setup_done', '1'); } catch { /* ignore */ } setShowCompleteProfile(false); }} className="px-4 py-2.5 text-gray-500 text-sm font-semibold">דלג</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {signingQuote && (
+        <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4" dir="rtl">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+              <h3 className="font-bold text-base text-[#0c2d57] flex items-center gap-1.5">
+                <PenTool size={18} className="text-[#004387]" /> אישור וחתימה דיגיטלית
+              </h3>
+              <button onClick={() => setSigningQuote(null)} className="text-gray-400 p-1 hover:bg-gray-100 rounded-full border-none">✕</button>
+            </div>
+            
+            <p className="text-xs text-gray-500 leading-relaxed">
+              לצורך אישור הצעת המחיר בסך <strong className="text-[#004387]">₪{Math.round(signingQuote.total || 0)}</strong>, נא למלא את שם המאשר ולחתום על המסך למטה. אישור זה מעביר את ההצעה להזמנה סופית.
+            </p>
+
+            <div>
+              <label className="block text-[11px] font-bold text-gray-600 mb-1">שם המאשר / מורשה חתימה *</label>
+              <input 
+                value={signingName} 
+                onChange={(e) => setSigningName(e.target.value)} 
+                placeholder="הקלד את שמך המלא..." 
+                className="w-full border border-gray-200 rounded-lg p-2 text-sm" 
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-gray-600 mb-1">חתימה (צייר באמצעות האצבע או העכבר):</label>
+              <div className="border border-gray-300 rounded-xl bg-gray-50 overflow-hidden relative" style={{ height: '140px' }}>
+                <canvas 
+                  id="sig-canvas"
+                  width={380}
+                  height={140}
+                  className="w-full h-full cursor-crosshair touch-none"
+                  onMouseDown={(e) => {
+                    const canvas = e.currentTarget;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return;
+                    ctx.strokeStyle = '#004387';
+                    ctx.lineWidth = 3;
+                    ctx.lineCap = 'round';
+                    const rect = canvas.getBoundingClientRect();
+                    ctx.beginPath();
+                    (canvas as any).isDrawing = true;
+                    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+                  }}
+                  onMouseMove={(e) => {
+                    const canvas = e.currentTarget;
+                    if (!(canvas as any).isDrawing) return;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return;
+                    const rect = canvas.getBoundingClientRect();
+                    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+                    ctx.stroke();
+                  }}
+                  onMouseUp={(e) => {
+                    (e.currentTarget as any).isDrawing = false;
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as any).isDrawing = false;
+                  }}
+                  onTouchStart={(e) => {
+                    const canvas = e.currentTarget;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return;
+                    ctx.strokeStyle = '#004387';
+                    ctx.lineWidth = 3;
+                    ctx.lineCap = 'round';
+                    const rect = canvas.getBoundingClientRect();
+                    const touch = e.touches[0];
+                    ctx.beginPath();
+                    (canvas as any).isDrawing = true;
+                    ctx.moveTo(touch.clientX - rect.left, touch.clientY - rect.top);
+                  }}
+                  onTouchMove={(e) => {
+                    const canvas = e.currentTarget;
+                    if (!(canvas as any).isDrawing) return;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const touch = e.touches[0];
+                    ctx.lineTo(touch.clientX - rect.left, touch.clientY - rect.top);
+                    ctx.stroke();
+                  }}
+                  onTouchEnd={(e) => {
+                    (e.currentTarget as any).isDrawing = false;
+                  }}
+                />
+                <button 
+                  type="button"
+                  onClick={() => {
+                    const canvas = document.getElementById('sig-canvas') as HTMLCanvasElement;
+                    if (canvas) {
+                      const ctx = canvas.getContext('2d');
+                      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    }
+                  }}
+                  className="absolute bottom-2 left-2 px-2.5 py-1 bg-white hover:bg-gray-100 text-gray-500 rounded text-[10px] font-bold border border-gray-200 shadow-sm"
+                >
+                  נקה
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button 
+                onClick={() => setSigningQuote(null)} 
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-bold border-none"
+              >
+                ביטול
+              </button>
+              <button 
+                onClick={async () => {
+                  if (!signingName.trim()) {
+                    alert('נא להקליד שם מאשר');
+                    return;
+                  }
+                  const canvas = document.getElementById('sig-canvas') as HTMLCanvasElement;
+                  let sigUrl = '';
+                  if (canvas) {
+                    sigUrl = canvas.toDataURL('image/png');
+                  }
+                  await approveQuote(signingQuote, sigUrl, signingName.trim());
+                  setSigningQuote(null);
+                }} 
+                disabled={quoteSaving}
+                className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1 border-none shadow-md disabled:opacity-50"
+              >
+                {quoteSaving ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                חתום ואשר הצעה
+              </button>
             </div>
           </div>
         </div>
@@ -5106,10 +5848,27 @@ export default function App() {
                             </div>
                           ))}
                           {q.note && <p className="text-xs text-gray-500 mt-1">הערה: {q.note}</p>}
+                          {q.signature && (
+                            <div className="mt-2 bg-green-50/70 p-2 rounded-lg border border-green-100 text-xs flex items-center justify-between gap-2">
+                              <div>
+                                <span className="font-bold text-green-800 block">✓ אושר ונחתם דיגיטלית</span>
+                                <span className="text-gray-500 text-[10px]">על ידי: {q.signedBy || 'מורשה חתימה'}</span>
+                              </div>
+                              <img src={q.signature} alt="חתימה דיגיטלית" className="h-9 max-w-[120px] object-contain bg-white rounded border border-gray-100 p-0.5" />
+                            </div>
+                          )}
                           {q.status === 'sent' && (
                             <div className="flex gap-2 mt-2">
-                              <button onClick={() => approveQuote(q)} className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold">אשר הזמנה</button>
-                              <button onClick={() => rejectQuote(q)} className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-sm font-bold">דחה</button>
+                              <button 
+                                onClick={() => { 
+                                  setSigningQuote(q); 
+                                  setSigningName(userProfile?.company || ''); 
+                                }} 
+                                className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold border-none"
+                              >
+                                אשר הזמנה וחתום ✍️
+                              </button>
+                              <button onClick={() => rejectQuote(q)} className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-sm font-bold border-none">דחה</button>
                             </div>
                           )}
                         </div>
@@ -5352,6 +6111,11 @@ export default function App() {
                                 </details>
                               )}
                               <div className="flex gap-1.5 mt-2">
+                                {userRole === 'agent' && (
+                                  <button onClick={() => convertOrderToQuote(o, g)} className="flex-1 py-1 bg-blue-600 text-white hover:bg-[#004387] rounded text-[11px] font-extrabold flex items-center justify-center gap-1 border-none">
+                                    <FileText size={12} /> הפוך להצעת מחיר
+                                  </button>
+                                )}
                                 {o.status !== 'processing' && o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'processing')} className="flex-1 py-1 bg-amber-50 border border-amber-200 text-amber-700 rounded text-[11px] font-bold">סמן בטיפול</button>}
                                 {o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'done')} className="flex-1 py-1 bg-green-50 border border-green-200 text-green-700 rounded text-[11px] font-bold">סמן הושלם</button>}
                                 {o.status === 'done' && <button onClick={() => advanceOrderStatus(o.id, 'sent')} className="flex-1 py-1 bg-gray-50 border border-gray-200 text-gray-500 rounded text-[11px] font-bold">החזר ל׳נשלח׳</button>}
