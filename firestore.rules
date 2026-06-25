@@ -47,6 +47,10 @@ service cloud.firestore {
         (resource.data.customerEmail == request.auth.token.email &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']))
       );
+      allow delete: if request.auth != null && (
+        resource.data.agentUid == request.auth.uid ||
+        get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email)).data.get('role', 'user') == 'sales_manager'
+      );
     }
 
   }

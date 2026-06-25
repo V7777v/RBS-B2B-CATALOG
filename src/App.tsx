@@ -11,7 +11,7 @@ import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadAllQuotes, loadCustomerQuotes, updateQuoteStatus, updateQuote, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder, getLastOrderError } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadAllQuotes, loadCustomerQuotes, updateQuoteStatus, updateQuote, deleteQuote, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder, getLastOrderError } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -2220,6 +2220,23 @@ export default function App() {
   const [quoteNote, setQuoteNote] = useState('');
   const [quoteSearch, setQuoteSearch] = useState('');
   const [quoteSaving, setQuoteSaving] = useState(false);
+  const [quoteFilterStatus, setQuoteFilterStatus] = useState<string>('all');
+  const [quoteSearchTerm, setQuoteSearchTerm] = useState<string>('');
+
+  const filteredAgentQuotes = useMemo(() => {
+    return agentQuotes.filter((q: any) => {
+      if (quoteFilterStatus !== 'all' && q.status !== quoteFilterStatus) return false;
+      if (quoteSearchTerm.trim()) {
+        const term = quoteSearchTerm.toLowerCase();
+        const matchesCompany = String(q.customerCompany || '').toLowerCase().includes(term);
+        const matchesName = String(q.customerName || '').toLowerCase().includes(term);
+        const matchesEmail = String(q.customerEmail || '').toLowerCase().includes(term);
+        const matchesId = String(q.id || '').toLowerCase().includes(term);
+        return matchesCompany || matchesName || matchesEmail || matchesId;
+      }
+      return true;
+    });
+  }, [agentQuotes, quoteFilterStatus, quoteSearchTerm]);
 
   // Custom/Free-text Item States for Quote Editor
   const [customItemName, setCustomItemName] = useState('');
@@ -5110,7 +5127,7 @@ export default function App() {
           {/* Header */}
           <div className="flex items-center justify-between p-4 bg-[#004387] text-white flex-shrink-0 shadow-md">
             <div className="min-w-0">
-              <span className="text-[10px] uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full font-bold">הצעת מחיר סוכן</span>
+              <span className="text-[10px] uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full font-bold">הצעת מחיר סוכן ומחירון מורחב</span>
               <h2 className="font-extrabold text-base truncate mt-1">
                 {quoteEditorCustomer?.company || quoteEditorCustomer?.name || quoteEditorCustomer?.email}
               </h2>
@@ -5126,7 +5143,7 @@ export default function App() {
             {/* 1. Search Catalog to Add Items */}
             <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
               <h3 className="text-xs font-bold text-gray-500 mb-2 flex items-center gap-1.5">
-                <Search size={14} className="text-[#004387]" /> הוספת מוצרים מהקטלוג
+                <Search size={14} className="text-[#004387]" /> חיפוש מהיר והוספת מוצר לקטלוג ההצעה
               </h3>
               <input 
                 value={quoteSearch} 
@@ -5140,7 +5157,7 @@ export default function App() {
                     <button 
                       key={pr.id} 
                       onClick={() => addQuoteLine(pr)} 
-                      className="w-full text-right p-3 hover:bg-gray-50 text-sm flex justify-between items-center transition-colors"
+                      className="w-full text-right p-3 hover:bg-gray-50 text-sm flex justify-between items-center transition-colors border-none bg-transparent"
                     >
                       <div className="min-w-0">
                         <span className="font-semibold text-[#0c2d57] block truncate">{pr.name}</span>
@@ -5153,12 +5170,58 @@ export default function App() {
               )}
             </div>
 
+            {/* Quick Add Installation Accessories (סנדלים וזרועות) */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+              <h3 className="text-xs font-bold text-blue-600 mb-3 flex items-center gap-1.5">
+                <Sparkles size={14} className="text-blue-500" /> הוספה מהירה של סנדלים ואביזרי התקנה נפוצים 🔌
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                {[
+                  { name: 'סנדל קיר B2B 2" מתכוונן כבד', sku: 'SND-WALL-ADJ-2', listPrice: 190, costPrice: 95 },
+                  { name: 'סנדל תורן 1.5" כפול כבד', sku: 'SND-POLE-DBL-15', listPrice: 220, costPrice: 110 },
+                  { name: 'סנדל פינתי למעקה 2" מגולוון', sku: 'SND-CNR-GLV-2', listPrice: 280, costPrice: 140 },
+                  { name: 'זרוע קיר כבדה באורך 50 ס"מ', sku: 'SND-ARM-HVY-50', listPrice: 160, costPrice: 80 },
+                  { name: 'זרוע תורן כפול כבדה 2" לצינור', sku: 'SND-ARM-DBL-POLE', listPrice: 290, costPrice: 145 },
+                ].map((tpl) => (
+                  <button
+                    key={tpl.sku}
+                    onClick={() => {
+                      setQuoteItems((prev) => {
+                        if (prev.some((l: any) => l.sku === tpl.sku)) return prev;
+                        return [
+                          ...prev,
+                          {
+                            id: 'sandal_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                            sku: tpl.sku,
+                            name: tpl.name,
+                            qty: 1,
+                            listPrice: tpl.listPrice,
+                            quotedPrice: tpl.listPrice,
+                            costPrice: tpl.costPrice,
+                            discountPercent: 0,
+                            isCustom: true
+                          }
+                        ];
+                      });
+                    }}
+                    className="p-2.5 border border-blue-100 hover:border-blue-400 hover:bg-blue-50/50 rounded-xl text-right transition-all flex flex-col justify-between h-20 text-[11px] group bg-transparent cursor-pointer"
+                  >
+                    <span className="font-bold text-gray-700 line-clamp-2 leading-tight group-hover:text-blue-700">{tpl.name}</span>
+                    <div className="flex justify-between items-center w-full mt-1">
+                      <span className="text-gray-400 font-mono text-[9px]">{tpl.sku}</span>
+                      <span className="font-extrabold text-[#004387] bg-blue-50 px-1.5 py-0.5 rounded">₪{tpl.listPrice}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* 2. Add Custom Item (סנדלים / שירותים / אביזרים וכו׳) */}
             <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
               <details className="group">
                 <summary className="text-xs font-bold text-gray-500 cursor-pointer flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-amber-600 font-extrabold">
-                    <Plus size={14} /> הוספת שורה חופשית (סנדלים / עבודה / פריט ידני)
+                    <Plus size={14} /> הוספת שורה מותאמת אישית (אביזר אחר, הובלה, עבודה ידנית)
                   </span>
                   <span className="text-gray-400 transition-transform group-open:rotate-180">▼</span>
                 </summary>
@@ -5168,7 +5231,7 @@ export default function App() {
                     <input 
                       value={customItemName} 
                       onChange={(e) => setCustomItemName(e.target.value)} 
-                      placeholder="לדוגמא: סנדלים, כבלים, התקנה, תוספות..." 
+                      placeholder="לדוגמא: סנדלים נוספים, כבל קואקס מיוחד, עבודת התקנה..." 
                       className="w-full border border-gray-200 rounded-lg p-2 text-sm" 
                     />
                   </div>
@@ -5177,7 +5240,7 @@ export default function App() {
                     <input 
                       value={customItemSku} 
                       onChange={(e) => setCustomItemSku(e.target.value)} 
-                      placeholder="לדוגמא: ACC-100" 
+                      placeholder="לדוגמא: ACC-SND-9" 
                       className="w-full border border-gray-200 rounded-lg p-2 text-sm" 
                     />
                   </div>
@@ -5224,7 +5287,7 @@ export default function App() {
                     type="button" 
                     onClick={addCustomQuoteLine} 
                     disabled={!customItemName.trim()} 
-                    className="col-span-2 mt-2 w-full py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    className="col-span-2 mt-2 w-full py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 border-none cursor-pointer"
                   >
                     <Plus size={16} /> הוסף שורה להצעה
                   </button>
@@ -5232,178 +5295,288 @@ export default function App() {
               </details>
             </div>
 
-            {/* 3. Items Table / Card Feed */}
+            {/* 3. Items Grid Workspace (Priority-style Dense Table for desktop / High-density cards for mobile) */}
             <div className="space-y-3">
               <h3 className="text-xs font-bold text-gray-500 flex justify-between items-center px-1">
-                <span>פריטים בהצעה ({quoteItems.length})</span>
-                <span className="text-gray-400 font-normal">לגרור או להקליד ערכים לשינוי מיידי</span>
+                <span>טבלת פריטים בהצעת מחיר ({quoteItems.length})</span>
+                <span className="text-gray-400 font-normal">השינויים בטבלה מסתנכרנים ומחושבים מיידית (כמו ב-Priority)</span>
               </h3>
 
               {quoteItems.length === 0 ? (
                 <div className="bg-white rounded-xl p-8 border border-gray-200 text-center text-gray-400">
                   <FileText className="w-10 h-10 mx-auto opacity-30 mb-2" />
                   <p className="font-semibold text-sm">אין פריטים עדיין</p>
-                  <p className="text-xs mt-1">חפש בקטלוג או הוסף שורה ידנית למעלה כדי להתחיל.</p>
+                  <p className="text-xs mt-1">חפש בקטלוג או לחץ על הוספה מהירה של אביזרים למעלה.</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {quoteItems.map((line: any, idx: number) => {
-                    const margin = line.quotedPrice > 0 ? Math.round(((line.quotedPrice - (line.costPrice || 0)) / line.quotedPrice) * 100) : 0;
-                    const isMarginNegative = margin < 0;
-                    const marginColorClass = isMarginNegative ? 'text-red-600 bg-red-50' : margin >= 40 ? 'text-green-700 bg-green-50' : 'text-amber-700 bg-amber-50';
+                <>
+                  {/* Desktop Tabular View (Priority Style) */}
+                  <div className="hidden md:block overflow-x-auto bg-white rounded-xl shadow-sm border border-gray-200">
+                    <table className="w-full text-right text-xs">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-400 border-b border-gray-250">
+                          <th className="p-3 font-extrabold w-12 text-center">#</th>
+                          <th className="p-3 font-extrabold">מוצר ומק״ט</th>
+                          <th className="p-3 font-extrabold w-20 text-center">כמות</th>
+                          <th className="p-3 font-extrabold w-28 text-center">מחירון (₪)</th>
+                          <th className="p-3 font-extrabold w-24 text-center">הנחה (%)</th>
+                          <th className="p-3 font-extrabold w-28 text-center">מחיר מוצע (₪)</th>
+                          <th className="p-3 font-extrabold w-28 text-center">עלות סודית (₪)</th>
+                          <th className="p-3 font-extrabold w-24 text-center">רווחיות</th>
+                          <th className="p-3 font-extrabold w-28 text-left">סה״כ מוצע</th>
+                          <th className="p-3 font-extrabold w-12 text-center">הסר</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {quoteItems.map((line: any, idx: number) => {
+                          const margin = line.quotedPrice > 0 ? Math.round(((line.quotedPrice - (line.costPrice || 0)) / line.quotedPrice) * 100) : 0;
+                          const isMarginNegative = margin < 0;
+                          const marginColorClass = isMarginNegative ? 'text-red-600 bg-red-50 border-red-200' : margin >= 35 ? 'text-green-700 bg-green-50 border-green-200' : 'text-amber-700 bg-amber-50 border-amber-200';
+                          const belowCost = line.quotedPrice < (line.costPrice || 0);
 
-                    return (
-                      <div key={line.id} className="bg-white rounded-xl p-3.5 shadow-sm border border-gray-200 relative">
-                        {/* Remove line */}
-                        <button 
-                          onClick={() => removeQuoteLine(idx)} 
-                          className="absolute top-3 left-3 w-7 h-7 rounded-full hover:bg-red-50 flex items-center justify-center text-red-500 transition-colors border-none"
-                          title="הסר שורה"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                          return (
+                            <tr key={line.id} className={`hover:bg-gray-50/50 transition-colors ${belowCost ? 'bg-red-50/20' : ''}`}>
+                              <td className="p-3 text-center text-gray-400 font-bold font-mono">{idx + 1}</td>
+                              <td className="p-3 min-w-[200px]">
+                                <span className="font-bold text-[#0c2d57] block truncate max-w-[250px]">{line.name}</span>
+                                <span className="text-gray-400 text-[10px] font-mono block mt-0.5">
+                                  מק״ט: <span className="text-gray-600 font-bold">{line.sku || 'N/A'}</span> {line.isCustom && <span className="text-amber-600 bg-amber-50 px-1 rounded font-sans font-extrabold">ידני</span>}
+                                </span>
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  value={line.qty}
+                                  onChange={(e) => updateQuoteLine(idx, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                                  className="w-16 border border-gray-200 rounded p-1 text-center font-bold text-sm"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={line.listPrice}
+                                  onChange={(e) => updateQuoteLine(idx, 'listPrice', Math.max(0, parseFloat(e.target.value) || 0))}
+                                  className="w-24 border border-gray-200 rounded p-1 text-center font-mono text-xs"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <div className="flex items-center justify-center gap-1">
+                                  <input
+                                    type="number"
+                                    value={line.discountPercent || 0}
+                                    onChange={(e) => updateQuoteLine(idx, 'discountPercent', parseFloat(e.target.value) || 0)}
+                                    className="w-14 border border-blue-200 text-[#004387] bg-blue-50/50 rounded p-1 text-center font-bold"
+                                  />
+                                  <span className="text-blue-500 font-bold text-xs">%</span>
+                                </div>
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={line.quotedPrice}
+                                  onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))}
+                                  className={`w-24 border rounded p-1 text-center font-extrabold text-sm ${belowCost ? 'border-red-400 bg-red-100 text-red-900 animate-pulse' : 'border-amber-300 bg-amber-50 text-amber-950'}`}
+                                />
+                                {belowCost && <span className="text-[9px] text-red-600 font-bold block text-center mt-0.5">מתחת לעלות!</span>}
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={line.costPrice || 0}
+                                  onChange={(e) => updateQuoteLine(idx, 'costPrice', Math.max(0, parseFloat(e.target.value) || 0))}
+                                  className="w-24 border border-gray-200 rounded p-1 text-center text-gray-500 font-mono bg-gray-50/30"
+                                />
+                              </td>
+                              <td className="p-3 text-center">
+                                <span className={`inline-block font-extrabold px-2 py-0.5 rounded border text-[11px] ${marginColorClass}`}>
+                                  {margin}%
+                                </span>
+                              </td>
+                              <td className="p-3 text-left font-extrabold text-[#004387] text-sm">
+                                ₪{Math.round(line.quotedPrice * line.qty).toLocaleString('he-IL')}
+                              </td>
+                              <td className="p-3 text-center">
+                                <button
+                                  onClick={() => removeQuoteLine(idx)}
+                                  className="p-1.5 rounded-full hover:bg-red-50 text-red-500 transition-colors border-none bg-transparent cursor-pointer"
+                                  title="הסר שורה"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
 
-                        <div className="pl-6">
-                          <span className="text-[10px] font-bold text-gray-400 block tracking-wider font-mono">שורה {idx + 1} {line.isCustom && '· ידני/סנדלים'}</span>
-                          <span className="font-bold text-sm text-[#0c2d57] block truncate mt-0.5">{line.name}</span>
-                          <span className="text-[11px] text-gray-400 font-mono">מק״ט: {line.sku}</span>
+                  {/* Mobile High-Density Card Feed View */}
+                  <div className="block md:hidden space-y-3">
+                    {quoteItems.map((line: any, idx: number) => {
+                      const margin = line.quotedPrice > 0 ? Math.round(((line.quotedPrice - (line.costPrice || 0)) / line.quotedPrice) * 100) : 0;
+                      const isMarginNegative = margin < 0;
+                      const marginColorClass = isMarginNegative ? 'text-red-600 bg-red-50' : margin >= 35 ? 'text-green-700 bg-green-50' : 'text-amber-700 bg-amber-50';
+                      const belowCost = line.quotedPrice < (line.costPrice || 0);
+
+                      return (
+                        <div key={line.id} className="bg-white rounded-xl p-3 shadow-sm border border-gray-200 relative">
+                          <button 
+                            onClick={() => removeQuoteLine(idx)} 
+                            className="absolute top-2 left-2 w-7 h-7 rounded-full hover:bg-red-50 flex items-center justify-center text-red-500 transition-colors border-none bg-transparent cursor-pointer"
+                            title="הסר שורה"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+
+                          <div>
+                            <span className="text-[9px] font-bold text-gray-400 block tracking-wider font-mono">שורה {idx + 1} {line.isCustom && '· ידני/סנדלים'}</span>
+                            <span className="font-bold text-xs text-[#0c2d57] block truncate mt-0.5 max-w-[85%]">{line.name}</span>
+                            <span className="text-[10px] text-gray-400 font-mono">מק״ט: {line.sku}</span>
+                          </div>
+
+                          <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-gray-100 text-center">
+                            <div>
+                              <span className="text-[9px] text-gray-400 block mb-0.5">כמות</span>
+                              <input 
+                                type="number" 
+                                min={1} 
+                                value={line.qty} 
+                                onChange={(e) => updateQuoteLine(idx, 'qty', Math.max(1, parseInt(e.target.value) || 1))} 
+                                className="w-full border border-gray-200 rounded p-0.5 text-center font-bold text-xs"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-gray-400 block mb-0.5">מחירון</span>
+                              <input 
+                                type="number" 
+                                min={0} 
+                                value={line.listPrice} 
+                                onChange={(e) => updateQuoteLine(idx, 'listPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
+                                className="w-full border border-gray-200 rounded p-0.5 text-center text-[10px]"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-[#004387] font-bold block mb-0.5">הנחה (%)</span>
+                              <input 
+                                type="number" 
+                                value={line.discountPercent || 0} 
+                                onChange={(e) => updateQuoteLine(idx, 'discountPercent', parseFloat(e.target.value) || 0)} 
+                                className="w-full border border-blue-200 text-[#004387] bg-blue-50 rounded p-0.5 text-center text-xs font-bold"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-amber-800 font-bold block mb-0.5">הצעה (₪)</span>
+                              <input 
+                                type="number" 
+                                min={0} 
+                                value={line.quotedPrice} 
+                                onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
+                                className={`w-full border rounded p-0.5 text-center font-extrabold text-xs ${belowCost ? 'border-red-400 bg-red-100 text-red-900 animate-pulse' : 'border-amber-200 bg-amber-50'}`}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 mt-2 bg-gray-50/50 p-1.5 rounded text-[10px] items-center">
+                            <div className="flex items-center gap-1">
+                              <span className="text-gray-400">עלות ₪</span>
+                              <input 
+                                type="number" 
+                                min={0} 
+                                value={line.costPrice || 0} 
+                                onChange={(e) => updateQuoteLine(idx, 'costPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
+                                className="w-12 border border-gray-200 rounded px-1 text-center bg-white"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-gray-400">רווח שורה:</span>
+                              <span className="font-bold text-gray-700 block">₪{Math.round((line.quotedPrice - (line.costPrice || 0)) * line.qty)}</span>
+                            </div>
+                            <div className="text-left">
+                              <span className={`inline-block font-extrabold px-1.5 py-0.2 rounded text-[10px] ${marginColorClass}`}>
+                                {margin}% רווחיות
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-between items-center mt-2 text-[11px] font-semibold">
+                            <span className="text-gray-400">מחירון סה״כ: ₪{Math.round(line.listPrice * line.qty)}</span>
+                            <span className="text-[#004387] font-bold">סה״כ מוצע: ₪{Math.round(line.quotedPrice * line.qty)}</span>
+                          </div>
                         </div>
-
-                        {/* Calculations Row */}
-                        <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-gray-100 text-center">
-                          {/* Qty */}
-                          <div>
-                            <span className="text-[10px] text-gray-400 block mb-1">כמות</span>
-                            <input 
-                              type="number" 
-                              min={1} 
-                              value={line.qty} 
-                              onChange={(e) => updateQuoteLine(idx, 'qty', Math.max(1, parseInt(e.target.value) || 1))} 
-                              className="w-full border border-gray-200 rounded-lg p-1 text-center font-bold text-sm"
-                            />
-                          </div>
-
-                          {/* List Price */}
-                          <div>
-                            <span className="text-[10px] text-gray-400 block mb-1">מחירון (₪)</span>
-                            <input 
-                              type="number" 
-                              min={0} 
-                              value={line.listPrice} 
-                              onChange={(e) => updateQuoteLine(idx, 'listPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
-                              className="w-full border border-gray-200 rounded-lg p-1 text-center text-xs"
-                            />
-                          </div>
-
-                          {/* Discount % */}
-                          <div>
-                            <span className="text-[10px] text-gray-400 block mb-1">הנחה (%)</span>
-                            <input 
-                              type="number" 
-                              value={line.discountPercent || 0} 
-                              onChange={(e) => updateQuoteLine(idx, 'discountPercent', parseFloat(e.target.value) || 0)} 
-                              className="w-full border border-blue-200 text-[#004387] bg-blue-50 rounded-lg p-1 text-center text-xs font-bold"
-                            />
-                          </div>
-
-                          {/* Quoted Price */}
-                          <div>
-                            <span className="text-[10px] text-gray-400 block mb-1">מחיר הצעה (₪)</span>
-                            <input 
-                              type="number" 
-                              min={0} 
-                              value={line.quotedPrice} 
-                              onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
-                              className="w-full border border-amber-300 bg-amber-50 text-amber-900 rounded-lg p-1 text-center font-extrabold text-sm"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Cost & Margins (Agent Confidential) */}
-                        <div className="grid grid-cols-3 gap-2 mt-2 bg-gray-50/50 p-2 rounded-lg text-right text-xs items-center">
-                          <div>
-                            <span className="text-[10px] text-gray-400 block">עלות יח׳ ₪ (סודי סוכן)</span>
-                            <input 
-                              type="number" 
-                              min={0} 
-                              value={line.costPrice || 0} 
-                              onChange={(e) => updateQuoteLine(idx, 'costPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
-                              className="w-18 border border-gray-200 rounded px-1 py-0.5 text-center text-[11px] bg-white mt-0.5"
-                            />
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-gray-400 block">רווח שורה</span>
-                            <span className="font-bold text-gray-700 block mt-0.5">
-                              ₪{Math.round((line.quotedPrice - (line.costPrice || 0)) * line.qty)}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-gray-400 block">רווחיות (%)</span>
-                            <span className={`inline-block font-extrabold px-1.5 py-0.5 rounded text-[11px] mt-0.5 ${marginColorClass}`}>
-                              {margin}%
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between items-center mt-2.5 text-xs">
-                          <span className="text-gray-400">מחיר מחירון כולל: ₪{Math.round(line.listPrice * line.qty)}</span>
-                          <span className="font-extrabold text-[#004387] text-sm">סה״כ מוצע: ₪{Math.round(line.quotedPrice * line.qty)}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </div>
 
             {/* 4. Notes */}
             <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-              <label className="block text-xs font-bold text-gray-500 mb-1.5 flex items-center gap-1">הערות ללקוח (יופיעו בהצעה)</label>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 flex items-center gap-1">הערות ותנאים מיוחדים להצעה (יופיעו בהצעה ללקוח)</label>
               <textarea 
                 value={quoteNote} 
                 onChange={(e) => setQuoteNote(e.target.value)} 
-                placeholder="רשום תוקף הצעה, הסכמים מיוחדים או הערות אספקה..." 
+                placeholder="רשום תוקף הצעת מחיר, הסכמים מיוחדים או הערות אספקה..." 
                 rows={2} 
                 className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" 
               />
             </div>
 
-            {/* 5. Secret Profitability / Margin Dashboard */}
+            {/* 5. Rich Profitability & Deal Viability Dashboard */}
             {quoteItems.length > 0 && (
               <div className="bg-[#eef4fb] rounded-xl p-4 border border-[#cdd9e8] shadow-sm">
                 <button 
                   onClick={() => setShowProfitCalculator(!showProfitCalculator)} 
-                  className="w-full flex items-center justify-between text-xs font-bold text-[#004387] border-none"
+                  className="w-full flex items-center justify-between text-xs font-bold text-[#004387] border-none bg-transparent cursor-pointer"
                 >
-                  <span className="flex items-center gap-1.5"><Calculator size={15} /> מחשבון רווחיות לסוכן (סודי בהחלט) 💼</span>
-                  <span>{showProfitCalculator ? '▲ הסתר' : '▼ הצג חישובי רווח'}</span>
+                  <span className="flex items-center gap-1.5"><Calculator size={15} /> מחשבון כדאיות עסקה ורווחיות סודי לסוכן 💼</span>
+                  <span>{showProfitCalculator ? '▲ הסתר חישובי רווח' : '▼ הצג חישובי רווח ומרווחים'}</span>
                 </button>
                 
                 {showProfitCalculator && (
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs animate-fade-in">
+                  <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-xs animate-fade-in">
                     <div className="bg-white p-2 rounded border border-[#cdd9e8]">
                       <span className="text-gray-400 block text-[10px]">מחזור מחירון סה״כ</span>
-                      <span className="font-bold text-[#0c2d57] text-sm">
-                        ₪{Math.round(quoteItems.reduce((acc, l) => acc + (l.listPrice * l.qty), 0))}
+                      <span className="font-bold text-[#0c2d57] text-sm block mt-0.5">
+                        ₪{Math.round(quoteItems.reduce((acc, l) => acc + (l.listPrice * l.qty), 0)).toLocaleString('he-IL')}
                       </span>
                     </div>
                     <div className="bg-white p-2 rounded border border-[#cdd9e8]">
-                      <span className="text-gray-400 block text-[10px]">עלות רכש כוללת</span>
-                      <span className="font-bold text-gray-600 text-sm">
-                        ₪{Math.round(quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0))}
+                      <span className="text-gray-400 block text-[10px]">עלות רכש סודית</span>
+                      <span className="font-bold text-gray-600 text-sm block mt-0.5">
+                        ₪{Math.round(quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0)).toLocaleString('he-IL')}
                       </span>
                     </div>
                     <div className="bg-white p-2 rounded border border-[#cdd9e8]">
-                      <span className="text-gray-400 block text-[10px]">רווח גולמי כולל</span>
-                      <span className={`font-extrabold text-sm ${quoteTotal - quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                        ₪{Math.round(quoteTotal - quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0))}
+                      <span className="text-gray-400 block text-[10px]">רווח גולמי בעסקה</span>
+                      <span className={`font-extrabold text-sm block mt-0.5 ${quoteTotal - quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                        ₪{Math.round(quoteTotal - quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0)).toLocaleString('he-IL')}
                       </span>
                     </div>
                     <div className="bg-white p-2 rounded border border-[#cdd9e8]">
-                      <span className="text-gray-400 block text-[10px]">ממוצע רווחיות (Margin)</span>
-                      <span className={`font-extrabold text-sm ${quoteTotal > 0 && (quoteTotal - quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0)) / quoteTotal >= 0.3 ? 'text-green-700' : 'text-amber-700'}`}>
+                      <span className="text-gray-400 block text-[10px]">ממוצע רווחיות גולמי</span>
+                      <span className={`font-extrabold text-sm block mt-0.5 ${quoteTotal > 0 && (quoteTotal - quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0)) / quoteTotal >= 0.35 ? 'text-green-700' : 'text-amber-700'}`}>
                         {quoteTotal > 0 ? Math.round(((quoteTotal - quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0)) / quoteTotal) * 100) : 0}%
                       </span>
+                    </div>
+                    
+                    {/* Viability Indicator */}
+                    <div className="col-span-2 md:col-span-4 bg-white p-2.5 rounded border border-[#cdd9e8] flex justify-between items-center px-4">
+                      <span className="font-bold text-gray-500 text-[11px]">מדד כדאיות עסקה:</span>
+                      {(() => {
+                        const totalCost = quoteItems.reduce((acc, l) => acc + ((l.costPrice || 0) * l.qty), 0);
+                        const grossProfit = quoteTotal - totalCost;
+                        const marginPercent = quoteTotal > 0 ? (grossProfit / quoteTotal) * 100 : 0;
+                        if (marginPercent >= 35) return <span className="font-extrabold text-green-700 flex items-center gap-1 text-xs">גבוהה מאוד 🟢 (רווחיות מעולה מעל 35%)</span>;
+                        if (marginPercent >= 20) return <span className="font-extrabold text-yellow-600 flex items-center gap-1 text-xs">בינונית סבירה 🟡 (רווחיות נאותה 20%-35%)</span>;
+                        if (marginPercent >= 0) return <span className="font-extrabold text-orange-600 flex items-center gap-1 text-xs font-bold">נמוכה מאוד 🟠 (תמחור גבולי 0%-20%)</span>;
+                        return <span className="font-extrabold text-red-600 flex items-center gap-1 text-xs animate-pulse">הפסדית למערכת 🔴 (תמחור מתחת למחירי עלות!)</span>;
+                      })()}
                     </div>
                   </div>
                 )}
@@ -5414,22 +5587,22 @@ export default function App() {
           {/* Sticky Actions Bar */}
           <div className="p-4 border-t border-gray-200 bg-white flex-shrink-0 flex flex-col gap-2 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
             <div className="flex justify-between items-center font-bold text-base px-1">
-              <span className="text-gray-500">סה״כ הצעה (ללקוח)</span>
-              <span className="text-2xl text-[#004387] font-extrabold">₪{Math.round(quoteTotal)}</span>
+              <span className="text-gray-500">סה״כ הצעת מחיר סופית ללקוח</span>
+              <span className="text-2xl text-[#004387] font-extrabold">₪{Math.round(quoteTotal).toLocaleString('he-IL')}</span>
             </div>
             
             <div className="flex gap-2.5 mt-2">
               <button 
                 onClick={() => submitQuote('draft')} 
                 disabled={quoteSaving || quoteItems.length === 0} 
-                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition-colors disabled:opacity-50 border-none"
+                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition-colors disabled:opacity-50 border-none cursor-pointer"
               >
                 שמור כטיוטה
               </button>
               <button 
                 onClick={() => submitQuote('sent')} 
                 disabled={quoteSaving || quoteItems.length === 0} 
-                className="flex-1 py-3 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-xl font-extrabold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 border-none"
+                className="flex-1 py-3 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-xl font-extrabold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 border-none cursor-pointer"
               >
                 <CheckCircle size={18} /> שלח הצעה ללקוח
               </button>
@@ -5565,139 +5738,6 @@ export default function App() {
         </div>
       )}
 
-      {signingQuote && (
-        <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4" dir="rtl">
-          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
-            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-              <h3 className="font-bold text-base text-[#0c2d57] flex items-center gap-1.5">
-                <PenTool size={18} className="text-[#004387]" /> אישור וחתימה דיגיטלית
-              </h3>
-              <button onClick={() => setSigningQuote(null)} className="text-gray-400 p-1 hover:bg-gray-100 rounded-full border-none">✕</button>
-            </div>
-            
-            <p className="text-xs text-gray-500 leading-relaxed">
-              לצורך אישור הצעת המחיר בסך <strong className="text-[#004387]">₪{Math.round(signingQuote.total || 0)}</strong>, נא למלא את שם המאשר ולחתום על המסך למטה. אישור זה מעביר את ההצעה להזמנה סופית.
-            </p>
-
-            <div>
-              <label className="block text-[11px] font-bold text-gray-600 mb-1">שם המאשר / מורשה חתימה *</label>
-              <input 
-                value={signingName} 
-                onChange={(e) => setSigningName(e.target.value)} 
-                placeholder="הקלד את שמך המלא..." 
-                className="w-full border border-gray-200 rounded-lg p-2 text-sm" 
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-gray-600 mb-1">חתימה (צייר באמצעות האצבע או העכבר):</label>
-              <div className="border border-gray-300 rounded-xl bg-gray-50 overflow-hidden relative" style={{ height: '140px' }}>
-                <canvas 
-                  id="sig-canvas"
-                  width={380}
-                  height={140}
-                  className="w-full h-full cursor-crosshair touch-none"
-                  onMouseDown={(e) => {
-                    const canvas = e.currentTarget;
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) return;
-                    ctx.strokeStyle = '#004387';
-                    ctx.lineWidth = 3;
-                    ctx.lineCap = 'round';
-                    const rect = canvas.getBoundingClientRect();
-                    ctx.beginPath();
-                    (canvas as any).isDrawing = true;
-                    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-                  }}
-                  onMouseMove={(e) => {
-                    const canvas = e.currentTarget;
-                    if (!(canvas as any).isDrawing) return;
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) return;
-                    const rect = canvas.getBoundingClientRect();
-                    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-                    ctx.stroke();
-                  }}
-                  onMouseUp={(e) => {
-                    (e.currentTarget as any).isDrawing = false;
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as any).isDrawing = false;
-                  }}
-                  onTouchStart={(e) => {
-                    const canvas = e.currentTarget;
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) return;
-                    ctx.strokeStyle = '#004387';
-                    ctx.lineWidth = 3;
-                    ctx.lineCap = 'round';
-                    const rect = canvas.getBoundingClientRect();
-                    const touch = e.touches[0];
-                    ctx.beginPath();
-                    (canvas as any).isDrawing = true;
-                    ctx.moveTo(touch.clientX - rect.left, touch.clientY - rect.top);
-                  }}
-                  onTouchMove={(e) => {
-                    const canvas = e.currentTarget;
-                    if (!(canvas as any).isDrawing) return;
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) return;
-                    const rect = canvas.getBoundingClientRect();
-                    const touch = e.touches[0];
-                    ctx.lineTo(touch.clientX - rect.left, touch.clientY - rect.top);
-                    ctx.stroke();
-                  }}
-                  onTouchEnd={(e) => {
-                    (e.currentTarget as any).isDrawing = false;
-                  }}
-                />
-                <button 
-                  type="button"
-                  onClick={() => {
-                    const canvas = document.getElementById('sig-canvas') as HTMLCanvasElement;
-                    if (canvas) {
-                      const ctx = canvas.getContext('2d');
-                      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    }
-                  }}
-                  className="absolute bottom-2 left-2 px-2.5 py-1 bg-white hover:bg-gray-100 text-gray-500 rounded text-[10px] font-bold border border-gray-200 shadow-sm"
-                >
-                  נקה
-                </button>
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button 
-                onClick={() => setSigningQuote(null)} 
-                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-bold border-none"
-              >
-                ביטול
-              </button>
-              <button 
-                onClick={async () => {
-                  if (!signingName.trim()) {
-                    alert('נא להקליד שם מאשר');
-                    return;
-                  }
-                  const canvas = document.getElementById('sig-canvas') as HTMLCanvasElement;
-                  let sigUrl = '';
-                  if (canvas) {
-                    sigUrl = canvas.toDataURL('image/png');
-                  }
-                  await approveQuote(signingQuote, sigUrl, signingName.trim());
-                  setSigningQuote(null);
-                }} 
-                disabled={quoteSaving}
-                className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1 border-none shadow-md disabled:opacity-50"
-              >
-                {quoteSaving ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-                חתום ואשר הצעה
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ADMIN SYNC MODAL OVERLAY */}
       {showProfile && (
@@ -6068,6 +6108,149 @@ export default function App() {
                 🔔 הפעל התראות על הזמנות חדשות
               </button>
             )}
+            {/* AGENT/MANAGER QUOTES & PRICING DASHBOARD PANEL */}
+            {(userRole === 'agent' || userRole === 'sales_manager') && (
+              <div className="mt-5 bg-white border border-gray-100 rounded-2xl p-4 shadow-sm text-right" dir="rtl">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-2 mb-3">
+                  <h3 className="text-sm font-bold text-[#0c2d57] flex items-center gap-1.5">
+                    <FileText size={18} className="text-[#004387]" />
+                    <span>לוח ניהול הצעות מחיר ומחירים</span>
+                  </h3>
+                  <span className="text-[11px] font-bold bg-[#004387]/10 text-[#004387] px-2 py-0.5 rounded-full">
+                    {agentQuotes.length} הצעות
+                  </span>
+                </div>
+
+                {/* Search Bar */}
+                <div className="relative mb-3">
+                  <input
+                    type="text"
+                    value={quoteSearchTerm}
+                    onChange={(e) => setQuoteSearchTerm(e.target.value)}
+                    placeholder="חיפוש לפי שם לקוח, אימייל..."
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2 px-3 pl-8 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#004387] text-right"
+                    dir="rtl"
+                  />
+                  <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+                </div>
+
+                {/* Status Tabs */}
+                <div className="flex gap-1 overflow-x-auto pb-2 mb-3 scrollbar-none" dir="rtl">
+                  {[
+                    { id: 'all', label: 'הכל' },
+                    { id: 'draft', label: 'טיוטות' },
+                    { id: 'sent', label: 'נשלחו' },
+                    { id: 'approved', label: 'אושרו' },
+                    { id: 'rejected', label: 'נדחו' }
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setQuoteFilterStatus(tab.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border-none transition-all cursor-pointer ${
+                        quoteFilterStatus === tab.id
+                          ? 'bg-[#004387] text-white'
+                          : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Quotes Grid List */}
+                <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                  {filteredAgentQuotes.length === 0 ? (
+                    <div className="text-center py-6 text-gray-400 text-xs">לא נמצאו הצעות מחיר מתאימות.</div>
+                  ) : (
+                    filteredAgentQuotes.map((q: any) => {
+                      const customerObj = {
+                        email: q.customerEmail || '',
+                        company: q.customerCompany || q.customerName || 'לקוח מזדמן',
+                        name: q.customerName || '',
+                      };
+                      return (
+                        <div key={q.id} className="border border-gray-100 rounded-xl p-3 bg-gray-50/50 hover:bg-gray-50 transition-all text-right">
+                          <div className="flex justify-between items-start gap-1">
+                            <div className="text-right">
+                              <div className="font-bold text-xs text-[#0c2d57] leading-tight mb-0.5 truncate max-w-[180px]">
+                                {q.customerCompany || q.customerName || 'לקוח כללי'}
+                              </div>
+                              <span className="text-[10px] text-gray-400 font-mono block">מזהה: {q.id?.slice(-6).toUpperCase()}</span>
+                            </div>
+                            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                q.status === 'approved'
+                                  ? 'bg-green-100 text-green-700'
+                                  : q.status === 'rejected'
+                                  ? 'bg-red-100 text-red-700'
+                                  : q.status === 'sent'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {q.status === 'approved' ? 'אושר' : q.status === 'rejected' ? 'נדחה' : q.status === 'sent' ? 'נשלח' : 'טיוטה'}
+                              </span>
+                              <span className="text-xs font-extrabold text-[#004387]">₪{Math.round(q.total || 0).toLocaleString('he-IL')}</span>
+                            </div>
+                          </div>
+
+                          {/* Quick details about products in quote */}
+                          <div className="mt-2 text-[10px] text-gray-500 leading-normal bg-white/75 p-1.5 rounded-lg border border-gray-100/50 text-right">
+                            <span className="font-bold text-gray-600">שורות הצעה ({q.items?.length || 0}): </span>
+                            <span className="truncate block max-w-full">
+                              {(q.items || []).map((it: any) => `${it.name} (${it.qty})`).join(', ')}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 mt-2.5 pt-2 border-t border-gray-100/50">
+                            {/* Edit/View quote button */}
+                            <button
+                              onClick={() => openQuoteEditor(customerObj, q)}
+                              className="flex-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-[11px] rounded-lg border-none cursor-pointer flex items-center justify-center gap-1"
+                            >
+                              <FileText size={12} /> {q.status === 'approved' ? 'צפה בהצעה' : 'ערוך הצעה ✍️'}
+                            </button>
+
+                            {/* Sign Quote (For sent status) */}
+                            {q.status === 'sent' && (
+                              <button
+                                onClick={() => {
+                                  setSigningQuote(q);
+                                  setSigningName(q.customerName || q.customerCompany || '');
+                                }}
+                                className="flex-1 py-1.5 bg-green-600 hover:bg-green-700 text-white font-bold text-[11px] rounded-lg border-none cursor-pointer flex items-center justify-center gap-1 shadow-sm"
+                              >
+                                <ShieldCheck size={12} /> אשר וחתום
+                              </button>
+                            )}
+
+                            {/* Delete Draft Button */}
+                            {q.status === 'draft' && (
+                              <button
+                                onClick={async () => {
+                                  if (confirm('האם למחוק טיוטה זו?')) {
+                                    await deleteQuote(q.id);
+                                    if (userRole === 'sales_manager') {
+                                      loadAllQuotes().then(setAgentQuotes);
+                                    } else if (agentName) {
+                                      loadAgentQuotes(agentName).then(setAgentQuotes);
+                                    }
+                                  }
+                                }}
+                                className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg border-none cursor-pointer flex items-center justify-center"
+                                title="מחק טיוטה"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
             {(userRole === 'agent' || userRole === 'sales_manager') && customerGroups.length > 0 && (
               <div className="mt-5">
                 <h3 className="text-sm font-bold text-gray-600 mb-2">{userRole === 'sales_manager' ? 'תיקיות לקוחות (כל הסוכנים)' : 'תיקיות לקוחות'} ({customerGroups.length})</h3>
@@ -6095,30 +6278,50 @@ export default function App() {
                             </div>
                           )}
                           {g.orders.map((o: any) => (
-                            <div key={o.id} className="border border-gray-100 rounded-lg p-2">
+                            <div key={o.id} className="border border-gray-100 rounded-lg p-3 bg-white hover:shadow-sm transition-all">
                               <div className="flex justify-between items-center gap-2">
-                                <span className="text-[#0c2d57] text-sm font-semibold">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'}</span>
+                                <span className="text-[#0c2d57] text-xs font-bold font-mono">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'}</span>
                                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${orderStatusClass(o.status)}`}>{orderStatusLabel(o.status)}</span>
-                                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
+                                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${orderStatusClass(o.status)}`}>{orderStatusLabel(o.status)}</span>
+                                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
                                 </div>
                               </div>
-                              <div className="text-gray-500 text-xs mt-1">{o.itemCount || (o.items?.length ?? 0)} פריטים{userRole === 'sales_manager' && o.agent ? ` · סוכן: ${o.agent}` : ''}</div>
+
+                              {/* Beautiful visual item cards */}
+                              {o.items && o.items.length > 0 ? (
+                                <div className="mt-2 space-y-1 bg-gray-50/50 p-2 rounded-lg border border-gray-100 max-h-40 overflow-y-auto">
+                                  {o.items.map((it: any, i: number) => (
+                                    <div key={i} className="flex justify-between items-center text-xs py-1 border-b border-gray-100/50 last:border-0">
+                                      <div className="min-w-0 pr-1">
+                                        <span className="font-semibold text-gray-700 block truncate text-[11px]">{it.name}</span>
+                                        {it.sku && <span className="text-[9px] text-gray-400 font-mono">מק״ט: {it.sku}</span>}
+                                      </div>
+                                      <div className="text-left flex-shrink-0 font-bold text-gray-600 text-[11px]">
+                                        {it.quantity} יח׳
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-gray-500 text-xs mt-1">{o.itemCount || 0} פריטים{userRole === 'sales_manager' && o.agent ? ` · סוכן: ${o.agent}` : ''}</div>
+                              )}
+
                               {o.detailsText && (
-                                <details className="mt-1">
-                                  <summary className="text-[11px] text-[#004387] cursor-pointer">פרטי הזמנה</summary>
+                                <details className="mt-2">
+                                  <summary className="text-[10px] text-[#004387] cursor-pointer font-bold">הערות ופרטי התקשרות נוספים</summary>
                                   <pre className="text-[10px] text-gray-600 whitespace-pre-wrap mt-1 bg-gray-50 rounded p-1.5 max-h-32 overflow-y-auto" dir="rtl">{o.detailsText}</pre>
                                 </details>
                               )}
-                              <div className="flex gap-1.5 mt-2">
-                                {userRole === 'agent' && (
-                                  <button onClick={() => convertOrderToQuote(o, g)} className="flex-1 py-1 bg-blue-600 text-white hover:bg-[#004387] rounded text-[11px] font-extrabold flex items-center justify-center gap-1 border-none">
-                                    <FileText size={12} /> הפוך להצעת מחיר
+
+                              <div className="flex gap-1.5 mt-2.5">
+                                {(userRole === 'agent' || userRole === 'sales_manager') && (
+                                  <button onClick={() => convertOrderToQuote(o, g)} className="flex-1 py-1.5 bg-[#004387] text-white hover:bg-[#0c2d57] rounded text-[11px] font-extrabold flex items-center justify-center gap-1 border-none cursor-pointer">
+                                    <FileText size={12} /> ערוך והפוך להצעת מחיר ✍️
                                   </button>
                                 )}
-                                {o.status !== 'processing' && o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'processing')} className="flex-1 py-1 bg-amber-50 border border-amber-200 text-amber-700 rounded text-[11px] font-bold">סמן בטיפול</button>}
-                                {o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'done')} className="flex-1 py-1 bg-green-50 border border-green-200 text-green-700 rounded text-[11px] font-bold">סמן הושלם</button>}
-                                {o.status === 'done' && <button onClick={() => advanceOrderStatus(o.id, 'sent')} className="flex-1 py-1 bg-gray-50 border border-gray-200 text-gray-500 rounded text-[11px] font-bold">החזר ל׳נשלח׳</button>}
+                                {o.status !== 'processing' && o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'processing')} className="flex-1 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded text-[11px] font-bold cursor-pointer">סמן בטיפול</button>}
+                                {o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'done')} className="flex-1 py-1.5 bg-green-50 border border-green-200 text-green-700 rounded text-[11px] font-bold cursor-pointer">סמן הושלם</button>}
+                                {o.status === 'done' && <button onClick={() => advanceOrderStatus(o.id, 'sent')} className="flex-1 py-1.5 bg-gray-50 border border-gray-200 text-gray-500 rounded text-[11px] font-bold cursor-pointer">החזר ל׳נשלח׳</button>}
                               </div>
                             </div>
                           ))}

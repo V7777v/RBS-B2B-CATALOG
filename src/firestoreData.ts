@@ -1,7 +1,7 @@
 // Firestore data access for the distributor personal area (cart, orders, favorites)
 import { db } from './firebase';
 import {
-  doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, serverTimestamp, onSnapshot,
+  doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, serverTimestamp, onSnapshot, deleteDoc,
 } from 'firebase/firestore';
 
 // ---------- Saved cart (carts/{uid}) ----------
@@ -200,6 +200,12 @@ export async function updateQuote(quoteId: string, fields: Record<string, any>):
   try {
     await setDoc(doc(db, 'quotes', quoteId), { ...sanitizeForFirestore(fields), updatedAt: serverTimestamp() }, { merge: true });
   } catch (e) { console.error('updateQuote failed:', e); }
+}
+
+export async function deleteQuote(quoteId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'quotes', quoteId));
+  } catch (e) { console.error('deleteQuote failed:', e); }
 }
 
 // ---------- Favorites (favorites/{uid}) ----------
