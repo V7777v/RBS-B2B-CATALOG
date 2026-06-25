@@ -2463,12 +2463,16 @@ export default function App() {
   const submitQuote = async (status: string) => {
     if (!quoteEditorCustomer || quoteItems.length === 0) return;
     setQuoteSaving(true);
+    const customerFacingItems = quoteItems.map((it: any) => {
+      const { costPrice, ...rest } = it;
+      return rest;
+    });
     const data = { 
       agentName, 
       agentUid: userUid, 
       customerEmail: String(quoteEditorCustomer.email || '').toLowerCase(), 
       customerCompany: quoteEditorCustomer.company || quoteEditorCustomer.name || '', 
-      items: quoteItems, 
+      items: customerFacingItems, 
       note: quoteNote, 
       total: quoteTotal, 
       status 
@@ -2518,7 +2522,7 @@ export default function App() {
       detailsText,
       total: q.total || 0,
       agent: q.agentName || '',
-      status: 'done', // auto marked as done/approved!
+      status: 'processing', // אושר ונחתם → נכנס לטיפול/אספקה אצל הסוכן
       method: 'quote',
       signature: signatureDataUrl || '',
       signerName: signer || '',
