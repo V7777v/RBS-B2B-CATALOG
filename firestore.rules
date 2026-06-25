@@ -18,38 +18,36 @@ service cloud.firestore {
     match /userProfiles/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
+    
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
 
     match /orders/{orderId} {
       allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
-      allow read: if request.auth != null && (
+      allow read, update: if request.auth != null && (
         resource.data.uid == request.auth.uid ||
-        get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email)).data.get('role', 'user') == 'sales_manager' ||
-        (get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email)).data.get('agentName', '') != '' &&
-         get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email)).data.get('agentName', '') == resource.data.get('agent', ''))
-      );
-      allow update: if request.auth != null && (
-        resource.data.uid == request.auth.uid ||
-        get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email)).data.get('role', 'user') == 'sales_manager' ||
-        (get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email)).data.get('agentName', '') != '' &&
-         get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email)).data.get('agentName', '') == resource.data.get('agent', ''))
+        get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email.lower())).data.get('role', 'user') == 'sales_manager' ||
+        (get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email.lower())).data.get('agentName', '').trim() != '' &&
+         get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email.lower())).data.get('agentName', '').trim() == resource.data.get('agent', '').trim())
       );
     }
 
     match /quotes/{quoteId} {
       allow read: if request.auth != null && (
         resource.data.agentUid == request.auth.uid ||
-        resource.data.customerEmail == request.auth.token.email ||
-        get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email)).data.get('role', 'user') == 'sales_manager'
+        resource.data.customerEmail == request.auth.token.email.lower() ||
+        get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email.lower())).data.get('role', 'user') == 'sales_manager'
       );
       allow create: if request.auth != null && request.resource.data.agentUid == request.auth.uid;
       allow update: if request.auth != null && (
         resource.data.agentUid == request.auth.uid ||
-        (resource.data.customerEmail == request.auth.token.email &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']))
+        (resource.data.customerEmail == request.auth.token.email.lower() &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'signature', 'signedBy']))
       );
       allow delete: if request.auth != null && (
         resource.data.agentUid == request.auth.uid ||
-        get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email)).data.get('role', 'user') == 'sales_manager'
+        get(/databases/$(database)/documents/approvedDistributors/$(request.auth.token.email.lower())).data.get('role', 'user') == 'sales_manager'
       );
     }
 
