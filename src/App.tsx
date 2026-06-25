@@ -262,17 +262,10 @@ const fetchCSV = (gid: string, limit?: number, offset?: number, bypassCache?: bo
           resolve(normalizedData);
         },
         error: (error: any) => {
-          if (useFallbackOnFail) {
-            console.warn("Express/Vercel Sheets proxy was bypassed, falling back directly to Google Sheets...", error);
-            // 2. Direct Fallback: transparent call to raw Google Sheets if anything goes wrong with the CDN proxy
-            let fallbackUrl = `${SHEET_URL}/gviz/tq?tqx=out:csv&gid=${gid}&_=${Date.now()}`;
-            if (limit !== undefined && offset !== undefined) {
-              fallbackUrl += `&tq=${encodeURIComponent(`SELECT * LIMIT ${limit} OFFSET ${offset}`)}`;
-            }
-            runParse(fallbackUrl, false);
-          } else {
-            reject(error);
-          }
+          // B-06: no direct public-Sheets fallback. All data must go through
+          // the controlled /api/sheets proxy; on failure we surface an error.
+          console.error("Sheets proxy request failed:", error);
+          reject(error);
         }
       });
     };

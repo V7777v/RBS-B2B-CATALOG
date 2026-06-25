@@ -3,10 +3,8 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers for secure API access
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // Same-origin only: no wildcard CORS (prevents use as an open proxy).
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -14,8 +12,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { gid, limit, offset } = req.query;
 
-  if (!gid) {
-    return res.status(400).json({ error: "Missing GID parameter in the request query." });
+  // H-14: only allow the known catalog sheet tabs (no arbitrary gid).
+  const ALLOWED_GIDS = ["1506812668", "1781083359", "1626175369"];
+  if (!gid || !ALLOWED_GIDS.includes(String(gid))) {
+    return res.status(400).json({ error: "Invalid request." });
   }
 
   try {
@@ -39,9 +39,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (!response.ok) {
-      return res.status(response.status).json({ 
-        error: `Google Sheets API returned an error: ${response.statusText}` 
-      });
+      console.error("Upstream Sheets error:", response.status, response.statusText);
+      return res.status(502).json({ error: "Upstream data source unavailable." });
     }
 
     const text = await response.text();
@@ -65,8 +64,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error: any) {
     console.error("Vercel CDN Sheets Proxy Error:", error);
-    return res.status(500).json({ 
-      error: error.message || "Failed to proxy Google Sheet safely." 
-    });
+    return res.status(500).json({ error: "Failed to load data." });
   }
 }
