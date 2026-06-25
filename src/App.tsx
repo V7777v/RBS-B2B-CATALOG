@@ -2850,20 +2850,8 @@ export default function App() {
   const [isAdminAuth, setIsAdminAuth] = useState(false);
   useEffect(() => { if (isAdmin) setIsAdminAuth(true); }, [isAdmin]);
   const [showAdminSyncModal, setShowAdminSyncModal] = useState(false);
-  const [adminPassword, setAdminPassword] = useState(() => {
-    try {
-      return localStorage.getItem('rbs_b2b_admin_saved_pwd') || '';
-    } catch {
-      return '';
-    }
-  });
-  const [saveAdminPassword, setSaveAdminPassword] = useState(() => {
-    try {
-      return localStorage.getItem('rbs_b2b_admin_save_pwd') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [adminPassword, setAdminPassword] = useState('');
+  const [saveAdminPassword, setSaveAdminPassword] = useState(false);
   const [adminError, setAdminError] = useState('');
   const [isSyncingLive, setIsSyncingLive] = useState(false);
   const [syncSuccessMsg, setSyncSuccessMsg] = useState('');
@@ -2906,20 +2894,15 @@ export default function App() {
     };
   }, [currentView, searchQuery]);
 
-  // Check valid admin session from localStorage (expires after 1 hour)
+  // B-10: admin status is server-controlled (approvedDistributors.admin === true).
+  // Remove any legacy client-side admin password/session from localStorage.
   useEffect(() => {
     try {
-      const authTime = localStorage.getItem('rbs_b2b_admin_auth_time');
-      if (authTime) {
-        const elapsed = Date.now() - parseInt(authTime, 10);
-        if (elapsed < 3600000) { // 1 hour
-          setIsAdminAuth(true);
-        } else {
-          localStorage.removeItem('rbs_b2b_admin_auth_time');
-        }
-      }
+      localStorage.removeItem('rbs_b2b_admin_auth_time');
+      localStorage.removeItem('rbs_b2b_admin_saved_pwd');
+      localStorage.removeItem('rbs_b2b_admin_save_pwd');
     } catch {
-      // ignore admin auth time parse errors
+      // ignore
     }
   }, []);
 
@@ -2929,24 +2912,13 @@ export default function App() {
     setSyncSuccessMsg('');
 
     const trimmedPassword = adminPassword.trim();
-    const isAuthorized = isAdminAuth;
+    const isAuthorized = isAdmin;
 
     if (isAuthorized) {
       try {
         setIsSyncingLive(true);
-        
-        // Save the session validation timestamp (1 hour)
-        localStorage.setItem('rbs_b2b_admin_auth_time', Date.now().toString());
-        setIsAdminAuth(true);
 
-        // Save password details if checkbox is checked
-        if (saveAdminPassword) {
-          localStorage.setItem('rbs_b2b_admin_saved_pwd', trimmedPassword);
-          localStorage.setItem('rbs_b2b_admin_save_pwd', 'true');
-        } else {
-          localStorage.removeItem('rbs_b2b_admin_saved_pwd');
-          localStorage.removeItem('rbs_b2b_admin_save_pwd');
-        }
+        setIsAdminAuth(true);
 
         // Trigger live sheets sync - bypassing the CDN and intermediate browser cache instantly!
         await loadData(false, true);
