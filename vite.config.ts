@@ -105,7 +105,7 @@ export default defineConfig(() => {
     },
     build: {
       cssCodeSplit: true,
-      target: 'esnext',
+      target: 'es2019',
       minify: 'esbuild',
       rollupOptions: {
         output: {

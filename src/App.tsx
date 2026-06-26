@@ -4017,7 +4017,7 @@ export default function App() {
               </div>
               
               {/* Breadcrumb style path indicator with inline breadcrumbs on desktop */}
-              <div className="hidden sm:flex items-center text-sm text-[#0c2d57] opacity-85 whitespace-nowrap gap-2">
+              <div className="hidden md:flex items-center text-sm text-[#0c2d57] opacity-85 whitespace-nowrap gap-2">
                 <img 
                   referrerPolicy="no-referrer" 
                   src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
