@@ -363,6 +363,7 @@ const parseProductRow = (row: any) => {
     price: (isClearance && clearancePrice !== null && clearancePrice > 0) ? clearancePrice : parsePrice(row.price),
     oldPrice: (isClearance && clearancePrice !== null && clearancePrice > 0 && parsePrice(row.price) > clearancePrice) ? parsePrice(row.price) : null,
     retailPrice: row.retailPrice ? parsePrice(row.retailPrice) : null,
+    costPrice: row['מחיר עלות'] ? parsePrice(row['מחיר עלות']) : null,
     images: itemImages.map((img: string) => transformImageLink(img, 800)),
     labCerts: labCerts.map((link: string) => link.startsWith('www.') ? 'https://' + link : link)
   };
@@ -2348,7 +2349,7 @@ export default function App() {
         qty: it.quantity || 1,
         listPrice: listP,
         quotedPrice: quotedP,
-        costPrice: Math.round(quotedP * 0.6) || 0,
+        costPrice: (catProd && catProd.costPrice) ? Math.round(catProd.costPrice) : (Math.round(quotedP * 0.6) || 0),
         discountPercent: listP > 0 ? Math.round((1 - quotedP / listP) * 100) : 0
       };
     });
@@ -2368,11 +2369,11 @@ export default function App() {
   const openQuoteEditor = (customer: any, existing?: any) => {
     setQuoteEditorCustomer(customer);
     setQuoteId(existing?.id || null);
-    setQuoteItems(existing?.items ? existing.items.map((i: any) => ({
+    setQuoteItems(reconcileGifts(existing?.items ? existing.items.map((i: any) => ({
       ...i,
       costPrice: i.costPrice !== undefined ? i.costPrice : Math.round((i.quotedPrice || i.listPrice || 0) * 0.6),
       discountPercent: i.discountPercent !== undefined ? i.discountPercent : (i.listPrice > 0 ? Math.round((1 - (i.quotedPrice || 0) / i.listPrice) * 100) : 0)
-    })) : []);
+    })) : []));
     setQuoteNote(existing?.note || '');
     setQuoteSearch('');
     setShowQuoteEditor(true);
@@ -2391,7 +2392,7 @@ export default function App() {
           qty: 1,
           listPrice: listPrice,
           quotedPrice: listPrice,
-          costPrice: Math.round(listPrice * 0.6) || 0,
+          costPrice: (pr.costPrice !== null && pr.costPrice !== undefined && pr.costPrice > 0) ? Math.round(pr.costPrice) : (Math.round(listPrice * 0.6) || 0),
           discountPercent: 0
         }
       ];
@@ -2429,8 +2430,42 @@ export default function App() {
     setCustomItemQty('1');
   };
 
+  // Bundle/promo: rebuild auto-gift (₪0) lines from each paid line's "X+Y" deal.
+  const reconcileGifts = (items: any[]): any[] => {
+    const result: any[] = [];
+    for (const l of items) {
+      if (l.isAutoGift) continue; // drop existing auto-gifts; rebuilt below
+      result.push(l);
+      const buy = Number(l.promoBuy) || 0;
+      const free = Number(l.promoFree) || 0;
+      const freeQty = (buy > 0 && free > 0) ? Math.floor((Number(l.qty) || 0) / buy) * free : 0;
+      if (freeQty > 0) {
+        result.push({
+          id: String(l.id) + '_gift',
+          parentId: l.id,
+          isAutoGift: true,
+          sku: l.sku || '',
+          name: (l.name || '') + ' — מתנה (' + buy + '+' + free + ')',
+          qty: freeQty,
+          listPrice: 0,
+          quotedPrice: 0,
+          costPrice: 0,
+          discountPercent: 0
+        });
+      }
+    }
+    return result;
+  };
+
+  const setLinePromo = (idx: number, text: string) => {
+    const m = String(text).match(/(\d+)\s*\+\s*(\d+)/);
+    const buy = m ? parseInt(m[1], 10) : 0;
+    const free = m ? parseInt(m[2], 10) : 0;
+    setQuoteItems((prev: any[]) => reconcileGifts(prev.map((l: any, i: number) => i === idx ? { ...l, promoText: text, promoBuy: buy, promoFree: free } : l)));
+  };
+
   const updateQuoteLine = (idx: number, field: string, value: any) => {
-    setQuoteItems((prev) => prev.map((l: any, i: number) => {
+    setQuoteItems((prev) => reconcileGifts(prev.map((l: any, i: number) => {
       if (i !== idx) return l;
       let updated = { ...l, [field]: value };
       
@@ -2448,10 +2483,10 @@ export default function App() {
         updated.quotedPrice = Math.round(listPrice * (1 - discount / 100));
       }
       return updated;
-    }));
+    })));
   };
 
-  const removeQuoteLine = (idx: number) => setQuoteItems((prev) => prev.filter((_: any, i: number) => i !== idx));
+  const removeQuoteLine = (idx: number) => setQuoteItems((prev) => reconcileGifts(prev.filter((_: any, i: number) => i !== idx)));
 
   const submitQuote = async (status: string) => {
     if (!quoteEditorCustomer || quoteItems.length === 0) return;
@@ -5309,8 +5344,23 @@ export default function App() {
                               <td className="p-3 min-w-[200px]">
                                 <span className="font-bold text-[#0c2d57] block truncate max-w-[250px]">{line.name}</span>
                                 <span className="text-gray-400 text-[10px] font-mono block mt-0.5">
-                                  מק״ט: <span className="text-gray-600 font-bold">{line.sku || 'N/A'}</span> {line.isCustom && <span className="text-amber-600 bg-amber-50 px-1 rounded font-sans font-extrabold">ידני</span>}
+                                  מק״ט: <span className="text-gray-600 font-bold">{line.sku || 'N/A'}</span> {line.isCustom && <span className="text-amber-600 bg-amber-50 px-1 rounded font-sans font-extrabold">ידני</span>} {line.isAutoGift && <span className="text-emerald-700 bg-emerald-50 px-1 rounded font-sans font-extrabold">מתנה</span>}
                                 </span>
+                                {!line.isAutoGift && (
+                                  <div className="flex items-center gap-1 mt-1">
+                                    <span className="text-[9px] text-gray-400 font-bold">מבצע</span>
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      placeholder="10+2"
+                                      value={line.promoText !== undefined ? line.promoText : ((line.promoBuy && line.promoFree) ? line.promoBuy + '+' + line.promoFree : '')}
+                                      onChange={(e) => setLinePromo(idx, e.target.value)}
+                                      className="w-14 border border-emerald-200 bg-emerald-50/50 rounded px-1 py-0.5 text-center text-[10px] font-bold text-emerald-800"
+                                      title="מבצע: קנה X קבל Y מתנה (לדוגמה 10+2)"
+                                    />
+                                    {(() => { const fq = (line.promoBuy > 0 && line.promoFree > 0) ? Math.floor((Number(line.qty) || 0) / line.promoBuy) * line.promoFree : 0; return fq > 0 ? <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 px-1 rounded">+{fq} מתנה</span> : null; })()}
+                                  </div>
+                                )}
                               </td>
                               <td className="p-3">
                                 <input
@@ -5405,7 +5455,21 @@ export default function App() {
                           <div>
                             <span className="text-[9px] font-bold text-gray-400 block tracking-wider font-mono">שורה {idx + 1} {line.isCustom && '· ידני/סנדלים'}</span>
                             <span className="font-bold text-xs text-[#0c2d57] block truncate mt-0.5 max-w-[85%]">{line.name}</span>
-                            <span className="text-[10px] text-gray-400 font-mono">מק״ט: {line.sku}</span>
+                            <span className="text-[10px] text-gray-400 font-mono">מק״ט: {line.sku} {line.isAutoGift && <span className="text-emerald-700 bg-emerald-50 px-1 rounded font-sans font-extrabold">מתנה</span>}</span>
+                            {!line.isAutoGift && (
+                              <div className="flex items-center gap-1.5 mt-1.5">
+                                <span className="text-[9px] text-gray-400 font-bold">מבצע (קנה+מתנה)</span>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  placeholder="10+2"
+                                  value={line.promoText !== undefined ? line.promoText : ((line.promoBuy && line.promoFree) ? line.promoBuy + '+' + line.promoFree : '')}
+                                  onChange={(e) => setLinePromo(idx, e.target.value)}
+                                  className="w-16 border border-emerald-200 bg-emerald-50/50 rounded px-1 py-0.5 text-center text-[11px] font-bold text-emerald-800"
+                                />
+                                {(() => { const fq = (line.promoBuy > 0 && line.promoFree > 0) ? Math.floor((Number(line.qty) || 0) / line.promoBuy) * line.promoFree : 0; return fq > 0 ? <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">+{fq} מתנה ₪0</span> : null; })()}
+                              </div>
+                            )}
                           </div>
 
                           <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-gray-100 text-center">
