@@ -6978,7 +6978,7 @@ export default function App() {
               <tbody>
                 {[
                   { label: 'מק״ט', get: (p: any) => p.sku || '—' },
-                  { label: 'מותג', get: (p: any) => p.brand || '—' },
+                  { label: 'מותג', get: (p: any) => p.brand ? <BrandBadge brand={p.brand} /> : '—' },
                   { label: 'קטגוריה', get: (p: any) => p.category || '—' },
                   { label: 'תת-קטגוריה', get: (p: any) => p.subcategory || '—' },
                   { label: 'מחיר', get: (p: any) => (p.price ? '₪' + Math.round(p.price).toLocaleString() : '—') },
