@@ -5152,12 +5152,17 @@ export default function App() {
               <input 
                 value={quoteSearch} 
                 onChange={(e) => setQuoteSearch(e.target.value)} 
-                placeholder="הקלד שם מוצר או מק״ט..." 
+                placeholder="חיפוש בקטלוג: שם, מק״ט או תיאור..." 
                 className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" 
               />
               {quoteSearch.trim().length >= 2 && (
                 <div className="border border-gray-200 rounded-lg mt-2 max-h-52 overflow-y-auto divide-y divide-gray-100 bg-white shadow-lg">
-                  {catalogData.filter((pr: any) => String(pr.name || '').includes(quoteSearch) || String(pr.sku || '').includes(quoteSearch)).slice(0, 25).map((pr: any) => (
+                  {catalogData.filter((pr: any) => {
+                    if (pr.active === 'FALSE') return false;
+                    const hay = [pr.name, pr.sku, pr.description, pr.desc, pr['תיאור'], pr.brand, pr['מותג'], pr.category].map((x: any) => String(x || '')).join(' ').toLowerCase();
+                    const terms = quoteSearch.toLowerCase().trim().split(/\s+/).filter(Boolean);
+                    return terms.every((t: string) => hay.includes(t));
+                  }).slice(0, 25).map((pr: any) => (
                     <button 
                       key={pr.id} 
                       onClick={() => addQuoteLine(pr)} 
@@ -5166,6 +5171,7 @@ export default function App() {
                       <div className="min-w-0">
                         <span className="font-semibold text-[#0c2d57] block truncate">{pr.name}</span>
                         <span className="text-gray-400 text-xs font-mono">מק״ט: {pr.sku}</span>
+                        {pr.description && <span className="text-gray-400 text-[10px] block truncate max-w-[260px]">{String(pr.description).slice(0, 70)}</span>}
                       </div>
                       <span className="font-bold text-[#004387] flex-shrink-0 bg-blue-50 px-2 py-1 rounded">₪{Math.round(parsePrice(pr.price))}</span>
                     </button>
