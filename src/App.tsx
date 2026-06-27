@@ -2474,7 +2474,28 @@ export default function App() {
     const m = String(text).match(/(\d+)\s*\+\s*(\d+)/);
     const buy = m ? parseInt(m[1], 10) : 0;
     const free = m ? parseInt(m[2], 10) : 0;
-    setQuoteItems((prev: any[]) => reconcileGifts(prev.map((l: any, i: number) => i === idx ? { ...l, promoText: text, promoBuy: buy, promoFree: free } : l)));
+
+    const percentMatch = String(text).match(/(\d+(?:\.\d+)?)\s*%/);
+    const percentVal = percentMatch ? parseFloat(percentMatch[1]) : null;
+
+    setQuoteItems((prev: any[]) => reconcileGifts(prev.map((l: any, i: number) => {
+      if (i !== idx) return l;
+      
+      let updated = { 
+        ...l, 
+        promoText: text, 
+        promoBuy: buy || undefined, 
+        promoFree: free || undefined 
+      };
+
+      if (percentVal !== null) {
+        updated.discountPercent = percentVal;
+        const listPrice = Number(updated.listPrice) || 0;
+        updated.quotedPrice = Math.round(listPrice * (1 - percentVal / 100));
+      }
+      
+      return updated;
+    })));
   };
 
   const updateQuoteLine = (idx: number, field: string, value: any) => {
@@ -5370,12 +5391,11 @@ export default function App() {
                                     <span className="text-[9px] text-gray-400 font-bold">מבצע</span>
                                     <input
                                       type="text"
-                                      inputMode="numeric"
-                                      placeholder="10+2"
+                                      placeholder="10+2 / 10% / מבצע"
                                       value={line.promoText !== undefined ? line.promoText : ((line.promoBuy && line.promoFree) ? line.promoBuy + '+' + line.promoFree : '')}
                                       onChange={(e) => setLinePromo(idx, e.target.value)}
-                                      className="w-14 border border-emerald-200 bg-emerald-50/50 rounded px-1 py-0.5 text-center text-[10px] font-bold text-emerald-800"
-                                      title="מבצע: קנה X קבל Y מתנה (לדוגמה 10+2)"
+                                      className="w-24 border border-emerald-200 bg-emerald-50/50 rounded px-1 py-0.5 text-center text-[10px] font-bold text-emerald-800"
+                                      title="מבצע: קנה X קבל Y מתנה (10+2), אחוז הנחה (10%) או טקסט חופשי"
                                     />
                                     {(() => { const fq = (line.promoBuy > 0 && line.promoFree > 0) ? Math.floor((Number(line.qty) || 0) / line.promoBuy) * line.promoFree : 0; return fq > 0 ? <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 px-1 rounded">+{fq} מתנה</span> : null; })()}
                                   </div>
@@ -5487,11 +5507,11 @@ export default function App() {
                                 <span className="text-[9px] text-gray-400 font-bold">מבצע (קנה+מתנה)</span>
                                 <input
                                   type="text"
-                                  inputMode="numeric"
-                                  placeholder="10+2"
+                                  placeholder="10+2 / 10% / מבצע"
                                   value={line.promoText !== undefined ? line.promoText : ((line.promoBuy && line.promoFree) ? line.promoBuy + '+' + line.promoFree : '')}
                                   onChange={(e) => setLinePromo(idx, e.target.value)}
-                                  className="w-16 border border-emerald-200 bg-emerald-50/50 rounded px-1 py-0.5 text-center text-[11px] font-bold text-emerald-800"
+                                  className="w-28 border border-emerald-200 bg-emerald-50/50 rounded px-1.5 py-0.5 text-center text-[11px] font-bold text-emerald-800"
+                                  title="מבצע: קנה X קבל Y מתנה (10+2), אחוז הנחה (10%) או טקסט חופשי"
                                 />
                                 {(() => { const fq = (line.promoBuy > 0 && line.promoFree > 0) ? Math.floor((Number(line.qty) || 0) / line.promoBuy) * line.promoFree : 0; return fq > 0 ? <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">+{fq} מתנה ₪0</span> : null; })()}
                               </div>
