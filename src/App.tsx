@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut, User, Heart, Calculator, Percent, TrendingUp, PenTool
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut, User, Heart, Calculator, Percent, TrendingUp, PenTool, Scale
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -652,6 +652,8 @@ const isNetworkCableRoll = (product: any): boolean => {
 
 const FavoritesContext = React.createContext<{ favoriteIds: Set<string>; toggleFavorite: (p: any) => void }>({ favoriteIds: new Set(), toggleFavorite: () => {} });
 
+const CompareContext = React.createContext<{ compareIds: Set<string>; toggleCompare: (p: any) => void }>({ compareIds: new Set(), toggleCompare: () => {} });
+
 interface ProductCardProps {
   product: any;
   navigateToProduct: (product: any) => void;
@@ -663,6 +665,7 @@ interface ProductCardProps {
 }
 const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSelection, onBulkSelectionChange, onNavigateToCategory, isGuest}: ProductCardProps) => {
   const { favoriteIds, toggleFavorite } = React.useContext(FavoritesContext);
+  const { compareIds, toggleCompare } = React.useContext(CompareContext);
   const theme = getBrandTheme(product.brand);
   const [isAdded, setIsAdded] = useState(false);
   
@@ -778,6 +781,15 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
           className="absolute bottom-2 right-2 z-20 w-8 h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform"
         >
           <Heart size={16} className={favoriteIds.has(product.id) ? 'text-red-500 fill-red-500' : 'text-gray-400'} />
+        </button>
+
+        <button
+          onClick={(e) => { e.stopPropagation(); toggleCompare(product); }}
+          aria-label="השוואה"
+          title="הוסף להשוואה"
+          className={`absolute bottom-2 left-2 z-20 w-8 h-8 rounded-full border shadow-sm flex items-center justify-center hover:scale-110 transition-transform ${compareIds.has(product.id) ? 'bg-[#004387] border-[#004387]' : 'bg-white/90 border-gray-200'}`}
+        >
+          <Scale size={15} className={compareIds.has(product.id) ? 'text-white' : 'text-gray-400'} />
         </button>
       </div>
       
@@ -2632,6 +2644,18 @@ export default function App() {
       return next;
     });
   }, [userUid]);
+
+  const [compareItems, setCompareItems] = useState<any[]>([]);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const compareIds = useMemo(() => new Set(compareItems.map((c: any) => c.id)), [compareItems]);
+  const toggleCompare = useCallback((product: any) => {
+    setCompareItems((prev: any[]) => {
+      if (prev.some((c) => c.id === product.id)) return prev.filter((c) => c.id !== product.id);
+      if (prev.length >= 4) return prev;
+      return [...prev, product];
+    });
+  }, []);
+  const clearCompare = useCallback(() => setCompareItems([]), []);
   // Firebase auth state is the source of truth: only verified AND approved distributors are authenticated
   useEffect(() => {
     const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // require re-login after 7 days
@@ -4003,6 +4027,7 @@ export default function App() {
 
   return (
     <FavoritesContext.Provider value={{ favoriteIds, toggleFavorite }}>
+    <CompareContext.Provider value={{ compareIds, toggleCompare }}>
     <div id="rbs-b2b-app" className="min-h-screen bg-slate-50 flex flex-col font-sans" dir="rtl">
         {/* SECONDARY TOOLBAR INSTEAD OF MAIN HEADER */}
         <div ref={headerRef} className="sticky top-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header">
@@ -6907,6 +6932,85 @@ export default function App() {
         }
       `}</style>
     </div>
+
+    {/* Compare floating bar */}
+    {compareItems.length > 0 && !compareOpen && (
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[55] flex items-center gap-2 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.18)] border border-gray-200 rounded-full px-3 py-2" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
+        <Scale size={16} className="text-[#004387]" />
+        <span className="text-xs font-bold text-[#0c2d57] whitespace-nowrap">{compareItems.length} להשוואה</span>
+        <button
+          onClick={() => setCompareOpen(true)}
+          disabled={compareItems.length < 2}
+          className="bg-[#004387] text-white text-xs font-bold px-3 py-1.5 rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#0c2d57] transition-colors"
+        >
+          השווה
+        </button>
+        <button onClick={clearCompare} aria-label="נקה השוואה" className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400">
+          <X size={14} />
+        </button>
+      </div>
+    )}
+
+    {/* Compare modal */}
+    {compareOpen && (
+      <div className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setCompareOpen(false)}>
+        <div className="bg-white w-full sm:max-w-5xl sm:rounded-2xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()} dir="rtl">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-[#004387] text-white flex-shrink-0">
+            <div className="flex items-center gap-2"><Scale size={18} /><span className="font-bold">השוואת מוצרים ({compareItems.length})</span></div>
+            <button onClick={() => setCompareOpen(false)} aria-label="סגור" className="w-8 h-8 rounded-full hover:bg-white/15 flex items-center justify-center"><X size={18} /></button>
+          </div>
+          <div className="overflow-auto flex-grow" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <table className="text-sm border-collapse" style={{ minWidth: (compareItems.length * 160 + 110) + 'px' }}>
+              <thead>
+                <tr>
+                  <th className="sticky top-0 right-0 z-20 bg-gray-50 border-b border-l border-gray-200 p-2 w-[110px]"></th>
+                  {compareItems.map((p: any) => (
+                    <th key={p.id} className="sticky top-0 z-10 bg-gray-50 border-b border-l border-gray-200 p-2 align-top min-w-[150px]">
+                      <div className="relative">
+                        <button onClick={() => toggleCompare(p)} aria-label="הסר" className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-red-50 text-red-500 flex items-center justify-center z-10"><X size={12} /></button>
+                        <img src={p.images?.[0] || 'https://placehold.co/120x90/f3f4f6/000000?text=—'} alt={p.name} className="w-full h-20 object-contain mb-1" loading="lazy" />
+                        <div className="text-[11px] font-bold text-[#0c2d57] leading-tight">{p.name}</div>
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { label: 'מק״ט', get: (p: any) => p.sku || '—' },
+                  { label: 'מותג', get: (p: any) => p.brand || '—' },
+                  { label: 'קטגוריה', get: (p: any) => p.category || '—' },
+                  { label: 'תת-קטגוריה', get: (p: any) => p.subcategory || '—' },
+                  { label: 'מחיר', get: (p: any) => (p.price ? '₪' + Math.round(p.price).toLocaleString() : '—') },
+                  { label: 'תיאור', get: (p: any) => p.description || p.desc || '—' },
+                ].map((row: any, ri: number) => (
+                  <tr key={ri} className={ri % 2 ? 'bg-gray-50/50' : 'bg-white'}>
+                    <td className="sticky right-0 z-10 bg-inherit border-b border-l border-gray-200 p-2 text-[11px] font-bold text-gray-500 align-top">{row.label}</td>
+                    {compareItems.map((p: any) => (
+                      <td key={p.id} className="border-b border-l border-gray-100 p-2 text-[12px] text-gray-700 align-top whitespace-pre-wrap break-words">{row.get(p)}</td>
+                    ))}
+                  </tr>
+                ))}
+                <tr>
+                  <td className="sticky right-0 z-10 bg-white border-l border-gray-200 p-2 text-[11px] font-bold text-gray-500 align-top">קישורים</td>
+                  {compareItems.map((p: any) => (
+                    <td key={p.id} className="border-l border-gray-100 p-2 align-top">
+                      <div className="flex flex-col gap-1">
+                        {p.specsLink && <a href={p.specsLink} target="_blank" rel="noopener noreferrer" className="text-[#004387] text-[11px] underline">מפרט טכני</a>}
+                        {p.manualLink && <a href={p.manualLink} target="_blank" rel="noopener noreferrer" className="text-[#004387] text-[11px] underline">מדריך</a>}
+                        {!p.specsLink && !p.manualLink && <span className="text-gray-300 text-[11px]">—</span>}
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )}
+
+    </CompareContext.Provider>
     </FavoritesContext.Provider>
   );
 }
