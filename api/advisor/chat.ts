@@ -201,10 +201,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // Same-origin guard: block cross-origin abuse of the AI endpoint at the server level
-  const reqOrigin = req.headers.origin || "";
-  const reqHost = req.headers.host || "";
-  if (reqOrigin && reqHost && !reqOrigin.endsWith(reqHost)) {
+  // Same-origin guard: require an Origin or Referer whose host EXACTLY matches the
+  // deployment host. Missing source (e.g. naive curl/scripts) or mismatch is rejected.
+  const reqOrigin = (req.headers.origin || "") as string;
+  const reqReferer = (req.headers.referer || "") as string;
+  const reqHost = (req.headers.host || "") as string;
+  const sourceUrl = reqOrigin || reqReferer;
+  let okSource = false;
+  if (reqHost && sourceUrl) {
+    try { okSource = new URL(sourceUrl).host === reqHost; } catch { okSource = false; }
+  }
+  if (!okSource) {
     return res.status(403).json({ error: "Forbidden" });
   }
 
