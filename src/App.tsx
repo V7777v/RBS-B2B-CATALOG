@@ -2381,9 +2381,19 @@ export default function App() {
 
   const addQuoteLine = (pr: any) => {
     const listPrice = Math.round(parsePrice(pr.price)) || 0;
+    
+    // Check if the catalog item has a promotion pattern like "10+2" in saleType/saleValue
+    const m = String(pr.saleType || '').match(/(\d+)\s*\+\s*(\d+)/) || String(pr.saleValue || '').match(/(\d+)\s*\+\s*(\d+)/);
+    const promoText = m ? m[0] : '';
+    const buy = m ? parseInt(m[1], 10) : 0;
+    const free = m ? parseInt(m[2], 10) : 0;
+
     setQuoteItems((prev) => {
-      if (prev.some((l: any) => l.id === pr.id)) return prev;
-      return [
+      const exists = prev.find((l: any) => l.id === pr.id);
+      if (exists) {
+        return reconcileGifts(prev.map((l: any) => l.id === pr.id ? { ...l, qty: (Number(l.qty) || 0) + 1 } : l));
+      }
+      return reconcileGifts([
         ...prev,
         {
           id: pr.id,
@@ -2393,9 +2403,12 @@ export default function App() {
           listPrice: listPrice,
           quotedPrice: listPrice,
           costPrice: (pr.costPrice !== null && pr.costPrice !== undefined && pr.costPrice > 0) ? Math.round(pr.costPrice) : (Math.round(listPrice * 0.6) || 0),
-          discountPercent: 0
+          discountPercent: 0,
+          promoText: promoText || undefined,
+          promoBuy: buy || undefined,
+          promoFree: free || undefined
         }
-      ];
+      ]);
     });
     setQuoteSearch('');
   };
@@ -2407,7 +2420,7 @@ export default function App() {
     const costP = parseFloat(customItemCostPrice) || 0;
     const qtyVal = parseInt(customItemQty) || 1;
     
-    setQuoteItems((prev) => [
+    setQuoteItems((prev) => reconcileGifts([
       ...prev,
       {
         id: 'custom_' + Date.now(),
@@ -2420,7 +2433,7 @@ export default function App() {
         discountPercent: listP > 0 ? Math.round((1 - quotedP / listP) * 100) : 0,
         isCustom: true
       }
-    ]);
+    ]));
     
     setCustomItemName('');
     setCustomItemSku('');
@@ -2447,10 +2460,10 @@ export default function App() {
           sku: l.sku || '',
           name: (l.name || '') + ' — מתנה (' + buy + '+' + free + ')',
           qty: freeQty,
-          listPrice: 0,
+          listPrice: l.listPrice || 0,
           quotedPrice: 0,
-          costPrice: 0,
-          discountPercent: 0
+          costPrice: l.costPrice || 0,
+          discountPercent: 100
         });
       }
     }
@@ -5374,7 +5387,8 @@ export default function App() {
                                   min={1}
                                   value={line.qty}
                                   onChange={(e) => updateQuoteLine(idx, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                                  className="w-16 border border-gray-200 rounded p-1 text-center font-bold text-sm"
+                                  className={`w-16 border border-gray-200 rounded p-1 text-center font-bold text-sm ${line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : ''}`}
+                                  disabled={line.isAutoGift}
                                 />
                               </td>
                               <td className="p-3">
@@ -5383,7 +5397,8 @@ export default function App() {
                                   min={0}
                                   value={line.listPrice}
                                   onChange={(e) => updateQuoteLine(idx, 'listPrice', Math.max(0, parseFloat(e.target.value) || 0))}
-                                  className="w-24 border border-gray-200 rounded p-1 text-center font-mono text-xs"
+                                  className={`w-24 border border-gray-200 rounded p-1 text-center font-mono text-xs ${line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : ''}`}
+                                  disabled={line.isAutoGift}
                                 />
                               </td>
                               <td className="p-3">
@@ -5392,7 +5407,8 @@ export default function App() {
                                     type="number"
                                     value={line.discountPercent || 0}
                                     onChange={(e) => updateQuoteLine(idx, 'discountPercent', parseFloat(e.target.value) || 0)}
-                                    className="w-14 border border-blue-200 text-[#004387] bg-blue-50/50 rounded p-1 text-center font-bold"
+                                    className={`w-14 border border-blue-200 text-[#004387] bg-blue-50/50 rounded p-1 text-center font-bold ${line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : ''}`}
+                                    disabled={line.isAutoGift}
                                   />
                                   <span className="text-blue-500 font-bold text-xs">%</span>
                                 </div>
@@ -5403,9 +5419,10 @@ export default function App() {
                                   min={0}
                                   value={line.quotedPrice}
                                   onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))}
-                                  className={`w-24 border rounded p-1 text-center font-extrabold text-sm ${belowCost ? 'border-red-400 bg-red-100 text-red-900 animate-pulse' : 'border-amber-300 bg-amber-50 text-amber-950'}`}
+                                  className={`w-24 border rounded p-1 text-center font-extrabold text-sm ${line.isAutoGift ? 'bg-emerald-50/80 text-emerald-900 border-emerald-200 cursor-not-allowed font-extrabold' : belowCost ? 'border-red-400 bg-red-100 text-red-900 animate-pulse' : 'border-amber-300 bg-amber-50 text-amber-950'}`}
+                                  disabled={line.isAutoGift}
                                 />
-                                {belowCost && <span className="text-[9px] text-red-600 font-bold block text-center mt-0.5">מתחת לעלות!</span>}
+                                {belowCost && !line.isAutoGift && <span className="text-[9px] text-red-600 font-bold block text-center mt-0.5">מתחת לעלות!</span>}
                               </td>
                               <td className="p-3">
                                 <input
@@ -5413,7 +5430,8 @@ export default function App() {
                                   min={0}
                                   value={line.costPrice || 0}
                                   onChange={(e) => updateQuoteLine(idx, 'costPrice', Math.max(0, parseFloat(e.target.value) || 0))}
-                                  className="w-24 border border-gray-200 rounded p-1 text-center text-gray-500 font-mono bg-gray-50/30"
+                                  className={`w-24 border border-gray-200 rounded p-1 text-center text-gray-500 font-mono bg-gray-50/30 ${line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : ''}`}
+                                  disabled={line.isAutoGift}
                                 />
                               </td>
                               <td className="p-3 text-center">
@@ -5427,8 +5445,9 @@ export default function App() {
                               <td className="p-3 text-center">
                                 <button
                                   onClick={() => removeQuoteLine(idx)}
-                                  className="p-1.5 rounded-full hover:bg-red-50 text-red-500 transition-colors border-none bg-transparent cursor-pointer"
+                                  className={`p-1.5 rounded-full hover:bg-red-50 text-red-500 transition-colors border-none bg-transparent cursor-pointer ${line.isAutoGift ? 'opacity-30 cursor-not-allowed hover:bg-transparent text-gray-400' : ''}`}
                                   title="הסר שורה"
+                                  disabled={line.isAutoGift}
                                 >
                                   <Trash2 size={14} />
                                 </button>
@@ -5452,8 +5471,9 @@ export default function App() {
                         <div key={line.id} className="bg-white rounded-xl p-3 shadow-sm border border-gray-200 relative">
                           <button 
                             onClick={() => removeQuoteLine(idx)} 
-                            className="absolute top-2 left-2 w-7 h-7 rounded-full hover:bg-red-50 flex items-center justify-center text-red-500 transition-colors border-none bg-transparent cursor-pointer"
+                            className={`absolute top-2 left-2 w-7 h-7 rounded-full hover:bg-red-50 flex items-center justify-center text-red-500 transition-colors border-none bg-transparent cursor-pointer ${line.isAutoGift ? 'opacity-20 cursor-not-allowed hover:bg-transparent text-gray-400' : ''}`}
                             title="הסר שורה"
+                            disabled={line.isAutoGift}
                           >
                             <Trash2 size={14} />
                           </button>
@@ -5486,7 +5506,8 @@ export default function App() {
                                 min={1} 
                                 value={line.qty} 
                                 onChange={(e) => updateQuoteLine(idx, 'qty', Math.max(1, parseInt(e.target.value) || 1))} 
-                                className="w-full border border-gray-200 rounded p-0.5 text-center font-bold text-xs"
+                                className={`w-full border border-gray-200 rounded p-0.5 text-center font-bold text-xs ${line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : ''}`}
+                                disabled={line.isAutoGift}
                               />
                             </div>
                             <div>
@@ -5496,7 +5517,8 @@ export default function App() {
                                 min={0} 
                                 value={line.listPrice} 
                                 onChange={(e) => updateQuoteLine(idx, 'listPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
-                                className="w-full border border-gray-200 rounded p-0.5 text-center text-[10px]"
+                                className={`w-full border border-gray-200 rounded p-0.5 text-center text-[10px] ${line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : ''}`}
+                                disabled={line.isAutoGift}
                               />
                             </div>
                             <div>
@@ -5505,7 +5527,8 @@ export default function App() {
                                 type="number" 
                                 value={line.discountPercent || 0} 
                                 onChange={(e) => updateQuoteLine(idx, 'discountPercent', parseFloat(e.target.value) || 0)} 
-                                className="w-full border border-blue-200 text-[#004387] bg-blue-50 rounded p-0.5 text-center text-xs font-bold"
+                                className={`w-full border border-blue-200 text-[#004387] bg-blue-50 rounded p-0.5 text-center text-xs font-bold ${line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : ''}`}
+                                disabled={line.isAutoGift}
                               />
                             </div>
                             <div>
@@ -5515,7 +5538,8 @@ export default function App() {
                                 min={0} 
                                 value={line.quotedPrice} 
                                 onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
-                                className={`w-full border rounded p-0.5 text-center font-extrabold text-xs ${belowCost ? 'border-red-400 bg-red-100 text-red-900 animate-pulse' : 'border-amber-200 bg-amber-50'}`}
+                                className={`w-full border rounded p-0.5 text-center font-extrabold text-xs ${line.isAutoGift ? 'bg-emerald-50/80 text-emerald-900 border-emerald-200 cursor-not-allowed font-extrabold' : belowCost ? 'border-red-400 bg-red-100 text-red-900 animate-pulse' : 'border-amber-200 bg-amber-50'}`}
+                                disabled={line.isAutoGift}
                               />
                             </div>
                           </div>
@@ -5528,7 +5552,8 @@ export default function App() {
                                 min={0} 
                                 value={line.costPrice || 0} 
                                 onChange={(e) => updateQuoteLine(idx, 'costPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
-                                className="w-12 border border-gray-200 rounded px-1 text-center bg-white"
+                                className={`w-12 border border-gray-200 rounded px-1 text-center bg-white ${line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : ''}`}
+                                disabled={line.isAutoGift}
                               />
                             </div>
                             <div>
