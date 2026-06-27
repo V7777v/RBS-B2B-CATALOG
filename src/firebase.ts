@@ -2,6 +2,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBXtmBKArqyEm4dweJXQkfZbI78ezfLy8I",
@@ -13,5 +14,13 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
+// App Check (reCAPTCHA v3) — verifies requests come from this app (incl. guests),
+// protecting Firestore and custom endpoints from non-app/automated clients.
+export const appCheck = initializeAppCheck(app, {
+  provider: new ReCaptchaV3Provider('6LdpujgtAAAAANkpH4GyTSoqR3Pp_kPHThHwtbQi'),
+  isTokenAutoRefreshEnabled: true
+});
+
 export const auth = getAuth(app);
 export const db = getFirestore(app);

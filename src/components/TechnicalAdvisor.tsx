@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UPSCalculator } from './UPSCalculator';
+import { getToken } from 'firebase/app-check';
+import { appCheck } from '../firebase';
 
 interface TechnicalAdvisorProps {
   catalogData: any[];
@@ -111,10 +113,14 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
         text: m.text
       }));
 
+      let appCheckToken: string | null = null;
+      try { appCheckToken = (await getToken(appCheck)).token; } catch { appCheckToken = null; }
+
       const res = await fetch('/api/advisor/chat', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Firebase-AppCheck': appCheckToken || ''
         },
         body: JSON.stringify({
           message: textToSend,

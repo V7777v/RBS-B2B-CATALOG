@@ -2,6 +2,22 @@ import "dotenv/config";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI } from "@google/genai";
 import Papa from "papaparse";
+import { jwtVerify, createRemoteJWKSet } from "jose";
+
+// App Check token verification (reCAPTCHA v3) via Firebase App Check public JWKS.
+const APP_CHECK_JWKS = createRemoteJWKSet(new URL("https://firebaseappcheck.googleapis.com/v1/jwks"));
+const APP_CHECK_PROJECT_NUMBER = "224025193925";
+async function verifyAppCheck(token: string): Promise<boolean> {
+  try {
+    await jwtVerify(token, APP_CHECK_JWKS, {
+      issuer: `https://firebaseappcheck.googleapis.com/${APP_CHECK_PROJECT_NUMBER}`,
+      audience: `projects/${APP_CHECK_PROJECT_NUMBER}`
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // Google Sheets context configurations
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
@@ -213,6 +229,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (!okSource) {
     return res.status(403).json({ error: "Forbidden" });
+  }
+
+  // App Check: verify the request originates from our app (works for guests too).
+  const appCheckToken = (req.headers["x-firebase-appcheck"] || "") as string;
+  if (!appCheckToken || !(await verifyAppCheck(appCheckToken))) {
+    return res.status(401).json({ error: "App Check verification failed" });
   }
 
   // Best-effort per-IP rate limit
