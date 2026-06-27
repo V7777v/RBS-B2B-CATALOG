@@ -43,6 +43,16 @@ export default defineConfig(() => {
           ],
           runtimeCaching: [
             {
+              urlPattern: ({ url }) => url.pathname.startsWith('/api/sheets'),
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'catalog-data',
+                networkTimeoutSeconds: 4,
+                expiration: { maxEntries: 10, maxAgeSeconds: 24 * 60 * 60 },
+                cacheableResponse: { statuses: [0, 200] }
+              }
+            },
+            {
               urlPattern: ({ url }) =>
                 url.hostname.includes('sheets.googleapis.com') ||
                 url.hostname.includes('docs.google.com') ||

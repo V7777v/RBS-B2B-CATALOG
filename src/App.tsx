@@ -1712,6 +1712,7 @@ const ProductDetailsView = (props: any) => {
 const CheckoutView = (props: any) => {
   const { addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity } = props;
     const [orderPlaced, setOrderPlaced] = useState(false);
+    const [isPlacingOrder, setIsPlacingOrder] = useState(false);
     const [lastSentMethod, setLastSentMethod] = useState<'email' | 'whatsapp' | 'saved' | null>(null);
     const [companyName, setCompanyName] = useState('');
     const [companyId, setCompanyId] = useState('');
@@ -1896,16 +1897,21 @@ const CheckoutView = (props: any) => {
     const handlePlaceOrder = async () => {
       if (!validateForm()) return;
       if (!props.userUid) return;
-
-      const orderDetails = buildOrderDetailsText();
-      const itemCount = cart.reduce((acc: number, item: any) => acc + item.quantity, 0);
-      const orderData = { uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount, items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'saved' };
-      const newId = await addOrderRecord(orderData);
-      if (!newId) { alert('שמירת ההזמנה נכשלה (' + (getLastOrderError() || 'שגיאה לא ידועה') + '). נסה שוב.'); return; }
-      if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
-      if (props.onOrderPlaced) props.onOrderPlaced({ id: newId, ...orderData, status: 'sent', createdAt: { toDate: () => new Date() } });
-      setLastSentMethod('saved');
-      setOrderPlaced(true);
+      if (isPlacingOrder) return;
+      setIsPlacingOrder(true);
+      try {
+        const orderDetails = buildOrderDetailsText();
+        const itemCount = cart.reduce((acc: number, item: any) => acc + item.quantity, 0);
+        const orderData = { uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount, items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'saved' };
+        const newId = await addOrderRecord(orderData);
+        if (!newId) { alert('שמירת ההזמנה נכשלה (' + (getLastOrderError() || 'שגיאה לא ידועה') + '). נסה שוב.'); return; }
+        if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
+        if (props.onOrderPlaced) props.onOrderPlaced({ id: newId, ...orderData, status: 'sent', createdAt: { toDate: () => new Date() } });
+        setLastSentMethod('saved');
+        setOrderPlaced(true);
+      } finally {
+        setIsPlacingOrder(false);
+      }
     };
 
     const handleBackToSite = () => {
@@ -2111,9 +2117,10 @@ const CheckoutView = (props: any) => {
                 </div>
                 <button
                   onClick={handlePlaceOrder}
-                  className="w-full bg-[#004387] text-white py-4 px-4 font-bold hover:bg-[#0c2d57] transition-colors flex flex-col items-center justify-center gap-0.5 rounded-lg shadow-[0_4px_14px_rgba(0,67,135,0.28)]"
+                  disabled={isPlacingOrder}
+                  className="w-full bg-[#004387] text-white py-4 px-4 font-bold hover:bg-[#0c2d57] transition-colors flex flex-col items-center justify-center gap-0.5 rounded-lg shadow-[0_4px_14px_rgba(0,67,135,0.28)] disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <span className="text-lg">בצע הזמנה</span>
+                  <span className="text-lg">{isPlacingOrder ? 'שומר הזמנה…' : 'בצע הזמנה'}</span>
                   <span className="text-xs font-medium opacity-90">ההזמנה תישמר באזור האישי והסוכן יקבל התראה</span>
                 </button>
                 <div className="pt-1 text-center">
