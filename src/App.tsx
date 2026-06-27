@@ -5302,7 +5302,7 @@ export default function App() {
                     />
                   </div>
                   <div>
-                    <label className="block text-gray-400 mb-0.5 font-semibold">מחיר מחירון ₪</label>
+                    <label className="block text-gray-400 mb-0.5 font-semibold">מחיר מתקין ₪</label>
                     <input 
                       type="number" 
                       value={customItemListPrice} 
@@ -5366,8 +5366,8 @@ export default function App() {
                           <th className="p-3 font-extrabold w-12 text-center">#</th>
                           <th className="p-3 font-extrabold">מוצר ומק״ט</th>
                           <th className="p-3 font-extrabold w-20 text-center">כמות</th>
-                          <th className="p-3 font-extrabold w-24 text-center">מחירון (₪)</th>
-                          <th className="p-3 font-extrabold w-24 text-center">סיטונאי (₪)</th>
+                          <th className="p-3 font-extrabold w-24 text-center">מחיר מתקין (₪)</th>
+                          <th className="p-3 font-extrabold w-24 text-center">מחיר מפיץ (₪)</th>
                           <th className="p-3 font-extrabold w-24 text-center">הנחה (%)</th>
                           <th className="p-3 font-extrabold w-28 text-center">מחיר מוצע (₪)</th>
                           <th className="p-3 font-extrabold w-28 text-center">עלות סודית (₪)</th>
@@ -5591,7 +5591,7 @@ export default function App() {
                               />
                             </div>
                             <div>
-                              <span className="text-[9px] text-gray-400 block mb-0.5">מחירון</span>
+                              <span className="text-[9px] text-gray-400 block mb-0.5">מחיר מתקין</span>
                               <input 
                                 type="number" 
                                 min={0} 
@@ -5602,7 +5602,7 @@ export default function App() {
                               />
                             </div>
                             <div>
-                              <span className="text-[9px] text-gray-400 block mb-0.5">סיטונאי</span>
+                              <span className="text-[9px] text-gray-400 block mb-0.5">מחיר מפיץ</span>
                               <input 
                                 type="number" 
                                 min={0} 
@@ -5659,7 +5659,7 @@ export default function App() {
                           </div>
 
                           <div className="flex justify-between items-center mt-2 text-[11px] font-semibold">
-                            <span className="text-gray-400">מחירון סה״כ: ₪{Math.round(line.listPrice * line.qty)}</span>
+                            <span className="text-gray-400">מתקין סה״כ: ₪{Math.round(line.listPrice * line.qty)}</span>
                             <span className="text-[#004387] font-bold">סה״כ מוצע: ₪{Math.round(line.quotedPrice * line.qty)}</span>
                           </div>
                         </div>
@@ -5696,7 +5696,7 @@ export default function App() {
                 {showProfitCalculator && (
                   <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-xs animate-fade-in">
                     <div className="bg-white p-2 rounded border border-[#cdd9e8]">
-                      <span className="text-gray-400 block text-[10px]">מחזור מחירון סה״כ</span>
+                      <span className="text-gray-400 block text-[10px]">מחזור מחיר מתקין סה״כ</span>
                       <span className="font-bold text-[#0c2d57] text-sm block mt-0.5">
                         ₪{Math.round(quoteItems.reduce((acc, l) => acc + (l.listPrice * l.qty), 0)).toLocaleString('he-IL')}
                       </span>
@@ -5756,7 +5756,7 @@ export default function App() {
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-center">
                       <div className="bg-white/60 p-2 rounded-lg border border-emerald-100/50">
-                        <span className="text-gray-400 block text-[9px] mb-0.5">שווי ערך מחירון מלא</span>
+                        <span className="text-gray-400 block text-[9px] mb-0.5">שווי ערך מחיר מתקין מלא</span>
                         <span className="font-bold line-through text-gray-500 block text-xs">₪{Math.round(totalOriginalListValue).toLocaleString('he-IL')}</span>
                       </div>
                       <div className="bg-white/90 p-2 rounded-lg border border-emerald-100/50">
