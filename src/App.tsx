@@ -5383,6 +5383,15 @@ export default function App() {
                           const marginColorClass = isMarginNegative ? 'text-red-600 bg-red-50 border-red-200' : margin >= 35 ? 'text-green-700 bg-green-50 border-green-200' : 'text-amber-700 bg-amber-50 border-amber-200';
                           const belowCost = line.quotedPrice < (line.costPrice || 0);
 
+                          const buy = Number(line.promoBuy) || 0;
+                          const free = Number(line.promoFree) || 0;
+                          const freeQty = (buy > 0 && free > 0) ? Math.floor((Number(line.qty) || 0) / buy) * free : 0;
+                          const totalLineQty = Number(line.qty) + freeQty;
+                          const totalLineCharged = Number(line.qty) * Number(line.quotedPrice);
+                          const effectiveUnitPrice = totalLineQty > 0 ? totalLineCharged / totalLineQty : 0;
+                          const totalLineListValue = totalLineQty * (Number(line.listPrice) || 0);
+                          const effectiveLineDiscount = totalLineListValue > 0 ? Math.round((1 - totalLineCharged / totalLineListValue) * 100) : 0;
+
                           return (
                             <tr key={line.id} className={`hover:bg-gray-50/50 transition-colors ${belowCost ? 'bg-red-50/20' : ''}`}>
                               <td className="p-3 text-center text-gray-400 font-bold font-mono">{idx + 1}</td>
@@ -5403,6 +5412,15 @@ export default function App() {
                                       title="מבצע: קנה X קבל Y מתנה (10+2), אחוז הנחה (10%) או טקסט חופשי"
                                     />
                                     {(() => { const fq = (line.promoBuy > 0 && line.promoFree > 0) ? Math.floor((Number(line.qty) || 0) / line.promoBuy) * line.promoFree : 0; return fq > 0 ? <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 px-1 rounded">+{fq} מתנה</span> : null; })()}
+                                  </div>
+                                )}
+                                {!line.isAutoGift && (totalLineQty !== Number(line.qty) || effectiveLineDiscount !== Number(line.discountPercent)) && (
+                                  <div className="mt-1 text-[10px] bg-emerald-50/40 p-1.5 rounded-lg border border-emerald-100/40 flex flex-wrap gap-x-2 gap-y-0.5 text-emerald-900 leading-none">
+                                    <span>סה״כ אספקה: <span className="font-bold text-gray-700">{totalLineQty} יח׳</span></span>
+                                    <span>מחיר סופי ליחידה: <span className="font-bold text-emerald-700">₪{Math.round(effectiveUnitPrice)}</span></span>
+                                    {totalLineListValue > 0 && (
+                                      <span>הנחה אמיתית: <span className="font-extrabold text-emerald-800">{effectiveLineDiscount}%</span></span>
+                                    )}
                                   </div>
                                 )}
                               </td>
@@ -5502,6 +5520,15 @@ export default function App() {
                       const marginColorClass = isMarginNegative ? 'text-red-600 bg-red-50' : margin >= 35 ? 'text-green-700 bg-green-50' : 'text-amber-700 bg-amber-50';
                       const belowCost = line.quotedPrice < (line.costPrice || 0);
 
+                      const buy = Number(line.promoBuy) || 0;
+                      const free = Number(line.promoFree) || 0;
+                      const freeQty = (buy > 0 && free > 0) ? Math.floor((Number(line.qty) || 0) / buy) * free : 0;
+                      const totalLineQty = Number(line.qty) + freeQty;
+                      const totalLineCharged = Number(line.qty) * Number(line.quotedPrice);
+                      const effectiveUnitPrice = totalLineQty > 0 ? totalLineCharged / totalLineQty : 0;
+                      const totalLineListValue = totalLineQty * (Number(line.listPrice) || 0);
+                      const effectiveLineDiscount = totalLineListValue > 0 ? Math.round((1 - totalLineCharged / totalLineListValue) * 100) : 0;
+
                       return (
                         <div key={line.id} className="bg-white rounded-xl p-3 shadow-sm border border-gray-200 relative">
                           <button 
@@ -5529,6 +5556,24 @@ export default function App() {
                                   title="מבצע: קנה X קבל Y מתנה (10+2), אחוז הנחה (10%) או טקסט חופשי"
                                 />
                                 {(() => { const fq = (line.promoBuy > 0 && line.promoFree > 0) ? Math.floor((Number(line.qty) || 0) / line.promoBuy) * line.promoFree : 0; return fq > 0 ? <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">+{fq} מתנה ₪0</span> : null; })()}
+                              </div>
+                            )}
+                            {!line.isAutoGift && (totalLineQty !== Number(line.qty) || effectiveLineDiscount !== Number(line.discountPercent)) && (
+                              <div className="mt-1.5 text-[10px] bg-emerald-50/40 p-1.5 rounded-lg border border-emerald-100/40 flex flex-col gap-1 text-emerald-950">
+                                <div className="flex justify-between items-center">
+                                  <span>סה״כ אספקה:</span>
+                                  <span className="font-bold text-gray-700">{totalLineQty} יח׳</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span>מחיר אפקטיבי ליחידה:</span>
+                                  <span className="font-bold text-emerald-700">₪{Math.round(effectiveUnitPrice)}</span>
+                                </div>
+                                {totalLineListValue > 0 && (
+                                  <div className="flex justify-between items-center">
+                                    <span>הנחה אמיתית:</span>
+                                    <span className="font-extrabold text-emerald-800">{effectiveLineDiscount}%</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -5696,6 +5741,39 @@ export default function App() {
 
           {/* Sticky Actions Bar */}
           <div className="p-4 border-t border-gray-200 bg-white flex-shrink-0 flex flex-col gap-2 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+            {/* Customer Illustration Summary (המחשה והנחות ללקוח) */}
+            {quoteItems.length > 0 && (() => {
+              const totalOriginalListValue = quoteItems.reduce((acc, l) => acc + (Number(l.listPrice) || 0) * (Number(l.qty) || 0), 0);
+              const totalDiscountAmount = Math.max(0, totalOriginalListValue - quoteTotal);
+              const overallDiscountPercent = totalOriginalListValue > 0 ? Math.round((totalDiscountAmount / totalOriginalListValue) * 100) : 0;
+              
+              if (totalDiscountAmount > 0) {
+                return (
+                  <div className="bg-emerald-50/80 border border-emerald-100 rounded-xl p-3.5 text-xs text-emerald-950 flex flex-col gap-2 mb-2 animate-fade-in shadow-sm">
+                    <div className="flex items-center gap-2 border-b border-emerald-100/60 pb-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span className="font-extrabold text-sm text-emerald-800">💡 המחשת תנאי מסחר וחיסכון ללקוח:</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="bg-white/60 p-2 rounded-lg border border-emerald-100/50">
+                        <span className="text-gray-400 block text-[9px] mb-0.5">שווי ערך מחירון מלא</span>
+                        <span className="font-bold line-through text-gray-500 block text-xs">₪{Math.round(totalOriginalListValue).toLocaleString('he-IL')}</span>
+                      </div>
+                      <div className="bg-white/90 p-2 rounded-lg border border-emerald-100/50">
+                        <span className="text-emerald-800 block text-[9px] font-bold mb-0.5">סכום ההנחה (₪)</span>
+                        <span className="font-extrabold text-emerald-700 block text-sm">₪{Math.round(totalDiscountAmount).toLocaleString('he-IL')}</span>
+                      </div>
+                      <div className="bg-emerald-600 p-2 rounded-lg text-white">
+                        <span className="text-emerald-100 block text-[9px] font-bold mb-0.5">אחוז חיסכון כולל</span>
+                        <span className="font-black block text-sm">{overallDiscountPercent}% הנחה!</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             <div className="flex justify-between items-center font-bold text-base px-1">
               <span className="text-gray-500">סה״כ הצעת מחיר סופית ללקוח</span>
               <span className="text-2xl text-[#004387] font-extrabold">₪{Math.round(quoteTotal).toLocaleString('he-IL')}</span>
