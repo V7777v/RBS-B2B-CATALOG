@@ -88,6 +88,25 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
     const textToSend = typeof customText === 'string' ? customText : input;
     if (!textToSend.trim() || isLoading) return;
 
+    // Daily AI usage cap (soft client-side limit; guests stricter than distributors)
+    const AI_DAILY_LIMIT = isGuest ? 8 : 50;
+    const aiToday = new Date().toISOString().slice(0, 10);
+    let aiQuota: { date: string; count: number } = { date: aiToday, count: 0 };
+    try {
+      const rawQ = localStorage.getItem('rbs_ai_quota');
+      if (rawQ) { const pq = JSON.parse(rawQ); if (pq && pq.date === aiToday) aiQuota = pq; }
+    } catch {}
+    if (aiQuota.count >= AI_DAILY_LIMIT) {
+      if (typeof customText !== 'string') setInput('');
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        text: `הגעת למכסת השאלות היומית (${AI_DAILY_LIMIT}). ניתן להמשיך מחר${isGuest ? ', או להתחבר כמשתמש מורשה לקבלת מכסה גבוהה יותר' : ', או לפנות לתמיכה'}.`,
+        timestamp: new Date()
+      }]);
+      return;
+    }
+    try { aiQuota.count += 1; localStorage.setItem('rbs_ai_quota', JSON.stringify(aiQuota)); } catch {}
+
     if (calcOpen) setCalcOpen(false);
 
     if (typeof customText !== 'string') setInput('');
@@ -125,7 +144,8 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
         body: JSON.stringify({
           message: textToSend,
           history: historyPayload,
-          forceAI: forceAI
+          forceAI: forceAI,
+          isGuest: !!isGuest
         }),
         signal: abortControllerRef.current.signal
       });

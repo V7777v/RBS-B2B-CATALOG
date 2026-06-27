@@ -248,7 +248,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   rateMap.set(ip, recentHits);
 
   try {
-    const { message, history = [], forceAI = false } = req.body;
+    const { message, history = [], forceAI = false, isGuest = false } = req.body;
     if (!message) {
       return res.status(400).json({ error: "Message content is required" });
     }
@@ -308,7 +308,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }).join("\n");
     }
 
-    const systemInstruction = getSystemInstructionTemplate(catalogSummaryString);
+    let systemInstruction = getSystemInstructionTemplate(catalogSummaryString);
+    if (isGuest) {
+      systemInstruction += "\n\n--- מצב אורח (מתקין) ---\nהמשתמש הוא מתקין. ענה אך ורק על שאלות הקשורות למוצרי הקטלוג של RBS Telecom: מפרטים טכניים, התאמה בין מוצרים, אביזרים נלווים, התקנה ושימוש. אם השאלה אינה קשורה לקטלוג של RBS (נושאים כלליים שאינם מוצרי החברה) — סרב בנימוס והסבר אילו שאלות ניתן לשאול במסגרת הקטלוג.";
+    }
 
     // 3. Initialize Gemini structure safely and run content generation with Google Search Grounding enabled
     const ai = getGeminiClient();
