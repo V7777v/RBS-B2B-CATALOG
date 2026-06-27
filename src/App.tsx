@@ -364,6 +364,7 @@ const parseProductRow = (row: any) => {
     oldPrice: (isClearance && clearancePrice !== null && clearancePrice > 0 && parsePrice(row.price) > clearancePrice) ? parsePrice(row.price) : null,
     retailPrice: row.retailPrice ? parsePrice(row.retailPrice) : null,
     costPrice: row['מחיר עלות'] ? parsePrice(row['מחיר עלות']) : null,
+    wholesalePrice: (row['מחיר סיטונאות'] || row['מחיר סיטונאי']) ? parsePrice(row['מחיר סיטונאות'] || row['מחיר סיטונאי']) : null,
     images: itemImages.map((img: string) => transformImageLink(img, 800)),
     labCerts: labCerts.map((link: string) => link.startsWith('www.') ? 'https://' + link : link)
   };
@@ -2350,6 +2351,7 @@ export default function App() {
         listPrice: listP,
         quotedPrice: quotedP,
         costPrice: (catProd && catProd.costPrice) ? Math.round(catProd.costPrice) : (Math.round(quotedP * 0.6) || 0),
+        wholesalePrice: (catProd && catProd.wholesalePrice) ? Math.round(catProd.wholesalePrice) : null,
         discountPercent: listP > 0 ? Math.round((1 - quotedP / listP) * 100) : 0
       };
     });
@@ -2403,6 +2405,7 @@ export default function App() {
           listPrice: listPrice,
           quotedPrice: listPrice,
           costPrice: (pr.costPrice !== null && pr.costPrice !== undefined && pr.costPrice > 0) ? Math.round(pr.costPrice) : (Math.round(listPrice * 0.6) || 0),
+          wholesalePrice: (pr.wholesalePrice !== null && pr.wholesalePrice !== undefined && pr.wholesalePrice > 0) ? Math.round(pr.wholesalePrice) : null,
           discountPercent: 0,
           promoText: promoText || undefined,
           promoBuy: buy || undefined,
@@ -2430,6 +2433,7 @@ export default function App() {
         listPrice: listP,
         quotedPrice: quotedP,
         costPrice: costP,
+        wholesalePrice: 0,
         discountPercent: listP > 0 ? Math.round((1 - quotedP / listP) * 100) : 0,
         isCustom: true
       }
@@ -5362,7 +5366,8 @@ export default function App() {
                           <th className="p-3 font-extrabold w-12 text-center">#</th>
                           <th className="p-3 font-extrabold">מוצר ומק״ט</th>
                           <th className="p-3 font-extrabold w-20 text-center">כמות</th>
-                          <th className="p-3 font-extrabold w-28 text-center">מחירון (₪)</th>
+                          <th className="p-3 font-extrabold w-24 text-center">מחירון (₪)</th>
+                          <th className="p-3 font-extrabold w-24 text-center">סיטונאי (₪)</th>
                           <th className="p-3 font-extrabold w-24 text-center">הנחה (%)</th>
                           <th className="p-3 font-extrabold w-28 text-center">מחיר מוצע (₪)</th>
                           <th className="p-3 font-extrabold w-28 text-center">עלות סודית (₪)</th>
@@ -5418,6 +5423,16 @@ export default function App() {
                                   value={line.listPrice}
                                   onChange={(e) => updateQuoteLine(idx, 'listPrice', Math.max(0, parseFloat(e.target.value) || 0))}
                                   className={`w-24 border border-gray-200 rounded p-1 text-center font-mono text-xs ${line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : ''}`}
+                                  disabled={line.isAutoGift}
+                                />
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={line.wholesalePrice || 0}
+                                  onChange={(e) => updateQuoteLine(idx, 'wholesalePrice', Math.max(0, parseFloat(e.target.value) || 0))}
+                                  className={`w-24 border border-gray-200 rounded p-1 text-center font-mono text-xs ${line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : 'bg-blue-50/30'}`}
                                   disabled={line.isAutoGift}
                                 />
                               </td>
@@ -5518,7 +5533,7 @@ export default function App() {
                             )}
                           </div>
 
-                          <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-gray-100 text-center">
+                          <div className="grid grid-cols-5 gap-1 mt-2 pt-2 border-t border-gray-100 text-center">
                             <div>
                               <span className="text-[9px] text-gray-400 block mb-0.5">כמות</span>
                               <input 
@@ -5542,7 +5557,18 @@ export default function App() {
                               />
                             </div>
                             <div>
-                              <span className="text-[9px] text-[#004387] font-bold block mb-0.5">הנחה (%)</span>
+                              <span className="text-[9px] text-gray-400 block mb-0.5">סיטונאי</span>
+                              <input 
+                                type="number" 
+                                min={0} 
+                                value={line.wholesalePrice || 0} 
+                                onChange={(e) => updateQuoteLine(idx, 'wholesalePrice', Math.max(0, parseFloat(e.target.value) || 0))} 
+                                className={`w-full border border-gray-200 rounded p-0.5 text-center text-[10px] ${line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : 'bg-blue-50/30'}`}
+                                disabled={line.isAutoGift}
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-[#004387] font-bold block mb-0.5">הנחה(%)</span>
                               <input 
                                 type="number" 
                                 value={line.discountPercent || 0} 
@@ -5967,7 +5993,10 @@ export default function App() {
                         <div className="mt-2 space-y-1">
                           {(q.items || []).map((l: any, i: number) => (
                             <div key={i} className="flex justify-between text-xs text-gray-600 border-b border-gray-50 pb-1">
-                              <span className="truncate">{l.name} ×{l.qty}</span>
+                              <span className="truncate">
+                                {l.name} ×{l.qty}
+                                {l.wholesalePrice ? <span className="text-[10px] text-blue-600 ml-1 block">מחיר בסיס מפיץ: ₪{l.wholesalePrice}</span> : null}
+                              </span>
                               <span className="font-semibold flex-shrink-0">₪{Math.round((l.quotedPrice || 0) * (l.qty || 0))}</span>
                             </div>
                           ))}
