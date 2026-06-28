@@ -2234,6 +2234,7 @@ export default function App() {
   const [quoteNote, setQuoteNote] = useState('');
   const [quoteSearch, setQuoteSearch] = useState('');
   const [quoteSaving, setQuoteSaving] = useState(false);
+  const approvingRef = useRef(false);
   const [quoteFilterStatus, setQuoteFilterStatus] = useState<string>('all');
   const [quoteSearchTerm, setQuoteSearchTerm] = useState<string>('');
 
@@ -2573,7 +2574,10 @@ export default function App() {
   };
 
   const approveQuote = async (q: any, signatureDataUrl?: string, signerName?: string) => {
+    if (approvingRef.current) return;
+    approvingRef.current = true;
     setQuoteSaving(true);
+    try {
     const updateFields: any = { status: 'approved' };
     if (signatureDataUrl) {
       updateFields.signature = signatureDataUrl;
@@ -2614,7 +2618,6 @@ export default function App() {
       sourceQuoteId: q.id
     });
 
-    setQuoteSaving(false);
     if (userProfile?.email) loadCustomerQuotes(userProfile.email).then(setCustomerQuotes);
     if (userRole === 'sales_manager') {
       loadAllOrders().then(setTeamOrders);
@@ -2622,6 +2625,10 @@ export default function App() {
     } else if (agentName) {
       loadAgentOrders(agentName).then(setTeamOrders);
       loadAgentQuotes(agentName).then(setAgentQuotes);
+    }
+    } finally {
+      approvingRef.current = false;
+      setQuoteSaving(false);
     }
   };
 
