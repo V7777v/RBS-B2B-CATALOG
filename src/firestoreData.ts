@@ -1,7 +1,7 @@
 // Firestore data access for the distributor personal area (cart, orders, favorites)
 import { db } from './firebase';
 import {
-  doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, serverTimestamp, onSnapshot, deleteDoc,
+  doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, serverTimestamp, onSnapshot, deleteDoc, orderBy, limit,
 } from 'firebase/firestore';
 
 // ---------- Saved cart (carts/{uid}) ----------
@@ -109,8 +109,9 @@ export async function loadAgentOrders(agentName: string): Promise<any[]> {
 
 export async function loadAllOrders(): Promise<any[]> {
   try {
-    const snap = await getDocs(collection(db, 'orders'));
-    return sortNewestFirst(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(200));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
   } catch {
     return [];
   }
@@ -141,7 +142,8 @@ export function subscribeAgentOrders(agentName: string, cb: (orders: any[]) => v
 
 export function subscribeAllOrders(cb: (orders: any[]) => void): () => void {
   try {
-    return onSnapshot(collection(db, 'orders'), (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), () => {});
+    const qq = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(200));
+    return onSnapshot(qq, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), () => {});
   } catch {
     return () => {};
   }
@@ -173,7 +175,8 @@ export async function loadAgentQuotes(agentName: string): Promise<any[]> {
 
 export async function loadAllQuotes(): Promise<any[]> {
   try {
-    const snap = await getDocs(collection(db, 'quotes'));
+    const q = query(collection(db, 'quotes'), orderBy('createdAt', 'desc'), limit(200));
+    const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
   } catch {
     return [];

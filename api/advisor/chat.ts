@@ -74,6 +74,11 @@ async function getCatalogDataContext(): Promise<any[]> {
     ]);
 
     // Format products lightly for high value / lower token footprint
+    const toPrice = (v: any): number | null => {
+      const raw = String(v == null ? '' : v).replace(/[^\d.]/g, '');
+      const n = parseFloat(raw);
+      return isFinite(n) && n > 0 ? n : null;
+    };
     const parsedProducts = productsRaw.map((row: any) => {
       // Normalize row keys to prevent casing differences
       const normalizedRow: any = {};
@@ -94,6 +99,7 @@ async function getCatalogDataContext(): Promise<any[]> {
         desc: normalizedRow.Desc || normalizedRow.desc || normalizedRow['תיאור'] || '',
         brand: normalizedRow.Brand || normalizedRow.brand || normalizedRow['מותג'] || '',
         isHotSale: !!(normalizedRow.HotSale || normalizedRow.isHotSale || normalizedRow['מבצע']),
+        price: toPrice(normalizedRow.Price || normalizedRow.price || normalizedRow['מחיר']),
         specsLink: specsLink,
         manualLink: manualLink
       };
@@ -193,6 +199,7 @@ ${catalogSummaryString}
 2. הגבלת תשובות והימנעות מכלליות:
    - ענה אך ורק על מוצרים המופיעים בקטלוג לעיל. אל תמציא שום מוצר, מק"ט או יצרן אחר שאינו מופיע במפורש.
    - הימנע לחלוטין מתשובות אמורפיות או סופרלטיבים כלליים כמו "נקודת הגישה הכי עוצמתית" או "האל-פסק המעולה ביותר". אם דגם מסוים הוא בעל עוצמה או מפרט גבוה יותר, הסבר בדיוק ובאופן כמותי באילו תכונות הוא חזק יותר (כגון: מהירות Gbps, רוחב סרט, עוצמת dBi, זמני טעינה, הספק מוצא או גובה פיזי).
+   - מחירים: השתמש אך ורק במחירים המופיעים בקטלוג לעיל (שדה Price). אל תמציא, תעריך או תחשב מחירים שאינם מופיעים. אם למוצר אין מחיר בקטלוג, ציין שהמחיר אינו זמין ויש לפנות לסוכן.
 3. הצגת חלופות ופונקציונליות עיקרית:
    - כאשר המשתמש שואל שאילתה כללית (או לגבי קטגוריית מוצרים), אל תבחר עבורו רק מוצר אחד באופן שרירותי. הצג סקירה קצרה של החלופות המתאימות בקטלוג, ופרט לכל דגם את הפונקציונליות והשימושים העיקריים שלו בלבד.
    - בצע השוואה הנדסית מסודרת על ידי טבלת השוואה (Markdown table) הכוללת עמודות כגון: מק"ט, שם, מאפיין מפתח, מפרט והתאמה הנדסית, כדי להעניק ללקוח אפשרות קלה ומקצועית להשוות בעצמו.
@@ -297,6 +304,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (relevantProducts.length > 0) {
       catalogSummaryString = relevantProducts.map(p => {
         let line = `SKU: ${p.sku} | Name: ${p.name} | Category: ${p.category} | Sub: ${p.subcategory} | Desc: ${p.desc}`;
+        if (p.price) line += ` | Price: ₪${Math.round(p.price)}`;
         if (p.specsLink) line += ` | Specs Link: ${p.specsLink}`;
         if (p.manualLink) line += ` | Manual Link: ${p.manualLink}`;
         return line;
