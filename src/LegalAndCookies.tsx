@@ -39,15 +39,14 @@ const AccessibilityDoc: React.FC = () => (
   <div>
     <DraftNote />
     <P>{COMPANY.name} רואה חשיבות רבה במתן שירות שוויוני לכלל הלקוחות, ופועלת להנגשת האתר לאנשים עם מוגבלות בהתאם לחוק שוויון זכויות לאנשים עם מוגבלות, התשנ״ח-1998, ולתקנות הנגישות מכוחו.</P>
-    <P>אתר זה הונגש בהתאם לתקן הישראלי 5568 ולהנחיות WCAG 2.0 ברמת AA, ככל הניתן.</P>
+    <P>אתר זה הונגש בהתאם לתקן הישראלי 5568 ולהנחיות WCAG 2.0 ברמת AA, ככל הניתן, וכולל תפריט נגישות ייעודי להתאמת התצוגה.</P>
     <H2>פעולות הנגשה שבוצעו</H2>
     <ul className="list-disc pr-5">
+      <LI>תפריט נגישות: הגדלת טקסט, גופן קריא, הדגשת קישורים ועצירת אנימציות.</LI>
       <LI>מבנה דף סמנטי ותמיכה בקוראי מסך.</LI>
       <LI>ניווט מלא באמצעות מקלדת וקישור "דלג לתוכן הראשי".</LI>
       <LI>סימון ברור של אלמנט הפוקוס בעת ניווט מקלדת.</LI>
-      <LI>טקסט חלופי (alt) לתמונות.</LI>
-      <LI>שמירה על ניגודיות צבעים וכיווניות RTL מותאמת.</LI>
-      <LI>תמיכה בהגדלת טקסט בדפדפן.</LI>
+      <LI>טקסט חלופי (alt) לתמונות ושמירה על ניגודיות וכיווניות RTL.</LI>
     </ul>
     <H2>מגבלות ידועות</H2>
     <P>ייתכנו רכיבים או תכנים של צד שלישי (כגון מסמכים מקושרים או תכנים מוטמעים) שאינם נגישים במלואם. אנו פועלים לשיפור מתמשך של הנגישות.</P>
@@ -101,7 +100,7 @@ const CookiesDoc: React.FC = () => (
     </ul>
     <H2>אחסון פונקציונלי</H2>
     <ul className="list-disc pr-5">
-      <LI>שמירת מוצרים מועדפים והעדפות תצוגה.</LI>
+      <LI>שמירת מוצרים מועדפים והעדפות תצוגה ונגישות.</LI>
       <LI>מצב גלישת אורח (מתקין).</LI>
       <LI>ניהול מכסת שימוש ביועץ החכם.</LI>
     </ul>
@@ -139,9 +138,34 @@ const DOC_TITLES: Record<DocKey, string> = {
   accessibility: 'הצהרת נגישות',
 };
 
+// ====================================================================
+// תפריט נגישות (Accessibility widget) — כלים בטוחים שאינם שוברים פריסה
+// ====================================================================
+type A11yState = { readable: boolean; links: boolean; nomotion: boolean; font: number };
+const A11Y_DEFAULT: A11yState = { readable: false, links: false, nomotion: false, font: 0 };
+
+const A11yIcon: React.FC<{ size?: number }> = ({ size = 26 }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true" focusable="false">
+    <path d="M12 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm9 7h-6v13h-2v-6h-2v6H9V9H3V7h18z" />
+  </svg>
+);
+
+const ToggleRow: React.FC<{ label: string; active: boolean; onClick: () => void }> = ({ label, active, onClick }) => (
+  <button
+    onClick={onClick}
+    aria-pressed={active}
+    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${active ? 'bg-[#004387] text-white border-[#004387]' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+  >
+    <span>{label}</span>
+    <span className={`text-xs ${active ? 'text-white' : 'text-gray-400'}`}>{active ? 'פעיל' : 'כבוי'}</span>
+  </button>
+);
+
 const LegalAndCookies: React.FC = () => {
   const [openDoc, setOpenDoc] = useState<DocKey | null>(null);
   const [consent, setConsent] = useState<boolean>(true);
+  const [a11yOpen, setA11yOpen] = useState(false);
+  const [a11y, setA11y] = useState<A11yState>(A11Y_DEFAULT);
 
   useEffect(() => {
     try {
@@ -149,12 +173,28 @@ const LegalAndCookies: React.FC = () => {
     } catch {
       setConsent(true);
     }
+    try {
+      const saved = JSON.parse(localStorage.getItem('rbs_a11y') || 'null');
+      if (saved && typeof saved === 'object') setA11y({ ...A11Y_DEFAULT, ...saved });
+    } catch {}
   }, []);
+
+  useEffect(() => {
+    const el = document.documentElement;
+    el.classList.toggle('rbs-a11y-readable', a11y.readable);
+    el.classList.toggle('rbs-a11y-links', a11y.links);
+    el.classList.toggle('rbs-a11y-nomotion', a11y.nomotion);
+    el.style.fontSize = a11y.font ? `${100 + a11y.font * 10}%` : '';
+    try { localStorage.setItem('rbs_a11y', JSON.stringify(a11y)); } catch {}
+  }, [a11y]);
 
   const acceptCookies = () => {
     try { localStorage.setItem('rbs_cookie_consent', '1'); } catch {}
     setConsent(true);
   };
+
+  const setFont = (delta: number) => setA11y((p) => ({ ...p, font: Math.max(0, Math.min(4, p.font + delta)) }));
+  const resetA11y = () => setA11y(A11Y_DEFAULT);
 
   const renderDoc = (k: DocKey) => {
     if (k === 'privacy') return <PrivacyDoc />;
@@ -165,6 +205,13 @@ const LegalAndCookies: React.FC = () => {
 
   return (
     <>
+      {/* CSS for accessibility adjustments (layout-safe, no filters) */}
+      <style>{`
+        .rbs-a11y-readable, .rbs-a11y-readable * { font-family: Arial, "Assistant", sans-serif !important; line-height: 1.7 !important; letter-spacing: .03em !important; }
+        .rbs-a11y-links a { text-decoration: underline !important; outline: 1px dashed currentColor !important; outline-offset: 2px; }
+        .rbs-a11y-nomotion *, .rbs-a11y-nomotion *::before, .rbs-a11y-nomotion *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+      `}</style>
+
       {/* Footer */}
       <footer className="bg-[#0c2d57] text-white/90 mt-auto" dir="rtl">
         <div className="max-w-6xl mx-auto px-4 py-6">
@@ -189,9 +236,53 @@ const LegalAndCookies: React.FC = () => {
         </div>
       </footer>
 
+      {/* Accessibility floating button */}
+      <button
+        onClick={() => setA11yOpen((v) => !v)}
+        aria-label="תפריט נגישות"
+        aria-expanded={a11yOpen}
+        className="fixed bottom-4 left-4 z-[80] w-12 h-12 rounded-full bg-[#004387] text-white shadow-lg flex items-center justify-center hover:bg-[#0c2d57] transition-colors"
+      >
+        <A11yIcon />
+      </button>
+
+      {/* Accessibility menu */}
+      {a11yOpen && (
+        <div className="fixed inset-0 z-[81]" onClick={() => setA11yOpen(false)}>
+          <div
+            className="fixed bottom-20 left-4 w-[280px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+            role="dialog"
+            aria-label="תפריט נגישות"
+          >
+            <div className="flex items-center justify-between px-4 py-3 bg-[#004387] text-white">
+              <span className="font-bold flex items-center gap-2"><A11yIcon size={18} /> נגישות</span>
+              <button onClick={() => setA11yOpen(false)} aria-label="סגור" className="w-7 h-7 rounded-full hover:bg-white/15 flex items-center justify-center"><X size={16} /></button>
+            </div>
+            <div className="p-3 space-y-2">
+              {/* Font size */}
+              <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                <span className="text-sm font-medium text-gray-700">גודל טקסט</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setFont(-1)} aria-label="הקטן טקסט" className="w-8 h-8 rounded-md bg-white border border-gray-200 font-bold text-gray-700 hover:bg-gray-100">A-</button>
+                  <span className="text-xs text-gray-500 w-8 text-center">{100 + a11y.font * 10}%</span>
+                  <button onClick={() => setFont(1)} aria-label="הגדל טקסט" className="w-8 h-8 rounded-md bg-white border border-gray-200 font-bold text-gray-700 hover:bg-gray-100">A+</button>
+                </div>
+              </div>
+              <ToggleRow label="גופן קריא" active={a11y.readable} onClick={() => setA11y((p) => ({ ...p, readable: !p.readable }))} />
+              <ToggleRow label="הדגשת קישורים" active={a11y.links} onClick={() => setA11y((p) => ({ ...p, links: !p.links }))} />
+              <ToggleRow label="עצירת אנימציות" active={a11y.nomotion} onClick={() => setA11y((p) => ({ ...p, nomotion: !p.nomotion }))} />
+              <button onClick={resetA11y} className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">איפוס הגדרות</button>
+              <button onClick={() => { setA11yOpen(false); setOpenDoc('accessibility'); }} className="w-full px-3 py-2.5 rounded-lg bg-[#f7941d] text-white text-sm font-bold hover:opacity-90">הצהרת נגישות</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Legal modal */}
       {openDoc && (
-        <div className="fixed inset-0 z-[70] bg-black/50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setOpenDoc(null)}>
+        <div className="fixed inset-0 z-[85] bg-black/50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setOpenDoc(null)}>
           <div className="bg-white w-full sm:max-w-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()} dir="rtl">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-[#004387] text-white flex-shrink-0">
               <span className="font-bold">{DOC_TITLES[openDoc]}</span>
@@ -206,7 +297,7 @@ const LegalAndCookies: React.FC = () => {
 
       {/* Cookie consent banner */}
       {!consent && (
-        <div className="fixed bottom-0 inset-x-0 z-[65] bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.12)]" dir="rtl" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="fixed bottom-0 inset-x-0 z-[75] bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.12)]" dir="rtl" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
             <p className="text-xs sm:text-sm text-gray-700 flex-grow leading-relaxed">
               אתר זה עושה שימוש בעוגיות לצורך תפעול, אבטחה ושיפור חוויית המשתמש.{' '}
