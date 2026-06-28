@@ -2349,8 +2349,8 @@ export default function App() {
   const orderStatusClass = (st?: string) => st === 'done' ? 'bg-green-100 text-green-700' : st === 'processing' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700';
   const advanceOrderStatus = async (orderId: string, status: string) => {
     await updateOrderStatus(orderId, status);
-    if (userRole === 'sales_manager') loadAllOrders().then(setTeamOrders);
-    else if (userRole === 'agent' && agentName) loadAgentOrders(agentName).then(setTeamOrders);
+    // teamOrders is kept live by the real-time listener (subscribeAllOrders/subscribeAgentOrders) —
+    // no explicit reload needed; saves a re-read of up to 200 docs on every status change.
   };
   const [agentUnread, setAgentUnread] = useState(0);
   const [notifPerm, setNotifPerm] = useState<string>(() => (typeof Notification !== 'undefined' ? Notification.permission : 'default'));
@@ -2620,10 +2620,8 @@ export default function App() {
 
     if (userProfile?.email) loadCustomerQuotes(userProfile.email).then(setCustomerQuotes);
     if (userRole === 'sales_manager') {
-      loadAllOrders().then(setTeamOrders);
       loadAllQuotes().then(setAgentQuotes);
     } else if (agentName) {
-      loadAgentOrders(agentName).then(setTeamOrders);
       loadAgentQuotes(agentName).then(setAgentQuotes);
     }
     } finally {
@@ -2836,11 +2834,9 @@ export default function App() {
   useEffect(() => {
     if (!showProfile) return;
     if (userRole === 'sales_manager') {
-      loadAllOrders().then(setTeamOrders);
       loadAllQuotes().then(setAgentQuotes);
     }
     else if (userRole === 'agent' && agentName) {
-      loadAgentOrders(agentName).then(setTeamOrders);
       loadAgentQuotes(agentName).then(setAgentQuotes);
     }
     else setTeamOrders([]);
