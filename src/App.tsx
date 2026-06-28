@@ -2961,6 +2961,24 @@ export default function App() {
   const [saveAdminPassword, setSaveAdminPassword] = useState(false);
   const [adminError, setAdminError] = useState('');
   const [isSyncingLive, setIsSyncingLive] = useState(false);
+
+  // Accessibility: close the top-most open modal on Escape (WCAG keyboard support)
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (selectedProduct) { setSelectedProduct(null); return; }
+      if (signingQuote) { setSigningQuote(null); return; }
+      if (showQuoteEditor) { setShowQuoteEditor(false); return; }
+      if (selectedOrder) { setSelectedOrder(null); return; }
+      if (compareOpen) { setCompareOpen(false); return; }
+      if (isCartOpen) { setIsCartOpen(false); return; }
+      if (showProfitCalculator) { setShowProfitCalculator(false); return; }
+      if (showAdminSyncModal) { setShowAdminSyncModal(false); return; }
+      if (showProfile) { setShowProfile(false); return; }
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [selectedProduct, signingQuote, showQuoteEditor, selectedOrder, compareOpen, isCartOpen, showProfitCalculator, showAdminSyncModal, showProfile]);
   const [syncSuccessMsg, setSyncSuccessMsg] = useState('');
 
   const headerRef = useRef<HTMLDivElement | null>(null);
