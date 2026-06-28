@@ -450,32 +450,20 @@ const getBrandTheme = (brand: string) => {
 const BrandBadge: React.FC<{brand: string}> = ({brand}) => {
   const [imgFailed, setImgFailed] = useState(false);
   if (!brand) return null;
-  const theme = getBrandTheme(brand);
-  const isLink = brand.startsWith('http');
-  let displayName = brand;
+  const cleanBrand = brand.trim();
+  const theme = getBrandTheme(cleanBrand);
+  const isLink = cleanBrand.toLowerCase().startsWith('http');
+  let displayName = cleanBrand;
   if (isLink) {
-    const lower = brand.toLowerCase();
+    const lower = cleanBrand.toLowerCase();
     if (lower.includes('ezviz') || lower.includes('16oips6v2')) displayName = 'EZVIZ';
     else if (lower.includes('hikvision') || lower.includes('1m1hhh')) displayName = 'HIKVISION';
     else if (lower.includes('polman') || lower.includes('1zozo23t')) displayName = 'POLMAN';
     else if (lower.includes('rbs') || lower.includes('telecom')) displayName = 'RBS';
-    else {
-      try {
-        const u = new URL(brand);
-        const parts = u.pathname.split('/');
-        const file = parts[parts.length - 1];
-        if (file && file.length > 3) {
-          displayName = decodeURIComponent(file.split('.')[0]).replace(/[-_]/g, '').substring(0, 15);
-        } else {
-          displayName = 'מותג';
-        }
-      } catch {
-        displayName = 'מותג';
-      }
-    }
+    else displayName = 'מותג';
   }
   if (!imgFailed) {
-    const upper = brand.toUpperCase();
+    const upper = cleanBrand.toUpperCase();
     if (upper === 'EZVIZ' || (!isLink && upper.includes('EZVIZ')) || (isLink && upper.includes('EZVIZ'))) {
       return <img referrerPolicy="no-referrer" src={transformImageLink("https://drive.google.com/uc?id=16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh", 120)} alt="EZVIZ" onError={() => setImgFailed(true)} className="h-8 sm:h-12 object-contain drop-shadow-sm bg-white/50 rounded px-1"/>;
     }
@@ -486,7 +474,7 @@ const BrandBadge: React.FC<{brand: string}> = ({brand}) => {
       return <img referrerPolicy="no-referrer" src={transformImageLink("https://drive.google.com/uc?id=1ZOzo23Twgf_xVoTVIi-tgucVq90CGmLU", 120)} alt="POLMAN" onError={() => setImgFailed(true)} className="h-10 sm:h-14 object-contain drop-shadow-sm bg-white/80 rounded-full px-1"/>;
     }
     if (isLink) {
-      return <img referrerPolicy="no-referrer" src={transformImageLink(brand, 120)} alt="BrandLogo" onError={() => setImgFailed(true)} className="h-10 sm:h-14 object-contain drop-shadow-md bg-white/90 shadow-sm border border-gray-100 rounded-md px-2 py-0.5"/>;
+      return <img referrerPolicy="no-referrer" src={transformImageLink(cleanBrand, 120)} alt="BrandLogo" onError={() => setImgFailed(true)} className="h-10 sm:h-14 object-contain drop-shadow-md bg-white/90 shadow-sm border border-gray-100 rounded-md px-2 py-0.5"/>;
     }
   }
   return (
@@ -787,7 +775,7 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
           onClick={(e) => { e.stopPropagation(); toggleCompare(product); }}
           aria-label="השוואה"
           title="הוסף להשוואה"
-          className={`absolute bottom-2 left-2 z-20 w-8 h-8 rounded-full border shadow-sm flex items-center justify-center hover:scale-110 transition-transform ${compareIds.has(product.id) ? 'bg-[#004387] border-[#004387]' : 'bg-white/90 border-gray-200'}`}
+          className={`absolute top-2 left-2 z-20 w-8 h-8 rounded-full border shadow-sm flex items-center justify-center hover:scale-110 transition-transform ${compareIds.has(product.id) ? 'bg-[#004387] border-[#004387]' : 'bg-white/90 border-gray-200'}`}
         >
           <Scale size={15} className={compareIds.has(product.id) ? 'text-white' : 'text-gray-400'} />
         </button>
