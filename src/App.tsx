@@ -4031,6 +4031,7 @@ export default function App() {
     <FavoritesContext.Provider value={{ favoriteIds, toggleFavorite }}>
     <CompareContext.Provider value={{ compareIds, toggleCompare }}>
     <div id="rbs-b2b-app" className="min-h-screen bg-slate-50 flex flex-col font-sans" dir="rtl">
+      <a href="#main-content" className="skip-to-content">דלג לתוכן הראשי</a>
         {/* SECONDARY TOOLBAR INSTEAD OF MAIN HEADER */}
         <div ref={headerRef} className="sticky top-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header">
           <div className="container mx-auto px-4 min-h-[56px] flex flex-row items-center justify-between flex-wrap gap-1 sm:gap-4">
@@ -4605,7 +4606,7 @@ export default function App() {
           )}
 
           {/* MAIN CONTENT AREA */}
-          <main className="w-full pb-32 md:pb-20">
+          <main id="main-content" className="w-full pb-32 md:pb-20">
             {advisorOpen ? (
               <React.Suspense fallback={null}>
                 <TechnicalAdvisor catalogData={catalogData} addToCart={addToCart} isAuthenticated={isAuthenticated || isGuest} isGuest={isGuest} onClose={() => setAdvisorOpen(false)} />
