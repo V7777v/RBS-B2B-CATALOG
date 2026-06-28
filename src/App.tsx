@@ -13,6 +13,7 @@ import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadAllQuotes, loadCustomerQuotes, updateQuoteStatus, updateQuote, deleteQuote, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder, getLastOrderError } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import LegalAndCookies from './LegalAndCookies';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
 const TechnicalAdvisor = React.lazy(() => import('./components/TechnicalAdvisor').then(module => ({ default: module.TechnicalAdvisor })));
@@ -6934,6 +6935,7 @@ export default function App() {
           }
         }
       `}</style>
+      <LegalAndCookies />
     </div>
 
     {/* Compare floating bar */}
