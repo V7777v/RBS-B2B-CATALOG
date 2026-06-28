@@ -96,9 +96,9 @@ function sortNewestFirst(list: any[]): any[] {
 
 export async function loadAgentOrders(agentName: string): Promise<any[]> {
   try {
-    const q = query(collection(db, 'orders'), where('agent', '==', agentName));
+    const q = query(collection(db, 'orders'), where('agent', '==', agentName), orderBy('createdAt', 'desc'), limit(200));
     const snap = await getDocs(q);
-    const res = sortNewestFirst(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+    const res = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
     console.log('[RBS] loadAgentOrders agent=', JSON.stringify(agentName), '→', res.length, 'orders');
     return res;
   } catch (e) {
@@ -132,7 +132,7 @@ export async function updateOrder(orderId: string, fields: Record<string, any>):
 // ---------- Real-time order notifications (agent/manager) ----------
 export function subscribeAgentOrders(agentName: string, cb: (orders: any[]) => void): () => void {
   try {
-    const qq = query(collection(db, 'orders'), where('agent', '==', agentName));
+    const qq = query(collection(db, 'orders'), where('agent', '==', agentName), orderBy('createdAt', 'desc'), limit(200));
     return onSnapshot(qq, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), (e) => console.error('subscribeAgentOrders error:', e));
   } catch (e) {
     console.error('subscribeAgentOrders failed:', e);
