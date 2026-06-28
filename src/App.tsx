@@ -775,9 +775,20 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
           onClick={(e) => { e.stopPropagation(); toggleCompare(product); }}
           aria-label="השוואה"
           title="הוסף להשוואה"
-          className={`absolute top-2 left-2 z-20 w-8 h-8 rounded-full border shadow-sm flex items-center justify-center hover:scale-110 transition-transform ${compareIds.has(product.id) ? 'bg-[#004387] border-[#004387]' : 'bg-white/90 border-gray-200'}`}
+          className={`absolute bottom-2 right-11 z-20 h-8 rounded-full border shadow-sm flex items-center justify-center transition-all duration-300 group/compare ${
+            compareIds.has(product.id) 
+              ? 'bg-[#004387] border-[#004387] text-white px-2.5 w-auto gap-1' 
+              : 'bg-white/95 border-gray-200 text-gray-500 hover:text-[#004387] hover:border-[#004387] w-8 hover:w-[86px] hover:px-2 gap-0 hover:gap-1'
+          }`}
         >
-          <Scale size={15} className={compareIds.has(product.id) ? 'text-white' : 'text-gray-400'} />
+          <Scale size={14} className={compareIds.has(product.id) ? 'text-white' : 'text-gray-400 group-hover/compare:text-[#004387]'} />
+          <span className={`text-[10px] font-bold whitespace-nowrap overflow-hidden transition-all duration-300 ${
+            compareIds.has(product.id)
+              ? 'w-auto opacity-100'
+              : 'w-0 group-hover/compare:w-auto opacity-0 group-hover/compare:opacity-100'
+          }`}>
+            {compareIds.has(product.id) ? 'בהשוואה' : 'השוואה'}
+          </span>
         </button>
       </div>
       
