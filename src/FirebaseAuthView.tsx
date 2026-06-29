@@ -301,6 +301,7 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest 
             <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="email"
+              aria-label="כתובת דוא״ל"
               dir="ltr"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -313,6 +314,7 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest 
             <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type={showPassword ? 'text' : 'password'}
+              aria-label="סיסמה"
               dir="ltr"
               value={password}
               onChange={(e) => onPasswordChange(e.target.value)}

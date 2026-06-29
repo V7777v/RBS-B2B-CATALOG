@@ -4460,7 +4460,7 @@ export default function App() {
               <Search size={18} className="text-gray-400 ml-2 flex-shrink-0" />
               <input 
                 type="text" 
-                placeholder="חיפוש חופשי (מק״ט, שם, מותג)..." 
+                placeholder="חיפוש חופשי (מק״ט, שם, מותג)..." aria-label="חיפוש מוצרים" 
                 className="bg-transparent border-none outline-none w-full min-w-0 text-base md:text-sm text-gray-700 shadow-none focus:ring-0 !p-0 !m-0 text-right pl-8"
                 value={searchQuery}
                 onChange={(e) => {
@@ -4557,7 +4557,7 @@ export default function App() {
                 <Search size={18} className="text-gray-400 ml-2 flex-shrink-0" />
                 <input 
                   type="text" 
-                  placeholder="חיפוש חופשי (מק״ט, שם, מותג)..." 
+                  placeholder="חיפוש חופשי (מק״ט, שם, מותג)..." aria-label="חיפוש מוצרים" 
                   className="bg-transparent border-none outline-none w-full min-w-0 text-base shadow-none focus:ring-0 !p-0 !m-0 text-right text-gray-700"
                   value={searchQuery}
                   onFocus={() => setIsSearchFocused(true)}
@@ -5409,7 +5409,7 @@ export default function App() {
               <input 
                 value={quoteSearch} 
                 onChange={(e) => setQuoteSearch(e.target.value)} 
-                placeholder="חיפוש בקטלוג: שם, מק״ט או תיאור..." 
+                placeholder="חיפוש בקטלוג: שם, מק״ט או תיאור..." aria-label="חיפוש בקטלוג"
                 className="w-full border border-gray-200 rounded-lg p-2.5 text-sm" 
               />
               {quoteSearch.trim().length >= 2 && (

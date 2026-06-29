@@ -674,6 +674,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                 >
                   <input 
                     type="text" 
+                    aria-label="הקלד שאלה ליועץ הטכני"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder="שאל אותי על צריכת W, חישובי אל פסק, או מוצר..."
