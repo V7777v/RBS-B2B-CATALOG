@@ -2546,6 +2546,131 @@ export default function App() {
 
   const removeQuoteLine = (idx: number) => setQuoteItems((prev) => reconcileGifts(prev.filter((_: any, i: number) => i !== idx)));
 
+  const handlePreviewQuote = () => {
+    if (!quoteEditorCustomer || quoteItems.length === 0) return;
+    
+    const w = window.open('', '_blank');
+    if (!w) {
+      alert("Please allow popups to view the PDF preview.");
+      return;
+    }
+    
+    const itemsHtml = quoteItems.map((item: any, idx: number) => {
+      const discount = item.discountPercent > 0 ? `${item.discountPercent}%` : '-';
+      return `
+        <tr>
+          <td>${idx + 1}</td>
+          <td style="text-align: right;">
+            <strong>${item.name}</strong><br/>
+            <span style="font-size: 10px; color: #666;">מק"ט: ${item.sku || 'N/A'}</span>
+          </td>
+          <td>${item.qty}</td>
+          <td>₪${Number(item.listPrice).toLocaleString('he-IL')}</td>
+          <td>${discount}</td>
+          <td>₪${Number(item.quotedPrice).toLocaleString('he-IL')}</td>
+          <td>₪${(Number(item.quotedPrice) * Number(item.qty)).toLocaleString('he-IL')}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const html = `
+      <html dir="rtl" lang="he">
+      <head>
+        <title>הצעת מחיר - ${quoteEditorCustomer.company || quoteEditorCustomer.name}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 0; padding: 40px; color: #333; background: #fff; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #004387; padding-bottom: 20px; margin-bottom: 30px; }
+          .logo { max-height: 60px; margin-bottom: 10px; }
+          .company-details { font-size: 14px; line-height: 1.5; color: #555; }
+          .quote-title { font-size: 28px; font-weight: bold; color: #004387; margin: 0 0 10px 0; }
+          .meta-info { font-size: 14px; margin-bottom: 30px; display: flex; justify-content: space-between; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 13px; }
+          th { background-color: #004387; color: white; padding: 10px; text-align: right; }
+          td { padding: 10px; border-bottom: 1px solid #eee; text-align: center; }
+          .totals { width: 300px; margin-right: auto; margin-left: 0; background: #f9f9f9; padding: 20px; border-radius: 8px; }
+          .total-row { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 10px; }
+          .total-row.final { font-size: 18px; font-weight: bold; color: #004387; border-top: 2px solid #ddd; padding-top: 10px; }
+          .notes { margin-top: 40px; padding: 15px; background: #f4f7f9; border-left: 4px solid #004387; font-size: 13px; white-space: pre-wrap;}
+          @media print {
+            body { padding: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="no-print" style="text-align: left; margin-bottom: 20px;">
+          <button onclick="window.print()" style="background: #004387; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 14px;">
+            🖨️ הדפס / שמור כ-PDF
+          </button>
+        </div>
+        
+        <div class="header">
+          <div>
+            <img src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" class="logo" alt="RBS Telecom"/>
+            <div class="company-details">
+              <strong>רבס טלקום בע"מ</strong><br/>
+              ח.פ 514373679<br/>
+              לנטוס טום 10, נתניה<br/>
+              077-2045522 | info@rbs-telecom.com
+            </div>
+          </div>
+          <div style="text-align: left;">
+            <h1 class="quote-title">הצעת מחיר</h1>
+            <div class="company-details">
+              תאריך: ${new Date().toLocaleDateString('he-IL')}<br/>
+              מסמך: ${quoteId ? quoteId.slice(-6).toUpperCase() : 'טיוטה'}<br/>
+              הופק ע"י: ${agentName}
+            </div>
+          </div>
+        </div>
+
+        <div class="meta-info">
+          <div>
+            <strong>לכבוד:</strong><br/>
+            ${quoteEditorCustomer.company || quoteEditorCustomer.name}<br/>
+            ${quoteEditorCustomer.email ? `דוא"ל: ${quoteEditorCustomer.email}` : ''}
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align: center; width: 40px;">#</th>
+              <th style="text-align: right;">תיאור פריט</th>
+              <th style="text-align: center;">כמות</th>
+              <th style="text-align: center;">מחירון</th>
+              <th style="text-align: center;">הנחה</th>
+              <th style="text-align: center;">מחיר סופי</th>
+              <th style="text-align: center;">סה"כ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+
+        <div class="totals">
+          <div class="total-row final">
+            <span>סה"כ לתשלום (לפני מע"מ):</span>
+            <span>₪${Math.round(quoteTotal).toLocaleString('he-IL')}</span>
+          </div>
+        </div>
+
+        ${quoteNote ? `
+        <div class="notes" style="border-right: 4px solid #004387; border-left: none;">
+          <strong>הערות ותנאים:</strong><br/>
+          ${quoteNote}
+        </div>
+        ` : ''}
+      </body>
+      </html>
+    `;
+
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  };
+
   const submitQuote = async (status: string) => {
     if (!quoteEditorCustomer || quoteItems.length === 0) return;
     setQuoteSaving(true);
@@ -5840,6 +5965,13 @@ export default function App() {
             </div>
             
             <div className="flex gap-2.5 mt-2">
+              <button
+                onClick={handlePreviewQuote}
+                disabled={quoteItems.length === 0}
+                className="flex-1 py-3 bg-blue-50 text-[#004387] border border-blue-200 hover:bg-blue-100 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <FileText size={18} /> תצוגה מקדימה / PDF
+              </button>
               <button 
                 onClick={() => submitQuote('draft')} 
                 disabled={quoteSaving || quoteItems.length === 0} 
