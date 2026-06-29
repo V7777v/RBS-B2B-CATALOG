@@ -3140,6 +3140,17 @@ export default function App() {
   }, [selectedProduct, signingQuote, showQuoteEditor, selectedOrder, compareOpen, isCartOpen, showProfitCalculator, showAdminSyncModal, showProfile]);
   const [syncSuccessMsg, setSyncSuccessMsg] = useState('');
 
+  // Accessibility: announce cart changes to screen readers (WCAG 4.1.3 Status Messages)
+  const [cartA11yMsg, setCartA11yMsg] = useState('');
+  const prevCartCountRef = useRef(0);
+  const cartItemCount = cart.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
+  useEffect(() => {
+    const prev = prevCartCountRef.current;
+    if (cartItemCount > prev) setCartA11yMsg(`נוסף לעגלה. סך הפריטים בעגלה: ${cartItemCount}`);
+    else if (cartItemCount < prev) setCartA11yMsg(`העגלה עודכנה. סך הפריטים בעגלה: ${cartItemCount}`);
+    prevCartCountRef.current = cartItemCount;
+  }, [cartItemCount]);
+
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [headerHeight, setHeaderHeight] = useState(140);
 
@@ -4210,6 +4221,7 @@ export default function App() {
     <CompareContext.Provider value={{ compareIds, toggleCompare }}>
     <div id="rbs-b2b-app" className="min-h-screen bg-slate-50 flex flex-col font-sans" dir="rtl">
       <a href="#main-content" className="skip-to-content">דלג לתוכן הראשי</a>
+      <div aria-live="polite" aria-atomic="true" style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0 }}>{cartA11yMsg}</div>
         {/* SECONDARY TOOLBAR INSTEAD OF MAIN HEADER */}
         <div ref={headerRef} className="sticky top-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header">
           <div className="container mx-auto px-4 min-h-[56px] flex flex-row items-center justify-between flex-wrap gap-1 sm:gap-4">
