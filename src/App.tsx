@@ -429,8 +429,8 @@ const getBrandTheme = (brand: string) => {
   let theme = {
     bg: 'bg-white', 
     border: 'border-gray-200', 
-    accent: 'text-[#f7941d]',
-    button: 'bg-[#004387] hover:bg-[#fe8d00] text-white rounded-none', 
+    accent: 'text-[#c2410c]',
+    button: 'bg-[#004387] hover:bg-[#c2410c] text-white rounded-none', 
     badge: 'bg-gray-100 text-gray-800 border-gray-200'
   };
   switch(brand?.toUpperCase()) {
@@ -505,7 +505,7 @@ const CatalogCard: React.FC<CatalogCardProps> = ({catalog, navigateToCatalog}) =
       <p className="text-gray-600 text-xs sm:text-sm leading-relaxed mb-2 sm:mb-4 line-clamp-2 hidden sm:block">
         {catalog.desc}
       </p>
-      <div className="mt-auto pt-2 border-t border-gray-50 sm:border-none flex justify-center sm:justify-between items-center text-[#f7941d] font-bold text-xs sm:text-sm">
+      <div className="mt-auto pt-2 border-t border-gray-50 sm:border-none flex justify-center sm:justify-between items-center text-[#c2410c] font-bold text-xs sm:text-sm">
         <span className="hidden sm:inline">פתח מחירון</span>
         <span className="sm:hidden">פתח</span>
         <ChevronLeft size={16} className="w-4 h-4 sm:w-5 sm:h-5 ml-1 sm:ml-0" />
@@ -550,7 +550,7 @@ const SubcategoryCard: React.FC<SubcategoryCardProps> = ({sub, onClick, navigate
           {sub.count} מוצרים
         </p>
       </div>
-      <div className="mt-auto flex justify-center items-center gap-1 text-[#f7941d] font-bold text-xs sm:text-sm opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity pt-1 border-t border-gray-50 sm:border-none">
+      <div className="mt-auto flex justify-center items-center gap-1 text-[#c2410c] font-bold text-xs sm:text-sm opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity pt-1 border-t border-gray-50 sm:border-none">
         <span className="hidden sm:inline">הצג</span>
         <ChevronLeft size={14} className="w-4 h-4 sm:w-4 sm:h-4"/>
       </div>
@@ -846,7 +846,7 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
                   מחירון מתקין מקורי (ללא מע"מ): ₪{product.oldPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </span>
               )}
-              <span className={`text-base sm:text-lg font-bold ${product.isClearance ? 'text-teal-600' : 'text-[#f7941d]'} leading-none block`}>
+              <span className={`text-base sm:text-lg font-bold ${product.isClearance ? 'text-teal-600' : 'text-[#c2410c]'} leading-none block`}>
                 ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 {isNetworkCableRoll(product) && <span className="inline-block text-[9px] sm:text-[10px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold align-middle select-none">מחיר למטר</span>}
                 <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
@@ -856,7 +856,7 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
             </div>
           ) : (
             <div className="mb-2 mt-auto flex flex-col items-center leading-none text-center">
-              <span className={`text-base sm:text-lg font-bold ${product.isClearance ? 'text-teal-600' : 'text-[#f7941d]'} leading-none flex items-center justify-center gap-1 flex-wrap`}>
+              <span className={`text-base sm:text-lg font-bold ${product.isClearance ? 'text-teal-600' : 'text-[#c2410c]'} leading-none flex items-center justify-center gap-1 flex-wrap`}>
                 ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 {isNetworkCableRoll(product) && <span className="inline-block text-[9px] sm:text-[10px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold align-middle select-none">מחיר למטר</span>}
               </span>
@@ -1163,11 +1163,11 @@ const ProductDetailsView = (props: any) => {
               
               <div className="mb-6 sm:mb-8 bg-white border-2 border-slate-100 p-5 sm:p-6 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_25px_rgba(0,0,0,0.06)] hover:border-[#004387]/25 transition-all duration-300 relative overflow-hidden text-right">
                 {/* Brand colored vertical accent bar on the right (RTL start) */}
-                <span className="absolute top-0 right-0 bottom-0 w-[5px] bg-gradient-to-b from-[#004387] via-[#004387] to-[#fe8d00]"></span>
+                <span className="absolute top-0 right-0 bottom-0 w-[5px] bg-gradient-to-b from-[#004387] via-[#004387] to-[#c2410c]"></span>
                 
                 {/* Section Header with Icon */}
                 <div className="flex items-center gap-2 mb-3 pb-2.5 border-b border-gray-100 text-[#0c2d57] font-extrabold text-sm sm:text-base select-none">
-                  <FileText size={18} className="text-[#fe8d00]" />
+                  <FileText size={18} className="text-[#c2410c]" />
                   <span>מידע ומפרט המוצר</span>
                 </div>
 
@@ -1353,7 +1353,7 @@ const ProductDetailsView = (props: any) => {
                           <span>סגור תצוגה מקדימה</span>
                         </button>
                         <span className="text-xs sm:text-sm font-bold text-[#0c2d57] flex items-center gap-1.5">
-                          <Eye size={14} className="text-[#fe8d00]" />
+                          <Eye size={14} className="text-[#c2410c]" />
                           <span>תצוגה מקדימה מהירה: {
                             activePreview === 'specs' ? 'מפרט טכני' : 
                             activePreview === 'manual' ? 'מדריך למשתמש' : 
@@ -1517,7 +1517,7 @@ const ProductDetailsView = (props: any) => {
                        );
                     })}
                     
-                    <div className="flex justify-between items-center text-lg lg:text-xl font-bold text-[#f7941d] pt-3 mt-2 border-t border-gray-200/60 bg-white -mx-4 -mb-4 p-4 rounded-b">
+                    <div className="flex justify-between items-center text-lg lg:text-xl font-bold text-[#c2410c] pt-3 mt-2 border-t border-gray-200/60 bg-white -mx-4 -mb-4 p-4 rounded-b">
                       <span>סה"כ לתשלום:</span>
                       <span>₪{(selectedProduct.price + currentOptionals.reduce((acc, opt) => {
                          const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
@@ -1564,7 +1564,7 @@ const ProductDetailsView = (props: any) => {
                           </span>
                        )}
                        {currentOptionals.length === 0 && (
-                         <div className={`text-2xl sm:text-3xl font-bold ${selectedProduct.isClearance ? 'text-teal-600' : 'text-[#f7941d]'} flex items-center gap-2 flex-wrap justify-center sm:justify-start`}>
+                         <div className={`text-2xl sm:text-3xl font-bold ${selectedProduct.isClearance ? 'text-teal-600' : 'text-[#c2410c]'} flex items-center gap-2 flex-wrap justify-center sm:justify-start`}>
                             <span>₪{selectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             {isNetworkCableRoll(selectedProduct) && (
                               <span className="text-xs sm:text-sm font-black text-[#004387] bg-blue-50 border border-blue-100 rounded px-2 py-0.5 select-none">מחיר למטר</span>
@@ -1586,7 +1586,7 @@ const ProductDetailsView = (props: any) => {
                             setIsAdded(true);
                             setTimeout(() => setIsAdded(false), 1500);
                           }}
-                          className={`flex-1 flex items-center justify-center gap-2 px-5 py-4 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base cursor-pointer rounded-none text-white ${isAdded ? 'bg-green-600' : 'bg-[#fe8d00] hover:bg-[#004387]'}`}
+                          className={`flex-1 flex items-center justify-center gap-2 px-5 py-4 font-bold transition-all shadow-md hover:shadow-lg text-sm sm:text-base cursor-pointer rounded-none text-white ${isAdded ? 'bg-green-600' : 'bg-[#c2410c] hover:bg-[#004387]'}`}
                         >
                           <ShoppingCart size={18} className={isAdded ? 'animate-bounce' : ''} />
                           {isAdded ? 'נארז יחד ונוסף! ✓' : 'הוסף כחבילה אחת (מומלץ)'}
@@ -2002,7 +2002,7 @@ const CheckoutView = (props: any) => {
       <div className="max-w-5xl mx-auto mt-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-[#0c2d57]">סיכום הזמנה ושליחה לסוכן</h2>
-          <button onClick={navigateHome} className="flex items-center gap-2 text-[#004387] font-semibold hover:text-[#fe8d00] transition-colors">
+          <button onClick={navigateHome} className="flex items-center gap-2 text-[#004387] font-semibold hover:text-[#c2410c] transition-colors">
             המשך קניות <ChevronLeft size={18} />
           </button>
         </div>
@@ -4448,8 +4448,8 @@ export default function App() {
               </div>
 
                 {hasMoreProducts && (
-                  <div className="flex items-center gap-1.5 text-xs text-[#fe8d00] bg-orange-50 px-2 py-0.5 animate-pulse select-none font-medium border border-orange-100 font-bold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#fe8d00] animate-ping"></span>
+                  <div className="flex items-center gap-1.5 text-xs text-[#c2410c] bg-orange-50 px-2 py-0.5 animate-pulse select-none font-medium border border-orange-100 font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#c2410c] animate-ping"></span>
                     <span>בסנכרון...</span>
                   </div>
                 )}
@@ -4491,7 +4491,7 @@ export default function App() {
                 <ShoppingCart size={20} className="flex-shrink-0" />
                 <span className="text-sm font-bold hidden sm:block whitespace-nowrap">עגלת הזמנה</span>
                 {cart.length > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-[#f7941d] text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
+                  <span className="absolute -top-2 -right-2 bg-[#c2410c] text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
                     {cart.reduce((sum, item) => sum + item.quantity, 0)}
                   </span>
                 )}
@@ -4764,13 +4764,13 @@ export default function App() {
                     setSyncSuccessMsg('');
                     setShowAdminSyncModal(true);
                   }}
-                  className="font-bold text-xl mb-6 mt-2 text-[#0c2d57] cursor-pointer select-none active:text-[#fe8d00] transition-colors"
+                  className="font-bold text-xl mb-6 mt-2 text-[#0c2d57] cursor-pointer select-none active:text-[#c2410c] transition-colors"
                 >
                   ניווט מהיר
                 </h2>
                 <ul className="space-y-4">
                   <li>
-                    <button onClick={navigateHome} className="font-bold text-lg text-[#f7941d] bg-transparent border-none !p-0">כל המחירונים</button>
+                    <button onClick={navigateHome} className="font-bold text-lg text-[#c2410c] bg-transparent border-none !p-0">כל המחירונים</button>
                   </li>
                   <hr className="border-gray-100"/>
                   {catalogFolders.map((cat, idx) => (
@@ -4793,7 +4793,7 @@ export default function App() {
             <>
             {isLoading ? (
                <div className="flex flex-col items-center justify-center p-12 bg-white text-[#0c2d57] min-h-[50vh]">
-                 <Loader2 size={48} className="animate-spin mb-4 text-[#fe8d00]" />
+                 <Loader2 size={48} className="animate-spin mb-4 text-[#c2410c]" />
                  <h2 className="text-xl font-bold">טוען נתונים מהמערכת...</h2>
                </div>
             ) : (searchQuery && currentView !== 'product' && currentView !== 'checkout') ? (
@@ -4802,7 +4802,7 @@ export default function App() {
 
                 {isProductsLoading ? (
                   <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
-                    <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
+                    <Loader2 size={40} className="animate-spin text-[#c2410c] mb-4" />
                     <h3 className="text-xl font-bold text-[#0c2d57]">מבצע חיפוש...</h3>
                   </div>
                 ) : filteredProducts.length === 0 ? (
@@ -4813,7 +4813,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setSearchQuery('')}
-                      className="bg-[#004387] hover:bg-[#fe8d00] text-white font-bold py-2.5 px-6 rounded-xl transition-all shadow-md active:scale-95 text-sm cursor-pointer"
+                      className="bg-[#004387] hover:bg-[#c2410c] text-white font-bold py-2.5 px-6 rounded-xl transition-all shadow-md active:scale-95 text-sm cursor-pointer"
                     >
                       נקה חיפוש וחזור
                     </button>
@@ -4822,7 +4822,7 @@ export default function App() {
                   <>
                     <div className="flex flex-col sm:flex-row items-center justify-between mb-6 bg-white p-4 border border-gray-100 shadow-xs rounded-xl gap-3 w-full">
                       <span className="text-sm sm:text-base text-gray-700 font-bold text-center sm:text-right">
-                        נמצאו <strong className="text-[#004387]">{filteredProducts.length}</strong> מוצרים עבור החיפוש: "<strong className="text-[#fe8d00]">{searchQuery}</strong>"
+                        נמצאו <strong className="text-[#004387]">{filteredProducts.length}</strong> מוצרים עבור החיפוש: "<strong className="text-[#c2410c]">{searchQuery}</strong>"
                       </span>
                       <button
                         type="button"
@@ -4893,7 +4893,7 @@ export default function App() {
                 
                 {isProductsLoading ? (
                   <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
-                    <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
+                    <Loader2 size={40} className="animate-spin text-[#c2410c] mb-4" />
                     <h3 className="text-xl font-bold text-[#0c2d57]">טוען נתונים...</h3>
                   </div>
                 ) : (
@@ -4924,7 +4924,7 @@ export default function App() {
                 
                 {isProductsLoading ? (
                   <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
-                    <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
+                    <Loader2 size={40} className="animate-spin text-[#c2410c] mb-4" />
                     <h3 className="text-xl font-bold text-[#0c2d57]">טוען נתונים...</h3>
                   </div>
                 ) : (
@@ -4949,7 +4949,7 @@ export default function App() {
                 
                 {isProductsLoading ? (
                   <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
-                    <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
+                    <Loader2 size={40} className="animate-spin text-[#c2410c] mb-4" />
                     <h3 className="text-xl font-bold text-[#0c2d57]">טוען נתונים...</h3>
                   </div>
                 ) : (
@@ -4980,7 +4980,7 @@ export default function App() {
 
                 {isProductsLoading ? (
                   <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
-                    <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
+                    <Loader2 size={40} className="animate-spin text-[#c2410c] mb-4" />
                     <h3 className="text-xl font-bold text-[#0c2d57]">טוען מוצרים...</h3>
                   </div>
                 ) : (
@@ -5008,7 +5008,7 @@ export default function App() {
             ) : currentView === 'product' && selectedProduct ? (
               isProductsLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
-                  <Loader2 size={40} className="animate-spin text-[#f7941d] mb-4" />
+                  <Loader2 size={40} className="animate-spin text-[#c2410c] mb-4" />
                   <h3 className="text-xl font-bold text-[#0c2d57]">טוען את פרטי המוצר...</h3>
                 </div>
               ) : (
@@ -5107,11 +5107,11 @@ export default function App() {
               <div className="border-t border-gray-200 p-5 bg-[#f2f2f2] shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.02)]">
                 <div className="flex justify-between items-center mb-4 text-lg font-bold text-[#0c2d57]">
                   <span>סה"כ כמות פריטים:</span>
-                  <span className="text-2xl text-[#f7941d]">{cart.reduce((sum, item) => sum + item.quantity, 0)}</span>
+                  <span className="text-2xl text-[#c2410c]">{cart.reduce((sum, item) => sum + item.quantity, 0)}</span>
                 </div>
                 <button 
                   onClick={handleCheckout}
-                  className="w-full bg-[#004387] hover:bg-[#fe8d00] text-white font-bold py-3 rounded-none transition-colors shadow-sm"
+                  className="w-full bg-[#004387] hover:bg-[#c2410c] text-white font-bold py-3 rounded-none transition-colors shadow-sm"
                 >
                   מעבר להצעת מחיר
                 </button>
@@ -5138,7 +5138,7 @@ export default function App() {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500 border-2 border-white"></span>
           </span>
-          <span className="absolute -bottom-1 -left-1 bg-[#f7941d] rounded-full p-1 border-2 border-white flex items-center justify-center">
+          <span className="absolute -bottom-1 -left-1 bg-[#c2410c] rounded-full p-1 border-2 border-white flex items-center justify-center">
             <Sparkles className="w-2.5 h-2.5 text-white" />
           </span>
         </button>
@@ -5269,7 +5269,7 @@ export default function App() {
                   setAddedItemConfirm(null);
                   setIsCartOpen(true);
                 }}
-                className="w-full bg-[#004387] hover:bg-[#fe8d00] text-white font-bold py-2 px-3 text-sm transition-colors text-center flex items-center justify-center gap-2 shadow-sm"
+                className="w-full bg-[#004387] hover:bg-[#c2410c] text-white font-bold py-2 px-3 text-sm transition-colors text-center flex items-center justify-center gap-2 shadow-sm"
               >
                 <ShoppingCart size={16} />
                 מעבר לסל הקניות
@@ -5311,7 +5311,7 @@ export default function App() {
                   <motion.div 
                     animate={{ scale: [1, 1.08, 1] }}
                     transition={{ duration: 2, repeat: Infinity }}
-                    className="p-3 bg-gradient-to-tr from-[#fe8d00] to-red-500 text-white rounded-full shadow-md relative z-10 flex items-center justify-center"
+                    className="p-3 bg-gradient-to-tr from-[#c2410c] to-red-500 text-white rounded-full shadow-md relative z-10 flex items-center justify-center"
                   >
                     <Flame size={22} className="animate-pulse" />
                   </motion.div>
@@ -5324,7 +5324,7 @@ export default function App() {
 
               {/* Content Header */}
               <div className="text-center mb-4">
-                <span className="inline-block bg-[#fe8d00]/10 text-[#fe8d00] font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1.5">
+                <span className="inline-block bg-[#c2410c]/10 text-[#c2410c] font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1.5">
                   הזדמנות מיוחדת עבורך
                 </span>
                 <h3 className="text-lg sm:text-xl font-bold text-[#0c2d57] leading-snug mb-1">
@@ -5364,7 +5364,7 @@ export default function App() {
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.99 }}
                   onClick={handleGoToPromos}
-                  className="w-full bg-gradient-to-r from-[#fe8d00] to-orange-500 hover:from-orange-500 hover:to-red-500 text-white font-bold py-2.5 px-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 text-xs sm:text-sm cursor-pointer border-none"
+                  className="w-full bg-gradient-to-r from-[#c2410c] to-orange-500 hover:from-orange-500 hover:to-red-500 text-white font-bold py-2.5 px-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 text-xs sm:text-sm cursor-pointer border-none"
                 >
                   <Flame size={14} />
                   <span>מעבר מהיר למבצעים ומציאון</span>
@@ -6240,7 +6240,7 @@ export default function App() {
                   <p className="text-white/70 text-xs mt-0.5 truncate" dir="ltr">{userProfile?.email || ''}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                  {isAdmin && <span className="text-[10px] font-bold bg-[#f7941d] px-2 py-0.5 rounded-full">מנהל מערכת</span>}
+                  {isAdmin && <span className="text-[10px] font-bold bg-[#c2410c] px-2 py-0.5 rounded-full">מנהל מערכת</span>}
                   {userRole === 'agent' && <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">סוכן</span>}
                   {userRole === 'sales_manager' && <span className="text-[10px] font-bold bg-purple-500 px-2 py-0.5 rounded-full">מנהל מכירות</span>}
                   {userProfile?.tier && <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">{userProfile.tier}</span>}
@@ -6814,7 +6814,7 @@ export default function App() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-[#0c2d57] leading-none mb-1">סנכרון נתונים ידני</h3>
-                <p className="text-[11px] text-[#fe8d00] font-bold">עקיפת ה-Cache ועדכון נתונים מיידי</p>
+                <p className="text-[11px] text-[#c2410c] font-bold">עקיפת ה-Cache ועדכון נתונים מיידי</p>
               </div>
             </div>
 
@@ -6878,7 +6878,7 @@ export default function App() {
                   <button 
                     type="submit"
                     disabled={isSyncingLive}
-                    className="w-full bg-[#004387] hover:bg-[#fe8d00] text-white font-bold py-2.5 text-sm transition-all shadow-sm rounded-none flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
+                    className="w-full bg-[#004387] hover:bg-[#c2410c] text-white font-bold py-2.5 text-sm transition-all shadow-sm rounded-none flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
                   >
                     {isSyncingLive ? (
                       <>
@@ -6938,12 +6938,12 @@ export default function App() {
                 >
                   <div className="relative">
                     <span className="flex h-3.5 w-3.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#fe8d00] opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-[#fe8d00]"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#c2410c] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-[#c2410c]"></span>
                     </span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[#0c2d57] font-black text-xs sm:text-sm leading-tight flex items-center gap-1.5 group-hover:text-[#fe8d00] transition-colors">
+                    <span className="text-[#0c2d57] font-black text-xs sm:text-sm leading-tight flex items-center gap-1.5 group-hover:text-[#c2410c] transition-colors">
                       {Object.keys(bulkSelection).length} מוצרים סומנו
                       <ChevronUp size={14} className="text-gray-400 group-hover:translate-y-[-2px] transition-transform animate-bounce" />
                     </span>
@@ -6963,7 +6963,7 @@ export default function App() {
                   </button>
                   <button
                     onClick={handleAddBulkToCart}
-                    className="bg-gradient-to-r from-[#004387] to-[#0a5bbb] hover:from-[#fe8d00] hover:to-orange-500 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-extrabold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 rounded-xl active:scale-95 whitespace-nowrap cursor-pointer border-none"
+                    className="bg-gradient-to-r from-[#004387] to-[#0a5bbb] hover:from-[#c2410c] hover:to-orange-500 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-extrabold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 rounded-xl active:scale-95 whitespace-nowrap cursor-pointer border-none"
                   >
                     <ShoppingCart size={14} />
                     <span>הוסף לעגלה</span>
@@ -7093,7 +7093,7 @@ export default function App() {
                     </button>
                     <button
                       onClick={handleAddBulkToCart}
-                      className="flex-1 bg-gradient-to-r from-[#fe8d00] to-orange-500 hover:from-orange-500 hover:to-red-500 text-white font-extrabold py-2 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 text-xs sm:text-sm cursor-pointer border-none"
+                      className="flex-1 bg-gradient-to-r from-[#c2410c] to-orange-500 hover:from-orange-500 hover:to-red-500 text-white font-extrabold py-2 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 text-xs sm:text-sm cursor-pointer border-none"
                     >
                       <ShoppingCart size={14} />
                       <span>הוסף {Object.values(bulkSelection).reduce((sum, item) => sum + item.quantity, 0)} פריטים לעגלה</span>
