@@ -3104,6 +3104,40 @@ export default function App() {
     window.addEventListener('keydown', onEsc);
     return () => window.removeEventListener('keydown', onEsc);
   }, [selectedProduct, signingQuote, showQuoteEditor, selectedOrder, compareOpen, isCartOpen, showProfitCalculator, showAdminSyncModal, showProfile]);
+
+  // Accessibility: dialog semantics + focus trap & restore for the open modal (WCAG 4.1.2 / 2.4.3)
+  useEffect(() => {
+    const anyModalOpen = !!(selectedProduct || signingQuote || showQuoteEditor || selectedOrder || compareOpen || isCartOpen || showProfitCalculator || showAdminSyncModal || showProfile);
+    if (!anyModalOpen) return;
+    const overlays = Array.from(document.querySelectorAll<HTMLElement>('.fixed.inset-0'));
+    const modal = overlays[overlays.length - 1];
+    if (!modal) return;
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    const heading = modal.querySelector('h1, h2, h3');
+    if (heading && heading.textContent && heading.textContent.trim()) {
+      modal.setAttribute('aria-label', heading.textContent.trim().slice(0, 80));
+    }
+    modal.setAttribute('tabindex', '-1');
+    const prevFocus = document.activeElement as HTMLElement | null;
+    try { modal.focus({ preventScroll: true }); } catch { try { modal.focus(); } catch {} }
+    const focusablesOf = () =>
+      Array.from(modal.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+        .filter((el) => el.offsetParent !== null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const f = focusablesOf();
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    modal.addEventListener('keydown', onKey);
+    return () => {
+      modal.removeEventListener('keydown', onKey);
+      try { prevFocus && prevFocus.focus && prevFocus.focus(); } catch {}
+    };
+  }, [selectedProduct, signingQuote, showQuoteEditor, selectedOrder, compareOpen, isCartOpen, showProfitCalculator, showAdminSyncModal, showProfile]);
   const [syncSuccessMsg, setSyncSuccessMsg] = useState('');
 
   const headerRef = useRef<HTMLDivElement | null>(null);
