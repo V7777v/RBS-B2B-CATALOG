@@ -4966,14 +4966,19 @@ export default function App() {
       {!advisorOpen && (
         <button
           onClick={() => setAdvisorOpen(true)}
-          className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-gradient-to-br from-[#004387] to-[#0c2d57] text-white shadow-[0_8px_24px_rgba(0,67,135,0.45)] hover:scale-105 transition-transform flex items-center justify-center border-2 border-white relative"
+          className="fixed bottom-4 right-4 z-[80] w-14 h-14 rounded-full bg-gradient-to-br from-[#004387] to-[#0c2d57] shadow-[0_8px_24px_rgba(0,67,135,0.45)] hover:scale-105 transition-transform border-2 border-white"
           aria-label="פתח יועץ טכני חכם"
         >
+          <img
+            src="https://lh3.googleusercontent.com/d/1ivu4rHgeaH6iiodL2WkA6i_6XS_gmmG_"
+            alt="יועץ טכני"
+            className="w-full h-full rounded-full object-cover"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+          />
           <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500 border-2 border-white"></span>
           </span>
-          <User className="w-7 h-7" />
           <span className="absolute -bottom-1 -left-1 bg-[#f7941d] rounded-full p-1 border-2 border-white flex items-center justify-center">
             <Sparkles className="w-2.5 h-2.5 text-white" />
           </span>
