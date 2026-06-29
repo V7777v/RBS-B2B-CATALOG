@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, MapPin, Phone, Mail } from 'lucide-react';
 
 // ====================================================================
 // פרטי החברה — RBS Telecom
@@ -80,7 +80,7 @@ const PrivacyDoc: React.FC = () => (
       <LI>עמידה בחובות חוקיות ושיפור השירות.</LI>
     </ul>
     <H2>6. מסירת מידע לצדדים שלישיים</H2>
-    <P>איננו מוכרים מידע אישי. מידע עשוי להימסר לספקי שירות הפועלים מטעמנו ולמטרות התפעול בלבד, ובהם: Google Firebase (אחסון, הזדהות ובסיס נתונים), Google reCAPTCHA (אבטחה) ו-EmailJS (משלוח דוא״ל). כמו כן עשוי להימסר מידע אם נידרש לכך על פי דין, צו שיפוטי, או לצורך הגנה על זכויותיונו.</P>
+    <P>איננו מוכרים מידע אישי. מידע עשוי להימסר לספקי שירות הפועלים מטעמנו ולמטרות התפעול בלבד, ובהם: Google Firebase (אחסון, הזדהות ובסיס נתונים), Google reCAPTCHA (אבטחה) ו-EmailJS (משלוח דוא״ל). כמו כן עשוי להימסר מידע אם נידרש לכך על פי דין, צו שיפוטי, או לצורך הגנה על זכויותינו.</P>
     <H2>7. העברת מידע אל מחוץ לישראל</H2>
     <P>חלק מספקי השירות (כגון Google) מאחסנים מידע בשרתים הממוקמים מחוץ לישראל. בעצם השימוש באתר אתה מסכים להעברה ולאחסון כאמור, בכפוף לאמצעי ההגנה של אותם ספקים ולהוראות הדין.</P>
     <H2>8. אבטחת מידע</H2>
@@ -122,7 +122,7 @@ const CookiesDoc: React.FC = () => (
     </ul>
     <P><strong>עוגיות צד שלישי</strong> — שירותי Google (reCAPTCHA, Firebase) עשויים להציב עוגיות בהתאם למדיניות הפרטיות שלהם.</P>
     <H2>3. ניהול עוגיות</H2>
-    <P>באפשרותך לחסום או למחוק עוגיות דרך הגדרות הדפנפן. חסימת עוגיות חיוניות עלולה לפגוע בתפקוד האתר ובאפשרות ההתחברות.</P>
+    <P>באפשרותך לחסום או למחוק עוגיות דרך הגדרות הדפדפן. חסימת עוגיות חיוניות עלולה לפגוע בתפקוד האתר ובאפשרות ההתחברות.</P>
     <H2>4. הסכמה</H2>
     <P>בכניסה הראשונה לאתר מוצג באנר עוגיות. המשך השימוש והאישור מהווים הסכמה לשימוש בעוגיות כמתואר; ניתן לשנות את הגדרות הדפדפן בכל עת.</P>
     <H2>5. שינויים</H2>
@@ -249,24 +249,44 @@ const LegalAndCookies: React.FC = () => {
       `}</style>
 
       {/* Footer */}
-      <footer className="bg-[#0c2d57] text-white/90 mt-auto" dir="rtl">
-        <div className="max-w-6xl mx-auto px-4 py-6">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-            <div className="text-sm leading-relaxed">
-              <div className="font-bold text-white mb-1">{COMPANY.name}</div>
-              <div>ח.פ {COMPANY.number}</div>
-              <div>{COMPANY.address}</div>
-              <div>טלפון: {COMPANY.phone}</div>
-              <div>דוא״ל: {COMPANY.email}</div>
+      <footer className="bg-gradient-to-b from-[#0c2d57] to-[#08203f] text-white/90 mt-auto" dir="rtl">
+        <div className="max-w-6xl mx-auto px-5 py-10">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+            {/* Brand */}
+            <div>
+              <img src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" alt="רבס טלקום" className="h-12 bg-white rounded-lg p-2 mb-3 inline-block" />
+              <p className="text-sm text-white/70 leading-relaxed mb-3">יבואן ומפיץ מורשה של פתרונות אבטחה, תקשורת ומיגון — שירות מקצועי ללקוחות ולמתקינים.</p>
+              <div className="flex flex-wrap gap-1.5 text-[11px]">
+                {['HIKVISION', 'EZVIZ', 'Polman', 'Inginium', 'BoostPower'].map((b) => (
+                  <span key={b} className="bg-white/10 px-2 py-1 rounded">{b}</span>
+                ))}
+              </div>
             </div>
-            <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm" aria-label="מידע משפטי">
-              <button onClick={() => setOpenDoc('accessibility')} className="hover:text-[#f7941d] underline transition-colors">הצהרת נגישות</button>
-              <button onClick={() => setOpenDoc('privacy')} className="hover:text-[#f7941d] underline transition-colors">מדיניות פרטיות</button>
-              <button onClick={() => setOpenDoc('cookies')} className="hover:text-[#f7941d] underline transition-colors">מדיניות עוגיות</button>
-              <button onClick={() => setOpenDoc('terms')} className="hover:text-[#f7941d] underline transition-colors">תקנון</button>
-            </nav>
+
+            {/* Contact */}
+            <div>
+              <h3 className="text-[#f7941d] font-bold mb-3 text-sm">יצירת קשר</h3>
+              <ul className="space-y-2.5 text-sm text-white/80">
+                <li className="flex items-center gap-2"><MapPin size={15} className="text-[#f7941d] flex-shrink-0" /> <span>{COMPANY.address}</span></li>
+                <li className="flex items-center gap-2"><Phone size={15} className="text-[#f7941d] flex-shrink-0" /> <a href={`tel:${COMPANY.phone}`} className="hover:text-white" dir="ltr">{COMPANY.phone}</a></li>
+                <li className="flex items-center gap-2"><Mail size={15} className="text-[#f7941d] flex-shrink-0" /> <a href={`mailto:${COMPANY.email}`} className="hover:text-white break-all">{COMPANY.email}</a></li>
+              </ul>
+              <p className="text-xs text-white/45 mt-3">ח.פ {COMPANY.number}</p>
+            </div>
+
+            {/* Legal */}
+            <div>
+              <h3 className="text-[#f7941d] font-bold mb-3 text-sm">מידע ומסמכים</h3>
+              <nav className="flex flex-col items-start gap-2.5 text-sm" aria-label="מידע משפטי">
+                <button onClick={() => setOpenDoc('accessibility')} className="text-white/80 hover:text-white transition-colors">הצהרת נגישות</button>
+                <button onClick={() => setOpenDoc('privacy')} className="text-white/80 hover:text-white transition-colors">מדיניות פרטיות</button>
+                <button onClick={() => setOpenDoc('cookies')} className="text-white/80 hover:text-white transition-colors">מדיניות עוגיות</button>
+                <button onClick={() => setOpenDoc('terms')} className="text-white/80 hover:text-white transition-colors">תקנון ותנאי שימוש</button>
+              </nav>
+            </div>
           </div>
-          <div className="border-t border-white/15 mt-4 pt-3 text-xs text-white/60 text-center">
+
+          <div className="border-t border-white/10 mt-8 pt-4 text-xs text-white/50 text-center">
             © {new Date().getFullYear()} {COMPANY.name}. כל הזכויות שמורות.
           </div>
         </div>
