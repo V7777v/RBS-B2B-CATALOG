@@ -294,8 +294,13 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
               <div className="bg-[#0c2d57] text-white p-2 sm:p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center relative overflow-hidden gap-2 sm:gap-0 shrink-0">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-[#fe8d00]/10 rounded-full blur-xl pointer-events-none" />
                 <div className="flex items-center gap-2.5 relative z-10 w-full sm:w-auto">
-                  <div className="bg-[#fe8d00] p-1.5 rounded-lg text-white shrink-0">
-                    <Bot className="w-5 h-5" />
+                  <div className="bg-[#fe8d00] p-0.5 rounded-lg text-white shrink-0 shadow-sm border border-white/20">
+                    <img 
+                      src="https://lh3.googleusercontent.com/d/1ivu4rHgeaH6iiodL2WkA6i_6XS_gmmG_" 
+                      alt="RBS Expert" 
+                      className="w-7 h-7 object-cover rounded-md"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                    />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-bold text-sm sm:text-base flex items-center gap-1.5 leading-tight text-white m-0 truncate">
@@ -381,8 +386,13 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                     return (
                     <div key={idx} className={`flex ${isModel ? 'justify-start' : 'justify-end'} gap-2`}>
                       {isModel && (
-                        <div className="w-8 h-8 rounded-full bg-[#0c2d57] text-white flex items-center justify-center shrink-0 self-start text-xs border border-white/20">
-                          <Bot className="w-4 h-4" />
+                        <div className="w-8 h-8 rounded-full bg-[#0c2d57] text-white flex items-center justify-center shrink-0 self-start text-xs border border-white/20 overflow-hidden shadow-sm">
+                          <img 
+                            src="https://lh3.googleusercontent.com/d/1ivu4rHgeaH6iiodL2WkA6i_6XS_gmmG_" 
+                            alt="RBS Expert" 
+                            className="w-full h-full object-cover"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          />
                         </div>
                       )}
                       
@@ -633,8 +643,13 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
 
                 {isLoading && (
                   <div className="flex justify-start gap-2">
-                    <div className="w-8 h-8 rounded-full bg-[#0c2d57] text-white flex items-center justify-center shrink-0 text-xs">
-                      <Bot className="w-4 h-4" />
+                    <div className="w-8 h-8 rounded-full bg-[#0c2d57] text-white flex items-center justify-center shrink-0 text-xs border border-white/20 overflow-hidden shadow-sm">
+                      <img 
+                        src="https://lh3.googleusercontent.com/d/1ivu4rHgeaH6iiodL2WkA6i_6XS_gmmG_" 
+                        alt="RBS Expert" 
+                        className="w-full h-full object-cover"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                      />
                     </div>
                     <div className="p-3 bg-white border border-gray-100 rounded-xl rounded-tr-none flex items-center gap-2 text-xs sm:text-sm text-gray-500">
                       <Loader2 className="w-4 h-4 animate-spin text-[#004387]" />
