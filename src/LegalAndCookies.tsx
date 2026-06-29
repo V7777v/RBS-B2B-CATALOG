@@ -274,26 +274,29 @@ const LegalAndCookies: React.FC = () => {
               </div>
             </div>
 
-            {/* Contact */}
-            <div>
-              <h3 className="text-[#f7941d] font-bold mb-3 text-sm">יצירת קשר</h3>
-              <ul className="space-y-2.5 text-sm text-white/80">
-                <li className="flex items-center gap-2"><MapPin size={15} className="text-[#f7941d] flex-shrink-0" /> <span>{COMPANY.address}</span></li>
-                <li className="flex items-center gap-2"><Phone size={15} className="text-[#f7941d] flex-shrink-0" /> <a href={`tel:${COMPANY.phone}`} className="hover:text-white" dir="ltr">{COMPANY.phone}</a></li>
-                <li className="flex items-center gap-2"><Mail size={15} className="text-[#f7941d] flex-shrink-0" /> <a href={`mailto:${COMPANY.email}`} className="hover:text-white break-all">{COMPANY.email}</a></li>
-              </ul>
-              <p className="text-xs text-white/45 mt-3">ח.פ {COMPANY.number}</p>
-            </div>
+            {/* Contact & Legal side-by-side on mobile, and columns on sm+ */}
+            <div className="grid grid-cols-2 gap-4 sm:col-span-2 sm:grid-cols-2">
+              {/* Contact */}
+              <div>
+                <h3 className="text-[#f7941d] font-bold mb-3 text-sm">יצירת קשר</h3>
+                <ul className="space-y-2.5 text-sm text-white/80">
+                  <li className="flex items-start gap-2"><MapPin size={15} className="text-[#f7941d] mt-0.5 flex-shrink-0" /> <span>{COMPANY.address}</span></li>
+                  <li className="flex items-center gap-2"><Phone size={15} className="text-[#f7941d] flex-shrink-0" /> <a href={`tel:${COMPANY.phone}`} className="hover:text-white" dir="ltr">{COMPANY.phone}</a></li>
+                  <li className="flex items-center gap-2"><Mail size={15} className="text-[#f7941d] flex-shrink-0" /> <a href={`mailto:${COMPANY.email}`} className="hover:text-white break-all">{COMPANY.email}</a></li>
+                </ul>
+                <p className="text-xs text-white/45 mt-3">ח.פ {COMPANY.number}</p>
+              </div>
 
-            {/* Legal */}
-            <div>
-              <h3 className="text-[#f7941d] font-bold mb-3 text-sm">מידע ומסמכים</h3>
-              <nav className="flex flex-col items-start gap-2.5 text-sm" aria-label="מידע משפטי">
-                <button onClick={() => setOpenDoc('accessibility')} className="text-white/80 hover:text-white transition-colors">הצהרת נגישות</button>
-                <button onClick={() => setOpenDoc('privacy')} className="text-white/80 hover:text-white transition-colors">מדיניות פרטיות</button>
-                <button onClick={() => setOpenDoc('cookies')} className="text-white/80 hover:text-white transition-colors">מדיניות עוגיות</button>
-                <button onClick={() => setOpenDoc('terms')} className="text-white/80 hover:text-white transition-colors">תקנון ותנאי שימוש</button>
-              </nav>
+              {/* Legal */}
+              <div>
+                <h3 className="text-[#f7941d] font-bold mb-3 text-sm">מידע ומסמכים</h3>
+                <nav className="flex flex-col items-start gap-2.5 text-sm" aria-label="מידע משפטי">
+                  <button onClick={() => setOpenDoc('accessibility')} className="text-white/80 hover:text-white transition-colors text-right">הצהרת נגישות</button>
+                  <button onClick={() => setOpenDoc('privacy')} className="text-white/80 hover:text-white transition-colors text-right">מדיניות פרטיות</button>
+                  <button onClick={() => setOpenDoc('cookies')} className="text-white/80 hover:text-white transition-colors text-right">מדיניות עוגיות</button>
+                  <button onClick={() => setOpenDoc('terms')} className="text-white/80 hover:text-white transition-colors text-right">תקנון ותנאי שימוש</button>
+                </nav>
+              </div>
             </div>
           </div>
 
