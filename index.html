@@ -23,6 +23,12 @@
         *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
       }
     </style>
+    <style>
+      /* Prevent iOS Safari auto-zoom on input focus (keeps pinch-zoom for accessibility) */
+      @media screen and (max-width: 767px) {
+        input, textarea, select { font-size: 16px !important; }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
