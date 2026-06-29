@@ -256,10 +256,21 @@ const LegalAndCookies: React.FC = () => {
             <div>
               <img src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" alt="רבס טלקום" className="h-12 bg-white rounded-lg p-2 mb-3 inline-block" />
               <p className="text-sm text-white/70 leading-relaxed mb-3">יבואן ומפיץ מורשה של פתרונות אבטחה, תקשורת ומיגון — שירות מקצועי ללקוחות ולמתקינים.</p>
-              <div className="flex flex-wrap gap-1.5 text-[11px]">
-                {['HIKVISION', 'EZVIZ', 'Polman', 'Inginium', 'BoostPower'].map((b) => (
-                  <span key={b} className="bg-white/10 px-2 py-1 rounded">{b}</span>
-                ))}
+              <div className="flex flex-col gap-2.5 mt-4">
+                <div className="flex flex-wrap gap-2.5 items-center">
+                  <img src="https://lh3.googleusercontent.com/d/15xOfJxJs-moC7gTES3_wNOAeajsOaR2F" alt="HIKVISION" referrerPolicy="no-referrer" className="h-8 bg-white rounded px-1.5 py-0.5 object-contain shadow-sm" />
+                  <img src="https://lh3.googleusercontent.com/d/16OipS6V2WxnB6iU41A6AUlnqkkm0K8kh" alt="EZVIZ" referrerPolicy="no-referrer" className="h-8 bg-white rounded px-1.5 py-0.5 object-contain shadow-sm" />
+                  <img src="https://lh3.googleusercontent.com/d/1NH5lbx4PYgUAwlwrIv6bC4bvnEA_3Xci" alt="POLMAN" referrerPolicy="no-referrer" className="h-8 bg-white rounded px-1.5 py-0.5 object-contain shadow-sm" />
+                  <img src="https://lh3.googleusercontent.com/d/1yUKeGG1pZ5zx0KBQsUxDwnMBAXcumk5w" alt="ROBUSTEL" referrerPolicy="no-referrer" className="h-6 bg-white rounded px-2 py-1 object-contain shadow-sm" />
+                </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <img src="https://lh3.googleusercontent.com/d/17j_07DGwqHdwtOvE_YkwKBAY17hbWvJO" alt="Boost Link" referrerPolicy="no-referrer" className="h-6 bg-white rounded px-1 py-0.5 object-contain shadow-sm" />
+                  <img src="https://lh3.googleusercontent.com/d/1oNXffciQFDX9ULUlB02wZRdG7qkNdDmC" alt="Boost Secure" referrerPolicy="no-referrer" className="h-6 bg-white rounded px-1 py-0.5 object-contain shadow-sm" />
+                  <img src="https://lh3.googleusercontent.com/d/1Ec6QmrHTeGihW5NZOVaji9tZrSsIZCnW" alt="Boost" referrerPolicy="no-referrer" className="h-6 bg-white rounded px-1 py-0.5 object-contain shadow-sm" />
+                  <img src="https://lh3.googleusercontent.com/d/1rjBiZSRWAFQfCYDiECpt3DaCOn0VqB54" alt="Inginium" referrerPolicy="no-referrer" className="h-6 bg-white rounded px-1 py-0.5 object-contain shadow-sm" />
+                  <img src="https://lh3.googleusercontent.com/d/1mCwVsuv0qfBBO0Hrd3ewS3ZWNp43c8U-" alt="Boost" referrerPolicy="no-referrer" className="h-6 bg-white rounded px-1 py-0.5 object-contain shadow-sm" />
+                  <img src="https://lh3.googleusercontent.com/d/1WrLAN7EJMtMv20xcJFDhAjYnPqrIwDhZ" alt="Boost" referrerPolicy="no-referrer" className="h-6 bg-white rounded px-1 py-0.5 object-contain shadow-sm" />
+                </div>
               </div>
             </div>
 
