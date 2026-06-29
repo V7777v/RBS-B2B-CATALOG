@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { 
-  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut, User, Heart, Calculator, Percent, TrendingUp, PenTool, Scale
+  ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut, User, Heart, Calculator, Percent, TrendingUp, PenTool, Scale, Users, Phone, Mail, MessageSquare
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -24,6 +24,28 @@ const SHEET_URL = SHEET_BASE + SHEET_SECRET_ID;
 const PRODUCTS_GID = '150681' + '2668';
 const CATALOGS_GID = '178108' + '3359';
 const SUBCATEGORIES_GID = '162617' + '5369';
+
+// Global Agents List and Helper Functions
+const SYSTEM_AGENTS = [
+  { name: 'משרד - נירית', email: 'nirit@rbs-telecom.com', phone: '972545241480' },
+  { name: 'מיכה', email: 'micha@rbs-telecom.com', phone: '972503332497' },
+  { name: 'ניר', email: 'nir@rbs-telecom.com', phone: '972503332116' },
+  { name: 'אברהם', email: 'avraham@rbs-telecom.com', phone: '972503332254' },
+  { name: 'מוטי', email: 'moti@rbs-telecom.com', phone: '972503334259' },
+  { name: 'מאיר', email: 'meir@rbs-telecom.com', phone: '972504530996' }
+];
+
+const formatPhoneForWhatsApp = (phone: string): string => {
+  if (!phone) return '';
+  let clean = phone.replace(/\D/g, ''); // keep only digits
+  if (clean.startsWith('0')) {
+    clean = '972' + clean.slice(1);
+  }
+  if (!clean.startsWith('972') && clean.length === 9) {
+    clean = '972' + clean;
+  }
+  return clean;
+};
 
 // --- HELPER FUNCTIONS ---
 const parsePrice = (priceVal: any): number => {
@@ -2217,15 +2239,137 @@ export default function App() {
   const [agentName, setAgentName] = useState<string>('');
   const [teamOrders, setTeamOrders] = useState<any[]>([]);
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
+  const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
+
+  // Helper to parse contact details from order details text
+  const parseOrderDetails = (detailsText: string) => {
+    const result: Record<string, string> = {};
+    if (!detailsText) return result;
+    const lines = detailsText.split('\n');
+    lines.forEach(line => {
+      const idx = line.indexOf(':');
+      if (idx !== -1) {
+        const key = line.slice(0, idx).trim();
+        const val = line.slice(idx + 1).trim();
+        if (key && val) {
+          result[key] = val;
+        }
+      }
+    });
+    return result;
+  };
+
   const customerGroups = useMemo(() => {
     const map = new Map<string, any>();
     teamOrders.forEach((o: any) => {
       const key = String(o.email || o.company || 'לא ידוע').toLowerCase();
-      if (!map.has(key)) map.set(key, { key, name: o.company || o.email || 'לא ידוע', email: o.email || '', orders: [] });
-      map.get(key).orders.push(o);
+      if (!map.has(key)) {
+        const parsed = parseOrderDetails(o.detailsText || '');
+        map.set(key, { 
+          key, 
+          name: o.company || o.email || 'לא ידוע', 
+          email: o.email || parsed['מייל לקוח'] || '', 
+          phone: parsed['טלפון'] || o.phone || '',
+          contactName: parsed['איש קשר'] || '',
+          address: parsed['כתובת אספקה'] || '',
+          agent: (o.agent || '').trim(),
+          orders: [] 
+        });
+      }
+      const group = map.get(key);
+      group.orders.push(o);
+      
+      if (o.detailsText) {
+        const parsed = parseOrderDetails(o.detailsText);
+        if (parsed['טלפון'] && !group.phone) group.phone = parsed['טלפון'];
+        if (parsed['איש קשר'] && !group.contactName) group.contactName = parsed['איש קשר'];
+        if (parsed['מייל לקוח'] && !group.email) group.email = parsed['מייל לקוח'];
+        if (parsed['כתובת אספקה'] && !group.address) group.address = parsed['כתובת אספקה'];
+      }
     });
     return Array.from(map.values());
   }, [teamOrders]);
+
+  const agentsGroup = useMemo(() => {
+    const defaultAgents = ['אברהם', 'מיכה', 'מוטי', 'ניר'];
+    const map = new Map<string, any>();
+    
+    // Initialize default agents
+    defaultAgents.forEach(name => {
+      map.set(name, {
+        name,
+        customers: [],
+        totalOrders: 0,
+        totalSales: 0,
+        statusCounts: { sent: 0, processing: 0, done: 0 }
+      });
+    });
+    
+    // Unassigned or other agents
+    const unassignedKey = 'ללא סוכן / אחר';
+    map.set(unassignedKey, {
+      name: unassignedKey,
+      customers: [],
+      totalOrders: 0,
+      totalSales: 0,
+      statusCounts: { sent: 0, processing: 0, done: 0 }
+    });
+
+    // Group customers into their respective agents
+    customerGroups.forEach((c: any) => {
+      let agentNameAssigned = (c.agent || '').trim();
+      if (!agentNameAssigned) {
+        const orderWithAgent = c.orders.find((o: any) => (o.agent || '').trim());
+        if (orderWithAgent) agentNameAssigned = orderWithAgent.agent.trim();
+      }
+      
+      let matchedAgentKey = unassignedKey;
+      if (agentNameAssigned) {
+        const found = defaultAgents.find(a => a === agentNameAssigned || agentNameAssigned.includes(a));
+        if (found) {
+          matchedAgentKey = found;
+        } else {
+          if (!map.has(agentNameAssigned)) {
+            map.set(agentNameAssigned, {
+              name: agentNameAssigned,
+              customers: [],
+              totalOrders: 0,
+              totalSales: 0,
+              statusCounts: { sent: 0, processing: 0, done: 0 }
+            });
+          }
+          matchedAgentKey = agentNameAssigned;
+        }
+      }
+      
+      const agentGroup = map.get(matchedAgentKey);
+      if (agentGroup) {
+        agentGroup.customers.push(c);
+        
+        c.orders.forEach((o: any) => {
+          agentGroup.totalOrders++;
+          
+          let orderTotal = Number(o.total) || 0;
+          if (!orderTotal && o.items) {
+            orderTotal = o.items.reduce((sum: number, it: any) => sum + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
+          }
+          agentGroup.totalSales += orderTotal;
+          
+          const status = o.status || 'sent';
+          if (agentGroup.statusCounts[status] !== undefined) {
+            agentGroup.statusCounts[status]++;
+          } else {
+            agentGroup.statusCounts[status] = 1;
+          }
+        });
+      }
+    });
+    
+    return Array.from(map.values()).filter(g => {
+      if (defaultAgents.includes(g.name)) return true;
+      return g.customers.length > 0;
+    });
+  }, [customerGroups]);
   const [agentQuotes, setAgentQuotes] = useState<any[]>([]);
   const [showQuoteEditor, setShowQuoteEditor] = useState(false);
   const [quoteEditorCustomer, setQuoteEditorCustomer] = useState<any>(null);
@@ -6268,15 +6412,63 @@ export default function App() {
               <button onClick={() => document.getElementById('sec-quotes')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="bg-gray-50 rounded-xl p-3 text-center hover:bg-gray-100 transition-colors w-full"><div className="text-2xl font-bold text-[#004387]">{customerQuotes.length}</div><div className="text-[11px] text-gray-500">הצעות מחיר</div></button>
               <button onClick={() => document.getElementById('sec-favorites')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="bg-gray-50 rounded-xl p-3 text-center hover:bg-gray-100 transition-colors w-full"><div className="text-2xl font-bold text-[#004387]">{favorites.length}</div><div className="text-[11px] text-gray-500">מועדפים</div></button>
             </div>
-            {userProfile?.agent && (userProfile?.agentPhone || userProfile?.agentEmail) && (
-              <div className="bg-gray-50 rounded-xl p-3 mb-4 flex items-center justify-between gap-2">
-                <div className="min-w-0"><span className="text-[11px] text-gray-500 block">הסוכן שלי</span><span className="font-bold text-[#0c2d57] truncate">{userProfile.agent}</span></div>
-                <div className="flex gap-2 flex-shrink-0">
-                  {userProfile.agentPhone && <a href={`tel:${userProfile.agentPhone}`} className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-bold whitespace-nowrap">📞 התקשר</a>}
-                  {userProfile.agentEmail && <a href={`mailto:${userProfile.agentEmail}`} className="px-3 py-1.5 bg-blue-100 text-[#004387] rounded-lg text-xs font-bold whitespace-nowrap">✉️ מייל</a>}
+            {userProfile?.agent && (() => {
+              const matchedAgent = SYSTEM_AGENTS.find(a => 
+                a.name === userProfile.agent || 
+                userProfile.agent.includes(a.name) || 
+                a.name.includes(userProfile.agent)
+              );
+              const agentPhone = userProfile.agentPhone || matchedAgent?.phone;
+              const agentEmail = userProfile.agentEmail || matchedAgent?.email;
+
+              if (!agentPhone && !agentEmail) return null;
+
+              return (
+                <div className="bg-gradient-to-br from-slate-50 to-gray-100 rounded-2xl p-4 border border-gray-200 shadow-sm mb-4 text-right" dir="rtl">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-8 h-8 rounded-full bg-[#004387]/10 flex items-center justify-center text-[#004387]">
+                      <User size={14} />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-gray-400 block leading-tight">סוכן מכירות אישי</span>
+                      <span className="font-extrabold text-xs text-[#0c2d57] leading-tight">{userProfile.agent}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-2">
+                    {agentPhone && (
+                      <a 
+                        href={`tel:${agentPhone}`} 
+                        className="py-2.5 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all"
+                      >
+                        <span className="text-lg">📞</span>
+                        <span>חיוג מהיר</span>
+                      </a>
+                    )}
+                    {agentPhone && (
+                      <a 
+                        href={`https://wa.me/${formatPhoneForWhatsApp(agentPhone)}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all"
+                      >
+                        <span className="text-lg">💬</span>
+                        <span>ווצאפ</span>
+                      </a>
+                    )}
+                    {agentEmail && (
+                      <a 
+                        href={`mailto:${agentEmail}?subject=${encodeURIComponent('פנייה מלקוח: ' + (userProfile.company || ''))}`} 
+                        className="py-2.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#004387] rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all"
+                      >
+                        <span className="text-lg">✉️</span>
+                        <span>מייל</span>
+                      </a>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
               </>
             )}
             {userRole !== 'agent' && userRole !== 'sales_manager' && (
@@ -6680,85 +6872,351 @@ export default function App() {
               </div>
             )}
 
-            {(userRole === 'agent' || userRole === 'sales_manager') && customerGroups.length > 0 && (
-              <div className="mt-5">
-                <h3 className="text-sm font-bold text-gray-600 mb-2">{userRole === 'sales_manager' ? 'תיקיות לקוחות (כל הסוכנים)' : 'תיקיות לקוחות'} ({customerGroups.length})</h3>
-                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                  {customerGroups.map((g: any) => (
-                    <div key={g.key} className="border border-gray-100 rounded-lg overflow-hidden">
-                      <button onClick={() => setExpandedCustomer(expandedCustomer === g.key ? null : g.key)} className="w-full flex items-center justify-between p-2.5 bg-gray-50 hover:bg-gray-100">
-                        <span className="flex items-center gap-2 min-w-0">
-                          <FolderOpen size={16} className="text-[#004387] flex-shrink-0" />
-                          <span className="font-semibold text-[#0c2d57] text-sm truncate">{g.name}</span>
+            {/* SALES MANAGER / AGENT HIERARCHICAL DIRECTORY (WCAG & STYLISH SEPARATION) */}
+            {(userRole === 'agent' || userRole === 'sales_manager') && (
+              <div className="mt-6 border-t border-gray-100 pt-5 text-right" dir="rtl">
+                
+                {/* 1. SALES MANAGER CONSOLIDATED VIEW */}
+                {userRole === 'sales_manager' && (
+                  <div className="mb-6 bg-slate-50 border border-slate-100 rounded-2xl p-4 shadow-sm">
+                    <div className="flex items-center gap-2 mb-3 text-[#0c2d57]">
+                      <TrendingUp size={18} className="text-[#004387]" />
+                      <h4 className="font-extrabold text-sm">לוח ריכוז וביצועי מנהל מכירות</h4>
+                    </div>
+
+                    {/* Consolidated Stats */}
+                    <div className="grid grid-cols-3 gap-2 mb-4">
+                      <div className="bg-white rounded-xl p-2.5 border border-gray-100 text-center">
+                        <span className="text-[10px] text-gray-400 block mb-0.5">סה״כ מחזור הזמנות</span>
+                        <span className="text-sm font-extrabold text-green-600">
+                          ₪{Math.round(agentsGroup.reduce((acc, a) => acc + a.totalSales, 0)).toLocaleString('he-IL')}
                         </span>
-                        <span className="text-xs text-gray-500 flex-shrink-0 mr-2">{g.orders.length} הזמנות {expandedCustomer === g.key ? '▲' : '▼'}</span>
-                      </button>
-                      {expandedCustomer === g.key && (
-                        <div className="p-2 space-y-2 bg-white">
-                          {userRole === 'agent' && (
-                            <div className="pb-1">
-                              <button onClick={() => openQuoteEditor(g)} className="w-full py-2 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-lg text-sm font-bold flex items-center justify-center gap-1.5"><FileText size={14} /> הצעת מחיר חדשה</button>
-                              {agentQuotes.filter((q: any) => String(q.customerEmail || '').toLowerCase() === g.key || (q.customerCompany || '') === g.name).map((q: any) => (
-                                <button key={q.id} onClick={() => openQuoteEditor(g, q)} className="w-full mt-1 flex justify-between items-center border border-gray-100 rounded-lg p-2 text-xs">
-                                  <span className="text-[#0c2d57] font-semibold">הצעה · ₪{Math.round(q.total || 0)} · {q.items?.length || 0} שורות</span>
-                                  <span className={`px-2 py-0.5 rounded-full font-bold ${q.status === 'approved' ? 'bg-green-100 text-green-700' : q.status === 'rejected' ? 'bg-red-100 text-red-700' : q.status === 'sent' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{q.status === 'approved' ? 'אושר' : q.status === 'rejected' ? 'נדחה' : q.status === 'sent' ? 'נשלח' : 'טיוטה'}</span>
-                                </button>
-                              ))}
+                      </div>
+                      <div className="bg-white rounded-xl p-2.5 border border-gray-100 text-center">
+                        <span className="text-[10px] text-gray-400 block mb-0.5">סה״כ הזמנות ברשת</span>
+                        <span className="text-sm font-extrabold text-[#004387]">
+                          {agentsGroup.reduce((acc, a) => acc + a.totalOrders, 0)}
+                        </span>
+                      </div>
+                      <div className="bg-white rounded-xl p-2.5 border border-gray-100 text-center">
+                        <span className="text-[10px] text-gray-400 block mb-0.5">לקוחות פעילים</span>
+                        <span className="text-sm font-extrabold text-purple-600">
+                          {customerGroups.length}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Agent Performance Progress Bars (אברהם, מיכה, מוטי, ניר) */}
+                    <div className="space-y-2.5">
+                      <span className="text-[11px] font-bold text-gray-500 block mb-1">פילוח מכירות לפי סוכנים:</span>
+                      {agentsGroup.map((ag) => {
+                        // Calculate maximum totalSales for ratio
+                        const maxSales = Math.max(...agentsGroup.map(a => a.totalSales), 1);
+                        const percent = Math.min(100, Math.round((ag.totalSales / maxSales) * 100));
+                        return (
+                          <div key={ag.name} className="bg-white rounded-lg p-2 border border-gray-100/80">
+                            <div className="flex justify-between text-xs font-bold text-[#0c2d57] mb-1">
+                              <span>סוכן: {ag.name}</span>
+                              <span className="text-gray-600">₪{Math.round(ag.totalSales).toLocaleString('he-IL')} · {ag.customers.length} לקוחות</span>
                             </div>
-                          )}
-                          {g.orders.map((o: any) => (
-                            <div key={o.id} className="border border-gray-100 rounded-lg p-3 bg-white hover:shadow-sm transition-all">
-                              <div className="flex justify-between items-center gap-2">
-                                <span className="text-[#0c2d57] text-xs font-bold font-mono">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'}</span>
-                                <div className="flex items-center gap-1.5 flex-shrink-0">
-                                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${orderStatusClass(o.status)}`}>{orderStatusLabel(o.status)}</span>
-                                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
+                            <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                              <div 
+                                className="bg-[#004387] h-full rounded-full transition-all duration-500" 
+                                style={{ width: `${percent}%` }}
+                              />
+                            </div>
+                            <div className="flex gap-2.5 text-[9px] text-gray-400 mt-1">
+                              <span>📦 {ag.totalOrders} הזמנות</span>
+                              <span>• בטיפול: {ag.statusCounts.processing || 0}</span>
+                              <span>• הושלמו: {ag.statusCounts.done || 0}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. SALES MANAGER VIEW - AGENT FOLDERS */}
+                {userRole === 'sales_manager' && (
+                  <div>
+                    <h3 className="text-sm font-extrabold text-gray-700 mb-3 flex items-center gap-1.5">
+                      <FolderOpen size={16} className="text-[#004387]" />
+                      <span>תיקיות סוכני מכירות ({agentsGroup.length})</span>
+                    </h3>
+                    
+                    <div className="space-y-3">
+                      {agentsGroup.map((ag) => {
+                        const isOpen = expandedAgent === ag.name;
+                        return (
+                          <div key={ag.name} className="border border-gray-200 rounded-xl bg-white overflow-hidden shadow-sm">
+                            {/* Agent Folder Header Button */}
+                            <button 
+                              onClick={() => setExpandedAgent(isOpen ? null : ag.name)}
+                              className={`w-full flex items-center justify-between p-3.5 text-right transition-colors ${
+                                isOpen ? 'bg-slate-50 border-b border-gray-100' : 'hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isOpen ? 'bg-[#004387] text-white' : 'bg-gray-100 text-gray-500'}`}>
+                                  <Users size={18} />
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="font-extrabold text-[#0c2d57] text-sm block">סוכן: {ag.name}</span>
+                                  <span className="text-[11px] text-gray-400 block mt-0.5">
+                                    {ag.customers.length} לקוחות · ₪{Math.round(ag.totalSales).toLocaleString('he-IL')}
+                                  </span>
                                 </div>
                               </div>
+                              <span className="text-xs font-bold text-gray-400">
+                                {isOpen ? 'סגור תיקייה ▲' : 'פתח תיקייה ▼'}
+                              </span>
+                            </button>
 
-                              {/* Beautiful visual item cards */}
-                              {o.items && o.items.length > 0 ? (
-                                <div className="mt-2 space-y-1 bg-gray-50/50 p-2 rounded-lg border border-gray-100 max-h-40 overflow-y-auto">
-                                  {o.items.map((it: any, i: number) => (
-                                    <div key={i} className="flex justify-between items-center text-xs py-1 border-b border-gray-100/50 last:border-0">
-                                      <div className="min-w-0 pr-1">
-                                        <span className="font-semibold text-gray-700 block truncate text-[11px]">{it.name}</span>
-                                        {it.sku && <span className="text-[9px] text-gray-400 font-mono">מק״ט: {it.sku}</span>}
+                            {/* Agent Folder Content */}
+                            {isOpen && (
+                              <div className="p-3 bg-gray-50/40 space-y-2.5">
+                                {ag.customers.length === 0 ? (
+                                  <div className="text-center py-4 text-gray-400 text-xs">אין לקוחות או הזמנות משויכים לסוכן זה.</div>
+                                ) : (
+                                  ag.customers.map((g: any) => {
+                                    const isCustOpen = expandedCustomer === g.key;
+                                    return (
+                                      <div key={g.key} className="border border-gray-200/60 rounded-xl bg-white overflow-hidden shadow-sm">
+                                        <button 
+                                          onClick={() => setExpandedCustomer(isCustOpen ? null : g.key)} 
+                                          className="w-full flex items-center justify-between p-3 hover:bg-gray-50/50 text-right"
+                                        >
+                                          <span className="flex items-center gap-2 min-w-0">
+                                            <FolderOpen size={16} className="text-amber-500 flex-shrink-0" />
+                                            <span className="font-bold text-[#0c2d57] text-xs truncate">{g.name}</span>
+                                          </span>
+                                          <span className="text-[11px] text-gray-500 flex-shrink-0 mr-2">
+                                            {g.orders.length} הזמנות {isCustOpen ? '▲' : '▼'}
+                                          </span>
+                                        </button>
+
+                                        {isCustOpen && (
+                                          <div className="p-3 space-y-3 bg-white border-t border-gray-100">
+                                            {/* Beautiful Customer Card (Resolves: hard for agent / manager to understand client) */}
+                                            <div className="bg-slate-50 rounded-xl p-3 border border-gray-100 text-xs text-right space-y-1.5">
+                                              <div className="text-[#0c2d57] font-extrabold text-[11px] mb-1 pb-1 border-b border-gray-200/50">כרטיס פרטי לקוח</div>
+                                              <div><span className="text-gray-500">חברה / לקוח:</span> <span className="font-extrabold text-[#0c2d57]">{g.name}</span></div>
+                                              {g.contactName && <div><span className="text-gray-500">איש קשר:</span> <span className="font-semibold text-gray-700">{g.contactName}</span></div>}
+                                              {g.phone && (
+                                                <div className="flex items-center justify-between gap-1 mt-1">
+                                                  <div><span className="text-gray-500">טלפון:</span> <span className="font-mono font-bold text-gray-800" dir="ltr">{g.phone}</span></div>
+                                                  <div className="flex gap-1.5">
+                                                    <a href={`tel:${g.phone}`} className="px-2.5 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded-md text-[10px] font-bold flex items-center gap-1">📞 התקשר</a>
+                                                    <a href={`https://wa.me/${formatPhoneForWhatsApp(g.phone)}`} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-[#25D366] text-white hover:bg-[#20ba56] rounded-md text-[10px] font-bold flex items-center gap-1">💬 וואטסאפ</a>
+                                                  </div>
+                                                </div>
+                                              )}
+                                              {g.email && (
+                                                <div className="flex items-center justify-between gap-1">
+                                                  <div><span className="text-gray-500">אימייל:</span> <span className="font-mono text-gray-600">{g.email}</span></div>
+                                                  <a href={`mailto:${g.email}`} className="px-2.5 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md text-[10px] font-bold flex items-center gap-1">✉️ שלח מייל</a>
+                                                </div>
+                                              )}
+                                              {g.address && <div><span className="text-gray-500">כתובת אספקה:</span> <span className="font-semibold text-gray-700">{g.address}</span></div>}
+                                              {g.agent && <div><span className="text-gray-500">סוכן מטפל:</span> <span className="font-extrabold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded text-[10px]">{g.agent}</span></div>}
+                                            </div>
+
+                                            {/* Orders under this Customer */}
+                                            <div className="space-y-2.5">
+                                              {g.orders.map((o: any) => (
+                                                <div key={o.id} className="border border-gray-100 rounded-xl p-3 bg-gray-50/30 hover:shadow-sm transition-all text-right">
+                                                  <div className="flex justify-between items-center gap-2 mb-1.5">
+                                                    <span className="text-[#0c2d57] text-xs font-bold font-mono">
+                                                      {o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'}
+                                                    </span>
+                                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${orderStatusClass(o.status)}`}>
+                                                        {orderStatusLabel(o.status)}
+                                                      </span>
+                                                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                        {o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}
+                                                      </span>
+                                                    </div>
+                                                  </div>
+
+                                                  {o.items && o.items.length > 0 ? (
+                                                    <div className="space-y-1 bg-white p-2 rounded-lg border border-gray-100 max-h-36 overflow-y-auto">
+                                                      {o.items.map((it: any, i: number) => (
+                                                        <div key={i} className="flex justify-between items-center text-xs py-1 border-b border-gray-100/50 last:border-0">
+                                                          <div className="min-w-0 pr-1 text-right">
+                                                            <span className="font-semibold text-gray-700 block truncate text-[11px]">{it.name}</span>
+                                                            {it.sku && <span className="text-[9px] text-gray-400 font-mono">מק״ט: {it.sku}</span>}
+                                                          </div>
+                                                          <div className="text-left flex-shrink-0 font-bold text-gray-600 text-[11px]">
+                                                            {it.quantity} יח׳
+                                                          </div>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  ) : (
+                                                    <div className="text-gray-500 text-xs mt-1">{o.itemCount || 0} פריטים</div>
+                                                  )}
+
+                                                  {o.detailsText && (
+                                                    <details className="mt-2 text-right">
+                                                      <summary className="text-[10px] text-[#004387] cursor-pointer font-bold">הערות ופרטי התקשרות נוספים</summary>
+                                                      <pre className="text-[10px] text-gray-600 whitespace-pre-wrap mt-1 bg-gray-50 rounded p-1.5 max-h-32 overflow-y-auto text-right" dir="rtl">{o.detailsText}</pre>
+                                                    </details>
+                                                  )}
+
+                                                  <div className="flex gap-1.5 mt-2.5 border-t border-gray-100/50 pt-2.5">
+                                                    <button onClick={() => convertOrderToQuote(o, g)} className="flex-grow py-1.5 bg-[#004387] text-white hover:bg-[#0c2d57] rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 border-none cursor-pointer">
+                                                      <FileText size={11} /> הפוך להצעת מחיר
+                                                    </button>
+                                                    {o.status !== 'processing' && o.status !== 'done' && (
+                                                      <button onClick={() => advanceOrderStatus(o.id, 'processing')} className="py-1.5 px-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[10px] font-bold cursor-pointer">סמן בטיפול</button>
+                                                    )}
+                                                    {o.status !== 'done' && (
+                                                      <button onClick={() => advanceOrderStatus(o.id, 'done')} className="py-1.5 px-2 bg-green-50 border border-green-200 text-green-700 rounded-lg text-[10px] font-bold cursor-pointer">סמן הושלם</button>
+                                                    )}
+                                                    {o.status === 'done' && (
+                                                      <button onClick={() => advanceOrderStatus(o.id, 'sent')} className="py-1.5 px-2 bg-gray-50 border border-gray-200 text-gray-500 rounded-lg text-[10px] font-bold cursor-pointer">החזר ל׳נשלח׳</button>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
-                                      <div className="text-left flex-shrink-0 font-bold text-gray-600 text-[11px]">
-                                        {it.quantity} יח׳
+                                    );
+                                  })
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. AGENT ONLY VIEW - FLAT DIRECTORIES (MODERN WITH DETAILED CUSTOMER CARDS) */}
+                {userRole === 'agent' && (
+                  <div>
+                    <h3 className="text-sm font-extrabold text-gray-700 mb-3 flex items-center gap-1.5">
+                      <FolderOpen size={16} className="text-[#004387]" />
+                      <span>תיקיות הלקוחות שלי ({customerGroups.length})</span>
+                    </h3>
+                    
+                    <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                      {customerGroups.map((g: any) => {
+                        const isCustOpen = expandedCustomer === g.key;
+                        return (
+                          <div key={g.key} className="border border-gray-100 rounded-xl bg-white overflow-hidden shadow-sm">
+                            <button 
+                              onClick={() => setExpandedCustomer(isCustOpen ? null : g.key)} 
+                              className="w-full flex items-center justify-between p-3.5 bg-gray-50/70 hover:bg-gray-100 text-right"
+                            >
+                              <span className="flex items-center gap-2 min-w-0">
+                                <FolderOpen size={16} className="text-amber-500 flex-shrink-0" />
+                                <span className="font-extrabold text-[#0c2d57] text-xs truncate">{g.name}</span>
+                              </span>
+                              <span className="text-[11px] text-gray-500 flex-shrink-0 mr-2">
+                                {g.orders.length} הזמנות {isCustOpen ? '▲' : '▼'}
+                              </span>
+                            </button>
+
+                            {isCustOpen && (
+                              <div className="p-3.5 space-y-3.5 bg-white border-t border-gray-100">
+                                {/* Enhanced Customer Card for Agents */}
+                                <div className="bg-slate-50 rounded-xl p-3 border border-gray-100 text-xs text-right space-y-1.5">
+                                  <div className="text-[#0c2d57] font-extrabold text-[11px] mb-1 pb-1 border-b border-gray-200/50">פרטי לקוח מלאים</div>
+                                  <div><span className="text-gray-500">חברה / לקוח:</span> <span className="font-extrabold text-[#0c2d57]">{g.name}</span></div>
+                                  {g.contactName && <div><span className="text-gray-500">איש קשר:</span> <span className="font-semibold text-gray-700">{g.contactName}</span></div>}
+                                  {g.phone && (
+                                    <div className="flex items-center justify-between gap-1 mt-1">
+                                      <div><span className="text-gray-500">טלפון:</span> <span className="font-mono font-bold text-gray-800" dir="ltr">{g.phone}</span></div>
+                                      <div className="flex gap-1.5">
+                                        <a href={`tel:${g.phone}`} className="px-2.5 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded-md text-[10px] font-bold flex items-center gap-1">📞 התקשר</a>
+                                        <a href={`https://wa.me/${formatPhoneForWhatsApp(g.phone)}`} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-[#25D366] text-white hover:bg-[#20ba56] rounded-md text-[10px] font-bold flex items-center gap-1">💬 וואטסאפ</a>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {g.email && (
+                                    <div className="flex items-center justify-between gap-1">
+                                      <div><span className="text-gray-500">אימייל:</span> <span className="font-mono text-gray-600">{g.email}</span></div>
+                                      <a href={`mailto:${g.email}`} className="px-2.5 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md text-[10px] font-bold flex items-center gap-1">✉️ שלח מייל</a>
+                                    </div>
+                                  )}
+                                  {g.address && <div><span className="text-gray-500">כתובת אספקה:</span> <span className="font-semibold text-gray-700">{g.address}</span></div>}
+                                </div>
+
+                                <div className="pb-1">
+                                  <button onClick={() => openQuoteEditor(g)} className="w-full py-2 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border-none cursor-pointer">
+                                    <FileText size={14} /> הצעת מחיר חדשה ללקוח זה
+                                  </button>
+                                  {agentQuotes.filter((q: any) => String(q.customerEmail || '').toLowerCase() === g.key || (q.customerCompany || '') === g.name).map((q: any) => (
+                                    <button key={q.id} onClick={() => openQuoteEditor(g, q)} className="w-full mt-1.5 flex justify-between items-center border border-gray-100 rounded-lg p-2.5 text-xs bg-gray-50">
+                                      <span className="text-[#0c2d57] font-semibold">הצעה · ₪{Math.round(q.total || 0)} · {q.items?.length || 0} שורות</span>
+                                      <span className={`px-2 py-0.5 rounded-full font-bold ${q.status === 'approved' ? 'bg-green-100 text-green-700' : q.status === 'rejected' ? 'bg-red-100 text-red-700' : q.status === 'sent' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{q.status === 'approved' ? 'אושר' : q.status === 'rejected' ? 'נדחה' : q.status === 'sent' ? 'נשלח' : 'טיוטה'}</span>
+                                    </button>
+                                  ))}
+                                </div>
+
+                                {/* Orders list for agent */}
+                                <div className="space-y-2">
+                                  {g.orders.map((o: any) => (
+                                    <div key={o.id} className="border border-gray-100 rounded-xl p-3.5 bg-gray-50/20 hover:shadow-sm transition-all text-right">
+                                      <div className="flex justify-between items-center gap-2 mb-2">
+                                        <span className="text-[#0c2d57] text-xs font-bold font-mono">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('he-IL') : '—'}</span>
+                                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${orderStatusClass(o.status)}`}>{orderStatusLabel(o.status)}</span>
+                                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${o.method === 'whatsapp' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.method === 'whatsapp' ? 'וואטסאפ' : 'מייל'}</span>
+                                        </div>
+                                      </div>
+
+                                      {o.items && o.items.length > 0 ? (
+                                        <div className="space-y-1 bg-white p-2 rounded-lg border border-gray-100 max-h-40 overflow-y-auto mb-2">
+                                          {o.items.map((it: any, i: number) => (
+                                            <div key={i} className="flex justify-between items-center text-xs py-1 border-b border-gray-100/50 last:border-0">
+                                              <div className="min-w-0 pr-1 text-right">
+                                                <span className="font-semibold text-gray-700 block truncate text-[11px]">{it.name}</span>
+                                                {it.sku && <span className="text-[9px] text-gray-400 font-mono">מק״ט: {it.sku}</span>}
+                                              </div>
+                                              <div className="text-left flex-shrink-0 font-bold text-gray-600 text-[11px]">
+                                                {it.quantity} יח׳
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div className="text-gray-500 text-xs mt-1">{o.itemCount || 0} פריטים</div>
+                                      )}
+
+                                      {o.detailsText && (
+                                        <details className="mt-2 text-right">
+                                          <summary className="text-[10px] text-[#004387] cursor-pointer font-bold">הערות ופרטי התקשרות נוספים</summary>
+                                          <pre className="text-[10px] text-gray-600 whitespace-pre-wrap mt-1 bg-gray-50 rounded p-1.5 max-h-32 overflow-y-auto text-right" dir="rtl">{o.detailsText}</pre>
+                                        </details>
+                                      )}
+
+                                      <div className="flex gap-1.5 mt-3 border-t border-gray-100/50 pt-3">
+                                        <button onClick={() => convertOrderToQuote(o, g)} className="flex-grow py-1.5 bg-[#004387] text-white hover:bg-[#0c2d57] rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 border-none cursor-pointer">
+                                          <FileText size={11} /> הפוך להצעת מחיר
+                                        </button>
+                                        {o.status !== 'processing' && o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'processing')} className="py-1.5 px-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[10px] font-bold cursor-pointer">סמן בטיפול</button>}
+                                        {o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'done')} className="py-1.5 px-2 bg-green-50 border border-green-200 text-green-700 rounded-lg text-[10px] font-bold cursor-pointer">סמן הושלם</button>}
+                                        {o.status === 'done' && <button onClick={() => advanceOrderStatus(o.id, 'sent')} className="py-1.5 px-2 bg-gray-50 border border-gray-200 text-gray-500 rounded-lg text-[10px] font-bold cursor-pointer">החזר ל׳נשלח׳</button>}
                                       </div>
                                     </div>
                                   ))}
                                 </div>
-                              ) : (
-                                <div className="text-gray-500 text-xs mt-1">{o.itemCount || 0} פריטים{userRole === 'sales_manager' && o.agent ? ` · סוכן: ${o.agent}` : ''}</div>
-                              )}
-
-                              {o.detailsText && (
-                                <details className="mt-2">
-                                  <summary className="text-[10px] text-[#004387] cursor-pointer font-bold">הערות ופרטי התקשרות נוספים</summary>
-                                  <pre className="text-[10px] text-gray-600 whitespace-pre-wrap mt-1 bg-gray-50 rounded p-1.5 max-h-32 overflow-y-auto" dir="rtl">{o.detailsText}</pre>
-                                </details>
-                              )}
-
-                              <div className="flex gap-1.5 mt-2.5">
-                                {(userRole === 'agent' || userRole === 'sales_manager') && (
-                                  <button onClick={() => convertOrderToQuote(o, g)} className="flex-1 py-1.5 bg-[#004387] text-white hover:bg-[#0c2d57] rounded text-[11px] font-extrabold flex items-center justify-center gap-1 border-none cursor-pointer">
-                                    <FileText size={12} /> ערוך והפוך להצעת מחיר ✍️
-                                  </button>
-                                )}
-                                {o.status !== 'processing' && o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'processing')} className="flex-1 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded text-[11px] font-bold cursor-pointer">סמן בטיפול</button>}
-                                {o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'done')} className="flex-1 py-1.5 bg-green-50 border border-green-200 text-green-700 rounded text-[11px] font-bold cursor-pointer">סמן הושלם</button>}
-                                {o.status === 'done' && <button onClick={() => advanceOrderStatus(o.id, 'sent')} className="flex-1 py-1.5 bg-gray-50 border border-gray-200 text-gray-500 rounded text-[11px] font-bold cursor-pointer">החזר ל׳נשלח׳</button>}
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+
               </div>
             )}
             {favorites.length > 0 && (
