@@ -2408,6 +2408,7 @@ export default function App() {
   // Profit margin dashboard toggle
   const [showProfitCalculator, setShowProfitCalculator] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [simpleAgentView, setSimpleAgentView] = useState(true);
 
   // Quote signing state
   const [signingQuote, setSigningQuote] = useState<any | null>(null);
@@ -2583,9 +2584,14 @@ export default function App() {
 
   const addCustomQuoteLine = () => {
     if (!customItemName.trim()) return;
-    const listP = parseFloat(customItemListPrice) || 0;
-    const quotedP = parseFloat(customItemQuotedPrice) || listP || 0;
-    const costP = parseFloat(customItemCostPrice) || 0;
+    let listP = parseFloat(customItemListPrice) || 0;
+    let quotedP = parseFloat(customItemQuotedPrice) || listP || 0;
+    let costP = parseFloat(customItemCostPrice) || 0;
+    
+    if (simpleAgentView) {
+      if (listP === 0) listP = quotedP;
+      if (costP === 0) costP = Math.round(quotedP * 0.6);
+    }
     const qtyVal = parseInt(customItemQty) || 1;
     
     setQuoteItems((prev) => reconcileGifts([
@@ -2598,7 +2604,7 @@ export default function App() {
         listPrice: listP,
         quotedPrice: quotedP,
         costPrice: costP,
-        wholesalePrice: 0,
+        wholesalePrice: listP, // Default wholesale to listP for custom items
         discountPercent: listP > 0 ? Math.round((1 - quotedP / listP) * 100) : 0,
         isCustom: true
       }
@@ -5162,7 +5168,7 @@ export default function App() {
       {!advisorOpen && (
         <button
           onClick={() => setAdvisorOpen(true)}
-          className="fixed bottom-4 right-4 z-[80] w-14 h-14 rounded-full bg-gradient-to-br from-[#004387] to-[#0c2d57] shadow-[0_8px_24px_rgba(0,67,135,0.45)] hover:scale-105 transition-transform border-2 border-white"
+          className="fixed bottom-4 right-4 z-[80] w-14 h-14 rounded-full bg-gradient-to-br from-[#004387] to-[#0c2d57] shadow-[0_8px_24px_rgba(0,67,135,0.45)] hover:scale-105 transition-transform border-2 border-white shadow-lg active:scale-95 flex items-center justify-center cursor-pointer"
           aria-label="פתח יועץ טכני חכם"
         >
           <img
@@ -5251,7 +5257,12 @@ export default function App() {
                     <div className="flex items-center border border-gray-300 bg-white shadow-sm">
                       <button 
                         type="button"
-                        onClick={() => updateConfirmCartItemQuantity(currentQty - 1)}
+                        onClick={() => {
+                          const newQty = currentQty - 1;
+                          if (newQty > 0) {
+                            updateConfirmCartItemQuantity(newQty);
+                          }
+                        }}
                         className="p-1 px-2.5 bg-gray-50 hover:bg-gray-100 text-gray-600 hover:text-black border-none select-none transition-colors"
                       >
                         <Minus size={12} className="stroke-[3]" />
@@ -5262,7 +5273,7 @@ export default function App() {
                         pattern="[0-9]*"
                         value={currentQty}
                         onChange={(e) => {
-                          const val = parseInt(e.target.value.replace(/\D/g, '')) || 0;
+                          const val = parseInt(e.target.value.replace(/D/g, '')) || 0;
                           updateConfirmCartItemQuantity(val);
                         }}
                         className="w-10 text-center text-xs font-extrabold text-gray-800 focus:outline-none py-1 border-none bg-transparent"
@@ -5362,21 +5373,21 @@ export default function App() {
               {/* Content Header */}
               <div className="text-center mb-4">
                 <span className="inline-block bg-[#c2410c]/10 text-[#c2410c] font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1.5">
-                  הזדמנות מיוחדת עבורך
+                  הזדמנות מיוחדת
                 </span>
-                <h3 className="text-lg sm:text-xl font-bold text-[#0c2d57] leading-snug mb-1">
-                  המבצעים שאסור לך לפספס! ⚡
+                <h3 className="font-extrabold text-[#0c2d57] text-lg leading-tight">
+                  מבצעים חמים ומציאון!
                 </h3>
-                <p className="text-xs text-gray-500 leading-relaxed max-w-xs mx-auto">
-                  מצאנו מחירים יוצאי דופן במחלקת המבצעים ובמציאון (עודפי מלאי).
+                <p className="text-xs text-gray-500 mt-1">
+                  ישנם פריטים במבצעים מיוחדים ומחירים חסרי תקדים עבורך.
                 </p>
               </div>
 
-              {/* Dynamic Counts Status Cards - Exact Counts WITHOUT Fallbacks */}
-              <div className="grid grid-cols-2 gap-2.5 mb-5">
-                <div className="bg-gradient-to-b from-red-50/50 to-orange-50/20 border border-orange-100 rounded-xl p-3 text-center flex flex-col justify-center items-center shadow-2xs">
-                  <Flame size={18} className="text-red-500 mb-1" />
-                  <span className="text-xl font-black text-red-600 leading-none">
+              {/* Counts grid */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <div className="bg-gradient-to-b from-orange-50/50 to-red-50/20 border border-orange-100 rounded-xl p-3 text-center flex flex-col justify-center items-center shadow-2xs">
+                  <Flame size={16} className="text-orange-600 mb-1" />
+                  <span className="text-xl font-black text-orange-600 leading-none">
                     {hotSaleCount}
                   </span>
                   <span className="text-[10px] text-gray-500 font-bold mt-1">
@@ -5423,16 +5434,30 @@ export default function App() {
       {showQuoteEditor && (
         <div className="fixed inset-0 z-[60] bg-gray-100 flex flex-col" dir="rtl">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 bg-[#004387] text-white flex-shrink-0 shadow-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-[#004387] text-white flex-shrink-0 shadow-md gap-3">
             <div className="min-w-0">
               <span className="text-[10px] uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full font-bold">הצעת מחיר סוכן ומחירון מורחב</span>
               <h2 className="font-extrabold text-base truncate mt-1">
                 {quoteEditorCustomer?.company || quoteEditorCustomer?.name || quoteEditorCustomer?.email}
               </h2>
             </div>
-            <button onClick={() => setShowQuoteEditor(false)} className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all" aria-label="סגור">
-              <X size={20} />
-            </button>
+            
+            <div className="flex items-center gap-3 self-end sm:self-center">
+              {/* Simplified Agent view toggle */}
+              <label className="flex items-center gap-2 cursor-pointer bg-white/10 px-3 py-1.5 rounded-xl hover:bg-white/20 transition-all select-none border border-white/20">
+                <input 
+                  type="checkbox" 
+                  checked={simpleAgentView} 
+                  onChange={(e) => setSimpleAgentView(e.target.checked)}
+                  className="rounded border-white/30 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer accent-amber-500"
+                />
+                <span className="text-xs font-bold whitespace-nowrap text-white">תצוגת סוכן פשוטה (הסתר מחיר מתקין ועלות)</span>
+              </label>
+
+              <button onClick={() => setShowQuoteEditor(false)} className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all border-none cursor-pointer text-white" aria-label="סגור">
+                <X size={20} />
+              </button>
+            </div>
           </div>
 
           {/* Main Workspace */}
@@ -5483,151 +5508,63 @@ export default function App() {
                 {[
                   { name: 'סנדל קיר B2B 2" מתכוונן כבד', sku: 'SND-WALL-ADJ-2', listPrice: 190, costPrice: 95 },
                   { name: 'סנדל תורן 1.5" כפול כבד', sku: 'SND-POLE-DBL-15', listPrice: 220, costPrice: 110 },
-                  { name: 'סנדל פינתי למעקה 2" מגולוון', sku: 'SND-CNR-GLV-2', listPrice: 280, costPrice: 140 },
-                  { name: 'זרוע קיר כבדה באורך 50 ס"מ', sku: 'SND-ARM-HVY-50', listPrice: 160, costPrice: 80 },
-                  { name: 'זרוע תורן כפול כבדה 2" לצינור', sku: 'SND-ARM-DBL-POLE', listPrice: 290, costPrice: 145 },
-                ].map((tpl) => (
+                  { name: 'סנדל פינתי למעקה 2" מגולוון', sku: 'SND-CNR-2', listPrice: 210, costPrice: 105 },
+                  { name: 'זרוע 2" באורך 1 מטר כבדה', sku: 'ARM-2-1M', listPrice: 150, costPrice: 75 },
+                  { name: 'זרוע 1.5" באורך 0.5 מטר קלה', sku: 'ARM-15-05M', listPrice: 85, costPrice: 42 }
+                ].map((item, idx) => (
                   <button
-                    key={tpl.sku}
+                    key={idx}
+                    type="button"
                     onClick={() => {
-                      setQuoteItems((prev) => {
-                        if (prev.some((l: any) => l.sku === tpl.sku)) return prev;
-                        return [
-                          ...prev,
-                          {
-                            id: 'sandal_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-                            sku: tpl.sku,
-                            name: tpl.name,
-                            qty: 1,
-                            listPrice: tpl.listPrice,
-                            quotedPrice: tpl.listPrice,
-                            costPrice: tpl.costPrice,
-                            discountPercent: 0,
-                            isCustom: true
-                          }
-                        ];
-                      });
+                      setQuoteItems((prev: any) => reconcileGifts([
+                        ...prev,
+                        {
+                          id: "acc-" + Date.now() + "-" + idx,
+                          name: item.name,
+                          sku: item.sku,
+                          qty: 1,
+                          listPrice: item.listPrice,
+                          quotedPrice: item.listPrice,
+                          costPrice: item.costPrice,
+                          wholesalePrice: item.listPrice,
+                          discountPercent: 0,
+                          isCustom: true
+                        }
+                      ]));
                     }}
-                    className="p-2.5 border border-blue-100 hover:border-blue-400 hover:bg-blue-50/50 rounded-xl text-right transition-all flex flex-col justify-between h-20 text-[11px] group bg-transparent cursor-pointer"
+                    className="p-2 border border-gray-200 hover:border-blue-400 rounded-lg hover:bg-blue-50/50 text-right transition-colors text-xs flex flex-col justify-between h-14 bg-transparent cursor-pointer"
                   >
-                    <span className="font-bold text-gray-700 line-clamp-2 leading-tight group-hover:text-blue-700">{tpl.name}</span>
-                    <div className="flex justify-between items-center w-full mt-1">
-                      <span className="text-gray-400 font-mono text-[9px]">{tpl.sku}</span>
-                      <span className="font-extrabold text-[#004387] bg-blue-50 px-1.5 py-0.5 rounded">₪{tpl.listPrice}</span>
-                    </div>
+                    <span className="font-bold text-gray-700 block truncate w-full text-right">{item.name}</span>
+                    <span className="text-blue-700 font-extrabold text-[10px] text-right">₪{item.listPrice} +</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* 2. Add Custom Item (סנדלים / שירותים / אביזרים וכו׳) */}
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-              <details className="group">
-                <summary className="text-xs font-bold text-gray-500 cursor-pointer flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-amber-600 font-extrabold">
-                    <Plus size={14} /> הוספת שורה מותאמת אישית (אביזר אחר, הובלה, עבודה ידנית)
-                  </span>
-                  <span className="text-gray-400 transition-transform group-open:rotate-180">▼</span>
-                </summary>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                  <div className="col-span-2">
-                    <label className="block text-gray-400 mb-0.5 font-semibold">שם הפריט או השירות *</label>
-                    <input 
-                      value={customItemName} 
-                      onChange={(e) => setCustomItemName(e.target.value)} 
-                      placeholder="לדוגמא: סנדלים נוספים, כבל קואקס מיוחד, עבודת התקנה..." 
-                      className="w-full border border-gray-200 rounded-lg p-2 text-sm" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-400 mb-0.5 font-semibold">מק״ט (אופציונלי)</label>
-                    <input 
-                      value={customItemSku} 
-                      onChange={(e) => setCustomItemSku(e.target.value)} 
-                      placeholder="לדוגמא: ACC-SND-9" 
-                      className="w-full border border-gray-200 rounded-lg p-2 text-sm" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-400 mb-0.5 font-semibold">כמות</label>
-                    <input 
-                      type="number" 
-                      value={customItemQty} 
-                      onChange={(e) => setCustomItemQty(e.target.value)} 
-                      className="w-full border border-gray-200 rounded-lg p-2 text-sm text-center" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-400 mb-0.5 font-semibold">מחיר מתקין ₪</label>
-                    <input 
-                      type="number" 
-                      value={customItemListPrice} 
-                      onChange={(e) => setCustomItemListPrice(e.target.value)} 
-                      placeholder="₪0" 
-                      className="w-full border border-gray-200 rounded-lg p-2 text-sm text-center" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-400 mb-0.5 font-semibold">מחיר מוצע ללקוח ₪</label>
-                    <input 
-                      type="number" 
-                      value={customItemQuotedPrice} 
-                      onChange={(e) => setCustomItemQuotedPrice(e.target.value)} 
-                      placeholder="₪0" 
-                      className="w-full border border-gray-200 rounded-lg p-2 text-sm text-center bg-amber-50" 
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-gray-400 mb-0.5 font-semibold">מחיר עלות (סודי לסוכן - לצורך רווחיות)</label>
-                    <input 
-                      type="number" 
-                      value={customItemCostPrice} 
-                      onChange={(e) => setCustomItemCostPrice(e.target.value)} 
-                      placeholder="₪0" 
-                      className="w-full border border-gray-200 rounded-lg p-2 text-sm text-center bg-gray-50" 
-                    />
-                  </div>
-                  <button 
-                    type="button" 
-                    onClick={addCustomQuoteLine} 
-                    disabled={!customItemName.trim()} 
-                    className="col-span-2 mt-2 w-full py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 border-none cursor-pointer"
-                  >
-                    <Plus size={16} /> הוסף שורה להצעה
-                  </button>
-                </div>
-              </details>
-            </div>
-
-            {/* 3. Items Grid Workspace (Priority-style Dense Table for desktop / High-density cards for mobile) */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-bold text-gray-500 flex justify-between items-center px-1">
-                <span>טבלת פריטים בהצעת מחיר ({quoteItems.length})</span>
-                <span className="text-gray-400 font-normal">השינויים בטבלה מסתנכרנים ומחושבים מיידית (כמו ב-Priority)</span>
-              </h3>
-
-              {quoteItems.length === 0 ? (
-                <div className="bg-white rounded-xl p-8 border border-gray-200 text-center text-gray-400">
-                  <FileText className="w-10 h-10 mx-auto opacity-30 mb-2" />
-                  <p className="font-semibold text-sm">אין פריטים עדיין</p>
-                  <p className="text-xs mt-1">חפש בקטלוג או לחץ על הוספה מהירה של אביזרים למעלה.</p>
-                </div>
-              ) : (
-                <>
-                  {/* Desktop Tabular View (Priority Style) */}
-                  <div className="hidden md:block overflow-x-auto bg-white rounded-xl shadow-sm border border-gray-200">
-                    <table className="w-full text-right text-xs">
+            {/* Desktop Tabular View (Priority Style) */}
+            <div className="hidden md:block overflow-x-auto bg-white rounded-xl shadow-sm border border-gray-200">
+              <table className="w-full text-right text-xs">
                       <thead>
                         <tr className="bg-gray-50 text-gray-400 border-b border-gray-250">
                           <th className="p-3 font-extrabold w-12 text-center">#</th>
                           <th className="p-3 font-extrabold">מוצר ומק״ט</th>
                           <th className="p-3 font-extrabold w-20 text-center">כמות</th>
-                          <th className="p-3 font-extrabold w-24 text-center">מחיר מתקין (₪)</th>
-                          <th className="p-3 font-extrabold w-24 text-center">מחיר מפיץ (₪)</th>
+                          {!simpleAgentView ? (
+                            <>
+                              <th className="p-3 font-extrabold w-24 text-center">מחיר מתקין (₪)</th>
+                              <th className="p-3 font-extrabold w-24 text-center">מחיר מפיץ (₪)</th>
+                            </>
+                          ) : (
+                            <th className="p-3 font-extrabold w-24 text-center text-[#004387]">מחיר סיטונאי (₪)</th>
+                          )}
                           <th className="p-3 font-extrabold w-24 text-center">הנחה (%)</th>
                           <th className="p-3 font-extrabold w-28 text-center">מחיר מוצע (₪)</th>
-                          <th className="p-3 font-extrabold w-28 text-center">עלות סודית (₪)</th>
-                          <th className="p-3 font-extrabold w-24 text-center">רווחיות</th>
+                          {!simpleAgentView && (
+                            <>
+                              <th className="p-3 font-extrabold w-28 text-center">עלות סודית (₪)</th>
+                              <th className="p-3 font-extrabold w-24 text-center">רווחיות</th>
+                            </>
+                          )}
                           <th className="p-3 font-extrabold w-28 text-left">סה״כ מוצע</th>
                           <th className="p-3 font-extrabold w-12 text-center">הסר</th>
                         </tr>
@@ -5649,7 +5586,7 @@ export default function App() {
                           const effectiveLineDiscount = totalLineListValue > 0 ? Math.round((1 - totalLineCharged / totalLineListValue) * 100) : 0;
 
                           return (
-                            <tr key={line.id} className={`hover:bg-gray-50/50 transition-colors ${belowCost ? 'bg-red-50/20' : ''}`}>
+                            <tr key={line.id} className={"hover:bg-gray-50/50 transition-colors " + (belowCost && !simpleAgentView ? 'bg-red-50/20' : '')}>
                               <td className="p-3 text-center text-gray-400 font-bold font-mono">{idx + 1}</td>
                               <td className="p-3 min-w-[200px]">
                                 <span className="font-bold text-[#0c2d57] block truncate max-w-[250px]">{line.name}</span>
@@ -5667,7 +5604,7 @@ export default function App() {
                                       className="w-24 border border-emerald-200 bg-emerald-50/50 rounded px-1 py-0.5 text-center text-[10px] font-bold text-emerald-800"
                                       title="מבצע: קנה X קבל Y מתנה (10+2), אחוז הנחה (10%) או טקסט חופשי"
                                     />
-                                    {(() => { const fq = (line.promoBuy > 0 && line.promoFree > 0) ? Math.floor((Number(line.qty) || 0) / line.promoBuy) * line.promoFree : 0; return fq > 0 ? <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 px-1 rounded">+{fq} מתנה</span> : null; })()}
+                                    {(() => { const fq = (line.promoBuy > 0 && line.promoFree > 0) ? Math.floor((Number(line.qty) || 0) / line.promoBuy) * line.promoFree : 0; return fq > 0 ? <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 px-1 rounded">+' + fq + ' מתנה</span> : null; })()}
                                   </div>
                                 )}
                                 {!line.isAutoGift && (totalLineQty !== Number(line.qty) || effectiveLineDiscount !== Number(line.discountPercent)) && (
@@ -5686,37 +5623,45 @@ export default function App() {
                                   min={1}
                                   value={line.qty}
                                   onChange={(e) => updateQuoteLine(idx, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                                  className={`w-16 border border-gray-200 rounded p-1 text-center font-bold text-sm ${line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : ''}`}
+                                  className={"w-16 border border-gray-200 rounded p-1 text-center font-bold text-sm " + (line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : '')}
                                   disabled={line.isAutoGift}
                                 />
                               </td>
-                              <td className="p-3">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={line.listPrice}
-                                  onChange={(e) => updateQuoteLine(idx, 'listPrice', Math.max(0, parseFloat(e.target.value) || 0))}
-                                  className={`w-24 border border-gray-200 rounded p-1 text-center font-mono text-xs ${line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : ''}`}
-                                  disabled={line.isAutoGift}
-                                />
-                              </td>
-                              <td className="p-3">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={line.wholesalePrice || 0}
-                                  onChange={(e) => updateQuoteLine(idx, 'wholesalePrice', Math.max(0, parseFloat(e.target.value) || 0))}
-                                  className={`w-24 border border-gray-200 rounded p-1 text-center font-mono text-xs ${line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : 'bg-blue-50/30'}`}
-                                  disabled={line.isAutoGift}
-                                />
-                              </td>
+                              {!simpleAgentView ? (
+                                <>
+                                  <td className="p-3">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      value={line.listPrice}
+                                      onChange={(e) => updateQuoteLine(idx, 'listPrice', Math.max(0, parseFloat(e.target.value) || 0))}
+                                      className={"w-24 border border-gray-200 rounded p-1 text-center font-mono text-xs " + (line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : '')}
+                                      disabled={line.isAutoGift}
+                                    />
+                                  </td>
+                                  <td className="p-3">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      value={line.wholesalePrice || 0}
+                                      onChange={(e) => updateQuoteLine(idx, 'wholesalePrice', Math.max(0, parseFloat(e.target.value) || 0))}
+                                      className={"w-24 border border-gray-200 rounded p-1 text-center font-mono text-xs " + (line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : 'bg-blue-50/30')}
+                                      disabled={line.isAutoGift}
+                                    />
+                                  </td>
+                                </>
+                              ) : (
+                                <td className="p-3 text-center font-bold font-mono text-blue-900 bg-blue-50/30 rounded-lg">
+                                  ₪{Math.round(line.wholesalePrice || (line.listPrice * 0.8)).toLocaleString('he-IL')}
+                                </td>
+                              )}
                               <td className="p-3">
                                 <div className="flex items-center justify-center gap-1">
                                   <input
                                     type="number"
                                     value={line.discountPercent || 0}
                                     onChange={(e) => updateQuoteLine(idx, 'discountPercent', parseFloat(e.target.value) || 0)}
-                                    className={`w-14 border border-blue-200 text-[#004387] bg-blue-50/50 rounded p-1 text-center font-bold ${line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : ''}`}
+                                    className={"w-14 border border-blue-200 text-[#004387] bg-blue-50/50 rounded p-1 text-center font-bold " + (line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : '')}
                                     disabled={line.isAutoGift}
                                   />
                                   <span className="text-blue-500 font-bold text-xs">%</span>
@@ -5728,33 +5673,38 @@ export default function App() {
                                   min={0}
                                   value={line.quotedPrice}
                                   onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))}
-                                  className={`w-24 border rounded p-1 text-center font-extrabold text-sm ${line.isAutoGift ? 'bg-emerald-50/80 text-emerald-900 border-emerald-200 cursor-not-allowed font-extrabold' : belowCost ? 'border-red-400 bg-red-100 text-red-900 animate-pulse' : 'border-amber-300 bg-amber-50 text-amber-950'}`}
+                                  className={"w-24 border rounded p-1 text-center font-extrabold text-sm " + (line.isAutoGift ? 'bg-emerald-50/80 text-emerald-900 border-emerald-200 cursor-not-allowed font-extrabold' : belowCost && !simpleAgentView ? 'border-red-400 bg-red-100 text-red-900 animate-pulse' : 'border-amber-300 bg-amber-50 text-amber-950 font-extrabold')}
                                   disabled={line.isAutoGift}
                                 />
-                                {belowCost && !line.isAutoGift && <span className="text-[9px] text-red-600 font-bold block text-center mt-0.5">מתחת לעלות!</span>}
+                                {belowCost && !line.isAutoGift && !simpleAgentView && <span className="text-[9px] text-red-600 font-bold block text-center mt-0.5">מתחת לעלות!</span>}
                               </td>
-                              <td className="p-3">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={line.costPrice || 0}
-                                  onChange={(e) => updateQuoteLine(idx, 'costPrice', Math.max(0, parseFloat(e.target.value) || 0))}
-                                  className={`w-24 border border-gray-200 rounded p-1 text-center text-gray-500 font-mono bg-gray-50/30 ${line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : ''}`}
-                                  disabled={line.isAutoGift}
-                                />
-                              </td>
-                              <td className="p-3 text-center">
-                                <span className={`inline-block font-extrabold px-2 py-0.5 rounded border text-[11px] ${marginColorClass}`}>
-                                  {margin}%
-                                </span>
-                              </td>
-                              <td className="p-3 text-left font-extrabold text-[#004387] text-sm">
+                              {!simpleAgentView && (
+                                <>
+                                  <td className="p-3">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      value={line.costPrice || 0}
+                                      onChange={(e) => updateQuoteLine(idx, 'costPrice', Math.max(0, parseFloat(e.target.value) || 0))}
+                                      className={"w-24 border border-gray-200 rounded p-1 text-center text-gray-500 font-mono bg-gray-50/30 " + (line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : '')}
+                                      disabled={line.isAutoGift}
+                                    />
+                                  </td>
+                                  <td className="p-3 text-center">
+                                    <span className={"inline-block font-extrabold px-2 py-0.5 rounded border text-[11px] " + marginColorClass}>
+                                      {margin}%
+                                    </span>
+                                  </td>
+                                </>
+                              )}
+                              <td className="p-3 text-left font-extrabold text-[#004387] text-sm font-mono">
                                 ₪{Math.round(line.quotedPrice * line.qty).toLocaleString('he-IL')}
                               </td>
                               <td className="p-3 text-center">
                                 <button
+                                  type="button"
                                   onClick={() => removeQuoteLine(idx)}
-                                  className={`p-1.5 rounded-full hover:bg-red-50 text-red-500 transition-colors border-none bg-transparent cursor-pointer ${line.isAutoGift ? 'opacity-30 cursor-not-allowed hover:bg-transparent text-gray-400' : ''}`}
+                                  className={"p-1.5 rounded-full hover:bg-red-50 text-red-500 transition-colors border-none bg-transparent cursor-pointer " + (line.isAutoGift ? 'opacity-30 cursor-not-allowed hover:bg-transparent text-gray-400' : '')}
                                   title="הסר שורה"
                                   disabled={line.isAutoGift}
                                 >
@@ -5764,7 +5714,7 @@ export default function App() {
                             </tr>
                           );
                         })}
-                      </tbody>
+</tbody>
                     </table>
                   </div>
 
@@ -5874,7 +5824,7 @@ export default function App() {
                                 type="number" 
                                 value={line.discountPercent || 0} 
                                 onChange={(e) => updateQuoteLine(idx, 'discountPercent', parseFloat(e.target.value) || 0)} 
-                                className={`w-full border border-blue-200 text-[#004387] bg-blue-50 rounded p-0.5 text-center text-xs font-bold ${line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : ''}`}
+                                className={"w-full border border-blue-200 text-[#004387] bg-blue-50 rounded p-0.5 text-center text-xs font-bold " + (line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : '')}
                                 disabled={line.isAutoGift}
                               />
                             </div>
@@ -5885,7 +5835,7 @@ export default function App() {
                                 min={0} 
                                 value={line.quotedPrice} 
                                 onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
-                                className={`w-full border rounded p-0.5 text-center font-extrabold text-xs ${line.isAutoGift ? 'bg-emerald-50/80 text-emerald-900 border-emerald-200 cursor-not-allowed font-extrabold' : belowCost ? 'border-red-400 bg-red-100 text-red-900 animate-pulse' : 'border-amber-200 bg-amber-50'}`}
+                                className={"w-full border rounded p-0.5 text-center font-extrabold text-xs " + (line.isAutoGift ? 'bg-emerald-50/80 text-emerald-900 border-emerald-200 cursor-not-allowed font-extrabold' : belowCost ? 'border-red-400 bg-red-100 text-red-900 animate-pulse' : 'border-amber-200 bg-amber-50')}
                                 disabled={line.isAutoGift}
                               />
                             </div>
@@ -5899,7 +5849,7 @@ export default function App() {
                                 min={0} 
                                 value={line.costPrice || 0} 
                                 onChange={(e) => updateQuoteLine(idx, 'costPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
-                                className={`w-12 border border-gray-200 rounded px-1 text-center bg-white ${line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : ''}`}
+                                className={"w-12 border border-gray-200 rounded px-1 text-center bg-white " + (line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : '')}
                                 disabled={line.isAutoGift}
                               />
                             </div>
@@ -5908,8 +5858,8 @@ export default function App() {
                               <span className="font-bold text-gray-700 block">₪{Math.round((line.quotedPrice - (line.costPrice || 0)) * line.qty)}</span>
                             </div>
                             <div className="text-left">
-                              <span className={`inline-block font-extrabold px-1.5 py-0.2 rounded text-[10px] ${marginColorClass}`}>
-                                {margin}% רווחיות
+                              <span className={"inline-block font-extrabold px-1.5 py-0.5 rounded text-[10px] " + marginColorClass}>
+                                {margin}% {"רווחיות"}
                               </span>
                             </div>
                           </div>
@@ -5922,9 +5872,6 @@ export default function App() {
                       );
                     })}
                   </div>
-                </>
-              )}
-            </div>
 
             {/* 4. Notes */}
             <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
