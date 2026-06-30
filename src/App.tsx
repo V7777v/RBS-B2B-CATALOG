@@ -13,6 +13,7 @@ import { auth, db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadAllQuotes, loadCustomerQuotes, updateQuoteStatus, updateQuote, deleteQuote, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder, getLastOrderError } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import QuoteDocument from './QuoteDocument';
 import LegalAndCookies from './LegalAndCookies';
 const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
@@ -5541,310 +5542,23 @@ export default function App() {
               </div>
             </div>
 
-            {/* Desktop Tabular View (Priority Style) */}
-            <div className="hidden md:block overflow-x-auto bg-white rounded-xl shadow-sm border border-gray-200">
-              <table className="w-full text-right text-xs">
-                      <thead>
-                        <tr className="bg-gray-50 text-gray-400 border-b border-gray-250">
-                          <th className="p-3 font-extrabold w-12 text-center">#</th>
-                          <th className="p-3 font-extrabold">מוצר ומק״ט</th>
-                          <th className="p-3 font-extrabold w-20 text-center">כמות</th>
-                          {!simpleAgentView ? (
-                            <>
-                              <th className="p-3 font-extrabold w-24 text-center">מחיר מתקין (₪)</th>
-                              <th className="p-3 font-extrabold w-24 text-center">מחיר מפיץ (₪)</th>
-                            </>
-                          ) : (
-                            <th className="p-3 font-extrabold w-24 text-center text-[#004387]">מחיר סיטונאי (₪)</th>
-                          )}
-                          <th className="p-3 font-extrabold w-24 text-center">הנחה (%)</th>
-                          <th className="p-3 font-extrabold w-28 text-center">מחיר מוצע (₪)</th>
-                          {!simpleAgentView && (
-                            <>
-                              <th className="p-3 font-extrabold w-28 text-center">עלות סודית (₪)</th>
-                              <th className="p-3 font-extrabold w-24 text-center">רווחיות</th>
-                            </>
-                          )}
-                          <th className="p-3 font-extrabold w-28 text-left">סה״כ מוצע</th>
-                          <th className="p-3 font-extrabold w-12 text-center">הסר</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {quoteItems.map((line: any, idx: number) => {
-                          const margin = line.quotedPrice > 0 ? Math.round(((line.quotedPrice - (line.costPrice || 0)) / line.quotedPrice) * 100) : 0;
-                          const isMarginNegative = margin < 0;
-                          const marginColorClass = isMarginNegative ? 'text-red-600 bg-red-50 border-red-200' : margin >= 35 ? 'text-green-700 bg-green-50 border-green-200' : 'text-amber-700 bg-amber-50 border-amber-200';
-                          const belowCost = line.quotedPrice < (line.costPrice || 0);
-
-                          const buy = Number(line.promoBuy) || 0;
-                          const free = Number(line.promoFree) || 0;
-                          const freeQty = (buy > 0 && free > 0) ? Math.floor((Number(line.qty) || 0) / buy) * free : 0;
-                          const totalLineQty = Number(line.qty) + freeQty;
-                          const totalLineCharged = Number(line.qty) * Number(line.quotedPrice);
-                          const effectiveUnitPrice = totalLineQty > 0 ? totalLineCharged / totalLineQty : 0;
-                          const totalLineListValue = totalLineQty * (Number(line.listPrice) || 0);
-                          const effectiveLineDiscount = totalLineListValue > 0 ? Math.round((1 - totalLineCharged / totalLineListValue) * 100) : 0;
-
-                          return (
-                            <tr key={line.id} className={"hover:bg-gray-50/50 transition-colors " + (belowCost && !simpleAgentView ? 'bg-red-50/20' : '')}>
-                              <td className="p-3 text-center text-gray-400 font-bold font-mono">{idx + 1}</td>
-                              <td className="p-3 min-w-[200px]">
-                                <span className="font-bold text-[#0c2d57] block truncate max-w-[250px]">{line.name}</span>
-                                <span className="text-gray-400 text-[10px] font-mono block mt-0.5">
-                                  מק״ט: <span className="text-gray-600 font-bold">{line.sku || 'N/A'}</span> {line.isCustom && <span className="text-amber-600 bg-amber-50 px-1 rounded font-sans font-extrabold">ידני</span>} {line.isAutoGift && <span className="text-emerald-700 bg-emerald-50 px-1 rounded font-sans font-extrabold">מתנה</span>}
-                                </span>
-                                {!line.isAutoGift && (
-                                  <div className="flex items-center gap-1 mt-1">
-                                    <span className="text-[9px] text-gray-400 font-bold">מבצע</span>
-                                    <input
-                                      type="text"
-                                      placeholder="10+2 / 10% / מבצע"
-                                      value={line.promoText !== undefined ? line.promoText : ((line.promoBuy && line.promoFree) ? line.promoBuy + '+' + line.promoFree : '')}
-                                      onChange={(e) => setLinePromo(idx, e.target.value)}
-                                      className="w-24 border border-emerald-200 bg-emerald-50/50 rounded px-1 py-0.5 text-center text-[10px] font-bold text-emerald-800"
-                                      title="מבצע: קנה X קבל Y מתנה (10+2), אחוז הנחה (10%) או טקסט חופשי"
-                                    />
-                                    {(() => { const fq = (line.promoBuy > 0 && line.promoFree > 0) ? Math.floor((Number(line.qty) || 0) / line.promoBuy) * line.promoFree : 0; return fq > 0 ? <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 px-1 rounded">+' + fq + ' מתנה</span> : null; })()}
-                                  </div>
-                                )}
-                                {!line.isAutoGift && (totalLineQty !== Number(line.qty) || effectiveLineDiscount !== Number(line.discountPercent)) && (
-                                  <div className="mt-1 text-[10px] bg-emerald-50/40 p-1.5 rounded-lg border border-emerald-100/40 flex flex-wrap gap-x-2 gap-y-0.5 text-emerald-900 leading-none">
-                                    <span>סה״כ אספקה: <span className="font-bold text-gray-700">{totalLineQty} יח׳</span></span>
-                                    <span>מחיר סופי ליחידה: <span className="font-bold text-emerald-700">₪{Math.round(effectiveUnitPrice)}</span></span>
-                                    {totalLineListValue > 0 && (
-                                      <span>הנחה אמיתית: <span className="font-extrabold text-emerald-800">{effectiveLineDiscount}%</span></span>
-                                    )}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="p-3">
-                                <input
-                                  type="number"
-                                  min={1}
-                                  value={line.qty}
-                                  onChange={(e) => updateQuoteLine(idx, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                                  className={"w-16 border border-gray-200 rounded p-1 text-center font-bold text-sm " + (line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : '')}
-                                  disabled={line.isAutoGift}
-                                />
-                              </td>
-                              {!simpleAgentView ? (
-                                <>
-                                  <td className="p-3">
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      value={line.listPrice}
-                                      onChange={(e) => updateQuoteLine(idx, 'listPrice', Math.max(0, parseFloat(e.target.value) || 0))}
-                                      className={"w-24 border border-gray-200 rounded p-1 text-center font-mono text-xs " + (line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : '')}
-                                      disabled={line.isAutoGift}
-                                    />
-                                  </td>
-                                  <td className="p-3">
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      value={line.wholesalePrice || 0}
-                                      onChange={(e) => updateQuoteLine(idx, 'wholesalePrice', Math.max(0, parseFloat(e.target.value) || 0))}
-                                      className={"w-24 border border-gray-200 rounded p-1 text-center font-mono text-xs " + (line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : 'bg-blue-50/30')}
-                                      disabled={line.isAutoGift}
-                                    />
-                                  </td>
-                                </>
-                              ) : (
-                                <td className="p-3 text-center font-bold font-mono text-blue-900 bg-blue-50/30 rounded-lg">
-                                  ₪{Math.round(line.wholesalePrice || (line.listPrice * 0.8)).toLocaleString('he-IL')}
-                                </td>
-                              )}
-                              <td className="p-3">
-                                <div className="flex items-center justify-center gap-1">
-                                  <input
-                                    type="number"
-                                    value={line.discountPercent || 0}
-                                    onChange={(e) => updateQuoteLine(idx, 'discountPercent', parseFloat(e.target.value) || 0)}
-                                    className={"w-14 border border-blue-200 text-[#004387] bg-blue-50/50 rounded p-1 text-center font-bold " + (line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : '')}
-                                    disabled={line.isAutoGift}
-                                  />
-                                  <span className="text-blue-500 font-bold text-xs">%</span>
-                                </div>
-                              </td>
-                              <td className="p-3">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={line.quotedPrice}
-                                  onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))}
-                                  className={"w-24 border rounded p-1 text-center font-extrabold text-sm " + (line.isAutoGift ? 'bg-emerald-50/80 text-emerald-900 border-emerald-200 cursor-not-allowed font-extrabold' : belowCost && !simpleAgentView ? 'border-red-400 bg-red-100 text-red-900 animate-pulse' : 'border-amber-300 bg-amber-50 text-amber-950 font-extrabold')}
-                                  disabled={line.isAutoGift}
-                                />
-                                {belowCost && !line.isAutoGift && !simpleAgentView && <span className="text-[9px] text-red-600 font-bold block text-center mt-0.5">מתחת לעלות!</span>}
-                              </td>
-                              {!simpleAgentView && (
-                                <>
-                                  <td className="p-3">
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      value={line.costPrice || 0}
-                                      onChange={(e) => updateQuoteLine(idx, 'costPrice', Math.max(0, parseFloat(e.target.value) || 0))}
-                                      className={"w-24 border border-gray-200 rounded p-1 text-center text-gray-500 font-mono bg-gray-50/30 " + (line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : '')}
-                                      disabled={line.isAutoGift}
-                                    />
-                                  </td>
-                                  <td className="p-3 text-center">
-                                    <span className={"inline-block font-extrabold px-2 py-0.5 rounded border text-[11px] " + marginColorClass}>
-                                      {margin}%
-                                    </span>
-                                  </td>
-                                </>
-                              )}
-                              <td className="p-3 text-left font-extrabold text-[#004387] text-sm font-mono">
-                                ₪{Math.round(line.quotedPrice * line.qty).toLocaleString('he-IL')}
-                              </td>
-                              <td className="p-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => removeQuoteLine(idx)}
-                                  className={"p-1.5 rounded-full hover:bg-red-50 text-red-500 transition-colors border-none bg-transparent cursor-pointer " + (line.isAutoGift ? 'opacity-30 cursor-not-allowed hover:bg-transparent text-gray-400' : '')}
-                                  title="הסר שורה"
-                                  disabled={line.isAutoGift}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-</tbody>
-                    </table>
-                  </div>
-
-                  {/* Mobile High-Density Card Feed View */}
-                  <div className="block md:hidden space-y-3">
-                    {quoteItems.map((line: any, idx: number) => {
-                      const margin = line.quotedPrice > 0 ? Math.round(((line.quotedPrice - (line.costPrice || 0)) / line.quotedPrice) * 100) : 0;
-                      const isMarginNegative = margin < 0;
-                      const marginColorClass = isMarginNegative ? 'text-red-600 bg-red-50' : margin >= 35 ? 'text-green-700 bg-green-50' : 'text-amber-700 bg-amber-50';
-                      const belowCost = line.quotedPrice < (line.costPrice || 0);
-
-                      const buy = Number(line.promoBuy) || 0;
-                      const free = Number(line.promoFree) || 0;
-                      const freeQty = (buy > 0 && free > 0) ? Math.floor((Number(line.qty) || 0) / buy) * free : 0;
-                      const totalLineQty = Number(line.qty) + freeQty;
-                      const totalLineCharged = Number(line.qty) * Number(line.quotedPrice);
-                      const effectiveUnitPrice = totalLineQty > 0 ? totalLineCharged / totalLineQty : 0;
-                      const totalLineListValue = totalLineQty * (Number(line.listPrice) || 0);
-                      const effectiveLineDiscount = totalLineListValue > 0 ? Math.round((1 - totalLineCharged / totalLineListValue) * 100) : 0;
-
-                      return (
-                        <div key={line.id} className="bg-white rounded-xl p-3 shadow-sm border border-gray-200 relative">
-                          <button 
-                            onClick={() => removeQuoteLine(idx)} 
-                            className={`absolute top-2 left-2 w-7 h-7 rounded-full hover:bg-red-50 flex items-center justify-center text-red-500 transition-colors border-none bg-transparent cursor-pointer ${line.isAutoGift ? 'opacity-20 cursor-not-allowed hover:bg-transparent text-gray-400' : ''}`}
-                            title="הסר שורה"
-                            disabled={line.isAutoGift}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-
-                          <div>
-                            <span className="text-[9px] font-bold text-gray-400 block tracking-wider font-mono">שורה {idx + 1} {line.isCustom && '· ידני/סנדלים'}</span>
-                            <span className="font-bold text-xs text-[#0c2d57] block truncate mt-0.5 max-w-[85%]">{line.name}</span>
-                            <span className="text-[10px] text-gray-400 font-mono">מק״ט: {line.sku} {line.isAutoGift && <span className="text-emerald-700 bg-emerald-50 px-1 rounded font-sans font-extrabold">מתנה</span>}</span>
-                            {!line.isAutoGift && (
-                              <div className="flex items-center gap-1.5 mt-1.5">
-                                <span className="text-[9px] text-gray-400 font-bold">מבצע (קנה+מתנה)</span>
-                                <input
-                                  type="text"
-                                  placeholder="10+2 / 10% / מבצע"
-                                  value={line.promoText !== undefined ? line.promoText : ((line.promoBuy && line.promoFree) ? line.promoBuy + '+' + line.promoFree : '')}
-                                  onChange={(e) => setLinePromo(idx, e.target.value)}
-                                  className="w-28 border border-emerald-200 bg-emerald-50/50 rounded px-1.5 py-0.5 text-center text-[11px] font-bold text-emerald-800"
-                                  title="מבצע: קנה X קבל Y מתנה (10+2), אחוז הנחה (10%) או טקסט חופשי"
-                                />
-                                {(() => { const fq = (line.promoBuy > 0 && line.promoFree > 0) ? Math.floor((Number(line.qty) || 0) / line.promoBuy) * line.promoFree : 0; return fq > 0 ? <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">+{fq} מתנה ₪0</span> : null; })()}
-                              </div>
-                            )}
-                            {!line.isAutoGift && (totalLineQty !== Number(line.qty) || effectiveLineDiscount !== Number(line.discountPercent)) && (
-                              <div className="mt-1.5 text-[10px] bg-emerald-50/40 p-1.5 rounded-lg border border-emerald-100/40 flex flex-col gap-1 text-emerald-950">
-                                <div className="flex justify-between items-center">
-                                  <span>סה״כ אספקה:</span>
-                                  <span className="font-bold text-gray-700">{totalLineQty} יח׳</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                  <span>מחיר אפקטיבי ליחידה:</span>
-                                  <span className="font-bold text-emerald-700">₪{Math.round(effectiveUnitPrice)}</span>
-                                </div>
-                                {totalLineListValue > 0 && (
-                                  <div className="flex justify-between items-center">
-                                    <span>הנחה אמיתית:</span>
-                                    <span className="font-extrabold text-emerald-800">{effectiveLineDiscount}%</span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-100">
-                            <div>
-                              <label className="text-[10px] text-gray-500 font-bold block mb-1">כמות</label>
-                              <input
-                                type="number"
-                                min={1}
-                                value={line.qty}
-                                onChange={(e) => updateQuoteLine(idx, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                                aria-label="כמות"
-                                className={`w-full border border-gray-200 rounded-lg p-2 text-center font-bold text-sm ${line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : ''}`}
-                                disabled={line.isAutoGift}
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-[#004387] font-bold block mb-1">מחיר סיטונאי (₪)</label>
-                              <input
-                                type="number"
-                                min={0}
-                                value={line.wholesalePrice || 0}
-                                onChange={(e) => updateQuoteLine(idx, 'wholesalePrice', Math.max(0, parseFloat(e.target.value) || 0))}
-                                aria-label="מחיר סיטונאי"
-                                className={`w-full border border-blue-200 bg-blue-50/40 rounded-lg p-2 text-center font-bold text-sm text-[#004387] ${line.isAutoGift ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                disabled={line.isAutoGift}
-                              />
-                            </div>
-                          </div>
-
-                          {!line.isAutoGift && (
-                            <div className="mt-2 flex items-center gap-2">
-                              <label className="text-[10px] text-gray-500 font-bold whitespace-nowrap">הנחה נוספת (%)</label>
-                              <input
-                                type="number"
-                                value={line.discountPercent || 0}
-                                onChange={(e) => updateQuoteLine(idx, 'discountPercent', parseFloat(e.target.value) || 0)}
-                                aria-label="הנחה נוספת באחוזים"
-                                className="w-20 border border-gray-200 rounded-lg p-1.5 text-center text-sm font-bold"
-                              />
-                            </div>
-                          )}
-
-                          <div className="mt-3">
-                            <label className="text-[11px] text-amber-900 font-extrabold block mb-1">מחיר מוצע ללקוח — ליחידה (₪)</label>
-                            <input
-                              type="number"
-                              min={0}
-                              value={line.quotedPrice}
-                              onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))}
-                              aria-label="מחיר מוצע ללקוח ליחידה"
-                              className={`w-full border-2 rounded-lg p-2.5 text-center font-extrabold text-lg ${line.isAutoGift ? 'bg-emerald-50/80 text-emerald-900 border-emerald-200 cursor-not-allowed' : belowCost ? 'border-red-400 bg-red-50 text-red-900' : 'border-amber-300 bg-amber-50 text-amber-900'}`}
-                              disabled={line.isAutoGift}
-                            />
-                          </div>
-
-                          <div className="flex justify-between items-center mt-3 pt-2 border-t border-gray-100">
-                            <span className={`inline-block font-extrabold px-2 py-1 rounded-lg text-xs ${marginColorClass}`}>רווחיות: {margin}%</span>
-                            <span className="text-[#004387] font-extrabold text-base">סה״כ: ₪{Math.round(line.quotedPrice * line.qty).toLocaleString('he-IL')}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                    {/* Unified quote document — agent edits inline (single source of truth) */}
+                    <div className="bg-white rounded-xl p-2 md:p-5 shadow-sm border border-gray-200 overflow-x-auto">
+                      <QuoteDocument
+                        data={{
+                          agentName,
+                          customerCompany: quoteEditorCustomer?.company || quoteEditorCustomer?.name,
+                          customerEmail: quoteEditorCustomer?.email,
+                          customerPhone: quoteEditorCustomer?.phone,
+                          items: quoteItems,
+                          note: quoteNote,
+                        }}
+                        mode="edit"
+                        onLineChange={(i, f, v) => updateQuoteLine(i, f as any, v)}
+                        onRemoveLine={(i) => removeQuoteLine(i)}
+                        onPromoChange={(i, txt) => setLinePromo(i, txt)}
+                      />
+                    </div>
 
             {/* 4. Notes */}
             <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
@@ -6141,142 +5855,17 @@ export default function App() {
                   id="printable-quote-area-root"
                   className="bg-white w-full max-w-[800px] shadow-lg rounded-xl border border-gray-200 p-8 md:p-12 text-gray-800 text-xs md:text-sm flex flex-col min-h-[1050px] justify-between relative text-right"
                 >
-                  <div>
-                    {/* Header: Logo and Details */}
-                    <div className="flex justify-between items-start border-b-2 border-[#004387] pb-6 mb-8 gap-4 text-right">
-                      <div className="flex flex-col text-right">
-                        <img 
-                          src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
-                          className="h-12 md:h-14 object-contain mb-3 w-auto self-start" 
-                          alt="RBS Telecom"
-                          referrerPolicy="no-referrer"
-                        />
-                        <div className="text-[11px] md:text-xs text-gray-500 leading-normal text-right">
-                          <strong className="text-gray-700">רבס טלקום בע"מ</strong><br />
-                          ח.פ 514373679<br />
-                          לנטוס טום 10, נתניה<br />
-                          טלפון: 077-2045522 | info@rbs-telecom.com
-                        </div>
-                      </div>
-                      
-                      <div className="text-left">
-                        <h1 className="text-2xl md:text-3xl font-black text-[#004387] tracking-tight mb-2">הצעת מחיר</h1>
-                        <div className="text-[11px] md:text-xs text-gray-500 leading-normal text-left">
-                          <span>תאריך: <strong className="text-gray-700 font-mono">{new Date().toLocaleDateString('he-IL')}</strong></span><br />
-                          <span>מסמך: <strong className="text-gray-700 font-mono">{quoteId ? quoteId.slice(-6).toUpperCase() : 'טיוטה'}</strong></span><br />
-                          <span>הופק ע"י: <strong className="text-gray-700">{agentName || 'סוכן רבס טלקום'}</strong></span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Client Metadata block */}
-                    <div className="bg-gray-50/70 border border-gray-100 rounded-xl p-4 mb-8 text-right">
-                      <h4 className="font-extrabold text-[#0c2d57] text-xs md:text-sm mb-1.5 text-right">לכבוד:</h4>
-                      <div className="text-[11px] md:text-xs text-gray-600 space-y-1 font-medium text-right">
-                        <div>שם / חברה: <strong className="text-gray-900">{quoteEditorCustomer?.company || quoteEditorCustomer?.name || 'לקוח כללי'}</strong></div>
-                        {quoteEditorCustomer?.email && <div>אימייל: <span className="font-mono text-gray-900">{quoteEditorCustomer.email}</span></div>}
-                        {quoteEditorCustomer?.phone && <div>טלפון: <span className="font-mono text-gray-900" dir="ltr">{quoteEditorCustomer.phone}</span></div>}
-                      </div>
-                    </div>
-
-                    {/* Items Table */}
-                    <div className="overflow-hidden border border-gray-200 rounded-xl mb-8">
-                      <table className="w-full border-collapse text-right text-xs">
-                        <thead>
-                          <tr className="bg-[#004387] text-white">
-                            <th className="p-3 font-extrabold text-center w-12">#</th>
-                            <th className="p-3 font-extrabold text-right">תיאור פריט</th>
-                            <th className="p-3 font-extrabold text-center w-16">כמות</th>
-                            <th className="p-3 font-extrabold text-center w-24">מחירון (₪)</th>
-                            <th className="p-3 font-extrabold text-center w-20">הנחה</th>
-                            <th className="p-3 font-extrabold text-center w-24">מחיר יחידה (₪)</th>
-                            <th className="p-3 font-extrabold text-left w-28">סה״כ (₪)</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {quoteItems.map((item: any, idx: number) => {
-                            const discount = item.discountPercent > 0 ? `${item.discountPercent}%` : '-';
-                            const buy = Number(item.promoBuy) || 0;
-                            const free = Number(item.promoFree) || 0;
-                            const freeQty = (buy > 0 && free > 0) ? Math.floor((Number(item.qty) || 0) / buy) * free : 0;
-                            const totalLineQty = Number(item.qty) + freeQty;
-                            const totalLineCharged = Number(item.qty) * Number(item.quotedPrice);
-                            const effectiveUnitPrice = totalLineQty > 0 ? totalLineCharged / totalLineQty : 0;
-
-                            return (
-                              <tr key={item.id || idx} className="hover:bg-gray-50/50">
-                                <td className="p-3 text-center text-gray-400 font-mono">{idx + 1}</td>
-                                <td className="p-3 text-right">
-                                  <div className="font-bold text-gray-900 leading-snug">{item.name}</div>
-                                  <div className="text-[10px] text-gray-400 font-mono mt-0.5">מק״ט: {item.sku || 'N/A'}</div>
-                                  
-                                  {/* Promotion details on the printed document */}
-                                  {buy > 0 && free > 0 && (
-                                    <div className="mt-1.5 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-100/50 rounded-lg p-1.5 font-medium leading-relaxed max-w-[320px] text-right">
-                                      <span>🎁 מבצע מיוחד מופעל: <strong>{buy}+{free}</strong></span><br />
-                                      <span>כמות אספקה: <strong>{totalLineQty} יח׳</strong> (מתוכם <strong>+{freeQty} מתנה</strong>)</span><br />
-                                      <span>מחיר אפקטיבי משוקלל: <strong>₪{Math.round(effectiveUnitPrice)}</strong></span>
-                                    </div>
-                                  )}
-                                  {!item.isAutoGift && item.promoText && !item.promoBuy && (
-                                    <div className="mt-1 text-[10px] text-emerald-700 bg-emerald-50/50 border border-emerald-100/30 rounded p-1 max-w-[320px] text-right">
-                                      🎁 מבצע: <strong>{item.promoText}</strong>
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="p-3 text-center font-bold font-mono text-gray-900">{item.qty}</td>
-                                <td className="p-3 text-center font-mono text-gray-500">₪{Number(item.listPrice || 0).toLocaleString('he-IL')}</td>
-                                <td className="p-3 text-center font-bold text-blue-800 font-mono">{discount}</td>
-                                <td className="p-3 text-center font-extrabold text-gray-900 font-mono">₪{Number(item.quotedPrice || 0).toLocaleString('he-IL')}</td>
-                                <td className="p-3 text-left font-extrabold text-[#004387] font-mono">₪{Math.round(item.quotedPrice * item.qty).toLocaleString('he-IL')}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Totals Section */}
-                    <div className="flex justify-end mb-8 text-right">
-                      <div className="w-full max-w-[340px] bg-slate-50 border border-gray-200/60 rounded-xl p-4 space-y-2.5 text-right">
-                        <div className="flex justify-between items-center text-xs text-gray-500 font-medium text-right">
-                          <span>סה״כ פריטים:</span>
-                          <span className="font-mono text-gray-700 font-bold">{quoteItems.reduce((acc, it) => acc + (Number(it.qty) || 0), 0)} יח׳</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs text-gray-500 font-medium text-right">
-                          <span>מע״מ (17%):</span>
-                          <span className="font-mono text-gray-700">₪{Math.round(quoteTotal * 0.17).toLocaleString('he-IL')}</span>
-                        </div>
-                        <div className="flex justify-between items-center pt-2.5 border-t border-gray-200 font-black text-[#004387] text-base text-right">
-                          <span>סה״כ לתשלום (לפני מע״מ):</span>
-                          <span className="font-mono text-lg">₪{Math.round(quoteTotal).toLocaleString('he-IL')}</span>
-                        </div>
-                        <div className="text-[10px] text-gray-400 font-medium text-left">
-                          * המחירים אינם כוללים מע״מ
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Notes & conditions & footer of printed page */}
-                  <div className="text-right">
-                    {quoteNote ? (
-                      <div className="border-r-4 border-[#004387] bg-blue-50/30 p-4 rounded-l-xl text-xs text-gray-600 mb-8 whitespace-pre-wrap leading-relaxed text-right">
-                        <strong className="text-gray-800 block mb-1 text-right">הערות ותנאים להצעת המחיר:</strong>
-                        {quoteNote}
-                      </div>
-                    ) : (
-                      <div className="border-r-4 border-gray-300 bg-gray-50 p-3 rounded-l-xl text-[11px] text-gray-500 mb-8 leading-normal text-right">
-                        <strong>תוקף הצעה:</strong> 30 ימים מיום הפקתה. האספקה בכפוף למלאי הקיים.
-                      </div>
-                    )}
-
-                    {/* Footer brand info */}
-                    <div className="border-t border-gray-100 pt-4 flex justify-between items-center text-[10px] text-gray-400 text-right">
-                      <span>הצעת מחיר מטעם רבס טלקום בע״מ | הפתרון המקיף לתקשורת וסלולר בישראל</span>
-                      <span className="font-mono font-medium">RBS Telecom Ltd.</span>
-                    </div>
-                  </div>
+                  <QuoteDocument
+                    data={{
+                      agentName,
+                      customerCompany: quoteEditorCustomer?.company || quoteEditorCustomer?.name,
+                      customerEmail: quoteEditorCustomer?.email,
+                      customerPhone: quoteEditorCustomer?.phone,
+                      items: quoteItems,
+                      note: quoteNote,
+                    }}
+                    mode="view"
+                  />
                 </div>
               </div>
             </div>

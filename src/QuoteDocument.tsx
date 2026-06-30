@@ -29,6 +29,7 @@ type Props = {
   mode?: 'edit' | 'view';
   onLineChange?: (idx: number, field: keyof QuoteLine, value: any) => void;
   onRemoveLine?: (idx: number) => void;
+  onPromoChange?: (idx: number, text: string) => void;
 };
 
 const ils = (n: number) => '₪' + Math.round(n || 0).toLocaleString('he-IL');
@@ -48,7 +49,7 @@ export function computeLine(line: QuoteLine) {
   return { qty, price, freeQty, suppliedQty, lineCharged, effectiveUnit, promoDiscount, margin };
 }
 
-const QuoteDocument: React.FC<Props> = ({ data, mode = 'view', onLineChange, onRemoveLine }) => {
+const QuoteDocument: React.FC<Props> = ({ data, mode = 'view', onLineChange, onRemoveLine, onPromoChange }) => {
   const edit = mode === 'edit';
   const items = data.items || [];
   let subtotal = 0; let totalCost = 0;
@@ -141,8 +142,8 @@ const QuoteDocument: React.FC<Props> = ({ data, mode = 'view', onLineChange, onR
                     {edit && (
                       <div className="qd-agent-only qd-no-print mt-1 flex items-center gap-1">
                         <span className="text-[9px] text-gray-400 font-bold">מבצע</span>
-                        <input type="text" placeholder="10+2 / 10%" value={line.promoText !== undefined ? line.promoText : ((line.promoBuy && line.promoFree) ? line.promoBuy + '+' + line.promoFree : '')}
-                          onChange={(e) => onLineChange && onLineChange(idx, 'promoText', e.target.value)} aria-label="מבצע"
+                        <input type="text" placeholder="10+2 / 10%" value={line.promoText || ''}
+                          onChange={(e) => onPromoChange && onPromoChange(idx, e.target.value)} aria-label="מבצע"
                           className="w-24 border border-emerald-200 bg-emerald-50/50 rounded px-1 py-0.5 text-center text-[10px] font-bold text-emerald-800" />
                       </div>
                     )}
