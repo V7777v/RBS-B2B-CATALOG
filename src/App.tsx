@@ -5784,89 +5784,62 @@ export default function App() {
                             )}
                           </div>
 
-                          <div className="grid grid-cols-5 gap-1 mt-2 pt-2 border-t border-gray-100 text-center">
+                          <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-100">
                             <div>
-                              <span className="text-[9px] text-gray-400 block mb-0.5">כמות</span>
-                              <input 
-                                type="number" 
-                                min={1} 
-                                value={line.qty} 
-                                onChange={(e) => updateQuoteLine(idx, 'qty', Math.max(1, parseInt(e.target.value) || 1))} 
-                                className={`w-full border border-gray-200 rounded p-0.5 text-center font-bold text-xs ${line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : ''}`}
+                              <label className="text-[10px] text-gray-500 font-bold block mb-1">כמות</label>
+                              <input
+                                type="number"
+                                min={1}
+                                value={line.qty}
+                                onChange={(e) => updateQuoteLine(idx, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                                aria-label="כמות"
+                                className={`w-full border border-gray-200 rounded-lg p-2 text-center font-bold text-sm ${line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : ''}`}
                                 disabled={line.isAutoGift}
                               />
                             </div>
                             <div>
-                              <span className="text-[9px] text-gray-400 block mb-0.5">מחיר מתקין</span>
-                              <input 
-                                type="number" 
-                                min={0} 
-                                value={line.listPrice} 
-                                onChange={(e) => updateQuoteLine(idx, 'listPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
-                                className={`w-full border border-gray-200 rounded p-0.5 text-center text-[10px] ${line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : ''}`}
-                                disabled={line.isAutoGift}
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[9px] text-gray-400 block mb-0.5">מחיר מפיץ</span>
-                              <input 
-                                type="number" 
-                                min={0} 
-                                value={line.wholesalePrice || 0} 
-                                onChange={(e) => updateQuoteLine(idx, 'wholesalePrice', Math.max(0, parseFloat(e.target.value) || 0))} 
-                                className={`w-full border border-gray-200 rounded p-0.5 text-center text-[10px] ${line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : 'bg-blue-50/30'}`}
-                                disabled={line.isAutoGift}
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[9px] text-[#004387] font-bold block mb-0.5">הנחה(%)</span>
-                              <input 
-                                type="number" 
-                                value={line.discountPercent || 0} 
-                                onChange={(e) => updateQuoteLine(idx, 'discountPercent', parseFloat(e.target.value) || 0)} 
-                                className={"w-full border border-blue-200 text-[#004387] bg-blue-50 rounded p-0.5 text-center text-xs font-bold " + (line.isAutoGift ? 'bg-emerald-50/50 text-emerald-800 border-emerald-100 cursor-not-allowed' : '')}
-                                disabled={line.isAutoGift}
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[9px] text-amber-800 font-bold block mb-0.5">הצעה (₪)</span>
-                              <input 
-                                type="number" 
-                                min={0} 
-                                value={line.quotedPrice} 
-                                onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
-                                className={"w-full border rounded p-0.5 text-center font-extrabold text-xs " + (line.isAutoGift ? 'bg-emerald-50/80 text-emerald-900 border-emerald-200 cursor-not-allowed font-extrabold' : belowCost ? 'border-red-400 bg-red-100 text-red-900 animate-pulse' : 'border-amber-200 bg-amber-50')}
+                              <label className="text-[10px] text-[#004387] font-bold block mb-1">מחיר סיטונאי (₪)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                value={line.wholesalePrice || 0}
+                                onChange={(e) => updateQuoteLine(idx, 'wholesalePrice', Math.max(0, parseFloat(e.target.value) || 0))}
+                                aria-label="מחיר סיטונאי"
+                                className={`w-full border border-blue-200 bg-blue-50/40 rounded-lg p-2 text-center font-bold text-sm text-[#004387] ${line.isAutoGift ? 'opacity-60 cursor-not-allowed' : ''}`}
                                 disabled={line.isAutoGift}
                               />
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-3 gap-2 mt-2 bg-gray-50/50 p-1.5 rounded text-[10px] items-center">
-                            <div className="flex items-center gap-1">
-                              <span className="text-gray-400">עלות ₪</span>
-                              <input 
-                                type="number" 
-                                min={0} 
-                                value={line.costPrice || 0} 
-                                onChange={(e) => updateQuoteLine(idx, 'costPrice', Math.max(0, parseFloat(e.target.value) || 0))} 
-                                className={"w-12 border border-gray-200 rounded px-1 text-center bg-white " + (line.isAutoGift ? 'bg-gray-50 text-gray-400 cursor-not-allowed border-gray-100' : '')}
-                                disabled={line.isAutoGift}
+                          {!line.isAutoGift && (
+                            <div className="mt-2 flex items-center gap-2">
+                              <label className="text-[10px] text-gray-500 font-bold whitespace-nowrap">הנחה נוספת (%)</label>
+                              <input
+                                type="number"
+                                value={line.discountPercent || 0}
+                                onChange={(e) => updateQuoteLine(idx, 'discountPercent', parseFloat(e.target.value) || 0)}
+                                aria-label="הנחה נוספת באחוזים"
+                                className="w-20 border border-gray-200 rounded-lg p-1.5 text-center text-sm font-bold"
                               />
                             </div>
-                            <div>
-                              <span className="text-gray-400">רווח שורה:</span>
-                              <span className="font-bold text-gray-700 block">₪{Math.round((line.quotedPrice - (line.costPrice || 0)) * line.qty)}</span>
-                            </div>
-                            <div className="text-left">
-                              <span className={"inline-block font-extrabold px-1.5 py-0.5 rounded text-[10px] " + marginColorClass}>
-                                {margin}% {"רווחיות"}
-                              </span>
-                            </div>
+                          )}
+
+                          <div className="mt-3">
+                            <label className="text-[11px] text-amber-900 font-extrabold block mb-1">מחיר מוצע ללקוח — ליחידה (₪)</label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={line.quotedPrice}
+                              onChange={(e) => updateQuoteLine(idx, 'quotedPrice', Math.max(0, parseFloat(e.target.value) || 0))}
+                              aria-label="מחיר מוצע ללקוח ליחידה"
+                              className={`w-full border-2 rounded-lg p-2.5 text-center font-extrabold text-lg ${line.isAutoGift ? 'bg-emerald-50/80 text-emerald-900 border-emerald-200 cursor-not-allowed' : belowCost ? 'border-red-400 bg-red-50 text-red-900' : 'border-amber-300 bg-amber-50 text-amber-900'}`}
+                              disabled={line.isAutoGift}
+                            />
                           </div>
 
-                          <div className="flex justify-between items-center mt-2 text-[11px] font-semibold">
-                            <span className="text-gray-400">מתקין סה״כ: ₪{Math.round(line.listPrice * line.qty)}</span>
-                            <span className="text-[#004387] font-bold">סה״כ מוצע: ₪{Math.round(line.quotedPrice * line.qty)}</span>
+                          <div className="flex justify-between items-center mt-3 pt-2 border-t border-gray-100">
+                            <span className={`inline-block font-extrabold px-2 py-1 rounded-lg text-xs ${marginColorClass}`}>רווחיות: {margin}%</span>
+                            <span className="text-[#004387] font-extrabold text-base">סה״כ: ₪{Math.round(line.quotedPrice * line.qty).toLocaleString('he-IL')}</span>
                           </div>
                         </div>
                       );
