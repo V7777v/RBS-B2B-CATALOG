@@ -2407,6 +2407,7 @@ export default function App() {
 
   // Profit margin dashboard toggle
   const [showProfitCalculator, setShowProfitCalculator] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   // Quote signing state
   const [signingQuote, setSigningQuote] = useState<any | null>(null);
@@ -2692,127 +2693,7 @@ export default function App() {
 
   const handlePreviewQuote = () => {
     if (!quoteEditorCustomer || quoteItems.length === 0) return;
-    
-    const w = window.open('', '_blank');
-    if (!w) {
-      alert("Please allow popups to view the PDF preview.");
-      return;
-    }
-    
-    const itemsHtml = quoteItems.map((item: any, idx: number) => {
-      const discount = item.discountPercent > 0 ? `${item.discountPercent}%` : '-';
-      return `
-        <tr>
-          <td>${idx + 1}</td>
-          <td style="text-align: right;">
-            <strong>${item.name}</strong><br/>
-            <span style="font-size: 10px; color: #666;">מק"ט: ${item.sku || 'N/A'}</span>
-          </td>
-          <td>${item.qty}</td>
-          <td>₪${Number(item.listPrice).toLocaleString('he-IL')}</td>
-          <td>${discount}</td>
-          <td>₪${Number(item.quotedPrice).toLocaleString('he-IL')}</td>
-          <td>₪${(Number(item.quotedPrice) * Number(item.qty)).toLocaleString('he-IL')}</td>
-        </tr>
-      `;
-    }).join('');
-
-    const html = `
-      <html dir="rtl" lang="he">
-      <head>
-        <title>הצעת מחיר - ${quoteEditorCustomer.company || quoteEditorCustomer.name}</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 0; padding: 40px; color: #333; background: #fff; }
-          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #004387; padding-bottom: 20px; margin-bottom: 30px; }
-          .logo { max-height: 60px; margin-bottom: 10px; }
-          .company-details { font-size: 14px; line-height: 1.5; color: #555; }
-          .quote-title { font-size: 28px; font-weight: bold; color: #004387; margin: 0 0 10px 0; }
-          .meta-info { font-size: 14px; margin-bottom: 30px; display: flex; justify-content: space-between; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 13px; }
-          th { background-color: #004387; color: white; padding: 10px; text-align: right; }
-          td { padding: 10px; border-bottom: 1px solid #eee; text-align: center; }
-          .totals { width: 300px; margin-right: auto; margin-left: 0; background: #f9f9f9; padding: 20px; border-radius: 8px; }
-          .total-row { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 10px; }
-          .total-row.final { font-size: 18px; font-weight: bold; color: #004387; border-top: 2px solid #ddd; padding-top: 10px; }
-          .notes { margin-top: 40px; padding: 15px; background: #f4f7f9; border-left: 4px solid #004387; font-size: 13px; white-space: pre-wrap;}
-          @media print {
-            body { padding: 0; }
-            .no-print { display: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="no-print" style="text-align: left; margin-bottom: 20px;">
-          <button onclick="window.print()" style="background: #004387; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 14px;">
-            🖨️ הדפס / שמור כ-PDF
-          </button>
-        </div>
-        
-        <div class="header">
-          <div>
-            <img src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" class="logo" alt="RBS Telecom"/>
-            <div class="company-details">
-              <strong>רבס טלקום בע"מ</strong><br/>
-              ח.פ 514373679<br/>
-              לנטוס טום 10, נתניה<br/>
-              077-2045522 | info@rbs-telecom.com
-            </div>
-          </div>
-          <div style="text-align: left;">
-            <h1 class="quote-title">הצעת מחיר</h1>
-            <div class="company-details">
-              תאריך: ${new Date().toLocaleDateString('he-IL')}<br/>
-              מסמך: ${quoteId ? quoteId.slice(-6).toUpperCase() : 'טיוטה'}<br/>
-              הופק ע"י: ${agentName}
-            </div>
-          </div>
-        </div>
-
-        <div class="meta-info">
-          <div>
-            <strong>לכבוד:</strong><br/>
-            ${quoteEditorCustomer.company || quoteEditorCustomer.name}<br/>
-            ${quoteEditorCustomer.email ? `דוא"ל: ${quoteEditorCustomer.email}` : ''}
-          </div>
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th style="text-align: center; width: 40px;">#</th>
-              <th style="text-align: right;">תיאור פריט</th>
-              <th style="text-align: center;">כמות</th>
-              <th style="text-align: center;">מחירון</th>
-              <th style="text-align: center;">הנחה</th>
-              <th style="text-align: center;">מחיר סופי</th>
-              <th style="text-align: center;">סה"כ</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHtml}
-          </tbody>
-        </table>
-
-        <div class="totals">
-          <div class="total-row final">
-            <span>סה"כ לתשלום (לפני מע"מ):</span>
-            <span>₪${Math.round(quoteTotal).toLocaleString('he-IL')}</span>
-          </div>
-        </div>
-
-        ${quoteNote ? `
-        <div class="notes" style="border-right: 4px solid #004387; border-left: none;">
-          <strong>הערות ותנאים:</strong><br/>
-          ${quoteNote}
-        </div>
-        ` : ''}
-      </body>
-      </html>
-    `;
-
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
+    setShowPreviewModal(true);
   };
 
   const submitQuote = async (status: string) => {
@@ -6270,6 +6151,217 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {showPreviewModal && (
+        <>
+          {/* Print-specific style override */}
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media print {
+              body > div:not(#printable-quote-area-root) {
+                display: none !important;
+              }
+              #printable-quote-area-root {
+                display: block !important;
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                width: 100% !important;
+                height: auto !important;
+                background: white !important;
+                color: black !important;
+                z-index: 9999999 !important;
+                padding: 40px !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
+              }
+              body {
+                direction: rtl !important;
+                background: white !important;
+              }
+            }
+          `}} />
+
+          {/* Regular screen Modal */}
+          <div className="fixed inset-0 z-[120] bg-black/75 flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
+            <div className="bg-slate-100 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-fade-in" onClick={(e) => e.stopPropagation()}>
+              {/* Modal Header */}
+              <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-[#004387]">
+                    <FileText size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-[#0c2d57] text-base leading-tight">תצוגה מקדימה של הצעת המחיר</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">בדוק כיצד הצעת המחיר תיראה בקובץ ה-PDF או בהדפסה ללקוח</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => window.print()}
+                    className="bg-[#004387] hover:bg-[#0c2d57] text-white px-4 py-2 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 shadow-sm border-none cursor-pointer"
+                  >
+                    <span>🖨️ הדפס / שמור כ-PDF</span>
+                  </button>
+                  <button
+                    onClick={() => setShowPreviewModal(false)}
+                    className="p-2 text-gray-400 hover:text-gray-600 rounded-xl hover:bg-gray-100 transition-colors border-none bg-transparent cursor-pointer"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrollable A4 Document Frame */}
+              <div className="flex-1 overflow-y-auto p-6 md:p-10 flex justify-center bg-gray-100/60">
+                {/* Simulated A4 Page Sheet */}
+                <div 
+                  id="printable-quote-area-root"
+                  className="bg-white w-full max-w-[800px] shadow-lg rounded-xl border border-gray-200 p-8 md:p-12 text-gray-800 text-xs md:text-sm flex flex-col min-h-[1050px] justify-between relative text-right"
+                >
+                  <div>
+                    {/* Header: Logo and Details */}
+                    <div className="flex justify-between items-start border-b-2 border-[#004387] pb-6 mb-8 gap-4 text-right">
+                      <div className="flex flex-col text-right">
+                        <img 
+                          src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
+                          className="h-12 md:h-14 object-contain mb-3 w-auto self-start" 
+                          alt="RBS Telecom"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="text-[11px] md:text-xs text-gray-500 leading-normal text-right">
+                          <strong className="text-gray-700">רבס טלקום בע"מ</strong><br />
+                          ח.פ 514373679<br />
+                          לנטוס טום 10, נתניה<br />
+                          טלפון: 077-2045522 | info@rbs-telecom.com
+                        </div>
+                      </div>
+                      
+                      <div className="text-left">
+                        <h1 className="text-2xl md:text-3xl font-black text-[#004387] tracking-tight mb-2">הצעת מחיר</h1>
+                        <div className="text-[11px] md:text-xs text-gray-500 leading-normal text-left">
+                          <span>תאריך: <strong className="text-gray-700 font-mono">{new Date().toLocaleDateString('he-IL')}</strong></span><br />
+                          <span>מסמך: <strong className="text-gray-700 font-mono">{quoteId ? quoteId.slice(-6).toUpperCase() : 'טיוטה'}</strong></span><br />
+                          <span>הופק ע"י: <strong className="text-gray-700">{agentName || 'סוכן רבס טלקום'}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Client Metadata block */}
+                    <div className="bg-gray-50/70 border border-gray-100 rounded-xl p-4 mb-8 text-right">
+                      <h4 className="font-extrabold text-[#0c2d57] text-xs md:text-sm mb-1.5 text-right">לכבוד:</h4>
+                      <div className="text-[11px] md:text-xs text-gray-600 space-y-1 font-medium text-right">
+                        <div>שם / חברה: <strong className="text-gray-900">{quoteEditorCustomer?.company || quoteEditorCustomer?.name || 'לקוח כללי'}</strong></div>
+                        {quoteEditorCustomer?.email && <div>אימייל: <span className="font-mono text-gray-900">{quoteEditorCustomer.email}</span></div>}
+                        {quoteEditorCustomer?.phone && <div>טלפון: <span className="font-mono text-gray-900" dir="ltr">{quoteEditorCustomer.phone}</span></div>}
+                      </div>
+                    </div>
+
+                    {/* Items Table */}
+                    <div className="overflow-hidden border border-gray-200 rounded-xl mb-8">
+                      <table className="w-full border-collapse text-right text-xs">
+                        <thead>
+                          <tr className="bg-[#004387] text-white">
+                            <th className="p-3 font-extrabold text-center w-12">#</th>
+                            <th className="p-3 font-extrabold text-right">תיאור פריט</th>
+                            <th className="p-3 font-extrabold text-center w-16">כמות</th>
+                            <th className="p-3 font-extrabold text-center w-24">מחירון (₪)</th>
+                            <th className="p-3 font-extrabold text-center w-20">הנחה</th>
+                            <th className="p-3 font-extrabold text-center w-24">מחיר יחידה (₪)</th>
+                            <th className="p-3 font-extrabold text-left w-28">סה״כ (₪)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {quoteItems.map((item: any, idx: number) => {
+                            const discount = item.discountPercent > 0 ? `${item.discountPercent}%` : '-';
+                            const buy = Number(item.promoBuy) || 0;
+                            const free = Number(item.promoFree) || 0;
+                            const freeQty = (buy > 0 && free > 0) ? Math.floor((Number(item.qty) || 0) / buy) * free : 0;
+                            const totalLineQty = Number(item.qty) + freeQty;
+                            const totalLineCharged = Number(item.qty) * Number(item.quotedPrice);
+                            const effectiveUnitPrice = totalLineQty > 0 ? totalLineCharged / totalLineQty : 0;
+
+                            return (
+                              <tr key={item.id || idx} className="hover:bg-gray-50/50">
+                                <td className="p-3 text-center text-gray-400 font-mono">{idx + 1}</td>
+                                <td className="p-3 text-right">
+                                  <div className="font-bold text-gray-900 leading-snug">{item.name}</div>
+                                  <div className="text-[10px] text-gray-400 font-mono mt-0.5">מק״ט: {item.sku || 'N/A'}</div>
+                                  
+                                  {/* Promotion details on the printed document */}
+                                  {buy > 0 && free > 0 && (
+                                    <div className="mt-1.5 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-100/50 rounded-lg p-1.5 font-medium leading-relaxed max-w-[320px] text-right">
+                                      <span>🎁 מבצע מיוחד מופעל: <strong>{buy}+{free}</strong></span><br />
+                                      <span>כמות אספקה: <strong>{totalLineQty} יח׳</strong> (מתוכם <strong>+{freeQty} מתנה</strong>)</span><br />
+                                      <span>מחיר אפקטיבי משוקלל: <strong>₪{Math.round(effectiveUnitPrice)}</strong></span>
+                                    </div>
+                                  )}
+                                  {!item.isAutoGift && item.promoText && !item.promoBuy && (
+                                    <div className="mt-1 text-[10px] text-emerald-700 bg-emerald-50/50 border border-emerald-100/30 rounded p-1 max-w-[320px] text-right">
+                                      🎁 מבצע: <strong>{item.promoText}</strong>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="p-3 text-center font-bold font-mono text-gray-900">{item.qty}</td>
+                                <td className="p-3 text-center font-mono text-gray-500">₪{Number(item.listPrice || 0).toLocaleString('he-IL')}</td>
+                                <td className="p-3 text-center font-bold text-blue-800 font-mono">{discount}</td>
+                                <td className="p-3 text-center font-extrabold text-gray-900 font-mono">₪{Number(item.quotedPrice || 0).toLocaleString('he-IL')}</td>
+                                <td className="p-3 text-left font-extrabold text-[#004387] font-mono">₪{Math.round(item.quotedPrice * item.qty).toLocaleString('he-IL')}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Totals Section */}
+                    <div className="flex justify-end mb-8 text-right">
+                      <div className="w-full max-w-[340px] bg-slate-50 border border-gray-200/60 rounded-xl p-4 space-y-2.5 text-right">
+                        <div className="flex justify-between items-center text-xs text-gray-500 font-medium text-right">
+                          <span>סה״כ פריטים:</span>
+                          <span className="font-mono text-gray-700 font-bold">{quoteItems.reduce((acc, it) => acc + (Number(it.qty) || 0), 0)} יח׳</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-gray-500 font-medium text-right">
+                          <span>מע״מ (17%):</span>
+                          <span className="font-mono text-gray-700">₪{Math.round(quoteTotal * 0.17).toLocaleString('he-IL')}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2.5 border-t border-gray-200 font-black text-[#004387] text-base text-right">
+                          <span>סה״כ לתשלום (לפני מע״מ):</span>
+                          <span className="font-mono text-lg">₪{Math.round(quoteTotal).toLocaleString('he-IL')}</span>
+                        </div>
+                        <div className="text-[10px] text-gray-400 font-medium text-left">
+                          * המחירים אינם כוללים מע״מ
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Notes & conditions & footer of printed page */}
+                  <div className="text-right">
+                    {quoteNote ? (
+                      <div className="border-r-4 border-[#004387] bg-blue-50/30 p-4 rounded-l-xl text-xs text-gray-600 mb-8 whitespace-pre-wrap leading-relaxed text-right">
+                        <strong className="text-gray-800 block mb-1 text-right">הערות ותנאים להצעת המחיר:</strong>
+                        {quoteNote}
+                      </div>
+                    ) : (
+                      <div className="border-r-4 border-gray-300 bg-gray-50 p-3 rounded-l-xl text-[11px] text-gray-500 mb-8 leading-normal text-right">
+                        <strong>תוקף הצעה:</strong> 30 ימים מיום הפקתה. האספקה בכפוף למלאי הקיים.
+                      </div>
+                    )}
+
+                    {/* Footer brand info */}
+                    <div className="border-t border-gray-100 pt-4 flex justify-between items-center text-[10px] text-gray-400 text-right">
+                      <span>הצעת מחיר מטעם רבס טלקום בע״מ | הפתרון המקיף לתקשורת וסלולר בישראל</span>
+                      <span className="font-mono font-medium">RBS Telecom Ltd.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {showBiometricOffer && (
