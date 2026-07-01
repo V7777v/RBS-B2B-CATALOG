@@ -2378,6 +2378,8 @@ export default function App() {
   const [quoteItems, setQuoteItems] = useState<any[]>([]);
   const [quoteNote, setQuoteNote] = useState('');
   const [quoteSearch, setQuoteSearch] = useState('');
+  const [replaceTargetIdx, setReplaceTargetIdx] = useState<number | null>(null);
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [quoteSaving, setQuoteSaving] = useState(false);
   const approvingRef = useRef(false);
   const [quoteFilterStatus, setQuoteFilterStatus] = useState<string>('all');
@@ -2535,8 +2537,33 @@ export default function App() {
     setShowQuoteEditor(true);
   };
 
+  const openOrderInEditor = (order: any) => {
+    const mapped = (order.items || []).map((it: any, i: number) => ({
+      id: it.id || it.sku || ('ord-' + i),
+      sku: it.sku || '',
+      name: it.name || '',
+      qty: Number(it.quantity) || 1,
+      listPrice: Number(it.price) || 0,
+      quotedPrice: Number(it.price) || 0,
+      costPrice: Math.round((Number(it.price) || 0) * 0.6),
+      wholesalePrice: null,
+      discountPercent: 0,
+    }));
+    setQuoteEditorCustomer({ company: order.company || '', email: order.email || '', name: order.company || '' });
+    setQuoteId(null);
+    setEditingOrderId(order.id);
+    setQuoteItems(reconcileGifts(mapped));
+    setQuoteNote('');
+    setQuoteSearch('');
+    setReplaceTargetIdx(null);
+    setSelectedOrder(null);
+    setEditMode(false);
+    setShowQuoteEditor(true);
+  };
+
   const openQuoteEditor = (customer: any, existing?: any) => {
     setQuoteEditorCustomer(customer);
+    setEditingOrderId(null);
     setQuoteId(existing?.id || null);
     setQuoteItems(reconcileGifts(existing?.items ? existing.items.map((i: any) => ({
       ...i,
@@ -2546,6 +2573,31 @@ export default function App() {
     setQuoteNote(existing?.note || '');
     setQuoteSearch('');
     setShowQuoteEditor(true);
+  };
+
+  const replaceQuoteLine = (idx: number, pr: any) => {
+    const listPrice = Math.round(parsePrice(pr.price)) || 0;
+    const m = String(pr.saleType || '').match(/(\d+)\s*\+\s*(\d+)/) || String(pr.saleValue || '').match(/(\d+)\s*\+\s*(\d+)/);
+    const buy = m ? parseInt(m[1], 10) : 0;
+    const free = m ? parseInt(m[2], 10) : 0;
+    setQuoteItems((prev: any[]) => reconcileGifts(prev.map((l: any, i: number) => i === idx ? {
+      ...l,
+      id: pr.id,
+      sku: pr.sku || '',
+      name: pr.name || '',
+      qty: Number(l.qty) || 1,
+      listPrice: listPrice,
+      quotedPrice: listPrice,
+      costPrice: (pr.costPrice !== null && pr.costPrice !== undefined && pr.costPrice > 0) ? Math.round(pr.costPrice) : (Math.round(listPrice * 0.6) || 0),
+      wholesalePrice: (pr.wholesalePrice !== null && pr.wholesalePrice !== undefined && pr.wholesalePrice > 0) ? Math.round(pr.wholesalePrice) : null,
+      discountPercent: 0,
+      promoText: m ? m[0] : undefined,
+      promoBuy: buy || undefined,
+      promoFree: free || undefined,
+      isAutoGift: false
+    } : l)));
+    setReplaceTargetIdx(null);
+    setQuoteSearch('');
   };
 
   const addQuoteLine = (pr: any) => {
@@ -2706,6 +2758,22 @@ export default function App() {
   const submitQuote = async (status: string) => {
     if (!quoteEditorCustomer || quoteItems.length === 0) return;
     setQuoteSaving(true);
+    if (editingOrderId) {
+      const orderItems = quoteItems.map((it: any) => ({
+        id: it.id, sku: it.sku || '', name: it.name || '',
+        price: Number(it.quotedPrice) || 0, quantity: Number(it.qty) || 1, optionals: []
+      }));
+      const itemCount = orderItems.reduce((a: number, it: any) => a + (it.quantity || 0), 0);
+      const detailsText = 'הזמנה (עודכנה ע"י הסוכן)\n---------------------------------\n' +
+        orderItems.map((it: any) => `${it.name} (${it.sku}) — כמות: ${it.quantity} — מחיר: ₪${it.price}`).join('\n') +
+        `\n\nסה"כ: ₪${Math.round(quoteTotal)}`;
+      await updateOrder(editingOrderId, { items: orderItems, itemCount, total: quoteTotal, detailsText, edited: true });
+      setOrders((prev: any) => prev.map((o: any) => o.id === editingOrderId ? { ...o, items: orderItems, itemCount, total: quoteTotal, detailsText, edited: true } : o));
+      setEditingOrderId(null);
+      setQuoteSaving(false);
+      setShowQuoteEditor(false);
+      return;
+    }
     const customerFacingItems = quoteItems.map((it: any) => {
       const { costPrice, ...rest } = it;
       return rest;
@@ -5465,10 +5533,22 @@ export default function App() {
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             
             {/* 1. Search Catalog to Add Items */}
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+            {editingOrderId && (
+              <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 text-sm text-amber-900 flex items-center gap-2">
+                <span className="text-lg">📝</span>
+                <div><span className="font-bold">עריכת הזמנה קיימת</span> — הוספה, החלפה, כמות ומחיר יישמרו ישירות בהזמנה.</div>
+              </div>
+            )}
+            <div id="quote-catalog-search" className={"bg-white rounded-xl p-4 shadow-sm border " + (replaceTargetIdx !== null ? "border-blue-400 ring-2 ring-blue-200" : "border-gray-200")}>
               <h3 className="text-xs font-bold text-gray-500 mb-2 flex items-center gap-1.5">
-                <Search size={14} className="text-[#004387]" /> חיפוש מהיר והוספת מוצר לקטלוג ההצעה
+                <Search size={14} className="text-[#004387]" /> {replaceTargetIdx !== null ? ("בחר מוצר חלופי לשורה " + (replaceTargetIdx + 1)) : "חיפוש מהיר והוספת מוצר לקטלוג ההצעה"}
               </h3>
+              {replaceTargetIdx !== null && (
+                <div className="mb-2 bg-blue-50 border border-blue-200 rounded-lg p-2 text-xs text-blue-800 flex justify-between items-center gap-2">
+                  <span>🔄 בחר מהחיפוש מוצר שיחליף את השורה הנוכחית (הכמות תישמר)</span>
+                  <button onClick={() => setReplaceTargetIdx(null)} className="text-blue-600 font-bold border-none bg-transparent cursor-pointer flex-shrink-0">ביטול</button>
+                </div>
+              )}
               <input 
                 value={quoteSearch} 
                 onChange={(e) => setQuoteSearch(e.target.value)} 
@@ -5485,7 +5565,7 @@ export default function App() {
                   }).slice(0, 25).map((pr: any) => (
                     <button 
                       key={pr.id} 
-                      onClick={() => addQuoteLine(pr)} 
+                      onClick={() => replaceTargetIdx !== null ? replaceQuoteLine(replaceTargetIdx, pr) : addQuoteLine(pr)} 
                       className="w-full text-right p-3 hover:bg-gray-50 text-sm flex justify-between items-center transition-colors border-none bg-transparent"
                     >
                       <div className="min-w-0">
@@ -5557,6 +5637,7 @@ export default function App() {
                         onLineChange={(i, f, v) => updateQuoteLine(i, f as any, v)}
                         onRemoveLine={(i) => removeQuoteLine(i)}
                         onPromoChange={(i, txt) => setLinePromo(i, txt)}
+                        onReplaceLine={(i) => { setReplaceTargetIdx(i); setQuoteSearch(''); setTimeout(() => document.getElementById('quote-catalog-search')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); }}
                       />
                     </div>
 
@@ -6299,7 +6380,7 @@ export default function App() {
                           בחר פריטים מחדש
                         </button>
                         <button
-                          onClick={() => { setEditItems((selectedOrder.items || []).map((it: any) => ({ ...it }))); setEditMode(true); }}
+                          onClick={() => openOrderInEditor(selectedOrder)}
                           className="w-full bg-white border border-gray-200 text-gray-600 py-3 font-bold rounded-xl hover:bg-gray-50 transition-colors"
                         >
                           עריכת ההזמנה

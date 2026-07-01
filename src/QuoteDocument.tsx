@@ -32,6 +32,7 @@ type Props = {
   onLineChange?: (idx: number, field: keyof QuoteLine, value: any) => void;
   onRemoveLine?: (idx: number) => void;
   onPromoChange?: (idx: number, text: string) => void;
+  onReplaceLine?: (idx: number) => void;
 };
 
 const ils = (n: number) => '₪' + Math.round(n || 0).toLocaleString('he-IL');
@@ -57,7 +58,7 @@ export function computeLine(line: QuoteLine) {
   return { qty, price, cost, refUnit, freeQty, suppliedQty, lineCharged, effectiveUnit, margin, manualDiscount };
 }
 
-const QuoteDocument: React.FC<Props> = ({ data, mode = 'view', onLineChange, onRemoveLine, onPromoChange }) => {
+const QuoteDocument: React.FC<Props> = ({ data, mode = 'view', onLineChange, onRemoveLine, onPromoChange, onReplaceLine }) => {
   const edit = mode === 'edit';
   const items = data.items || [];
 
@@ -196,7 +197,13 @@ const QuoteDocument: React.FC<Props> = ({ data, mode = 'view', onLineChange, onR
                   )}
                   {edit && (
                     <td className="p-2 text-center qd-agent-only qd-no-print">
-                      <button onClick={() => onRemoveLine && onRemoveLine(idx)} disabled={line.isAutoGift} aria-label="הסר שורה" className="text-red-500 hover:text-red-700 disabled:opacity-20 bg-transparent border-none cursor-pointer">✕</button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => onReplaceLine && onReplaceLine(idx)} disabled={line.isAutoGift} title="החלף מוצר" className="text-blue-500 hover:text-blue-700 disabled:opacity-20 bg-transparent border-none cursor-pointer text-xs flex items-center gap-0.5">
+                          <span>🔄</span>
+                          <span className="hidden sm:inline">החלף</span>
+                        </button>
+                        <button onClick={() => onRemoveLine && onRemoveLine(idx)} disabled={line.isAutoGift} aria-label="הסר שורה" className="text-red-500 hover:text-red-700 disabled:opacity-20 bg-transparent border-none cursor-pointer">✕</button>
+                      </div>
                     </td>
                   )}
                 </tr>
