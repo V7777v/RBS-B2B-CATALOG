@@ -5710,7 +5710,7 @@ export default function App() {
 
       {signingQuote && (
         <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4 animate-fade-in" dir="rtl" onClick={() => setSigningQuote(null)}>
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl p-5 md:p-6 max-w-2xl w-full shadow-2xl relative max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <button onClick={() => setSigningQuote(null)} className="absolute top-4 left-4 text-gray-400 hover:text-gray-600 border-none bg-transparent">
               <X size={20} />
             </button>
@@ -5720,6 +5720,10 @@ export default function App() {
             
             <h3 className="font-extrabold text-lg text-[#0c2d57] mb-1 text-center">חתימה דיגיטלית ואישור הצעה</h3>
             <p className="text-xs text-gray-500 mb-4 text-center">הצעת מחיר מס׳ {signingQuote.id?.slice(-6).toUpperCase()} סה״כ: <span className="font-bold text-[#004387]">₪{Math.round(signingQuote.total || 0)}</span></p>
+
+            <div className="mb-4 border border-gray-200 rounded-xl p-3 bg-white">
+              <QuoteDocument data={signingQuote} mode="view" />
+            </div>
             
             <div className="space-y-3">
               <div>
@@ -5782,6 +5786,17 @@ export default function App() {
                   <CheckCircle size={16} /> חתום ואשר
                 </button>
               </div>
+              <button
+                onClick={() => {
+                  const q = signingQuote;
+                  const lines = (q.items || []).map((it: any) => `\u2022 ${it.name} (${it.sku || ''}) \u00d7${it.qty} = \u20aa${Math.round((Number(it.quotedPrice) || 0) * (Number(it.qty) || 0))}`).join('\n');
+                  const txt = encodeURIComponent(`\u05d4\u05e6\u05e2\u05ea \u05de\u05d7\u05d9\u05e8 ${String(q.id || '').slice(-6).toUpperCase()}\n\u05dc\u05e7\u05d5\u05d7: ${q.customerCompany || ''}\n\u05e1\u05d5\u05cb\u05df: ${q.agentName || ''}\n\n${lines}\n\n\u05e1\u05d4"\u05db \u05db\u05d5\u05dc\u05dc \u05de\u05e2"\u05de: \u20aa${Math.round(q.total || 0)}`);
+                  window.open(`https://wa.me/972545241480?text=${txt}`, '_blank');
+                }}
+                className="w-full mt-2 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl font-bold text-sm flex items-center justify-center gap-1.5"
+              >
+                <span className="text-base">📤</span> שלח עותק למשרד (וואטסאפ)
+              </button>
             </div>
           </div>
         </div>
