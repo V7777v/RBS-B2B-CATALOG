@@ -407,34 +407,37 @@ function useIntersectionObserver({
   freezeOnceVisible = true,
 }: UseIntersectionObserverProps = {}): [React.LegacyRef<HTMLDivElement>, boolean] {
   const [isVisible, setIsVisible] = useState(false);
-  const elementRef = useRef<HTMLDivElement | null>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
 
-  useEffect(() => {
-    const node = elementRef.current;
-    if (!node || typeof window === 'undefined' || !window.IntersectionObserver) return;
-    if (isVisible && freezeOnceVisible) return;
-
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setIsVisible(true);
-        if (freezeOnceVisible) {
-          observer.disconnect();
-        }
-      } else if (!freezeOnceVisible) {
-        setIsVisible(false);
+  const setRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
       }
-    }, { threshold, rootMargin });
 
-    observer.observe(node);
+      if (node && typeof window !== 'undefined' && window.IntersectionObserver) {
+        if (isVisible && freezeOnceVisible) return;
 
-    return () => {
-      observer.disconnect();
-    };
-  }, [threshold, rootMargin, freezeOnceVisible, isVisible]);
+        const observer = new IntersectionObserver(
+          ([entry]) => {
+            if (entry.isIntersecting) {
+              setIsVisible(true);
+              if (freezeOnceVisible && observerRef.current) {
+                observerRef.current.disconnect();
+              }
+            } else if (!freezeOnceVisible) {
+              setIsVisible(false);
+            }
+          },
+          { threshold, rootMargin }
+        );
 
-  const setRef = useCallback((node: HTMLDivElement | null) => {
-    elementRef.current = node;
-  }, []);
+        observer.observe(node);
+        observerRef.current = observer;
+      }
+    },
+    [threshold, rootMargin, freezeOnceVisible, isVisible]
+  );
 
   return [setRef as any, isVisible];
 }
@@ -915,10 +918,18 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
 });
 
 const VirtualProductCard: React.FC<VirtualProductCardProps> = ({ product, children }) => {
+  return (
+    <div>
+      {children}
+    </div>
+  );
+};
 
+const _ignore_VirtualProductCard: React.FC<VirtualProductCardProps> = ({ product, children }) => {
   const [ref, isVisible] = useIntersectionObserver({
     rootMargin: '250px',
     freezeOnceVisible: true,
+
   });
 
   if (!isVisible) {
@@ -3839,9 +3850,10 @@ export default function App() {
         // Filter out placeholder "category mother" products
         if (item.name === 'קטגוריית אם' || item.name === 'מוצר הדגמה') return false;
 
-        const searchableText = `${item.name} ${item.sku} ${item.brand} ${item.description || ''} ${item.category} ${item.subcategory}`.toLowerCase();
-        // מנקה את כל התווים המיוחדים, הרווחים והמקפים מהטקסט (כדי למצוא H9C בתוך CS-H9C)
-        const cleanedSearchableText = searchableText.replace(/[^a-z0-9א-ת]/gi, '');
+        const cleanDescription = (item.description || '').replace(/<[^>]*>?/gm, ' ');
+        const searchableText = `${item.name} ${item.sku} ${item.brand} ${cleanDescription} ${item.category} ${item.subcategory}`.toLowerCase();
+        // שומרים על הרווחים, מוחקים רק תווים מיוחדים - כדי לא לחבר בטעות מילים למספרים
+        const cleanedSearchableText = searchableText.replace(/[^a-z0-9א-ת\s]/gi, '');
 
         // מוודא שכל ביטוי שהוקלד בחיפוש קיים במוצר (כטקסט נקי)
         const tokenMatch = queryTokens.every(token => {
@@ -4913,9 +4925,20 @@ export default function App() {
                <>
 
                 {isProductsLoading ? (
-                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
-                    <Loader2 size={40} className="animate-spin text-[#c2410c] mb-4" />
-                    <h3 className="text-xl font-bold text-[#0c2d57]">מבצע חיפוש...</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6 w-full">
+                    {Array.from({ length: 8 }).map((_, idx) => (
+                      <div key={idx} className="w-full h-[320px] sm:h-[450px] bg-white border border-gray-100 flex flex-col justify-between p-4 relative shadow-[0_5px_15px_rgba(0,0,0,0.02)]">
+                        <div className="w-full aspect-square bg-gray-50 flex items-center justify-center animate-pulse">
+                          <Loader2 size={24} className="animate-spin text-gray-200" />
+                        </div>
+                        <div className="space-y-2 mt-4 animate-pulse">
+                          <div className="h-3 bg-gray-100 rounded w-1/3 mx-auto"></div>
+                          <div className="h-4 bg-gray-100 rounded w-3/4 mx-auto"></div>
+                          <div className="h-3 bg-gray-100 rounded w-1/2 mx-auto"></div>
+                        </div>
+                        <div className="w-full h-10 bg-gray-50 mt-4 animate-pulse"></div>
+                      </div>
+                    ))}
                   </div>
                 ) : filteredProducts.length === 0 ? (
                   <div className="text-center py-20 bg-white border border-gray-100 flex flex-col items-center justify-center p-6">
@@ -5091,9 +5114,20 @@ export default function App() {
                 </div>
 
                 {isProductsLoading ? (
-                  <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
-                    <Loader2 size={40} className="animate-spin text-[#c2410c] mb-4" />
-                    <h3 className="text-xl font-bold text-[#0c2d57]">טוען מוצרים...</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6 w-full">
+                    {Array.from({ length: 8 }).map((_, idx) => (
+                      <div key={idx} className="w-full h-[320px] sm:h-[450px] bg-white border border-gray-100 flex flex-col justify-between p-4 relative shadow-[0_5px_15px_rgba(0,0,0,0.02)]">
+                        <div className="w-full aspect-square bg-gray-50 flex items-center justify-center animate-pulse">
+                          <Loader2 size={24} className="animate-spin text-gray-200" />
+                        </div>
+                        <div className="space-y-2 mt-4 animate-pulse">
+                          <div className="h-3 bg-gray-100 rounded w-1/3 mx-auto"></div>
+                          <div className="h-4 bg-gray-100 rounded w-3/4 mx-auto"></div>
+                          <div className="h-3 bg-gray-100 rounded w-1/2 mx-auto"></div>
+                        </div>
+                        <div className="w-full h-10 bg-gray-50 mt-4 animate-pulse"></div>
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <>
