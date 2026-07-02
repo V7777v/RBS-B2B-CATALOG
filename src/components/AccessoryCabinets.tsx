@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Server, Loader2, ExternalLink, ShoppingCart, CheckCircle2, BadgePercent, ArrowUpRight, HelpCircle, AlertCircle, Sparkles } from 'lucide-react';
 import { CabinetConfigurator } from './CabinetConfigurator';
 import Papa from 'papaparse';
+import { getToken as getAppCheckToken } from 'firebase/app-check';
+import { appCheck } from '../firebase';
 
 // Image helpers (must match local app definitions)
 const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -79,8 +81,10 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
     const fetchAndParse = async () => {
       try {
         setLoading(true);
-        const CABINETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs/export?format=csv&gid=250535112';
-        const res = await fetch(CABINETS_CSV_URL);
+        const CABINETS_CSV_URL = '/api/sheets?gid=250535112';
+        let appCheckTok = '';
+        try { appCheckTok = (await getAppCheckToken(appCheck)).token; } catch {}
+        const res = await fetch(CABINETS_CSV_URL, { headers: { 'X-Firebase-AppCheck': appCheckTok } });
         const csvText = await res.text();
         const parsed = Papa.parse(csvText, { header: false, skipEmptyLines: false });
 

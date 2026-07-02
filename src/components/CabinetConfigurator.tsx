@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, Plus, Minus, X, Server, Download, Box, AlertTriangle } from 'lucide-react';
 import Papa from 'papaparse';
+import { getToken as getAppCheckToken } from 'firebase/app-check';
+import { appCheck } from '../firebase';
 
 interface Accessory {
   pn: string;
@@ -135,12 +137,15 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         setLoading(true);
         setErrorMsg(null);
 
-        const CABINETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs/export?format=csv&gid=250535112';
-        const ACCESSORIES_CSV_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs/export?format=csv&gid=1366808268';
+        const CABINETS_CSV_URL = '/api/sheets?gid=250535112';
+        const ACCESSORIES_CSV_URL = '/api/sheets?gid=1366808268';
 
+        let appCheckTok = '';
+        try { appCheckTok = (await getAppCheckToken(appCheck)).token; } catch {}
+        const acHeaders = { headers: { 'X-Firebase-AppCheck': appCheckTok } };
         const [cabRes, accRes] = await Promise.all([
-          fetch(CABINETS_CSV_URL),
-          fetch(ACCESSORIES_CSV_URL)
+          fetch(CABINETS_CSV_URL, acHeaders),
+          fetch(ACCESSORIES_CSV_URL, acHeaders)
         ]);
 
         if (!cabRes.ok || !accRes.ok) {

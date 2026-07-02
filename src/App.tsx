@@ -9,7 +9,8 @@ import { HumanVerification } from './components/HumanVerification';
 import { AddressAutocomplete } from './components/AddressAutocomplete';
 import InstallBanner from './components/InstallBanner';
 import { FirebaseAuthView } from './FirebaseAuthView';
-import { auth, db } from './firebase';
+import { auth, db, appCheck } from './firebase';
+import { getToken as getAppCheckToken } from 'firebase/app-check';
 import { doc, getDoc } from 'firebase/firestore';
 import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadAllQuotes, loadCustomerQuotes, updateQuoteStatus, updateQuote, deleteQuote, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder, getLastOrderError } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -19,9 +20,6 @@ const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigu
 const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
 const TechnicalAdvisor = React.lazy(() => import('./components/TechnicalAdvisor').then(module => ({ default: module.TechnicalAdvisor })));
 
-const SHEET_BASE = 'https://docs.google.com' + '/spreadsheets/d/';
-const SHEET_SECRET_ID = '1NtYwQeTX' + '3blf' + '0aMcv' + 'tnlk9' + 'liIaJOiG9' + 'BOsP4Qc' + '8lSRs';
-const SHEET_URL = SHEET_BASE + SHEET_SECRET_ID;
 const PRODUCTS_GID = '150681' + '2668';
 const CATALOGS_GID = '178108' + '3359';
 const SUBCATEGORIES_GID = '162617' + '5369';
@@ -270,9 +268,12 @@ const fetchCSV = (gid: string, limit?: number, offset?: number, bypassCache?: bo
       url += `&bypass_cache=true&_=${Date.now()}`;
     }
 
-    const runParse = (targetUrl: string, useFallbackOnFail: boolean) => {
+    const runParse = async (targetUrl: string, useFallbackOnFail: boolean) => {
+      let appCheckTok = '';
+      try { appCheckTok = (await getAppCheckToken(appCheck)).token; } catch {}
       Papa.parse(targetUrl, {
         download: true,
+        downloadRequestHeaders: { 'X-Firebase-AppCheck': appCheckTok },
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
