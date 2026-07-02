@@ -2549,17 +2549,22 @@ export default function App() {
   };
 
   const openOrderInEditor = (order: any) => {
-    const mapped = (order.items || []).map((it: any, i: number) => ({
-      id: it.id || it.sku || ('ord-' + i),
-      sku: it.sku || '',
-      name: it.name || '',
-      qty: Number(it.quantity) || 1,
-      listPrice: Number(it.price) || 0,
-      quotedPrice: Number(it.price) || 0,
-      costPrice: Math.round((Number(it.price) || 0) * 0.6),
-      wholesalePrice: null,
-      discountPercent: 0,
-    }));
+    if (userRole !== 'agent' && userRole !== 'sales_manager') return; // agent-only: editor exposes margins
+    const mapped = (order.items || []).map((it: any, i: number) => {
+      const catProd = catalogData.find((cp: any) => cp.sku === it.sku || cp.id === it.id);
+      const listP = catProd ? (Math.round(parsePrice(catProd.price)) || 0) : (Number(it.price) || 0);
+      return {
+        id: it.id || it.sku || ('ord-' + i),
+        sku: it.sku || '',
+        name: it.name || '',
+        qty: Number(it.quantity) || 1,
+        listPrice: listP,
+        quotedPrice: Number(it.price) || listP,
+        costPrice: (catProd && catProd.costPrice) ? Math.round(catProd.costPrice) : Math.round((Number(it.price) || 0) * 0.6),
+        wholesalePrice: (catProd && catProd.wholesalePrice) ? Math.round(catProd.wholesalePrice) : null,
+        discountPercent: 0,
+      };
+    });
     setQuoteEditorCustomer({ company: order.company || '', email: order.email || '', name: order.company || '' });
     setQuoteId(null);
     setEditingOrderId(order.id);
@@ -5793,7 +5798,7 @@ export default function App() {
             </div>
             
             <h3 className="font-extrabold text-lg text-[#0c2d57] mb-1 text-center">חתימה דיגיטלית ואישור הצעה</h3>
-            <p className="text-xs text-gray-500 mb-4 text-center">הצעת מחיר מס׳ {signingQuote.id?.slice(-6).toUpperCase()} סה״כ: <span className="font-bold text-[#004387]">₪{Math.round(signingQuote.total || 0)}</span></p>
+            <p className="text-xs text-gray-500 mb-4 text-center">הצעת מחיר מס׳ {signingQuote.id?.slice(-6).toUpperCase()} סה״כ לפני מע״מ: <span className="font-bold text-[#004387]">₪{Math.round(signingQuote.total || 0)}</span></p>
 
             <div className="mb-4 border border-gray-200 rounded-xl p-3 bg-white">
               <QuoteDocument data={signingQuote} mode="view" />
@@ -5881,8 +5886,11 @@ export default function App() {
           {/* Print-specific style override */}
           <style dangerouslySetInnerHTML={{ __html: `
             @media print {
-              body > div:not(#printable-quote-area-root) {
-                display: none !important;
+              body * {
+                visibility: hidden !important;
+              }
+              #printable-quote-area-root, #printable-quote-area-root * {
+                visibility: visible !important;
               }
               #printable-quote-area-root {
                 display: block !important;
@@ -6373,7 +6381,7 @@ export default function App() {
                           בחר פריטים מחדש
                         </button>
                         <button
-                          onClick={() => openOrderInEditor(selectedOrder)}
+                          onClick={() => { setEditItems((selectedOrder.items || []).map((it: any) => ({ ...it }))); setEditMode(true); }}
                           className="w-full bg-white border border-gray-200 text-gray-600 py-3 font-bold rounded-xl hover:bg-gray-50 transition-colors"
                         >
                           עריכת ההזמנה
@@ -6759,6 +6767,7 @@ export default function App() {
                                                     <button onClick={() => convertOrderToQuote(o, g)} className="flex-grow py-1.5 bg-[#004387] text-white hover:bg-[#0c2d57] rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 border-none cursor-pointer">
                                                       <FileText size={11} /> הפוך להצעת מחיר
                                                     </button>
+                                                    <button onClick={() => openOrderInEditor(o)} className="py-1.5 px-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-[10px] font-bold cursor-pointer">✏️ ערוך הזמנה</button>
                                                     {o.status !== 'processing' && o.status !== 'done' && (
                                                       <button onClick={() => advanceOrderStatus(o.id, 'processing')} className="py-1.5 px-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[10px] font-bold cursor-pointer">סמן בטיפול</button>
                                                     )}
@@ -6891,6 +6900,7 @@ export default function App() {
                                         <button onClick={() => convertOrderToQuote(o, g)} className="flex-grow py-1.5 bg-[#004387] text-white hover:bg-[#0c2d57] rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 border-none cursor-pointer">
                                           <FileText size={11} /> הפוך להצעת מחיר
                                         </button>
+                                        <button onClick={() => openOrderInEditor(o)} className="py-1.5 px-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-[10px] font-bold cursor-pointer">✏️ ערוך הזמנה</button>
                                         {o.status !== 'processing' && o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'processing')} className="py-1.5 px-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[10px] font-bold cursor-pointer">סמן בטיפול</button>}
                                         {o.status !== 'done' && <button onClick={() => advanceOrderStatus(o.id, 'done')} className="py-1.5 px-2 bg-green-50 border border-green-200 text-green-700 rounded-lg text-[10px] font-bold cursor-pointer">סמן הושלם</button>}
                                         {o.status === 'done' && <button onClick={() => advanceOrderStatus(o.id, 'sent')} className="py-1.5 px-2 bg-gray-50 border border-gray-200 text-gray-500 rounded-lg text-[10px] font-bold cursor-pointer">החזר ל׳נשלח׳</button>}
