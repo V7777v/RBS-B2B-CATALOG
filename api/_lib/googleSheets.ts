@@ -5,7 +5,7 @@ export const ALLOWED_GIDS = ["1506812668", "1781083359", "1626175369", "25053511
 
 let googleToken: { token: string; exp: number } | null = null;
 
-export async function getGoogleToken(requestId: string): Promise<string> {
+export async function getGoogleToken(requestId: string): Promise<string | null> {
   let email = process.env.GOOGLE_SA_EMAIL;
   let key = process.env.GOOGLE_SA_PRIVATE_KEY;
   
@@ -24,8 +24,8 @@ export async function getGoogleToken(requestId: string): Promise<string> {
   }
 
   if (!email || !key) {
-    console.error(`[${requestId}] Missing Service Account credentials (email or key)`);
-    throw { status: 500, code: "GOOGLE_CREDENTIALS_MISSING", message: "Missing Service Account credentials" };
+    console.warn(`[${requestId}] Missing Service Account credentials, falling back to public sheet`);
+    return null;
   }
 
   if (!key.includes("BEGIN PRIVATE KEY")) {
@@ -84,7 +84,31 @@ const sheetMetaCache = new Map<string, { sheets: any[], exp: number }>();
 export async function fetchSheetDataV4(gid: string, limit?: string, offset?: string, requestId: string = "req"): Promise<string> {
   const gTok = await getGoogleToken(requestId);
   
-  const SHEET_ID_ACTUAL = process.env.GOOGLE_SHEET_ID || '1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
+  let SHEET_ID_ACTUAL = process.env.GOOGLE_SHEET_ID || '1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
+  if (SHEET_ID_ACTUAL.includes('BEGIN PRIVATE KEY') || SHEET_ID_ACTUAL.includes(' ')) {
+    console.warn(`[${requestId}] GOOGLE_SHEET_ID appears to be invalid (contains spaces or private key). Using default.`);
+    SHEET_ID_ACTUAL = '1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
+  }
+
+  async function fallbackGviz() {
+    console.warn(`[${requestId}] Falling back to public gviz/tq endpoint.`);
+    let url = `https://docs.google.com/spreadsheets/d/${SHEET_ID_ACTUAL}/gviz/tq?tqx=out:csv&gid=${gid}`;
+    if (limit !== undefined && offset !== undefined) {
+      url += `&tq=${encodeURIComponent(`SELECT * LIMIT ${limit} OFFSET ${offset}`)}`;
+    }
+    url += `&_=${Date.now()}`;
+    console.log(`[${requestId}] Fetching gviz url:`, url);
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw { status: res.status, code: "GOOGLE_SHEETS_PUBLIC_FETCH_FAILED", message: `Fallback gviz fetch failed: ${res.statusText}` };
+    }
+    return await res.text();
+  }
+
+  if (!gTok) {
+    console.warn(`[${requestId}] No GOOGLE_SA_EMAIL/KEY found.`);
+    return fallbackGviz();
+  }
 
   const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID_ACTUAL}`;
   let sheets = [];
@@ -102,9 +126,11 @@ export async function fetchSheetDataV4(gid: string, limit?: string, offset?: str
       }).finally(() => clearTimeout(metaTimer));
       
       if (!metaRes.ok) {
+        if (metaRes.status === 403 || metaRes.status === 404) {
+           console.warn(`[${requestId}] SA has no access (status ${metaRes.status}).`);
+           return fallbackGviz();
+        }
         if (metaRes.status === 401) throw { status: 401, code: "GOOGLE_TOKEN_REJECTED", message: "Catalog authentication failed." };
-        if (metaRes.status === 403) throw { status: 403, code: "GOOGLE_SHEETS_FORBIDDEN", message: "Catalog source is not accessible." };
-        if (metaRes.status === 404) throw { status: 404, code: "GOOGLE_SHEETS_NOT_FOUND", message: "Catalog source was not found." };
         throw { status: 502, code: "GOOGLE_SHEETS_INVALID_RESPONSE", message: "Catalog returned an invalid response." };
       }
       
@@ -120,7 +146,7 @@ export async function fetchSheetDataV4(gid: string, limit?: string, offset?: str
   const sheet = sheets.find((s: any) => String(s.properties.sheetId) === String(gid));
   if (!sheet) {
     console.error(`[${requestId}] Sheet with GID ${gid} not found in spreadsheet`);
-    throw { status: 404, code: "GOOGLE_SHEETS_NOT_FOUND", message: "Catalog source was not found." };
+    return fallbackGviz();
   }
   const sheetTitle = sheet.properties.title;
   // Properly quote the sheet title and include standard range A:ZZ to ensure all columns are fetched
