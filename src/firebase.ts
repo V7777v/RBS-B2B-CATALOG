@@ -18,7 +18,7 @@ const app = initializeApp(firebaseConfig);
 // App Check (reCAPTCHA v3) — verifies requests come from this app (incl. guests),
 // protecting Firestore and custom endpoints from non-app/automated clients.
 export const appCheck = initializeAppCheck(app, {
-  provider: new ReCaptchaV3Provider('6LdpujgtAAAAANkpH4GyTSoqR3Pp_kPHThHwtbQi'),
+  provider: new ReCaptchaV3Provider('6LcNEEEtAAAAAM_S4LNH8yNWXv4mCNxmTiyeYQuI'),
   isTokenAutoRefreshEnabled: true
 });
 
