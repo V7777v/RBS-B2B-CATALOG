@@ -124,11 +124,8 @@ export default defineConfig(() => {
               if (id.includes('xlsx') || id.includes('jszip')) {
                 return 'vendor-xlsx';
               }
-              if (id.includes('react') || id.includes('scheduler') || id.includes('react-dom') || id.includes('react-zoom-pan-pinch')) {
+              if (id.includes('react') || id.includes('scheduler') || id.includes('react-dom') || id.includes('react-zoom-pan-pinch') || id.includes('motion') || id.includes('framer-motion')) {
                 return 'vendor-react-core';
-              }
-              if (id.includes('motion') || id.includes('framer-motion')) {
-                return 'vendor-motion';
               }
               if (id.includes('lucide-react')) {
                 return 'vendor-icons';
