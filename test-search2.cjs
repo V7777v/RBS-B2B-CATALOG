@@ -14,4 +14,4 @@ const results = data.filter(item => {
     return cleanedSearchableText.includes(cleanToken);
   });
 });
-console.log(results.map(r => r.sku));
+console.log(results.find(r => r.sku === '303103627') ? "IT MATCHED" : "IT DID NOT MATCH");

@@ -2,7 +2,7 @@ const fs = require('fs');
 const Papa = require('papaparse');
 const csv = fs.readFileSync('test.csv', 'utf8');
 const data = Papa.parse(csv, { header: true }).data;
-const query = '101430';
+const query = 'DS-3WAP';
 const queryTokens = query.split(/[\s\-/,]+/).filter(Boolean);
 const results = data.filter(item => {
   const cleanDescription = (item.description || '').replace(/<[^>]*>?/gm, ' ');
@@ -14,4 +14,4 @@ const results = data.filter(item => {
     return cleanedSearchableText.includes(cleanToken);
   });
 });
-console.log(results.map(r => r.sku));
+console.log(results.find(r => r.sku === '303103627') ? "IT MATCHED" : "IT DID NOT MATCH");

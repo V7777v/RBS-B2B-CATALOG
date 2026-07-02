@@ -3857,7 +3857,9 @@ export default function App() {
         if (item.name === 'קטגוריית אם' || item.name === 'מוצר הדגמה') return false;
 
         const cleanDescription = (item.description || '').replace(/<[^>]*>?/gm, ' ');
-        const searchableText = `${item.name} ${item.sku} ${item.brand} ${cleanDescription} ${item.category} ${item.subcategory}`.toLowerCase();
+        let searchableText = `${item.name} ${item.sku} ${item.brand} ${cleanDescription} ${item.category} ${item.subcategory}`.toLowerCase();
+        // הסרת קישורים כדי למנוע התאמות שגויות מכתובות תמונה בטקסט
+        searchableText = searchableText.replace(/https?:\/\/[^\s]+/g, '');
         // שומרים על הרווחים, מוחקים רק תווים מיוחדים - כדי לא לחבר בטעות מילים למספרים
         const cleanedSearchableText = searchableText.replace(/[^a-z0-9א-ת\s]/gi, '');
 
