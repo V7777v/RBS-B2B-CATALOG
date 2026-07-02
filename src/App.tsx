@@ -270,7 +270,20 @@ const fetchCSV = (gid: string, limit?: number, offset?: number, bypassCache?: bo
 
     const runParse = async (targetUrl: string, useFallbackOnFail: boolean) => {
       let appCheckTok = '';
-      try { appCheckTok = (await getAppCheckToken(appCheck)).token; } catch {}
+      try { 
+        appCheckTok = (await getAppCheckToken(appCheck)).token; 
+      } catch (err) {
+        console.error("Failed to obtain App Check token.", err);
+        const isPreview = window.location.hostname.includes('run.app') || window.location.hostname.includes('localhost');
+        if (isPreview) {
+          console.warn("Bypassing App Check failure in preview environment.");
+          appCheckTok = "DEV_PREVIEW_BYPASS";
+        } else {
+          reject(new Error("אבטחת המערכת (App Check) נכשלה. אנא רענן את העמוד."));
+          return;
+        }
+      }
+      
       Papa.parse(targetUrl, {
         download: true,
         downloadRequestHeaders: { 'X-Firebase-AppCheck': appCheckTok },
@@ -2915,10 +2928,22 @@ export default function App() {
           const pdata: any = snap.exists() ? snap.data() : null;
           if (pdata) {
             setIsAdmin(pdata.admin === true);
-            setUserRole((pdata.role || 'user').trim().toLowerCase());
+            const rawRole = pdata.role;
+            let finalRole = 'user';
+            
+            if (rawRole && typeof rawRole === 'string' && rawRole.trim() !== '') {
+              finalRole = rawRole.trim().toLowerCase();
+            } else {
+              console.warn('[RBS] WARNING: approvedDistributors document for', user.email, 'is missing a valid role. Falling back to "user".');
+            }
+            
+            setUserRole(finalRole);
             setAgentName((pdata.agentName || '').trim());
             setUserProfile({ email: user.email, company: pdata.company || '', customerNumber: pdata.customerNumber || '', tier: pdata.tier || '', agent: (pdata.agent || pdata.Agent || pdata['סוכן'] || '').trim(), agentPhone: pdata.agentPhone || '', agentEmail: pdata.agentEmail || '' });
-            console.log('[RBS] role raw:', JSON.stringify(pdata.role), '→', JSON.stringify((pdata.role || 'user').trim().toLowerCase()), '| agentName:', JSON.stringify((pdata.agentName || '').trim()));
+            
+            if ((import.meta as any).env?.DEV) {
+              console.debug('[RBS] debug profile loaded:', { email: user.email, finalRole });
+            }
           }
         } catch { ok = false; }
         if (ok) {

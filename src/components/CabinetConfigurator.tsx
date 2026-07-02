@@ -141,7 +141,20 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         const ACCESSORIES_CSV_URL = '/api/sheets?gid=1366808268';
 
         let appCheckTok = '';
-        try { appCheckTok = (await getAppCheckToken(appCheck)).token; } catch {}
+        try { 
+          appCheckTok = (await getAppCheckToken(appCheck)).token; 
+        } catch (e) {
+          console.error("Failed to obtain App Check token.", e);
+          const isPreview = window.location.hostname.includes('run.app') || window.location.hostname.includes('localhost');
+          if (isPreview) {
+            console.warn("Bypassing App Check failure in preview environment.");
+            appCheckTok = "DEV_PREVIEW_BYPASS";
+          } else {
+            setErrorMsg("אבטחת המערכת (App Check) נכשלה. אנא רענן את העמוד.");
+            setLoading(false);
+            return;
+          }
+        }
         const acHeaders = { headers: { 'X-Firebase-AppCheck': appCheckTok } };
         const [cabRes, accRes] = await Promise.all([
           fetch(CABINETS_CSV_URL, acHeaders),

@@ -83,7 +83,18 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
         setLoading(true);
         const CABINETS_CSV_URL = '/api/sheets?gid=250535112';
         let appCheckTok = '';
-        try { appCheckTok = (await getAppCheckToken(appCheck)).token; } catch {}
+        try { 
+          appCheckTok = (await getAppCheckToken(appCheck)).token; 
+        } catch (e) {
+          console.error("Failed to obtain App Check token.", e);
+          const isPreview = window.location.hostname.includes('run.app') || window.location.hostname.includes('localhost');
+          if (isPreview) {
+            console.warn("Bypassing App Check failure in preview environment.");
+            appCheckTok = "DEV_PREVIEW_BYPASS";
+          } else {
+            throw new Error("אבטחת המערכת (App Check) נכשלה. אנא רענן את העמוד.");
+          }
+        }
         const res = await fetch(CABINETS_CSV_URL, { headers: { 'X-Firebase-AppCheck': appCheckTok } });
         const csvText = await res.text();
         const parsed = Papa.parse(csvText, { header: false, skipEmptyLines: false });

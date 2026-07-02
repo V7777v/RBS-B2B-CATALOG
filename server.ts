@@ -5,41 +5,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import Papa from "papaparse";
 import fs from "fs";
-import { importPKCS8, SignJWT } from "jose";
-
-let googleToken: { token: string; exp: number } | null = null;
-async function getGoogleToken(): Promise<string | null> {
-  const email = process.env.GOOGLE_SA_EMAIL;
-  let key = process.env.GOOGLE_SA_PRIVATE_KEY;
-  if (!email || !key) return null;
-  if (googleToken && Date.now() < googleToken.exp - 60_000) return googleToken.token;
-  try {
-    key = key.replace(/\\n/g, "\n");
-    const pk = await importPKCS8(key, "RS256");
-    const now = Math.floor(Date.now() / 1000);
-    const assertion = await new SignJWT({
-      scope: "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly"
-    })
-      .setProtectedHeader({ alg: "RS256", typ: "JWT" })
-      .setIssuer(email)
-      .setAudience("https://oauth2.googleapis.com/token")
-      .setIssuedAt(now)
-      .setExpirationTime(now + 3600)
-      .sign(pk);
-    const r = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `grant_type=${encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer")}&assertion=${assertion}`
-    });
-    if (!r.ok) return null;
-    const d: any = await r.json();
-    googleToken = { token: d.access_token, exp: Date.now() + (d.expires_in || 3600) * 1000 };
-    return googleToken.token;
-  } catch (e) {
-    console.error("SA token error:", e);
-    return null;
-  }
-}
+import { fetchSheetDataV4, fetchSheetCSVDataV4 } from "./api/_lib/googleSheets.js";
 
 const app = express();
 const PORT = 3000;
@@ -60,86 +26,6 @@ interface CachedCatalog {
 let catalogCache: CachedCatalog | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
 
-// Helper to fetch and parse Google Sheet as CSV
-async function fetchSheetDataV4(gid: string, limit?: string, offset?: string): Promise<string> {
-  const gTok = await getGoogleToken();
-  const headers: Record<string, string> = {};
-  if (gTok) headers["Authorization"] = `Bearer ${gTok}`;
-
-  const SHEET_ID_ACTUAL = '1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
-
-  if (!gTok) {
-    console.warn("No GOOGLE_SA_EMAIL/KEY found. Falling back to public gviz/tq endpoint.");
-    let url = `https://docs.google.com/spreadsheets/d/${SHEET_ID_ACTUAL}/gviz/tq?tqx=out:csv&gid=${gid}`;
-    if (limit !== undefined && offset !== undefined) {
-      url += `&tq=${encodeURIComponent(`SELECT * LIMIT ${limit} OFFSET ${offset}`)}`;
-    }
-    url += `&_=${Date.now()}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Fallback gviz fetch failed: ${res.statusText}`);
-    return await res.text();
-  }
-
-  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID_ACTUAL}`;
-  const metaRes = await fetch(metaUrl, { headers });
-  if (!metaRes.ok) throw new Error(`Failed to fetch sheet metadata: ${metaRes.statusText}`);
-  const metaData = await metaRes.json();
-
-  const sheet = metaData.sheets.find((s: any) => String(s.properties.sheetId) === String(gid));
-  if (!sheet) throw new Error(`Sheet with GID ${gid} not found`);
-  const sheetTitle = sheet.properties.title;
-
-  const dataUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID_ACTUAL}/values/'${sheetTitle}'`;
-  const dataRes = await fetch(dataUrl, { headers });
-  if (!dataRes.ok) throw new Error(`Failed to fetch sheet data: ${dataRes.statusText}`);
-  const dataJson = await dataRes.json();
-
-  const rows = dataJson.values || [];
-  if (rows.length === 0) return "";
-
-  const headersRow = rows[0] || [];
-  let dataRows = rows.slice(1);
-  
-  if (offset) {
-      const off = parseInt(offset, 10);
-      if (!isNaN(off) && off > 0) dataRows = dataRows.slice(off);
-  }
-  if (limit) {
-      const lim = parseInt(limit, 10);
-      if (!isNaN(lim) && lim > 0) dataRows = dataRows.slice(0, lim);
-  }
-
-  const escapeCell = (cell: any) => {
-      if (cell == null) return "";
-      const str = String(cell);
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-         return '"' + str.replace(/"/g, '""') + '"';
-      }
-      return str;
-  };
-  
-  const csvRows = [];
-  csvRows.push(headersRow.map(escapeCell).join(','));
-  for (const row of dataRows) {
-      const paddedRow = headersRow.map((_, i) => row[i] || "");
-      csvRows.push(paddedRow.map(escapeCell).join(','));
-  }
-  
-  return csvRows.join('\n');
-}
-
-async function fetchSheetCSV(gid: string): Promise<any[]> {
-  const csvString = await fetchSheetDataV4(gid);
-  return new Promise((resolve) => {
-    Papa.parse(csvString, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results: any) => resolve(results.data),
-      error: () => resolve([])
-    });
-  });
-}
-
 // Function to pull all products and catalogs
 async function getCatalogDataContext(): Promise<any[]> {
   try {
@@ -149,9 +35,10 @@ async function getCatalogDataContext(): Promise<any[]> {
     }
 
     const [productsRaw, catalogsRaw] = await Promise.all([
-      fetchSheetCSV(PRODUCTS_GID),
-      fetchSheetCSV(CATALOGS_GID)
+      fetchSheetCSVDataV4(PRODUCTS_GID, "server-catalog-fetch"),
+      fetchSheetCSVDataV4(CATALOGS_GID, "server-catalog-fetch")
     ]);
+
 
     // Format products lightly for high value / lower token footprint
     const parsedProducts = productsRaw.map((row: any) => {
