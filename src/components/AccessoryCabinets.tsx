@@ -86,7 +86,7 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
         try { 
           appCheckTok = (await getAppCheckToken(appCheck)).token; 
         } catch (e) {
-          console.error("Failed to obtain App Check token.", e);
+          console.warn("Failed to obtain App Check token.", e);
           const isPreview = window.location.hostname.includes('run.app') || window.location.hostname.includes('localhost');
           if (isPreview) {
             console.warn("Bypassing App Check failure in preview environment.");

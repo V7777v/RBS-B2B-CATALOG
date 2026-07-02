@@ -273,7 +273,7 @@ const fetchCSV = (gid: string, limit?: number, offset?: number, bypassCache?: bo
       try { 
         appCheckTok = (await getAppCheckToken(appCheck)).token; 
       } catch (err) {
-        console.error("Failed to obtain App Check token.", err);
+        console.warn("Failed to obtain App Check token.", err);
         const isPreview = window.location.hostname.includes('run.app') || window.location.hostname.includes('localhost');
         if (isPreview) {
           console.warn("Bypassing App Check failure in preview environment.");
