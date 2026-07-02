@@ -7,6 +7,34 @@ import { jwtVerify, createRemoteJWKSet } from "jose";
 // App Check token verification (reCAPTCHA v3) via Firebase App Check public JWKS.
 const APP_CHECK_JWKS = createRemoteJWKSet(new URL("https://firebaseappcheck.googleapis.com/v1/jwks"));
 const APP_CHECK_PROJECT_NUMBER = "224025193925";
+// --- Google Service Account OAuth token (for PRIVATE sheet access; cached ~55 min) ---
+import { SignJWT, importPKCS8 } from "jose";
+let googleToken: { token: string; exp: number } | null = null;
+async function getGoogleToken(): Promise<string | null> {
+  const email = process.env.GOOGLE_SA_EMAIL;
+  let key = process.env.GOOGLE_SA_PRIVATE_KEY;
+  if (!email || !key) return null;
+  if (googleToken && Date.now() < googleToken.exp - 60_000) return googleToken.token;
+  try {
+    key = key.replace(/\\n/g, "\n");
+    const pk = await importPKCS8(key, "RS256");
+    const now = Math.floor(Date.now() / 1000);
+    const assertion = await new SignJWT({ scope: "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly" })
+      .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+      .setIssuer(email).setAudience("https://oauth2.googleapis.com/token")
+      .setIssuedAt(now).setExpirationTime(now + 3600).sign(pk);
+    const r = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=${encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer")}&assertion=${assertion}`
+    });
+    if (!r.ok) { console.error("SA token exchange failed:", r.status); return null; }
+    const d: any = await r.json();
+    googleToken = { token: d.access_token, exp: Date.now() + (d.expires_in || 3600) * 1000 };
+    return googleToken.token;
+  } catch (e) { console.error("SA token error:", e); return null; }
+}
+
 async function verifyAppCheck(token: string): Promise<boolean> {
   try {
     await jwtVerify(token, APP_CHECK_JWKS, {
@@ -41,7 +69,8 @@ const RATE_WINDOW_MS = 60 * 1000;
 // Helper to fetch and parse Google Sheet as CSV
 async function fetchSheetCSV(gid: string): Promise<any[]> {
   const url = `${SHEET_URL}/gviz/tq?tqx=out:csv&gid=${gid}&_=${Date.now()}`;
-  const response = await fetch(url);
+  const gTok = await getGoogleToken();
+  const response = await fetch(url, gTok ? { headers: { Authorization: `Bearer ${gTok}` } } : undefined);
   if (!response.ok) {
     throw new Error(`Failed to fetch sheet GID ${gid}: ${response.statusText}`);
   }
