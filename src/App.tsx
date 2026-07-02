@@ -1503,7 +1503,7 @@ const ProductDetailsView = (props: any) => {
               )}
 
               {/* SPECIFIC CONFIGURATORS (Only for Cabinets, not accessories) */}
-              {((selectedProduct.subcategory === 'ארונות תקשורת ואביזרים' || selectedProduct.subcategory === 'ארונות וארונות הסתעפות') && 
+              {(selectedProduct.subcategory === 'ארונות תקשורת ואביזרים' && 
                 !selectedProduct['Nested subcategory']?.includes('אביזרים') && 
                 /ארון|מסד|מארז/i.test(selectedProduct.name)) && (
                 <div className="mb-6">
@@ -5614,47 +5614,6 @@ export default function App() {
               )}
             </div>
 
-            {/* Quick Add Installation Accessories (סנדלים וזרועות) */}
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-              <h3 className="text-xs font-bold text-blue-600 mb-3 flex items-center gap-1.5">
-                <Sparkles size={14} className="text-blue-500" /> הוספה מהירה של סנדלים ואביזרי התקנה נפוצים 🔌
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                {[
-                  { name: 'סנדל קיר B2B 2" מתכוונן כבד', sku: 'SND-WALL-ADJ-2', listPrice: 190, costPrice: 95 },
-                  { name: 'סנדל תורן 1.5" כפול כבד', sku: 'SND-POLE-DBL-15', listPrice: 220, costPrice: 110 },
-                  { name: 'סנדל פינתי למעקה 2" מגולוון', sku: 'SND-CNR-2', listPrice: 210, costPrice: 105 },
-                  { name: 'זרוע 2" באורך 1 מטר כבדה', sku: 'ARM-2-1M', listPrice: 150, costPrice: 75 },
-                  { name: 'זרוע 1.5" באורך 0.5 מטר קלה', sku: 'ARM-15-05M', listPrice: 85, costPrice: 42 }
-                ].map((item, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      setQuoteItems((prev: any) => reconcileGifts([
-                        ...prev,
-                        {
-                          id: "acc-" + Date.now() + "-" + idx,
-                          name: item.name,
-                          sku: item.sku,
-                          qty: 1,
-                          listPrice: item.listPrice,
-                          quotedPrice: item.listPrice,
-                          costPrice: item.costPrice,
-                          wholesalePrice: item.listPrice,
-                          discountPercent: 0,
-                          isCustom: true
-                        }
-                      ]));
-                    }}
-                    className="p-2 border border-gray-200 hover:border-blue-400 rounded-lg hover:bg-blue-50/50 text-right transition-colors text-xs flex flex-col justify-between h-14 bg-transparent cursor-pointer"
-                  >
-                    <span className="font-bold text-gray-700 block truncate w-full text-right">{item.name}</span>
-                    <span className="text-blue-700 font-extrabold text-[10px] text-right">₪{item.listPrice} +</span>
-                  </button>
-                ))}
-              </div>
-            </div>
 
                     {/* Unified quote document — agent edits inline (single source of truth) */}
                     <div className="bg-white rounded-xl p-2 md:p-5 shadow-sm border border-gray-200 overflow-x-auto">

@@ -29,6 +29,23 @@
         input, textarea, select { font-size: 16px !important; }
       }
     </style>
+    <style>
+      /* Larger, more readable typography on mobile — modest bump of small sizes, layout spacing preserved.
+         Inputs stay 16px (handled above) to avoid iOS zoom. Long words/SKUs wrap instead of overflowing. */
+      @media screen and (max-width: 767px) {
+        .text-\[9px\]  { font-size: 11px !important;  line-height: 1.4 !important;  font-weight: 500 !important; }
+        .text-\[10px\] { font-size: 11.5px !important; line-height: 1.4 !important;  font-weight: 500 !important; }
+        .text-\[11px\] { font-size: 12.5px !important; line-height: 1.45 !important; }
+        .text-xs   { font-size: 13.5px !important; line-height: 1.5 !important; }
+        .text-sm   { font-size: 15px !important;   line-height: 1.55 !important; }
+        .text-base { font-size: 16.5px !important; }
+        /* darken very-light secondary text for readability */
+        .text-gray-400 { color: #6b7280 !important; }
+        .text-gray-300 { color: #9ca3af !important; }
+      }
+      /* prevent long unbroken strings (SKUs, emails, URLs) from breaking mobile layout */
+      body { overflow-wrap: break-word; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
