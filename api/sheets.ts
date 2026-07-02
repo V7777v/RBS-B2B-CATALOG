@@ -27,6 +27,7 @@ async function verifyAppCheck(token: string): Promise<boolean> {
 }
 
 // --- In-memory CSV cache (per warm instance) ---
+const bypassHits = new Map<string, number[]>();
 const csvCache = new Map<string, { body: string; exp: number }>();
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -54,7 +55,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ success: false, code: "INVALID_GID", message: "Invalid catalog source." });
   }
 
-  const bypassCache = req.query.bypass_cache === "true";
+  // bypass_cache is rate-limited per IP (max 5 / 10 min) to protect Google quota.
+  const clientIp = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || "unknown";
+  let bypassCache = req.query.bypass_cache === "true";
+  if (bypassCache) {
+    const now = Date.now();
+    const hits = (bypassHits.get(clientIp) || []).filter((ts) => now - ts < 10 * 60 * 1000);
+    if (hits.length >= 5) {
+      bypassCache = false; // quota guard: serve cached instead
+    } else {
+      hits.push(now);
+      bypassHits.set(clientIp, hits);
+    }
+  }
   const cacheKey = `${gid}:${limit ?? ""}:${offset ?? ""}`;
   
   if (!bypassCache) {
@@ -73,7 +86,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!bypassCache) csvCache.set(cacheKey, { body: csvString, exp: Date.now() + CACHE_TTL_MS });
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Cache-Control", bypassCache ? "no-store, no-cache, must-revalidate, max-age=0" : "s-maxage=300, stale-while-revalidate=600");
+    res.setHeader("Cache-Control", "private, max-age=0, no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Cache", "MISS");
     

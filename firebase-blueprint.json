@@ -1,0 +1,167 @@
+{
+  "entities": {
+    "ApprovedDistributor": {
+      "title": "Approved Distributor",
+      "description": "Distributor approval entry containing their access role and associated agent.",
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["user", "agent", "sales_manager"],
+          "description": "Access control role"
+        },
+        "agentName": {
+          "type": "string",
+          "description": "The trimmed display name of the agent"
+        },
+        "company": {
+          "type": "string",
+          "description": "Company name"
+        },
+        "customerNumber": {
+          "type": "string",
+          "description": "Distributor customer ID"
+        },
+        "tier": {
+          "type": "string",
+          "description": "Pricing tier code"
+        },
+        "agent": {
+          "type": "string",
+          "description": "Assigned agent identifier"
+        },
+        "agentPhone": {
+          "type": "string",
+          "description": "Agent contact phone"
+        },
+        "agentEmail": {
+          "type": "string",
+          "description": "Agent contact email"
+        }
+      },
+      "required": ["role"]
+    },
+    "Cart": {
+      "title": "Cart",
+      "description": "User's pending items in cart",
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array"
+        }
+      }
+    },
+    "Favorite": {
+      "title": "Favorite",
+      "description": "User's favorited items",
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array"
+        }
+      }
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User profile metadata",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string"
+        }
+      }
+    },
+    "User": {
+      "title": "User",
+      "description": "User identity mapping",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string"
+        }
+      }
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order details",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array"
+        },
+        "agent": {
+          "type": "string"
+        }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "Quote": {
+      "title": "Quote",
+      "description": "Commercial sales quote",
+      "type": "object",
+      "properties": {
+        "agentUid": {
+          "type": "string"
+        },
+        "customerEmail": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "signedBy": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": ["agentUid", "customerEmail", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/approvedDistributors/{docEmail}": {
+      "schema": "ApprovedDistributor",
+      "description": "Active approved distributor records keyed by lowercased email addresses"
+    },
+    "/carts/{uid}": {
+      "schema": "Cart",
+      "description": "User specific cart selections"
+    },
+    "/favorites/{uid}": {
+      "schema": "Favorite",
+      "description": "User specific favorited items"
+    },
+    "/userProfiles/{uid}": {
+      "schema": "UserProfile",
+      "description": "User profile information"
+    },
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "General user settings"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer order documents"
+    },
+    "/quotes/{quoteId}": {
+      "schema": "Quote",
+      "description": "Commercial quote documents"
+    }
+  }
+}
