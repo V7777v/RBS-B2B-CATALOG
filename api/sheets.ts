@@ -87,8 +87,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // App Check: only our app (web/PWA, incl. guests) may call this endpoint.
   const appCheckToken = (req.headers["x-firebase-appcheck"] || "") as string;
-  if (!appCheckToken || !(await verifyAppCheck(appCheckToken))) {
-    return res.status(401).json({ error: "Unauthorized." });
+  if (!appCheckToken) {
+    console.error("[sheets] 401: App Check token MISSING (old client bundle or client getToken failed). UA:", String(req.headers["user-agent"] || "").slice(0, 60));
+    return res.status(401).json({ error: "Unauthorized.", reason: "missing-token" });
+  }
+  if (!(await verifyAppCheck(appCheckToken))) {
+    console.error("[sheets] 401: App Check token INVALID (verify failed). Token prefix:", appCheckToken.slice(0, 12));
+    return res.status(401).json({ error: "Unauthorized.", reason: "invalid-token" });
   }
 
   const { gid, limit, offset } = req.query;
