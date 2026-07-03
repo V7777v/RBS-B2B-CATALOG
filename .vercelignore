@@ -1,0 +1,33 @@
+# Dev/test/junk files — never needed for the Vercel build (vite build + api/).
+# Keeps the deploy context clean. (Vercel serves only dist/ + public/ + api/.)
+
+# test & scratch scripts
+test-search*.cjs
+test-api-sheets.ts
+test_gviz_query*.ts
+testPapa.cjs
+testPapa.js
+testPrice.js
+test.csv
+test1.jpg
+
+# one-off data/fetch/maintenance scripts
+fetch*.ts
+fetchCSV2.js
+export.cjs
+export.csv
+get-desc.cjs
+move_comp.cjs
+recover.cjs
+fix_app_tsx.cjs
+check_sizes.ts
+generate_icons.ts
+scripts/
+
+# self-host entrypoint (Vercel uses api/ functions, not this)
+server.ts
+
+# never deploy secrets/local env
+.env
+.env.*
+!.env.example
