@@ -22,7 +22,6 @@ recover.cjs
 fix_app_tsx.cjs
 check_sizes.ts
 generate_icons.ts
-scripts/
 
 # self-host entrypoint (Vercel uses api/ functions, not this)
 server.ts
