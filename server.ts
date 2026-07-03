@@ -5,6 +5,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import Papa from "papaparse";
 import fs from "fs";
+import { jwtVerify, createRemoteJWKSet } from "jose";
 import { fetchSheetDataV4, fetchSheetCSVDataV4 } from "./api/_lib/googleSheets.js";
 
 const app = express();
@@ -404,6 +405,53 @@ interface SheetsCacheEntry {
 const sheetsCacheMap = new Map<string, SheetsCacheEntry>();
 const CACHE_TTL_SHEETS_MS = 45 * 1000; // 45 seconds cache is ideal
 
+const SENSITIVE_COLS_SERVER = ["מחיר עלות", "מחיר סיטונאות", "מחיר סיטונאי"];
+const FIREBASE_JWKS_SERVER = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
+
+async function isAgentOrManagerServer(authHeader: string | undefined): Promise<boolean> {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return false;
+  }
+  const token = authHeader.substring(7);
+  try {
+    const { payload } = await jwtVerify(token, FIREBASE_JWKS_SERVER, {
+      issuer: "https://securetoken.google.com/rbs-b2b",
+      audience: "rbs-b2b"
+    });
+    
+    const uid = payload.sub;
+    if (!uid) return false;
+    
+    const url = `https://firestore.googleapis.com/v1/projects/rbs-b2b/databases/(default)/documents/approvedDistributors/${uid}`;
+    const res = await fetch(url, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      return false;
+    }
+    const data: any = await res.json();
+    const role = data.fields?.role?.stringValue;
+    return role === "agent" || role === "sales_manager";
+  } catch (err) {
+    console.warn("Express: Token or role verification failed:", err);
+    return false;
+  }
+}
+
+function stripSensitiveColumnsServer(csv: string): string {
+  const parsed = Papa.parse<string[]>(csv, { skipEmptyLines: false });
+  const rows = (parsed.data || []) as string[][];
+  if (!rows.length || !Array.isArray(rows[0])) return csv;
+  const header = rows[0];
+  const dropIdx = new Set<number>();
+  header.forEach((c, i) => { if (SENSITIVE_COLS_SERVER.includes(String(c).trim())) dropIdx.add(i); });
+  if (dropIdx.size === 0) return csv;
+  const out = rows
+    .filter((r) => !(r.length === 1 && r[0] === ""))
+    .map((r) => r.filter((_, i) => !dropIdx.has(i)));
+  return Papa.unparse(out);
+}
+
 // Proxy endpoint for cached Google Sheets access on Express
 app.get("/api/sheets", async (req, res) => {
   const { gid, limit, offset } = req.query;
@@ -412,7 +460,8 @@ app.get("/api/sheets", async (req, res) => {
   }
 
   const bypassCache = req.query.bypass_cache === "true";
-  const cacheKey = `${gid}_${limit || ""}_${offset || ""}`;
+  const authorized = await isAgentOrManagerServer(req.headers.authorization);
+  const cacheKey = `${gid}_${limit || ""}_${offset || ""}_${authorized ? "auth" : "guest"}`;
 
   // Serve from cache if valid and not bypassing
   if (!bypassCache) {
@@ -425,8 +474,12 @@ app.get("/api/sheets", async (req, res) => {
   }
 
   try {
-    const csvString = await fetchSheetDataV4(String(gid), limit as string, offset as string);
+    let csvString = await fetchSheetDataV4(String(gid), limit as string, offset as string);
     
+    if (!authorized) {
+      csvString = stripSensitiveColumnsServer(csvString);
+    }
+
     if (!bypassCache) {
       sheetsCacheMap.set(cacheKey, {
         text: csvString,

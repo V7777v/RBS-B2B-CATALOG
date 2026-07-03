@@ -284,9 +284,23 @@ const fetchCSV = (gid: string, limit?: number, offset?: number, bypassCache?: bo
         }
       }
       
+      let idToken = '';
+      if (auth.currentUser) {
+        try {
+          idToken = await auth.currentUser.getIdToken();
+        } catch (e) {
+          console.error("Failed to retrieve Firebase ID Token:", e);
+        }
+      }
+
+      const headers: Record<string, string> = { 'X-Firebase-AppCheck': appCheckTok };
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+      
       Papa.parse(targetUrl, {
         download: true,
-        downloadRequestHeaders: { 'X-Firebase-AppCheck': appCheckTok },
+        downloadRequestHeaders: headers,
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
@@ -3572,6 +3586,18 @@ export default function App() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Role-aware catalog: once the user is confirmed as agent/manager, reload so the
+  // server returns full columns (cost/wholesale) via the verified ID token.
+  const didAgentReloadRef = useRef(false);
+  useEffect(() => {
+    if ((userRole === 'agent' || userRole === 'sales_manager') && !didAgentReloadRef.current) {
+      didAgentReloadRef.current = true;
+      loadData(true);
+    } else if (userRole === 'user') {
+      didAgentReloadRef.current = false;
+    }
+  }, [userRole, loadData]);
   
   // Smart auto-refresh on focus
   useEffect(() => {

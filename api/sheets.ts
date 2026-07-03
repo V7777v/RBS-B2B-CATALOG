@@ -1,6 +1,56 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { jwtVerify, createRemoteJWKSet } from "jose";
+import Papa from "papaparse";
 import { fetchSheetDataV4, ALLOWED_GIDS } from "./_lib/googleSheets.js";
+
+const SENSITIVE_COLS = ["מחיר עלות", "מחיר סיטונאות", "מחיר סיטונאי"];
+const FIREBASE_JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
+
+async function isAgentOrManager(authHeader: string | undefined): Promise<boolean> {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return false;
+  }
+  const token = authHeader.substring(7);
+  try {
+    const { payload } = await jwtVerify(token, FIREBASE_JWKS, {
+      issuer: "https://securetoken.google.com/rbs-b2b",
+      audience: "rbs-b2b"
+    });
+    
+    const uid = payload.sub;
+    if (!uid) return false;
+    
+    // Fetch user document from Firestore REST API
+    const url = `https://firestore.googleapis.com/v1/projects/rbs-b2b/databases/(default)/documents/approvedDistributors/${uid}`;
+    const res = await fetch(url, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      return false;
+    }
+    const data: any = await res.json();
+    const role = data.fields?.role?.stringValue;
+    return role === "agent" || role === "sales_manager";
+  } catch (err) {
+    console.warn("Token or role verification failed:", err);
+    return false;
+  }
+}
+
+function stripSensitiveColumns(csv: string): string {
+  // Quote-safe: catalog cells (descriptions) can contain commas, so parse properly.
+  const parsed = Papa.parse<string[]>(csv, { skipEmptyLines: false });
+  const rows = (parsed.data || []) as string[][];
+  if (!rows.length || !Array.isArray(rows[0])) return csv;
+  const header = rows[0];
+  const dropIdx = new Set<number>();
+  header.forEach((c, i) => { if (SENSITIVE_COLS.includes(String(c).trim())) dropIdx.add(i); });
+  if (dropIdx.size === 0) return csv;
+  const out = rows
+    .filter((r) => !(r.length === 1 && r[0] === ""))
+    .map((r) => r.filter((_, i) => !dropIdx.has(i)));
+  return Papa.unparse(out);
+}
 
 // ============================================================================
 // Secure Google Sheets proxy via API v4.
@@ -68,7 +118,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       bypassHits.set(clientIp, hits);
     }
   }
-  const cacheKey = `${gid}:${limit ?? ""}:${offset ?? ""}`;
+  const authorized = await isAgentOrManager(req.headers.authorization);
+  const cacheKey = `${gid}:${limit ?? ""}:${offset ?? ""}:${authorized ? "auth" : "guest"}`;
   
   if (!bypassCache) {
     const hit = csvCache.get(cacheKey);
@@ -81,7 +132,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const csvString = await fetchSheetDataV4(String(gid), limit as string, offset as string, requestId);
+    let csvString = await fetchSheetDataV4(String(gid), limit as string, offset as string, requestId);
+
+    if (!authorized) {
+      csvString = stripSensitiveColumns(csvString);
+    }
 
     if (!bypassCache) csvCache.set(cacheKey, { body: csvString, exp: Date.now() + CACHE_TTL_MS });
 
