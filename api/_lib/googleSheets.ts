@@ -42,7 +42,7 @@ export async function getGoogleToken(requestId: string): Promise<string | null> 
     const pk = await importPKCS8(key, "RS256");
     const now = Math.floor(Date.now() / 1000);
     const assertion = await new SignJWT({
-      scope: "https://www.googleapis.com/auth/spreadsheets.readonly"
+      scope: "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/datastore"
     })
       .setProtectedHeader({ alg: "RS256", typ: "JWT" })
       .setIssuer(email)

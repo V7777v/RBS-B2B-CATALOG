@@ -1,56 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { jwtVerify, createRemoteJWKSet } from "jose";
 import Papa from "papaparse";
-import { fetchSheetDataV4, ALLOWED_GIDS } from "./_lib/googleSheets.js";
-
-const SENSITIVE_COLS = ["מחיר עלות", "מחיר סיטונאות", "מחיר סיטונאי"];
-const FIREBASE_JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
-
-async function isAgentOrManager(authHeader: string | undefined): Promise<boolean> {
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return false;
-  }
-  const token = authHeader.substring(7);
-  try {
-    const { payload } = await jwtVerify(token, FIREBASE_JWKS, {
-      issuer: "https://securetoken.google.com/rbs-b2b",
-      audience: "rbs-b2b"
-    });
-    
-    const uid = payload.sub;
-    if (!uid) return false;
-    
-    // Fetch user document from Firestore REST API
-    const url = `https://firestore.googleapis.com/v1/projects/rbs-b2b/databases/(default)/documents/approvedDistributors/${uid}`;
-    const res = await fetch(url, {
-      headers: { "Authorization": `Bearer ${token}` }
-    });
-    if (!res.ok) {
-      return false;
-    }
-    const data: any = await res.json();
-    const role = data.fields?.role?.stringValue;
-    return role === "agent" || role === "sales_manager";
-  } catch (err) {
-    console.warn("Token or role verification failed:", err);
-    return false;
-  }
-}
-
-function stripSensitiveColumns(csv: string): string {
-  // Quote-safe: catalog cells (descriptions) can contain commas, so parse properly.
-  const parsed = Papa.parse<string[]>(csv, { skipEmptyLines: false });
-  const rows = (parsed.data || []) as string[][];
-  if (!rows.length || !Array.isArray(rows[0])) return csv;
-  const header = rows[0];
-  const dropIdx = new Set<number>();
-  header.forEach((c, i) => { if (SENSITIVE_COLS.includes(String(c).trim())) dropIdx.add(i); });
-  if (dropIdx.size === 0) return csv;
-  const out = rows
-    .filter((r) => !(r.length === 1 && r[0] === ""))
-    .map((r) => r.filter((_, i) => !dropIdx.has(i)));
-  return Papa.unparse(out);
-}
+import { fetchSheetDataV4, ALLOWED_GIDS, getGoogleToken } from "./_lib/googleSheets.js";
 
 // ============================================================================
 // Secure Google Sheets proxy via API v4.
@@ -74,6 +25,34 @@ async function verifyAppCheck(token: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// --- Firebase ID token verification (identifies the actual USER + role) ---
+const FIREBASE_JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
+const FIREBASE_PROJECT_ID = "rbs-b2b";
+async function verifiedEmail(idToken: string): Promise<string | null> {
+  try {
+    const { payload } = await jwtVerify(idToken, FIREBASE_JWKS, {
+      issuer: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
+      audience: FIREBASE_PROJECT_ID
+    });
+    if (payload.email_verified === true && typeof payload.email === "string") return payload.email.toLowerCase();
+    return null;
+  } catch { return null; }
+}
+
+// --- Sensitive columns removed for non-agents (cost / wholesale) ---
+const SENSITIVE_COLS = ["מחיר עלות", "מחיר סיטונאות", "מחיר סיטונאי"];
+function stripSensitiveColumns(csv: string): string {
+  const parsed = Papa.parse<string[]>(csv, { skipEmptyLines: false });
+  const rows = (parsed.data || []) as string[][];
+  if (!rows.length || !Array.isArray(rows[0])) return csv;
+  const header = rows[0];
+  const dropIdx = new Set<number>();
+  header.forEach((c, i) => { if (SENSITIVE_COLS.includes(String(c).trim())) dropIdx.add(i); });
+  if (dropIdx.size === 0) return csv;
+  const out = rows.filter((r) => !(r.length === 1 && r[0] === "")).map((r) => r.filter((_, i) => !dropIdx.has(i)));
+  return Papa.unparse(out);
 }
 
 // --- In-memory CSV cache (per warm instance) ---
@@ -105,6 +84,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ success: false, code: "INVALID_GID", message: "Invalid catalog source." });
   }
 
+  // Agent/manager access: full columns only with a valid Firebase ID token + approved role.
+  let isAgentView = false;
+  const idToken = (req.headers["x-firebase-id-token"] || "") as string;
+  if (idToken) {
+    const email = await verifiedEmail(idToken);
+    if (email) {
+      try {
+        const saTok = await getGoogleToken(requestId);
+        if (saTok) {
+          const fsUrl = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/approvedDistributors/${encodeURIComponent(email)}`;
+          const fsRes = await fetch(fsUrl, { headers: { Authorization: `Bearer ${saTok}` } });
+          if (fsRes.ok) {
+            const doc: any = await fsRes.json();
+            const role = (doc?.fields?.role?.stringValue || "").trim().toLowerCase();
+            isAgentView = (role === "agent" || role === "sales_manager");
+          }
+        }
+      } catch { isAgentView = false; }
+    }
+  }
+
   // bypass_cache is rate-limited per IP (max 5 / 10 min) to protect Google quota.
   const clientIp = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || "unknown";
   let bypassCache = req.query.bypass_cache === "true";
@@ -118,8 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       bypassHits.set(clientIp, hits);
     }
   }
-  const authorized = await isAgentOrManager(req.headers.authorization);
-  const cacheKey = `${gid}:${limit ?? ""}:${offset ?? ""}:${authorized ? "auth" : "guest"}`;
+  const cacheKey = `${isAgentView ? "A" : "P"}:${gid}:${limit ?? ""}:${offset ?? ""}`;
   
   if (!bypassCache) {
     const hit = csvCache.get(cacheKey);
@@ -133,10 +132,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     let csvString = await fetchSheetDataV4(String(gid), limit as string, offset as string, requestId);
-
-    if (!authorized) {
-      csvString = stripSensitiveColumns(csvString);
-    }
+    if (!isAgentView) csvString = stripSensitiveColumns(csvString);
 
     if (!bypassCache) csvCache.set(cacheKey, { body: csvString, exp: Date.now() + CACHE_TTL_MS });
 

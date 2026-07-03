@@ -284,23 +284,17 @@ const fetchCSV = (gid: string, limit?: number, offset?: number, bypassCache?: bo
         }
       }
       
-      let idToken = '';
-      if (auth.currentUser) {
-        try {
-          idToken = await auth.currentUser.getIdToken();
-        } catch (e) {
-          console.error("Failed to retrieve Firebase ID Token:", e);
+      const reqHeaders: Record<string, string> = { 'X-Firebase-AppCheck': appCheckTok };
+      try {
+        if (auth.currentUser) {
+          const idTok = await auth.currentUser.getIdToken();
+          if (idTok) reqHeaders['X-Firebase-Id-Token'] = idTok;
         }
-      }
+      } catch {}
 
-      const headers: Record<string, string> = { 'X-Firebase-AppCheck': appCheckTok };
-      if (idToken) {
-        headers['Authorization'] = `Bearer ${idToken}`;
-      }
-      
       Papa.parse(targetUrl, {
         download: true,
-        downloadRequestHeaders: headers,
+        downloadRequestHeaders: reqHeaders,
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
@@ -3587,7 +3581,7 @@ export default function App() {
     loadData();
   }, [loadData]);
 
-  // Role-aware catalog: once the user is confirmed as agent/manager, reload so the
+  // Role-aware catalog: reload once the user is confirmed agent/manager so the
   // server returns full columns (cost/wholesale) via the verified ID token.
   const didAgentReloadRef = useRef(false);
   useEffect(() => {
