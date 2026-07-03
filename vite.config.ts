@@ -43,14 +43,12 @@ export default defineConfig(() => {
           ],
           runtimeCaching: [
             {
+              // SECURITY: /api/sheets returns role-dependent data (agents get cost/wholesale).
+              // Never cache it in the Service Worker — a cached agent response must not be
+              // served to a customer/guest on the same device (cross-role leak). Network only.
               urlPattern: ({ url }) => url.pathname.startsWith('/api/sheets'),
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'catalog-data',
-                networkTimeoutSeconds: 4,
-                expiration: { maxEntries: 10, maxAgeSeconds: 24 * 60 * 60 },
-                cacheableResponse: { statuses: [0, 200] }
-              }
+              handler: 'NetworkOnly',
+              options: { cacheName: 'no-cache-catalog' }
             },
             {
               urlPattern: ({ url }) =>
