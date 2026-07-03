@@ -590,17 +590,17 @@ const SubcategoryCard: React.FC<SubcategoryCardProps> = ({sub, onClick, navigate
       {sub.image ? (
         <img referrerPolicy="no-referrer" src={transformImageLink(sub.image, 400)} alt={sub.name} loading="lazy" decoding="async" onError={handleImageError} className="max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500 group-hover:scale-105"/>
       ) : (
-        <FolderOpen className="text-gray-300 w-10 h-10 sm:w-12 sm:h-12"/>
+        <FolderOpen className="text-gray-400 w-10 h-10 sm:w-12 sm:h-12"/>
       )}
     </div>
     <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white text-center justify-between">
       <div className="w-full">
-        <div className="min-h-[2rem] sm:min-h-[2.5rem] flex items-center justify-center mb-1 sm:mb-2 w-full">
-          <h3 className="font-semibold text-[#0c2d57] text-xs sm:text-lg leading-tight line-clamp-2 text-center w-full">
+        <div className="min-h-[2.5rem] sm:min-h-[2.5rem] flex items-center justify-center mb-1 sm:mb-2 w-full">
+          <h3 className="font-bold text-[#0c2d57] text-[15px] sm:text-lg leading-snug line-clamp-2 text-center w-full">
             {sub.name}
           </h3>
         </div>
-        <p className="text-gray-500 text-[11px] sm:text-sm mb-1 sm:mb-4 font-medium">
+        <p className="text-gray-600 text-xs sm:text-sm mb-1 sm:mb-4 font-semibold">
           {sub.count} מוצרים
         </p>
       </div>
@@ -852,7 +852,7 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
           <span>מק״ט: {product.sku}</span>
         </div>
         <div className="min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center mb-2">
-          <h3 className="text-[#0c2d57] text-xs sm:text-base font-semibold line-clamp-2 leading-tight text-center w-full">{product.name}</h3>
+          <h3 className="text-[#0c2d57] text-[15px] sm:text-base font-bold line-clamp-2 leading-snug text-center w-full">{product.name}</h3>
         </div>
         
         <div className="mt-auto pt-2 sm:pt-2 flex flex-col items-center w-full">
