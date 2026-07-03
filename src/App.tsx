@@ -595,12 +595,12 @@ const SubcategoryCard: React.FC<SubcategoryCardProps> = ({sub, onClick, navigate
     </div>
     <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white text-center justify-between">
       <div className="w-full">
-        <div className="min-h-[2.5rem] sm:min-h-[2.5rem] flex items-center justify-center mb-1 sm:mb-2 w-full">
-          <h3 className="font-bold text-[#0c2d57] text-[15px] sm:text-lg leading-snug line-clamp-2 text-center w-full">
+        <div className="min-h-[2.75rem] sm:min-h-[3rem] flex items-center justify-center mb-1 sm:mb-2 w-full">
+          <h3 className="font-bold text-[#0c2d57] text-base sm:text-xl leading-snug line-clamp-2 text-center w-full">
             {sub.name}
           </h3>
         </div>
-        <p className="text-gray-600 text-xs sm:text-sm mb-1 sm:mb-4 font-semibold">
+        <p className="text-gray-600 text-[13px] sm:text-sm mb-1 sm:mb-4 font-semibold">
           {sub.count} מוצרים
         </p>
       </div>
@@ -836,7 +836,7 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
               : 'bg-white/95 border-gray-200 text-gray-500 hover:text-[#004387] hover:border-[#004387] w-8 hover:w-[86px] hover:px-2 gap-0 hover:gap-1'
           }`}
         >
-          <Scale size={14} className={compareIds.has(product.id) ? 'text-white' : 'text-gray-400 group-hover/compare:text-[#004387]'} />
+          <Scale size={16} className={compareIds.has(product.id) ? 'text-white' : 'text-gray-600 group-hover/compare:text-[#004387]'} />
           <span className={`text-[10px] font-bold whitespace-nowrap overflow-hidden transition-all duration-300 ${
             compareIds.has(product.id)
               ? 'w-auto opacity-100'
@@ -852,7 +852,7 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
           <span>מק״ט: {product.sku}</span>
         </div>
         <div className="min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center mb-2">
-          <h3 className="text-[#0c2d57] text-[15px] sm:text-base font-bold line-clamp-2 leading-snug text-center w-full">{product.name}</h3>
+          <h3 className="text-[#0c2d57] text-base sm:text-lg font-bold line-clamp-2 leading-snug text-center w-full">{product.name}</h3>
         </div>
         
         <div className="mt-auto pt-2 sm:pt-2 flex flex-col items-center w-full">
@@ -4671,7 +4671,7 @@ export default function App() {
                 aria-label="פתח עגלת הזמנה"
                 style={{ margin: 0 }}
               >
-                <ShoppingCart size={20} className="flex-shrink-0" />
+                <ShoppingCart size={23} className="flex-shrink-0 stroke-[2.25]" />
                 <span className="text-sm font-bold hidden sm:block whitespace-nowrap">עגלת הזמנה</span>
                 {cart.length > 0 && (
                   <span className="absolute -top-2 -right-2 bg-[#c2410c] text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
@@ -4689,7 +4689,7 @@ export default function App() {
                 title="אזור אישי"
                 className="relative flex items-center justify-center gap-1.5 h-11 !p-2 !px-3.5 text-[#004387] bg-white border border-[#004387]/50 hover:bg-[#004387] hover:text-white hover:border-[#004387] hover:shadow-sm transition-all rounded-xl active:scale-95"
               >
-                <User size={20} className="flex-shrink-0" />
+                <User size={23} className="flex-shrink-0 stroke-[2.25]" />
                 <span className="text-sm font-bold hidden sm:block">אזור אישי</span>
                 {agentUnread > 0 && (
                   <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold min-w-[20px] h-5 px-1 rounded-full flex items-center justify-center shadow-sm ring-2 ring-white">{agentUnread > 99 ? '99+' : agentUnread}</span>
@@ -4703,9 +4703,9 @@ export default function App() {
                 onClick={handleAppLogout}
                 aria-label="התנתק"
                 title="התנתק"
-                className="flex items-center justify-center gap-1.5 h-11 !p-2 !px-3 text-gray-500 hover:text-red-600 transition-colors rounded-xl active:scale-95"
+                className="flex items-center justify-center gap-1.5 h-11 !p-2 !px-3 text-gray-700 hover:text-red-600 transition-colors rounded-xl active:scale-95"
               >
-                <LogOut size={20} className="flex-shrink-0" />
+                <LogOut size={23} className="flex-shrink-0 stroke-[2.25]" />
                 <span className="text-sm font-bold hidden sm:block">יציאה</span>
               </button>
             </div>
@@ -4718,7 +4718,7 @@ export default function App() {
                   title="מועדפים"
                   className="relative flex items-center justify-center gap-1.5 h-11 !px-4 bg-white border border-gray-200 hover:border-gray-300 text-red-500 font-bold rounded-xl active:scale-95 text-sm whitespace-nowrap"
                 >
-                  <Heart size={16} className="flex-shrink-0 fill-red-500" /> מועדפים
+                  <Heart size={18} className="flex-shrink-0 fill-red-500 stroke-[2.25]" /> <span className="hidden sm:inline">מועדפים</span>
                   {favorites.length > 0 && (
                     <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold min-w-[20px] h-5 px-1 rounded-full flex items-center justify-center shadow-sm ring-2 ring-white">
                       {favorites.length}
@@ -4726,7 +4726,7 @@ export default function App() {
                   )}
                 </button>
                 <button onClick={() => { try { sessionStorage.removeItem('rbs_guest'); } catch {} setIsGuest(false); }} title="כניסה / רישום למפיצים מורשים בלבד" className="flex items-center justify-center gap-1.5 h-11 !px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl active:scale-95 text-sm whitespace-nowrap">
-                  <Lock size={16} className="flex-shrink-0" /> כניסת מפיצים
+                  <Lock size={18} className="flex-shrink-0 stroke-[2.25]" /> כניסת מפיצים
                 </button>
               </div>
             )}
