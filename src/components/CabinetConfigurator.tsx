@@ -79,6 +79,7 @@ const buildCatalogAccessories = (catalogData: any[], productSkuNorm: string, cab
     description: pp.description || '', uSize: resolveAccU(pp), suitableRange: '',
     _depth: parseDepthMmLocal(`${pp.name || ''} ${pp.description || ''}`),
     _promoted: isFlagged(pp), brand: deriveBrand(pp),
+    _curated: !!compatMap[String(pp.sku ?? '').trim().toUpperCase()],
   }));
   return built.filter((a: any) => {
     if (a.uSize === 0) return true;                    // fans / PDU / hardware: free add
@@ -90,9 +91,10 @@ const buildCatalogAccessories = (catalogData: any[], productSkuNorm: string, cab
       if (c.dMin != null && cabDepthMm && (cabDepthMm < c.dMin - 60 || cabDepthMm > c.dMax + 60)) return false;
       return true;
     }
-    // Uncurated (new products): lenient depth heuristic so nothing valid disappears.
+    // Uncurated (not in the compat sheet): a shelf DEEPER than the cabinet cannot fit
+    // physically -> hide. Shallower shelves remain valid (front/hanging mount).
     if (!cabDepthMm || !a._depth) return true;
-    if (a._depth > cabDepthMm + 100) return false;
+    if (a._depth > cabDepthMm + 40) return false;
     return true;
   });
 };
@@ -625,7 +627,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const _q = accSearch.trim().toLowerCase();
   const _accMatch = ({ acc }: any) => !_q || `${acc.pn || ''} ${acc.name || ''} ${acc.description || ''}`.toLowerCase().includes(_q);
   const _filtered = _accPairs.filter(_accMatch);
-  const _bucketTakesU = _filtered.filter(({ acc }: any) => !acc._promoted && acc.uSize > 0);
+  const _bucketTakesU = _filtered
+    .filter(({ acc }: any) => !acc._promoted && acc.uSize > 0)
+    .sort((a: any, b: any) => {
+      const rank = (x: any) => (x.acc._curated ? 0 : (x.acc._depth ? 1 : 2));
+      return rank(a) - rank(b);
+    });
   const _bucketFree = _filtered.filter(({ acc }: any) => !acc._promoted && acc.uSize === 0);
   const _bucketPromoted = _filtered.filter(({ acc }: any) => acc._promoted);
   const _promotedByBrand: Record<string, any[]> = {};
@@ -655,6 +662,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
             <Box size={13} className="text-slate-400" />
             {acc.uSize > 0 ? `גודל נדרש: ${acc.uSize}U` : 'ללא נפח בארון'}
+            {acc._curated && <span className="text-emerald-600 font-bold mr-1">✓ התאמה מדויקת</span>}
             {acc.uSize > 0 && !fitsRemaining && <span className="text-rose-500 font-bold mr-1">(חורג מהמקום הפנוי)</span>}
           </span>
           <button type="button" onClick={() => handleAddOptional(acc, idx)}
@@ -721,6 +729,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             
             {/* Left and Right Rack Rails with mounting holes */}
             <div className="absolute right-1 top-0 bottom-0 w-3 bg-gradient-to-r from-gray-800 via-gray-600 to-gray-900 border-l border-slate-700 flex flex-col justify-around py-2 z-10 pointer-events-none">
+              {Array.from({ length: 15 }).map((_, i) => (
+                <div key={i} className="w-1.5 h-1.5 rounded-full bg-slate-400/50 mx-auto shadow-inner border border-slate-9000 select-none" style={{ display: 'none' }}></div>
+              ))}
               {Array.from({ length: 15 }).map((_, i) => (
                 <div key={i} className="w-1.5 h-1.5 rounded-full bg-slate-400/50 mx-auto shadow-inner border border-slate-900"></div>
               ))}
@@ -1051,7 +1062,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               <div className="mb-3 text-[12px] font-bold text-slate-600">
                 נותרו <span className="text-[#004387]">{availableU}U</span> פנויים — מלא עם אביזרים תואמים:
               </div>
-              {AccordionSection('takesU', '📏 אביזרים שתופסים מקום', _bucketTakesU, 'bg-slate-100 text-slate-800', true)}
+              {AccordionSection('takesU', '📏 אביזרים שתופסים מקום', _bucketTakesU, 'bg-slate-100 text-slate-800', false)}
               {AccordionSection('free', '🔌 תוספות ללא נפח (חופשי)', _bucketFree, 'bg-emerald-50 text-emerald-800', false)}
               {Object.keys(_promotedByBrand).sort().map(brand => AccordionSection('brand:' + brand, '⭐ ' + brand, _promotedByBrand[brand], 'bg-amber-50 text-amber-800', false))}
               {_filtered.length === 0 && (
