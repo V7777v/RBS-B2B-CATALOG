@@ -284,8 +284,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         // we degrade gracefully to catalog-only mode instead of a hard error.
         let cabRows: any[][] = [];
         try {
-          const cabRes = await fetch(CABINETS_URL_OR_API_PLACEHOLDER(CABINETS_CSV_URL), acHeaders);
-          function CABINETS_URL_OR_API_PLACEHOLDER(url: string) { return url; }
+          const cabRes = await fetch(CABINETS_CSV_URL, acHeaders);
           if (cabRes.ok) {
             const cabCsvText = await cabRes.text();
             cabRows = (Papa.parse(cabCsvText, { header: false, skipEmptyLines: false }).data) as any[][];
@@ -525,6 +524,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   interface VisualSlot {
     uIndex: number;
     type: 'empty' | 'preset-fan' | 'preset-shelf' | 'optional-accessory';
+    isAnchor?: boolean;
+    spanU?: number;
     name: string;
     description?: string;
     accessoryRef?: any;
@@ -576,7 +577,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   }
 
   // 3. Optional accessories added by user
-  const optionalItemsAssignment: { uIndex: number; name: string; description: string; accessoryRef: any; optionalIdx: number }[] = [];
+  const optionalItemsAssignment: { uIndex: number; name: string; description: string; accessoryRef: any; optionalIdx: number; isAnchor: boolean; spanU: number }[] = [];
   let currentCandidateSlot = totalSlotsU;
 
   selectedOptionals.forEach((opt, optIdx) => {
@@ -595,6 +596,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         currentCandidateSlot--;
       }
       
+      // The first (top) allocated U is the ANCHOR that shows the product; the rest are
+      // continuation rows of the SAME unit (so a multi-U item reads as one block, not N copies).
+      const topU = allocatedSlots.length ? Math.max(...allocatedSlots) : 0;
       allocatedSlots.forEach(slot => {
         usedIndexes.add(slot);
         optionalItemsAssignment.push({
@@ -602,7 +606,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           name: opt.pn,
           description: opt.name || opt.description || '',
           accessoryRef: opt,
-          optionalIdx: optIdx
+          optionalIdx: optIdx,
+          isAnchor: slot === topU,
+          spanU: size
         });
       });
     }
@@ -633,7 +639,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           name: optMatch.name,
           description: optMatch.description,
           accessoryRef: optMatch.accessoryRef,
-          optionalIdx: optMatch.optionalIdx
+          optionalIdx: optMatch.optionalIdx,
+          isAnchor: optMatch.isAnchor,
+          spanU: optMatch.spanU
         });
       } else {
         slots.push({
@@ -835,6 +843,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 const isFan = slot.type === 'preset-fan';
                 const isShelf = slot.type === 'preset-shelf';
                 const isOptional = slot.type === 'optional-accessory';
+                const isCont = isOptional && slot.isAnchor === false; // continuation row of a multi-U item
 
                 const nameLower = (slot.name || '').toLowerCase();
                 const descLower = (slot.description || '').toLowerCase();
@@ -882,7 +891,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     </div>
 
                     {/* Real product image filling the slot — like a real rack unit */}
-                    {isOptional && slot.accessoryRef?.image && (
+                    {isOptional && slot.isAnchor !== false && slot.accessoryRef?.image && (
                       <>
                         <img referrerPolicy="no-referrer" src={slot.accessoryRef.image} alt=""
                           className="absolute inset-0 w-full h-full object-cover object-center opacity-95 pointer-events-none select-none z-0"
@@ -901,7 +910,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                         {isPdu && <span className="text-red-500 animate-pulse">⚡</span>}
                         
                         <p className="font-semibold tracking-wide break-words leading-tight">
-                          {slot.name}
+                          {isCont ? '' : slot.name}
                         </p>
                       </div>
 
@@ -916,7 +925,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                         </div>
                       )}
 
-                      {slot.description && !isBrush && !isPdu && (
+                      {slot.description && !isBrush && !isPdu && !isCont && (
                         <p className="text-[10px] text-slate-400 font-normal line-clamp-2 break-words opacity-85 mt-0.5" title={slot.description}>
                           {slot.description}
                         </p>
@@ -924,7 +933,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     </div>
 
                     {/* Action buttons inside interactive slots */}
-                    <div className="flex items-center gap-1 relative z-20">
+                    {(!isCont) && <div className="flex items-center gap-1 relative z-20">
                       {isOptional && typeof slot.optionalIdx === 'number' && (
                         <div className="flex items-center gap-1 bg-slate-900/80 border border-slate-700 px-1 py-0.5 rounded opacity-80 group-hover:opacity-100 transition-opacity">
                           <button 
@@ -962,7 +971,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                       {isShelf && (
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                       )}
-                    </div>
+                    </div>}
                   </div>
                 );
               })}
