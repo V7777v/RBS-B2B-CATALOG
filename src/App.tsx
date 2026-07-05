@@ -3911,7 +3911,7 @@ export default function App() {
         // מוודא שכל ביטוי שהוקלד בחיפוש קיים במוצר (כטקסט נקי)
         const tokenMatch = queryTokens.every(token => {
           const cleanToken = token.replace(/[^a-z0-9א-ת]/gi, '');
-          if (!cleanToken) return searchableText.includes(token);
+          if (!cleanToken) return true; // pure separator/punctuation token -> ignore
           return cleanedSearchableText.includes(cleanToken);
         });
 

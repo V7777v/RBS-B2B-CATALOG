@@ -42,7 +42,7 @@ const buildCatalogAccessories = (catalogData: any[], productSkuNorm: string, cab
   const CAB_ACC_SUB = 'ארונות תקשורת ואביזרים';
   const isFlagged = (pp: any): boolean => {
     const v = String(pp?.['התאמה לארון'] ?? '').trim().toUpperCase();
-    return v === 'TRUE' || v === 'כן' || v === 'YES' || v === '1' || v === 'V';
+    return v === 'TRUE' || v === 'כן' || v === 'YES';
   };
   const resolveAccU = (pp: any): number => {
     const raw = String(pp?.['נפח'] ?? pp?.['נפח בארון'] ?? '').trim();
@@ -663,7 +663,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   // --- Accessory grouping: search + accordion buckets (promoted grouped by BRAND) ---
   const _accPairs = compatibleAccessories.map((acc, idx) => ({ acc, idx }));
   const _q = accSearch.trim().toLowerCase();
-  const _accMatch = ({ acc }: any) => !_q || `${acc.pn || ''} ${acc.name || ''} ${acc.description || ''}`.toLowerCase().includes(_q);
+  const _qTokens = _q.split(/[\s\-/,]+/).filter(Boolean);
+  const _accMatch = ({ acc }: any) => {
+    if (!_qTokens.length) return true;
+    const hay = `${acc.pn || ''} ${acc.name || ''} ${acc.description || ''} ${acc.sku || ''}`.toLowerCase();
+    return _qTokens.every((tok: string) => hay.includes(tok)); // all words, any order
+  };
   const _filtered = _accPairs.filter(_accMatch);
   const _bucketTakesU = _filtered
     .filter(({ acc }: any) => !acc._promoted && acc.uSize > 0)
@@ -677,7 +682,11 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const _bucketFree = _bucketFreeAll.filter((x: any) => !_isPdu(x));
   const _illusPairs = ILLUSTRATION_ACCESSORIES
     .map((acc, i) => ({ acc, idx: 100000 + i }))
-    .filter(({ acc }: any) => !_q || `${acc.pn} ${acc.name} ${acc.description}`.toLowerCase().includes(_q));
+    .filter(({ acc }: any) => {
+      if (!_qTokens.length) return true;
+      const hay = `${acc.pn} ${acc.name} ${acc.description}`.toLowerCase();
+      return _qTokens.every((tok: string) => hay.includes(tok));
+    });
   const _bucketPromoted = _filtered.filter(({ acc }: any) => acc._promoted);
   const _promotedByBrand: Record<string, any[]> = {};
   _bucketPromoted.forEach((pair: any) => {
