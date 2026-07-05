@@ -768,6 +768,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   // Build a self-contained HTML document and open it in a new window.
   // Reliable across desktop + mobile + PWA (unlike window.print() on the live page,
   // which iOS/PWA blocks and which clipped the layout on desktop).
+  // (g-134 נדרש להדפסה.)
   const handleDownloadPdf = (withPrice: boolean) => {
     setPdfWithPrice(withPrice);
     setShowPdfPreview(true);
@@ -870,9 +871,13 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                   slotStyles = 'bg-gradient-to-r from-indigo-950/40 via-slate-900 to-indigo-950/40 border-indigo-600/60 text-indigo-200 py-2.5 px-3 shadow-sm hover:border-indigo-400';
                 }
 
+                if (isCont) return null; // merged into the anchor cell above (multi-U block)
+                const spanU = slot.spanU || 1;
+                const isMerged = isOptional && spanU > 1;
                 return (
                   <div 
                     key={idx}
+                    style={isMerged ? { minHeight: `${spanU * 44 + (spanU - 1) * 4}px` } : undefined}
                     className={`group text-xs flex items-center justify-between transition-all duration-200 border relative overflow-hidden ${slotStyles}`}
                     onClick={() => {
                       if (isEmpty) {
@@ -886,18 +891,43 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     }}
                   >
                     {/* Position indicator */}
-                    <div className="font-mono font-bold text-[10px] tabular-nums bg-slate-800/80 text-slate-300 w-8 h-5 flex items-center justify-center rounded border border-slate-700/50 flex-shrink-0 relative z-20">
-                      {slot.uIndex}U
+                    <div className={`font-mono font-bold text-[10px] tabular-nums bg-slate-800/80 text-slate-300 flex flex-col items-center justify-center rounded border border-slate-700/50 flex-shrink-0 relative z-20 ${isMerged ? 'w-11 py-1' : 'w-8 h-5'}`}>
+                      {isMerged ? (<><span>{slot.uIndex}-{slot.uIndex - spanU + 1}</span><span className="text-[8px] text-emerald-300">{spanU}U</span></>) : `${slot.uIndex}U`}
                     </div>
 
                     {/* Real product image filling the slot — like a real rack unit */}
-                    {isOptional && slot.isAnchor !== false && slot.accessoryRef?.image && (
+                    {isOptional && slot.isAnchor !== false && !isShelfUpgrade && slot.accessoryRef?.image && (
                       <>
                         <img referrerPolicy="no-referrer" src={slot.accessoryRef.image} alt=""
-                          className="absolute inset-0 w-full h-full object-cover object-center opacity-95 pointer-events-none select-none z-0"
+                          className={`absolute inset-0 w-full h-full object-center opacity-95 pointer-events-none select-none z-0 ${isMerged ? 'object-contain p-1' : 'object-cover'}`}
                           onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
-                        <div className="absolute inset-0 bg-gradient-to-l from-black/80 via-black/35 to-transparent pointer-events-none z-10"></div>
+                        <div className="absolute inset-0 bg-gradient-to-l from-black/70 via-black/25 to-transparent pointer-events-none z-10"></div>
                       </>
+                    )}
+                    {/* Schematic shelf drawing (shelves have no proper front photo) */}
+                    {(isShelf || isShelfUpgrade) && slot.isAnchor !== false && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-1 z-0" aria-hidden="true">
+                        <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="w-full h-full opacity-90">
+                          <defs>
+                            <linearGradient id="shelfGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0" stopColor="#64748b" />
+                              <stop offset="0.55" stopColor="#475569" />
+                              <stop offset="1" stopColor="#334155" />
+                            </linearGradient>
+                          </defs>
+                          <rect x="10" y="8" width="8" height="26" rx="1" fill="#334155" stroke="#1e293b" strokeWidth="0.7" />
+                          <rect x="182" y="8" width="8" height="26" rx="1" fill="#334155" stroke="#1e293b" strokeWidth="0.7" />
+                          <circle cx="14" cy="13" r="1.5" fill="#0f172a" />
+                          <circle cx="14" cy="29" r="1.5" fill="#0f172a" />
+                          <circle cx="186" cy="13" r="1.5" fill="#0f172a" />
+                          <circle cx="186" cy="29" r="1.5" fill="#0f172a" />
+                          <rect x="16" y="11" width="168" height="21" rx="1.5" fill="url(#shelfGrad)" stroke="#1e293b" strokeWidth="0.8" />
+                          <rect x="16" y="28" width="168" height="4" fill="#1e293b" opacity="0.45" />
+                          {Array.from({ length: 9 }).map((_, i) => (
+                            <rect key={i} x={26 + i * 18} y="15" width="10" height="11" rx="1" fill="#1e293b" opacity="0.4" />
+                          ))}
+                        </svg>
+                      </div>
                     )}
                     {/* Left content description */}
                     <div className="flex-1 min-w-0 pr-3 pl-1 text-right relative z-20">
@@ -925,7 +955,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                         </div>
                       )}
 
-                      {slot.description && !isBrush && !isPdu && !isCont && (
+                      {slot.description && !isBrush && !isPdu && (
                         <p className="text-[10px] text-slate-400 font-normal line-clamp-2 break-words opacity-85 mt-0.5" title={slot.description}>
                           {slot.description}
                         </p>
@@ -1272,16 +1302,34 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                   ▲ תקרה: {roofItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
                 </div>
               )}
-              {slots.slice().sort((a, b) => b.uIndex - a.uIndex).map((s) => {
-                const occupied = s.type !== 'empty';
-                const bg = s.type === 'empty' ? '#ffffff' : (s.type === 'optional-accessory' ? '#dbeafe' : '#f1f5f9');
-                return (
-                  <div key={s.uIndex} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #eef2f7', minHeight: '17px', background: bg }}>
-                    <div style={{ width: '34px', textAlign: 'center', fontWeight: 700, fontSize: '9px', color: '#64748b', borderLeft: '1px solid #e2e8f0', flexShrink: 0 }}>{s.uIndex}U</div>
-                    <div style={{ flex: 1, padding: '1px 6px', fontSize: '10px', color: occupied ? '#0c2d57' : '#cbd5e1', fontWeight: occupied ? 700 : 400 }}>{occupied ? s.name : '—'}</div>
-                  </div>
-                );
-              })}
+              {(() => {
+                const pdfSlots: any[] = [];
+                const sortedSlots = slots.slice().sort((a, b) => b.uIndex - a.uIndex);
+                for (let i = 0; i < sortedSlots.length; i++) {
+                  const s = sortedSlots[i];
+                  const isOptional = s.type === 'optional-accessory';
+                  const isCont = isOptional && s.isAnchor === false;
+                  if (isCont) {
+                    continue;
+                  }
+                  pdfSlots.push(s);
+                }
+                return pdfSlots.map((s) => {
+                  const occupied = s.type !== 'empty';
+                  const bg = s.type === 'empty' ? '#ffffff' : (s.type === 'optional-accessory' ? '#dbeafe' : '#f1f5f9');
+                  const spanU = s.spanU || 1;
+                  return (
+                    <div key={s.uIndex} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #eef2f7', minHeight: `${17 * spanU}px`, background: bg }}>
+                      <div style={{ width: '34px', textAlign: 'center', fontWeight: 700, fontSize: '9px', color: '#64748b', borderLeft: '1px solid #e2e8f0', flexShrink: 0, alignSelf: 'stretch', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        {spanU > 1 ? `${s.uIndex}-${s.uIndex - spanU + 1}` : `${s.uIndex}U`}
+                      </div>
+                      <div style={{ flex: 1, padding: '2px 6px', fontSize: '10px', color: occupied ? '#0c2d57' : '#cbd5e1', fontWeight: occupied ? 700 : 400 }}>
+                        {occupied ? (s.name + (spanU > 1 ? ` (${spanU}U)` : '')) : '—'}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
               {plinthItems.length > 0 && (
                 <div style={{ background: '#f1f5f9', borderTop: '1px solid #94a3b8', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#475569' }}>
                   ▼ בסיס: {plinthItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
