@@ -1574,7 +1574,7 @@ const ProductDetailsView = (props: any) => {
                     })}
                     
                     <div className="flex justify-between items-center text-lg lg:text-xl font-bold text-[#c2410c] pt-3 mt-2 border-t border-gray-200/60 bg-white -mx-4 -mb-4 p-4 rounded-b">
-                      <span>סה"כ לתשלום:</span>
+                      <span>סה"כ:</span>
                       <span>₪{(selectedProduct.price + currentOptionals.reduce((acc, opt) => {
                          const catItem = catalogData.find(p => p.sku === opt.sku || p.sku === opt.pn);
                          return acc + (catItem ? catItem.price : (opt.price || 0));
@@ -2862,7 +2862,7 @@ export default function App() {
       `אושר ונחתם ע"י: ${signer}\n` +
       `הצעת מחיר מזהה: ${q.id}\n\n` +
       orderItems.map((it: any) => `${it.name} (${it.sku}) — כמות: ${it.quantity} — מחיר יח׳: ₪${it.price}`).join('\n') +
-      `\n\nסה"כ לתשלום: ₪${Math.round(q.total || 0)}`;
+      `\n\nסה"כ: ₪${Math.round(q.total || 0)}`;
 
     await addOrderRecord({
       uid: userUid || '',

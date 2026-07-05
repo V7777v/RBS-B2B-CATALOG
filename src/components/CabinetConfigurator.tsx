@@ -71,6 +71,9 @@ const buildCatalogAccessories = (catalogData: any[], productSkuNorm: string, cab
     if (normalizeSku(pp.sku) === productSkuNorm) return false;               // not the cabinet itself
     const nested = String(pp.nestedSubcategory || '');
     if (nested.includes('דלת מחוררת') || nested.includes('דלת זכוכית')) return false; // other cabinets
+    // Exclude tools that shouldn't appear in the cabinet config (e.g. cage-nut extractor).
+    const nameHay = `${pp.name || ''} ${pp.description || ''}`.toLowerCase();
+    if (/מחלץ|extractor|כלי\b|tool\b/.test(nameHay)) return false;
     const inUniverse = String(pp.subcategory || '').trim() === CAB_ACC_SUB &&
       (nested.includes('אביזרים לארונות') || nested.includes('פסי שקעים'));
     return inUniverse || isFlagged(pp);
@@ -132,9 +135,34 @@ interface CabinetData {
   suitableSliding: string;
 }
 
+// Generic rack items NOT sold by RBS — for a complete visual simulation only (price 0, not ordered).
+const ILLUSTRATION_ACCESSORIES: any[] = [
+  { pn: 'NVR', sku: 'ILLUS-NVR', name: 'מקליט NVR', description: 'מקליט וידאו לרשת (להמחשה בלבד)', uSize: 1, price: 0, _illustration: true },
+  { pn: 'PATCH-24', sku: 'ILLUS-PATCH24', name: 'פאנל תקשורת 24 פורט', description: 'Patch Panel 24P (להמחשה בלבד)', uSize: 1, price: 0, _illustration: true },
+  { pn: 'CABLE-ORG', sku: 'ILLUS-CABLEORG', name: 'ארגונית כבלים 1U', description: 'Cable Organizer (להמחשה בלבד)', uSize: 1, price: 0, _illustration: true },
+];
+
+const getPhysicalZone = (name: string, desc: string): 'roof' | 'plinth' | 'rear' => {
+  const s = `${name || ''} ${desc || ''}`.toLowerCase();
+  if (/מאוורר|fan|מפוח|איוורור|נורת|נורה|led|לד|תאורה|light/.test(s)) return 'roof'; // fans + LED lamp -> top frame/ceiling
+  if (/פס שקע|שקע|pdu|כבל חשמל|power strip/.test(s)) return 'rear';      // PDUs -> rear/side
+  return 'plinth';                                                        // feet / wheels / screws / kits -> base
+};
+
 const determineUSize = (pn: string, desc: string): number => {
   const text = `${pn} ${desc}`.toLowerCase();
-  
+
+  // A shelf/panel ALWAYS occupies U — even if its description mentions rails/sliding
+  // (e.g. "מדף נשלף על מסילות"). Check this before the 0U-hardware list below.
+  if (text.includes('מדף') || text.includes('shelf')) {
+    const um0 = text.match(/(\d+)\s*u/i);
+    return um0 ? parseInt(um0[1]) : 1;
+  }
+  if (text.includes('פנל') || text.includes('panel') || text.includes('עיוור') || text.includes('מברשת') || text.includes('שערות')) {
+    const um1 = text.match(/(\d+)\s*u/i);
+    return um1 ? parseInt(um1[1]) : 1;
+  }
+
   // High Priority: if it's a non-rack-mounted or side-mounted accessory, it occupies 0U of the frontal rail slots
   if (
     text.includes('בורג') || text.includes('ברגים') || text.includes('screw') || text.includes('cage') || text.includes('nut') ||
@@ -430,6 +458,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     if (onOptionalsChangeRef.current) {
       const flattened: Accessory[] = [];
       selectedOptionals.forEach(item => {
+        if ((item as any)._illustration) return; // visual-only, never added to the order
         const qty = item.quantity || 1;
         for (let i = 0; i < qty; i++) {
           flattened.push(item);
@@ -614,7 +643,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     }
   }
 
-  const nonUAccessories: { name: string; quantity: number; description: string; accessoryRef: any; optionalIdx: number }[] = [];
+  const nonUAccessories: { name: string; quantity: number; description: string; accessoryRef: any; optionalIdx: number; zone: 'roof' | 'plinth' | 'rear' }[] = [];
   selectedOptionals.forEach((opt, optIdx) => {
     if (opt.uSize === 0) {
       nonUAccessories.push({
@@ -622,10 +651,14 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         quantity: opt.quantity,
         description: opt.name || opt.description || '',
         accessoryRef: opt,
-        optionalIdx: optIdx
+        optionalIdx: optIdx,
+        zone: getPhysicalZone(opt.pn, opt.name || opt.description || ''),
       });
     }
   });
+  const roofItems = nonUAccessories.filter(a => a.zone === 'roof');
+  const rearItems = nonUAccessories.filter(a => a.zone === 'rear');
+  const plinthItems = nonUAccessories.filter(a => a.zone !== 'roof' && a.zone !== 'rear');
 
   // --- Accessory grouping: search + accordion buckets (promoted grouped by BRAND) ---
   const _accPairs = compatibleAccessories.map((acc, idx) => ({ acc, idx }));
@@ -638,7 +671,13 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       const rank = (x: any) => (x.acc._curated ? 0 : (x.acc._depth ? 1 : 2));
       return rank(a) - rank(b);
     });
-  const _bucketFree = _filtered.filter(({ acc }: any) => !acc._promoted && acc.uSize === 0);
+  const _bucketFreeAll = _filtered.filter(({ acc }: any) => !acc._promoted && acc.uSize === 0);
+  const _isPdu = ({ acc }: any) => /פס שקע|פסי שקע|\bשקע|pdu/i.test(`${acc.name || ''} ${acc.description || ''} ${acc.pn || ''}`);
+  const _bucketPdu = _bucketFreeAll.filter(_isPdu);
+  const _bucketFree = _bucketFreeAll.filter((x: any) => !_isPdu(x));
+  const _illusPairs = ILLUSTRATION_ACCESSORIES
+    .map((acc, i) => ({ acc, idx: 100000 + i }))
+    .filter(({ acc }: any) => !_q || `${acc.pn} ${acc.name} ${acc.description}`.toLowerCase().includes(_q));
   const _bucketPromoted = _filtered.filter(({ acc }: any) => acc._promoted);
   const _promotedByBrand: Record<string, any[]> = {};
   _bucketPromoted.forEach((pair: any) => {
@@ -646,24 +685,17 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     (_promotedByBrand[brand] = _promotedByBrand[brand] || []).push(pair);
   });
 
-  const handleDownloadPdf = (withPrice: boolean) => {
-    setPdfWithPrice(withPrice);
-    setTimeout(() => { try { window.print(); } catch {} }, 200);
-  };
-  const pdfCabinetPrice = Math.round(Number(product?.price) || 0);
-  const pdfAccessoriesTotal = selectedOptionals.reduce((s: number, o: any) => s + (Math.round(Number(o.price) || 0) * (o.quantity || 1)), 0);
-  const pdfGrandTotal = pdfCabinetPrice + pdfAccessoriesTotal;
-
   const renderAccCard = (acc: any, idx: number) => {
     const catalogMatch = catalogData.find(pp => pp && pp.sku && (pp.sku === acc.pn || pp.sku === acc.sku));
     const showPrice = catalogMatch ? catalogMatch.price : (acc.price || 0);
     const fitsRemaining = acc.uSize === 0 || acc.uSize <= availableU;
-    return (
+
+  return (
       <div key={idx} className={`flex flex-col p-3.5 border group transition-all relative rounded-none hover:shadow-sm ${fitsRemaining ? 'bg-slate-50 border-slate-100 hover:border-[#004387]' : 'bg-rose-50/40 border-rose-100'}`}>
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="font-bold text-[15px] text-slate-900 group-hover:text-[#004387] transition-colors leading-snug">{acc.pn}</p>
-            <p className="text-[13px] text-gray-600 line-clamp-2 break-words mt-0.5 leading-snug font-medium" title={acc.description}>{acc.description}</p>
+            <p className="text-[13px] text-gray-600 line-clamp-2 break-words mt-0.5 leading-snug" title={acc.description}>{acc.description}</p>
           </div>
           {showPrice > 0 && (
             <span className="text-xs font-bold text-slate-800 bg-slate-200 py-0.5 px-1.5 rounded-none whitespace-nowrap font-mono h-5 flex items-center justify-center">
@@ -681,6 +713,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             <Box size={13} className="text-slate-400" />
             {acc.uSize > 0 ? `גודל נדרש: ${acc.uSize}U` : 'ללא נפח בארון'}
             {acc._curated && <span className="text-emerald-600 font-bold mr-1">✓ התאמה מדויקת</span>}
+            {acc._illustration && <span className="text-purple-600 font-bold mr-1">להמחשה · לא בהזמנה</span>}
             {acc.uSize > 0 && !fitsRemaining && <span className="text-rose-500 font-bold mr-1">(חורג מהמקום הפנוי)</span>}
           </span>
           <button type="button" onClick={() => handleAddOptional(acc, idx)}
@@ -707,6 +740,15 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       </div>
     );
   };
+
+  const handleDownloadPdf = (withPrice: boolean) => {
+    setPdfWithPrice(withPrice);
+    setTimeout(() => { try { window.print(); } catch {} }, 200);
+  };
+  const pdfCabinetPrice = Math.round(Number(product?.price) || 0);
+  const pdfOrderable = selectedOptionals.filter((o: any) => !o._illustration);
+  const pdfAccessoriesTotal = pdfOrderable.reduce((s: number, o: any) => s + (Math.round(Number(o.price) || 0) * (o.quantity || 1)), 0);
+  const pdfGrandTotal = pdfCabinetPrice + pdfAccessoriesTotal;
 
   return (
     <div className="mt-8 bg-white border-2 border-[#004387] shadow-sm relative overflow-hidden" dir="rtl">
@@ -757,6 +799,19 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 <div key={i} className="w-1.5 h-1.5 rounded-full bg-slate-400/50 mx-auto shadow-inner border border-slate-900"></div>
               ))}
             </div>
+
+            {/* ROOF ZONE — fans physically sit in the cabinet ceiling, not the frontal U-rails */}
+            {roofItems.length > 0 && (
+              <div className="mx-4 mb-1 rounded-none border border-cyan-500/70 bg-gradient-to-r from-cyan-950/80 via-slate-900 to-cyan-950/80 px-3 py-2">
+                <div className="text-[9px] font-black tracking-widest text-cyan-300/90 uppercase text-center mb-1 select-none">◄ תקרת הארון · איוורור ►</div>
+                {roofItems.map((r, i) => (
+                  <div key={i} className="flex items-center justify-between text-cyan-100 text-[11px] py-0.5">
+                    <span className="flex items-center gap-1.5"><span className="inline-block animate-spin" style={{ animationDuration: '4s' }}>🌀</span>{r.description || r.name}</span>
+                    <span className="font-mono font-bold bg-cyan-900/60 px-1.5 rounded">{r.quantity}x</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Scrollable Chassis Interior */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-1 px-4 relative z-0 custom-scrollbar pr-1">
@@ -889,14 +944,14 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               })}
             </div>
 
-            {/* Ground-level or side-rail zero-U accessories (screws, wheels, feet, cable management) */}
-            {nonUAccessories.length > 0 && (
+            {/* Ground-level or side-rail zero-U accessories (screws, wheels, cable management) */}
+            {(plinthItems.length + rearItems.length) > 0 && (
               <div className="mt-2 pt-2 border-t border-slate-800/80 space-y-1">
                 <div className="text-[9px] font-black tracking-widest text-[#fe8d00]/90 uppercase text-center mb-1 select-none">
                   ◄ פריטי חיבור והתקנה מופעלים (Side Rail / 0U) ►
                 </div>
                 <div className="max-h-[140px] overflow-y-auto space-y-1 custom-scrollbar pr-1">
-                  {nonUAccessories.map((nonU, index) => {
+                  {[...plinthItems, ...rearItems].map((nonU, index) => {
                     const nameLower = (String(nonU.name || '') + " " + String(nonU.description || '')).toLowerCase();
                     const isScrew = nameLower.includes('בורג') || nameLower.includes('ברגים') || nameLower.includes('screw') || nameLower.includes('nut');
                     const isWheel = nameLower.includes('גלגל') || nameLower.includes('wheel') || nameLower.includes('wheels');
@@ -1052,18 +1107,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               </div>
             )}
           </div>
-          
-          {/* PDF export: two options — with prices / without */}
-          <div className="mt-4 grid grid-cols-2 gap-2.5 print:hidden">
-            <button type="button" onClick={() => handleDownloadPdf(true)}
-              className="flex items-center justify-center gap-1.5 py-2.5 bg-[#004387] text-white font-bold text-sm rounded-none hover:bg-[#0c2d57] transition-colors cursor-pointer shadow-sm">
-              <Download size={15} /> PDF עם מחירים
-            </button>
-            <button type="button" onClick={() => handleDownloadPdf(false)}
-              className="flex items-center justify-center gap-1.5 py-2.5 bg-white text-[#004387] border border-[#004387] font-bold text-sm rounded-none hover:bg-slate-50 transition-colors cursor-pointer shadow-sm">
-              <Download size={15} /> PDF ללא מחירים
-            </button>
-          </div>
         </div>
 
         {/* Column 3: Optional Compatible Upgrades / Accessories (Left side) */}
@@ -1084,13 +1127,15 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input value={accSearch} onChange={e => setAccSearch(e.target.value)} dir="rtl"
                   placeholder="חיפוש אביזר (שם / מק״ט)"
-                  className="w-full pr-9 pl-3 py-2 text-sm border border-slate-200 rounded-none focus:border-[#004387] outline-none font-medium" />
+                  className="w-full pr-9 pl-3 py-2 text-sm border border-slate-200 rounded-none focus:border-[#004387] outline-none" />
               </div>
               <div className="mb-3 text-[12px] font-bold text-slate-600">
                 נותרו <span className="text-[#004387]">{availableU}U</span> פנויים — מלא עם אביזרים תואמים:
               </div>
               {AccordionSection('takesU', '📏 אביזרים שתופסים מקום', _bucketTakesU, 'bg-slate-100 text-slate-800', false)}
-              {AccordionSection('free', '🔌 תוספות ללא נפח (חופשי)', _bucketFree, 'bg-emerald-50 text-emerald-800', false)}
+              {AccordionSection('pdu', '🔌 פסי שקעים (PDU)', _bucketPdu, 'bg-red-50 text-red-800', false)}
+              {AccordionSection('free', '🔧 תוספות אחרות ללא נפח', _bucketFree, 'bg-emerald-50 text-emerald-800', false)}
+              {AccordionSection('illus', '🧩 אביזרי המחשה (לא נמכר ע״י RBS)', _illusPairs, 'bg-purple-50 text-purple-800', false)}
               {Object.keys(_promotedByBrand).sort().map(brand => AccordionSection('brand:' + brand, '⭐ ' + brand, _promotedByBrand[brand], 'bg-amber-50 text-amber-800', false))}
               {_filtered.length === 0 && (
                 <div className="text-center py-8 text-slate-400 text-sm border-2 border-dashed border-gray-200">לא נמצאו תוצאות לחיפוש.</div>
@@ -1142,8 +1187,20 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         </div>
       )}
 
+      {/* PDF export: two options — with prices / without */}
+      <div className="mt-4 grid grid-cols-2 gap-2 print:hidden">
+        <button type="button" onClick={() => handleDownloadPdf(true)}
+          className="flex items-center justify-center gap-1.5 py-2.5 bg-[#004387] text-white font-bold text-sm rounded-none hover:bg-[#0c2d57] transition-colors">
+          <Download size={15} /> PDF עם מחירים
+        </button>
+        <button type="button" onClick={() => handleDownloadPdf(false)}
+          className="flex items-center justify-center gap-1.5 py-2.5 bg-white text-[#004387] border border-[#004387] font-bold text-sm rounded-none hover:bg-slate-50 transition-colors">
+          <Download size={15} /> PDF ללא מחירים
+        </button>
+      </div>
+
       {/* Printable spec sheet (hidden on screen, shown on print) */}
-      <div id="printable-cabinet-area" dir="rtl" className="hidden print:block" style={{ fontFamily: 'system-ui, -apple-system, sans-serif', color: '#111', padding: '24px', direction: 'rtl' }}>
+      <div id="printable-cabinet-area" dir="rtl" style={{ display: 'none', fontFamily: 'Arial, sans-serif', color: '#111', padding: '24px', direction: 'rtl' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #004387', paddingBottom: '12px', marginBottom: '16px' }}>
           <div>
             <div style={{ fontSize: '20px', fontWeight: 800, color: '#0c2d57' }}>מפרט תצורת ארון תקשורת</div>
@@ -1181,9 +1238,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             </tr>
           </thead>
           <tbody>
-            {selectedOptionals.length === 0 ? (
+            {pdfOrderable.length === 0 ? (
               <tr><td colSpan={pdfWithPrice ? 5 : 4} style={{ padding: '10px', textAlign: 'center', color: '#888', border: '1px solid #e2e8f0' }}>לא נוספו אביזרים</td></tr>
-            ) : selectedOptionals.map((o: any, i: number) => (
+            ) : pdfOrderable.map((o: any, i: number) => (
               <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
                 <td style={{ padding: '5px 6px', border: '1px solid #e2e8f0' }}>{o.pn}</td>
                 <td style={{ padding: '5px 6px', border: '1px solid #e2e8f0' }}>{o.name || o.description}</td>
