@@ -3426,7 +3426,11 @@ export default function App() {
         // Add without duplicate ids to keep data perfectly consistent and robust
         setCatalogData(prev => {
           const ids = new Set(prev.map(p => p.id));
-          const uniqueNew = parsedProducts.filter(p => !ids.has(p.id));
+          const uniqueNew = parsedProducts.filter(p => {
+            if (ids.has(p.id)) return false;
+            ids.add(p.id);
+            return true;
+          });
           return [...prev, ...uniqueNew];
         });
         setProductsOffset(prev => prev + 50);
@@ -3541,7 +3545,16 @@ export default function App() {
       const productsCsv = await fetchCSV(PRODUCTS_GID, 50, 0, forceBypassCache);
       const parsedProducts = productsCsv.map(parseProductRow);
 
-      setCatalogData(parsedProducts);
+      const deduplicate = (arr: any[]) => {
+        const seen = new Set();
+        return arr.filter(p => {
+          if (seen.has(p.id)) return false;
+          seen.add(p.id);
+          return true;
+        });
+      };
+
+      setCatalogData(deduplicate(parsedProducts));
       setProductsOffset(50);
       if (productsCsv.length < 50) {
         setHasMoreProducts(false);
@@ -3555,7 +3568,7 @@ export default function App() {
             .then(allProductsCsv => {
               if (allProductsCsv && allProductsCsv.length > 0) {
                 const allParsed = allProductsCsv.map(parseProductRow);
-                setCatalogData(allParsed);
+                setCatalogData(deduplicate(allParsed));
                 setHasMoreProducts(false);
                 setProductsOffset(allParsed.length);
               }
@@ -5946,6 +5959,7 @@ export default function App() {
                 position: absolute !important;
                 top: 0 !important; left: 0 !important; right: 0 !important;
                 width: 100% !important; background: white !important; color: black !important;
+                z-index: 9999999 !important;
               }
               #printable-quote-area-root {
                 display: block !important;

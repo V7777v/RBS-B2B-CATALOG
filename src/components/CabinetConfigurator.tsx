@@ -760,7 +760,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const pdfGrandTotal = pdfCabinetPrice + pdfAccessoriesTotal;
 
   return (
-    <div className="mt-8 bg-white border-2 border-[#004387] shadow-sm relative overflow-hidden" dir="rtl">
+    <div className="@container mt-8 bg-white border-2 border-[#004387] shadow-sm relative overflow-hidden" dir="rtl">
       
       {/* Header */}
       <div className="bg-[#004387] text-white p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -781,10 +781,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         </div>
       </div>
 
-      <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="p-6 grid grid-cols-1 @4xl:grid-cols-3 gap-8">
         
         {/* Column 1: Interactive Server Rack Simulator (Right side) */}
-        <div className="lg:col-span-1 space-y-3">
+        <div className="@4xl:col-span-1 space-y-3">
           <div className="text-sm font-bold text-gray-800 flex items-center gap-2 mb-1 justify-between">
             <span>🖥️ הדמיית ארון תקשורת פיזי (Rack Simulator)</span>
             <span className="text-xs text-gray-400 font-mono">1U = 44.45mm</span>
@@ -1225,6 +1225,40 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             <tr><td style={{ padding: '4px 8px', fontWeight: 700, background: '#f1f5f9' }}>נפח כולל</td><td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{totalU}U — נוצלו {usedU}U, פנויים {availableU}U</td></tr>
           </tbody>
         </table>
+
+        {/* Visual rack diagram — a print copy of the on-screen simulator */}
+        {slots.length > 0 && (
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: '#004387', marginBottom: '6px' }}>תצוגת הארון (סכמה)</div>
+            <div style={{ border: '2px solid #0c2d57', maxWidth: '360px', margin: '0 auto', borderRadius: '4px', overflow: 'hidden' }}>
+              {roofItems.length > 0 && (
+                <div style={{ background: '#e0f2fe', borderBottom: '1px solid #94a3b8', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#075985' }}>
+                  ▲ תקרה: {roofItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
+                </div>
+              )}
+              {slots.slice().sort((a, b) => b.uIndex - a.uIndex).map((s) => {
+                const occupied = s.type !== 'empty';
+                const bg = s.type === 'empty' ? '#ffffff' : (s.type === 'optional-accessory' ? '#dbeafe' : '#f1f5f9');
+                return (
+                  <div key={s.uIndex} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #eef2f7', minHeight: '17px', background: bg }}>
+                    <div style={{ width: '34px', textAlign: 'center', fontWeight: 700, fontSize: '9px', color: '#64748b', borderLeft: '1px solid #e2e8f0', flexShrink: 0 }}>{s.uIndex}U</div>
+                    <div style={{ flex: 1, padding: '1px 6px', fontSize: '10px', color: occupied ? '#0c2d57' : '#cbd5e1', fontWeight: occupied ? 700 : 400 }}>{occupied ? s.name : '—'}</div>
+                  </div>
+                );
+              })}
+              {plinthItems.length > 0 && (
+                <div style={{ background: '#f1f5f9', borderTop: '1px solid #94a3b8', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#475569' }}>
+                  ▼ בסיס: {plinthItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
+                </div>
+              )}
+              {rearItems.length > 0 && (
+                <div style={{ background: '#fef2f2', borderTop: '1px solid #fca5a5', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#b91c1c' }}>
+                  ◄ אחורי (PDU): {rearItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {includedItems.length > 0 && (
           <div style={{ marginBottom: '14px' }}>
