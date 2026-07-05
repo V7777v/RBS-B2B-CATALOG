@@ -58,3 +58,10 @@ createRoot(document.getElementById('root')!).render(
     </AppErrorBoundary>
   </StrictMode>,
 );
+
+// Clear the chunk-reload guard once the app has loaded healthily.
+if (typeof window !== 'undefined') {
+  window.addEventListener('load', () => {
+    setTimeout(() => { try { sessionStorage.removeItem('rbs-chunk-reloaded'); } catch {} }, 4000);
+  });
+}

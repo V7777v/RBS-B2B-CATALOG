@@ -16,9 +16,26 @@ import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavo
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import QuoteDocument from './QuoteDocument';
 import LegalAndCookies from './LegalAndCookies';
-const CabinetConfigurator = React.lazy(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
-const AccessoryCabinets = React.lazy(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
-const TechnicalAdvisor = React.lazy(() => import('./components/TechnicalAdvisor').then(module => ({ default: module.TechnicalAdvisor })));
+// Safari-safe lazy loading: if a chunk fails to load (stale Service Worker after a
+// redeploy points to an old chunk name), reload the page ONCE to fetch fresh assets.
+const lazyWithRetry = (factory: () => Promise<any>) =>
+  React.lazy(() =>
+    factory().catch((error: any) => {
+      const KEY = 'rbs-chunk-reloaded';
+      let already = false;
+      try { already = sessionStorage.getItem(KEY) === '1'; } catch {}
+      if (!already) {
+        try { sessionStorage.setItem(KEY, '1'); } catch {}
+        window.location.reload();
+        return new Promise(() => {}); // hold render while the page reloads
+      }
+      throw error;
+    })
+  );
+
+const CabinetConfigurator = lazyWithRetry(() => import('./components/CabinetConfigurator').then(module => ({ default: module.CabinetConfigurator })));
+const AccessoryCabinets = lazyWithRetry(() => import('./components/AccessoryCabinets').then(module => ({ default: module.AccessoryCabinets })));
+const TechnicalAdvisor = lazyWithRetry(() => import('./components/TechnicalAdvisor').then(module => ({ default: module.TechnicalAdvisor })));
 
 const PRODUCTS_GID = '150681' + '2668';
 const CATALOGS_GID = '178108' + '3359';
