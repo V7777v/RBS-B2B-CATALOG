@@ -750,14 +750,73 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     );
   };
 
-  const handleDownloadPdf = (withPrice: boolean) => {
-    setPdfWithPrice(withPrice);
-    setTimeout(() => { try { window.print(); } catch {} }, 200);
-  };
   const pdfCabinetPrice = Math.round(Number(product?.price) || 0);
   const pdfOrderable = selectedOptionals.filter((o: any) => !o._illustration);
   const pdfAccessoriesTotal = pdfOrderable.reduce((s: number, o: any) => s + (Math.round(Number(o.price) || 0) * (o.quantity || 1)), 0);
   const pdfGrandTotal = pdfCabinetPrice + pdfAccessoriesTotal;
+
+  // Build a self-contained HTML document and open it in a new window.
+  // Reliable across desktop + mobile + PWA (unlike window.print() on the live page,
+  // which iOS/PWA blocks and which clipped the layout on desktop).
+  const handleDownloadPdf = (withPrice: boolean) => {
+    const esc = (s: any) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+    const rackRows = slots.slice().sort((a, b) => b.uIndex - a.uIndex).map((s) => {
+      const occ = s.type !== 'empty';
+      const bg = s.type === 'empty' ? '#fff' : (s.type === 'optional-accessory' ? '#dbeafe' : '#f1f5f9');
+      return `<div style="display:flex;align-items:center;border-bottom:1px solid #eef2f7;min-height:16px;background:${bg}">
+        <div style="width:32px;text-align:center;font-weight:700;font-size:8px;color:#64748b;border-left:1px solid #e2e8f0;flex-shrink:0">${s.uIndex}U</div>
+        <div style="flex:1;padding:1px 6px;font-size:9.5px;color:${occ ? '#0c2d57' : '#cbd5e1'};font-weight:${occ ? 700 : 400}">${occ ? esc(s.name) : '—'}</div>
+      </div>`;
+    }).join('');
+    const zone = (items: any[], label: string, bg: string, col: string) => items.length ? `<div style="background:${bg};padding:4px 8px;font-size:10px;text-align:center;font-weight:700;color:${col}">${label}: ${items.map((r: any) => `${esc(r.description || r.name)} ×${r.quantity}`).join(' · ')}</div>` : '';
+    const accRows = pdfOrderable.length ? pdfOrderable.map((o: any) => `<tr>
+        <td style="padding:5px 6px;border:1px solid #e2e8f0">${esc(o.pn)}</td>
+        <td style="padding:5px 6px;border:1px solid #e2e8f0">${esc(o.name || o.description)}</td>
+        <td style="padding:5px 6px;text-align:center;border:1px solid #e2e8f0">${o.quantity || 1}</td>
+        <td style="padding:5px 6px;text-align:center;border:1px solid #e2e8f0">${o.uSize > 0 ? o.uSize + 'U' : '—'}</td>
+        ${withPrice ? `<td style="padding:5px 6px;text-align:center;border:1px solid #e2e8f0">₪${(Math.round(Number(o.price) || 0) * (o.quantity || 1)).toLocaleString('he-IL')}</td>` : ''}
+      </tr>`).join('') : `<tr><td colspan="${withPrice ? 5 : 4}" style="padding:10px;text-align:center;color:#888;border:1px solid #e2e8f0">לא נוספו אביזרים</td></tr>`;
+    const includedHtml = includedItems.length ? `<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:800;color:#004387;margin-bottom:4px">כלול בארון</div><ul style="margin:0;padding-right:18px;font-size:12px">${includedItems.map((it) => `<li>${esc(it)}</li>`).join('')}</ul></div>` : '';
+
+    const html = `<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>מפרט ארון תקשורת - ${esc(product?.sku)}</title>
+      <style>@page{margin:12mm;} *{box-sizing:border-box;} body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:16px;direction:rtl;} table{width:100%;border-collapse:collapse;} .noprint{margin-bottom:14px;} @media print{.noprint{display:none;}}</style>
+      </head><body>
+      <div class="noprint" style="text-align:center"><button onclick="window.print()" style="background:#004387;color:#fff;border:0;padding:10px 22px;font-size:15px;font-weight:700;border-radius:6px;cursor:pointer">🖨️ הדפס / שמור כ-PDF</button></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #004387;padding-bottom:10px;margin-bottom:14px">
+        <div><div style="font-size:19px;font-weight:800;color:#0c2d57">מפרט תצורת ארון תקשורת</div><div style="font-size:12px;color:#555">${new Date().toLocaleDateString('he-IL')}</div></div>
+        <img src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" alt="RBS" style="height:40px" onerror="this.style.display='none'">
+      </div>
+      <table style="margin-bottom:14px;font-size:13px"><tbody>
+        <tr><td style="padding:4px 8px;font-weight:700;background:#f1f5f9;width:30%">דגם הארון</td><td style="padding:4px 8px;border:1px solid #e2e8f0">${esc(product?.name)}</td></tr>
+        <tr><td style="padding:4px 8px;font-weight:700;background:#f1f5f9">מק״ט</td><td style="padding:4px 8px;border:1px solid #e2e8f0">${esc(product?.sku)}</td></tr>
+        <tr><td style="padding:4px 8px;font-weight:700;background:#f1f5f9">נפח כולל</td><td style="padding:4px 8px;border:1px solid #e2e8f0">${totalU}U — נוצלו ${usedU}U, פנויים ${availableU}U</td></tr>
+      </tbody></table>
+      ${slots.length ? `<div style="margin-bottom:16px"><div style="font-size:13px;font-weight:800;color:#004387;margin-bottom:4px">תצוגת הארון (סכמה)</div>
+        <div style="border:2px solid #0c2d57;max-width:340px;margin:0 auto;border-radius:4px;overflow:hidden">
+        ${zone(roofItems, '▲ תקרה', '#e0f2fe', '#075985')}${rackRows}${zone(plinthItems, '▼ בסיס', '#f1f5f9', '#475569')}${zone(rearItems, '◄ אחורי (PDU)', '#fef2f2', '#b91c1c')}
+        </div></div>` : ''}
+      ${includedHtml}
+      <div style="font-size:13px;font-weight:800;color:#004387;margin-bottom:4px">אביזרים שנוספו</div>
+      <table style="font-size:12.5px"><thead><tr style="background:#0c2d57;color:#fff">
+        <th style="padding:6px;text-align:right">מק״ט</th><th style="padding:6px;text-align:right">שם</th><th style="padding:6px;text-align:center">כמות</th><th style="padding:6px;text-align:center">נפח</th>${withPrice ? '<th style="padding:6px;text-align:center">מחיר</th>' : ''}
+      </tr></thead><tbody>${accRows}</tbody></table>
+      ${withPrice ? `<div style="margin-top:14px;text-align:left;font-size:15px;font-weight:800;color:#0c2d57">סה״כ (ארון + אביזרים): ₪${pdfGrandTotal.toLocaleString('he-IL')}<div style="font-size:11px;font-weight:400;color:#777">* מחיר מומלץ, ללא מע״מ</div></div>` : ''}
+      <div style="margin-top:20px;padding-top:10px;border-top:1px solid #ddd;font-size:11px;color:#666;text-align:center">רבס טלקום בע״מ · 077-2045522 · info@rbs-telecom.com</div>
+      <script>window.onload=function(){setTimeout(function(){try{window.focus();window.print();}catch(e){}},400);};</script>
+      </body></html>`;
+
+    const w = window.open('', '_blank');
+    if (w) { w.document.open(); w.document.write(html); w.document.close(); }
+    else {
+      // popup blocked (some PWAs) -> fallback via hidden iframe
+      const f = document.createElement('iframe');
+      f.style.position = 'fixed'; f.style.right = '0'; f.style.bottom = '0'; f.style.width = '0'; f.style.height = '0'; f.style.border = '0';
+      document.body.appendChild(f);
+      const d = f.contentWindow!.document; d.open(); d.write(html); d.close();
+      setTimeout(() => { try { document.body.removeChild(f); } catch {} }, 60000);
+    }
+  };
 
   return (
     <div className="@container mt-8 bg-white border-2 border-[#004387] shadow-sm relative overflow-hidden" dir="rtl">
@@ -878,6 +937,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     {/* Left content description */}
                     <div className="flex-1 min-w-0 pr-3 pl-1 text-right">
                       <div className="flex items-center gap-1.5">
+                        {/* Real product thumbnail from the catalog, when available */}
+                        {isOptional && slot.accessoryRef?.image && (
+                          <img referrerPolicy="no-referrer" src={slot.accessoryRef.image} alt=""
+                            className="w-6 h-6 object-contain bg-white/90 rounded-sm p-0.5 flex-shrink-0 border border-white/30"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                        )}
                         {/* Dynamic category icon */}
                         {(isFan || isFanUpgrade) && <span className="inline-block animate-spin text-cyan-400 mr-1" style={{ animationDuration: '5s' }}>🌀</span>}
                         {(isShelf || isShelfUpgrade) && <span className="text-emerald-400">📥</span>}
@@ -1206,105 +1271,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           className="flex items-center justify-center gap-1.5 py-2.5 bg-white text-[#004387] border border-[#004387] font-bold text-sm rounded-none hover:bg-slate-50 transition-colors">
           <Download size={15} /> PDF ללא מחירים
         </button>
-      </div>
-
-      {/* Printable spec sheet (hidden on screen, shown on print) */}
-      <div id="printable-cabinet-area" dir="rtl" style={{ display: 'none', fontFamily: 'Arial, sans-serif', color: '#111', padding: '24px', direction: 'rtl' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #004387', paddingBottom: '12px', marginBottom: '16px' }}>
-          <div>
-            <div style={{ fontSize: '20px', fontWeight: 800, color: '#0c2d57' }}>מפרט תצורת ארון תקשורת</div>
-            <div style={{ fontSize: '12px', color: '#555' }}>{new Date().toLocaleDateString('he-IL')}</div>
-          </div>
-          <img src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" alt="RBS" style={{ height: '42px' }} />
-        </div>
-
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px', fontSize: '13px' }}>
-          <tbody>
-            <tr><td style={{ padding: '4px 8px', fontWeight: 700, background: '#f1f5f9', width: '30%' }}>דגם הארון</td><td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{product?.name}</td></tr>
-            <tr><td style={{ padding: '4px 8px', fontWeight: 700, background: '#f1f5f9' }}>מק״ט</td><td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{product?.sku}</td></tr>
-            <tr><td style={{ padding: '4px 8px', fontWeight: 700, background: '#f1f5f9' }}>נפח כולל</td><td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{totalU}U — נוצלו {usedU}U, פנויים {availableU}U</td></tr>
-          </tbody>
-        </table>
-
-        {/* Visual rack diagram — a print copy of the on-screen simulator */}
-        {slots.length > 0 && (
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: '#004387', marginBottom: '6px' }}>תצוגת הארון (סכמה)</div>
-            <div style={{ border: '2px solid #0c2d57', maxWidth: '360px', margin: '0 auto', borderRadius: '4px', overflow: 'hidden' }}>
-              {roofItems.length > 0 && (
-                <div style={{ background: '#e0f2fe', borderBottom: '1px solid #94a3b8', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#075985' }}>
-                  ▲ תקרה: {roofItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
-                </div>
-              )}
-              {slots.slice().sort((a, b) => b.uIndex - a.uIndex).map((s) => {
-                const occupied = s.type !== 'empty';
-                const bg = s.type === 'empty' ? '#ffffff' : (s.type === 'optional-accessory' ? '#dbeafe' : '#f1f5f9');
-                return (
-                  <div key={s.uIndex} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #eef2f7', minHeight: '17px', background: bg }}>
-                    <div style={{ width: '34px', textAlign: 'center', fontWeight: 700, fontSize: '9px', color: '#64748b', borderLeft: '1px solid #e2e8f0', flexShrink: 0 }}>{s.uIndex}U</div>
-                    <div style={{ flex: 1, padding: '1px 6px', fontSize: '10px', color: occupied ? '#0c2d57' : '#cbd5e1', fontWeight: occupied ? 700 : 400 }}>{occupied ? s.name : '—'}</div>
-                  </div>
-                );
-              })}
-              {plinthItems.length > 0 && (
-                <div style={{ background: '#f1f5f9', borderTop: '1px solid #94a3b8', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#475569' }}>
-                  ▼ בסיס: {plinthItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
-                </div>
-              )}
-              {rearItems.length > 0 && (
-                <div style={{ background: '#fef2f2', borderTop: '1px solid #fca5a5', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#b91c1c' }}>
-                  ◄ אחורי (PDU): {rearItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {includedItems.length > 0 && (
-          <div style={{ marginBottom: '14px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: '#004387', marginBottom: '6px' }}>כלול בארון</div>
-            <ul style={{ margin: 0, paddingRight: '18px', fontSize: '13px' }}>
-              {includedItems.map((it, i) => <li key={i} style={{ marginBottom: '2px' }}>{it}</li>)}
-            </ul>
-          </div>
-        )}
-
-        <div style={{ fontSize: '14px', fontWeight: 800, color: '#004387', marginBottom: '6px' }}>אביזרים שנוספו</div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
-          <thead>
-            <tr style={{ background: '#0c2d57', color: '#fff' }}>
-              <th style={{ padding: '6px', textAlign: 'right' }}>מק״ט</th>
-              <th style={{ padding: '6px', textAlign: 'right' }}>שם</th>
-              <th style={{ padding: '6px', textAlign: 'center' }}>כמות</th>
-              <th style={{ padding: '6px', textAlign: 'center' }}>נפח</th>
-              {pdfWithPrice && <th style={{ padding: '6px', textAlign: 'center' }}>מחיר</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {pdfOrderable.length === 0 ? (
-              <tr><td colSpan={pdfWithPrice ? 5 : 4} style={{ padding: '10px', textAlign: 'center', color: '#888', border: '1px solid #e2e8f0' }}>לא נוספו אביזרים</td></tr>
-            ) : pdfOrderable.map((o: any, i: number) => (
-              <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                <td style={{ padding: '5px 6px', border: '1px solid #e2e8f0' }}>{o.pn}</td>
-                <td style={{ padding: '5px 6px', border: '1px solid #e2e8f0' }}>{o.name || o.description}</td>
-                <td style={{ padding: '5px 6px', textAlign: 'center', border: '1px solid #e2e8f0' }}>{o.quantity || 1}</td>
-                <td style={{ padding: '5px 6px', textAlign: 'center', border: '1px solid #e2e8f0' }}>{o.uSize > 0 ? `${o.uSize}U` : '—'}</td>
-                {pdfWithPrice && <td style={{ padding: '5px 6px', textAlign: 'center', border: '1px solid #e2e8f0' }}>₪{(Math.round(Number(o.price) || 0) * (o.quantity || 1)).toLocaleString('he-IL')}</td>}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {pdfWithPrice && (
-          <div style={{ marginTop: '14px', textAlign: 'left', fontSize: '15px', fontWeight: 800, color: '#0c2d57' }}>
-            סה״כ (ארון + אביזרים): ₪{pdfGrandTotal.toLocaleString('he-IL')}
-            <div style={{ fontSize: '11px', fontWeight: 400, color: '#777' }}>* מחיר מומלץ, לפני מע״מ</div>
-          </div>
-        )}
-
-        <div style={{ marginTop: '22px', paddingTop: '10px', borderTop: '1px solid #ddd', fontSize: '11px', color: '#666', textAlign: 'center' }}>
-          רבס טלקום בע״מ · 077-2045522 · info@rbs-telecom.com
-        </div>
       </div>
 
     </div>
