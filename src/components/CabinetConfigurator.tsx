@@ -14,8 +14,6 @@ interface Accessory {
   suitableRange?: string;
 }
 
-const normalizeSku = (val: any): string => String(val ?? '').trim().toUpperCase();
-
 // Match a shelf to a cabinet using the accessory sheet's "ארונות מתאימים" range
 // Handles: "כל הארונות" (all) | "NU-MU" (U range) | "...עומק: D" / "בעומק D1-D2" (depth) | U-range guarded by shelf's own depth
 const parseCabinetDepthFromName = (name: string): number => {
@@ -37,6 +35,8 @@ const parseCompatRange = (s: string): any => {
   else { const d = str.match(/עומק[:\s]*([0-9]{2,4})/); if (d) { dMin = dMax = parseInt(d[1], 10); } }
   return { uMin, uMax, dMin, dMax };
 };
+
+const normalizeSku = (val: any): string => String(val ?? '').trim().toUpperCase();
 
 const buildCatalogAccessories = (catalogData: any[], productSkuNorm: string, cabDepthMm: number, cabU: number = 0, compatMap: Record<string, any> = {}): any[] => {
   const CAB_ACC_SUB = 'ארונות תקשורת ואביזרים';
@@ -80,6 +80,7 @@ const buildCatalogAccessories = (catalogData: any[], productSkuNorm: string, cab
     _depth: parseDepthMmLocal(`${pp.name || ''} ${pp.description || ''}`),
     _promoted: isFlagged(pp), brand: deriveBrand(pp),
     _curated: !!compatMap[String(pp.sku ?? '').trim().toUpperCase()],
+    image: (pp.images && pp.images[0]) || pp.imageURL || '',
   }));
   return built.filter((a: any) => {
     if (a.uSize === 0) return true;                    // fans / PDU / hardware: free add
@@ -208,6 +209,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [warningModalOpen, setWarningModalOpen] = useState(false);
   const [pendingAccessory, setPendingAccessory] = useState<Accessory | null>(null);
   const [addedIdx, setAddedIdx] = useState<number | null>(null);
+  const [chassisPulse, setChassisPulse] = useState(false);
+  const [pdfWithPrice, setPdfWithPrice] = useState(false);
   const [accSearch, setAccSearch] = useState('');
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
@@ -448,7 +451,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       return [...prev, { ...acc, quantity: 1, id: Math.random().toString() }];
     });
     setAddedIdx(idx);
+    setChassisPulse(true);
     setTimeout(() => setAddedIdx(null), 1000);
+    setTimeout(() => setChassisPulse(false), 700);
   };
 
   const handleRemoveOptional = (index: number, fullyRemove = false) => {
@@ -641,6 +646,14 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     (_promotedByBrand[brand] = _promotedByBrand[brand] || []).push(pair);
   });
 
+  const handleDownloadPdf = (withPrice: boolean) => {
+    setPdfWithPrice(withPrice);
+    setTimeout(() => { try { window.print(); } catch {} }, 200);
+  };
+  const pdfCabinetPrice = Math.round(Number(product?.price) || 0);
+  const pdfAccessoriesTotal = selectedOptionals.reduce((s: number, o: any) => s + (Math.round(Number(o.price) || 0) * (o.quantity || 1)), 0);
+  const pdfGrandTotal = pdfCabinetPrice + pdfAccessoriesTotal;
+
   const renderAccCard = (acc: any, idx: number) => {
     const catalogMatch = catalogData.find(pp => pp && pp.sku && (pp.sku === acc.pn || pp.sku === acc.sku));
     const showPrice = catalogMatch ? catalogMatch.price : (acc.price || 0);
@@ -649,8 +662,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       <div key={idx} className={`flex flex-col p-3.5 border group transition-all relative rounded-none hover:shadow-sm ${fitsRemaining ? 'bg-slate-50 border-slate-100 hover:border-[#004387]' : 'bg-rose-50/40 border-rose-100'}`}>
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="font-bold text-sm text-slate-900 group-hover:text-[#004387] transition-colors">{acc.pn}</p>
-            <p className="text-xs text-gray-500 line-clamp-2 break-words mt-0.5" title={acc.description}>{acc.description}</p>
+            <p className="font-bold text-[15px] text-slate-900 group-hover:text-[#004387] transition-colors leading-snug">{acc.pn}</p>
+            <p className="text-[13px] text-gray-600 line-clamp-2 break-words mt-0.5 leading-snug font-medium" title={acc.description}>{acc.description}</p>
           </div>
           {showPrice > 0 && (
             <span className="text-xs font-bold text-slate-800 bg-slate-200 py-0.5 px-1.5 rounded-none whitespace-nowrap font-mono h-5 flex items-center justify-center">
@@ -658,8 +671,13 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             </span>
           )}
         </div>
-        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-200/60">
-          <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
+        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-200/60 gap-2">
+          {acc.image ? (
+            <img referrerPolicy="no-referrer" src={acc.image} alt={acc.pn}
+              className="w-9 h-9 object-contain bg-white border border-slate-200 rounded p-0.5 flex-shrink-0"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+          ) : null}
+          <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1 flex-1">
             <Box size={13} className="text-slate-400" />
             {acc.uSize > 0 ? `גודל נדרש: ${acc.uSize}U` : 'ללא נפח בארון'}
             {acc._curated && <span className="text-emerald-600 font-bold mr-1">✓ התאמה מדויקת</span>}
@@ -722,16 +740,13 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           </div>
 
           {/* Visual Rack Container */}
-          <div className="relative border-4 border-slate-700 bg-slate-950 p-3 shadow-2xl relative overflow-hidden flex flex-col min-h-[140px] max-h-[520px]">
+          <div className={`relative border-4 bg-slate-950 p-3 shadow-2xl overflow-hidden flex flex-col min-h-[140px] max-h-[520px] transition-all duration-300 ${chassisPulse ? 'border-emerald-400 ring-4 ring-emerald-400/40 scale-[1.01]' : 'border-slate-700'}`}>
             
             {/* Simulated Glass Door Gloss Effect */}
             <div className="absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-white/5 to-transparent pointer-events-none z-10 select-none"></div>
             
             {/* Left and Right Rack Rails with mounting holes */}
             <div className="absolute right-1 top-0 bottom-0 w-3 bg-gradient-to-r from-gray-800 via-gray-600 to-gray-900 border-l border-slate-700 flex flex-col justify-around py-2 z-10 pointer-events-none">
-              {Array.from({ length: 15 }).map((_, i) => (
-                <div key={i} className="w-1.5 h-1.5 rounded-full bg-slate-400/50 mx-auto shadow-inner border border-slate-9000 select-none" style={{ display: 'none' }}></div>
-              ))}
               {Array.from({ length: 15 }).map((_, i) => (
                 <div key={i} className="w-1.5 h-1.5 rounded-full bg-slate-400/50 mx-auto shadow-inner border border-slate-900"></div>
               ))}
@@ -874,7 +889,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               })}
             </div>
 
-            {/* Ground-level or side-rail zero-U accessories (screws, wheels, cable management) */}
+            {/* Ground-level or side-rail zero-U accessories (screws, wheels, feet, cable management) */}
             {nonUAccessories.length > 0 && (
               <div className="mt-2 pt-2 border-t border-slate-800/80 space-y-1">
                 <div className="text-[9px] font-black tracking-widest text-[#fe8d00]/90 uppercase text-center mb-1 select-none">
@@ -1037,6 +1052,18 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               </div>
             )}
           </div>
+          
+          {/* PDF export: two options — with prices / without */}
+          <div className="mt-4 grid grid-cols-2 gap-2.5 print:hidden">
+            <button type="button" onClick={() => handleDownloadPdf(true)}
+              className="flex items-center justify-center gap-1.5 py-2.5 bg-[#004387] text-white font-bold text-sm rounded-none hover:bg-[#0c2d57] transition-colors cursor-pointer shadow-sm">
+              <Download size={15} /> PDF עם מחירים
+            </button>
+            <button type="button" onClick={() => handleDownloadPdf(false)}
+              className="flex items-center justify-center gap-1.5 py-2.5 bg-white text-[#004387] border border-[#004387] font-bold text-sm rounded-none hover:bg-slate-50 transition-colors cursor-pointer shadow-sm">
+              <Download size={15} /> PDF ללא מחירים
+            </button>
+          </div>
         </div>
 
         {/* Column 3: Optional Compatible Upgrades / Accessories (Left side) */}
@@ -1057,7 +1084,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input value={accSearch} onChange={e => setAccSearch(e.target.value)} dir="rtl"
                   placeholder="חיפוש אביזר (שם / מק״ט)"
-                  className="w-full pr-9 pl-3 py-2 text-sm border border-slate-200 rounded-none focus:border-[#004387] outline-none" />
+                  className="w-full pr-9 pl-3 py-2 text-sm border border-slate-200 rounded-none focus:border-[#004387] outline-none font-medium" />
               </div>
               <div className="mb-3 text-[12px] font-bold text-slate-600">
                 נותרו <span className="text-[#004387]">{availableU}U</span> פנויים — מלא עם אביזרים תואמים:
@@ -1114,6 +1141,71 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           </div>
         </div>
       )}
+
+      {/* Printable spec sheet (hidden on screen, shown on print) */}
+      <div id="printable-cabinet-area" dir="rtl" className="hidden print:block" style={{ fontFamily: 'system-ui, -apple-system, sans-serif', color: '#111', padding: '24px', direction: 'rtl' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #004387', paddingBottom: '12px', marginBottom: '16px' }}>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: '#0c2d57' }}>מפרט תצורת ארון תקשורת</div>
+            <div style={{ fontSize: '12px', color: '#555' }}>{new Date().toLocaleDateString('he-IL')}</div>
+          </div>
+          <img src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" alt="RBS" style={{ height: '42px' }} />
+        </div>
+
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px', fontSize: '13px' }}>
+          <tbody>
+            <tr><td style={{ padding: '4px 8px', fontWeight: 700, background: '#f1f5f9', width: '30%' }}>דגם הארון</td><td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{product?.name}</td></tr>
+            <tr><td style={{ padding: '4px 8px', fontWeight: 700, background: '#f1f5f9' }}>מק״ט</td><td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{product?.sku}</td></tr>
+            <tr><td style={{ padding: '4px 8px', fontWeight: 700, background: '#f1f5f9' }}>נפח כולל</td><td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{totalU}U — נוצלו {usedU}U, פנויים {availableU}U</td></tr>
+          </tbody>
+        </table>
+
+        {includedItems.length > 0 && (
+          <div style={{ marginBottom: '14px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: '#004387', marginBottom: '6px' }}>כלול בארון</div>
+            <ul style={{ margin: 0, paddingRight: '18px', fontSize: '13px' }}>
+              {includedItems.map((it, i) => <li key={i} style={{ marginBottom: '2px' }}>{it}</li>)}
+            </ul>
+          </div>
+        )}
+
+        <div style={{ fontSize: '14px', fontWeight: 800, color: '#004387', marginBottom: '6px' }}>אביזרים שנוספו</div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+          <thead>
+            <tr style={{ background: '#0c2d57', color: '#fff' }}>
+              <th style={{ padding: '6px', textAlign: 'right' }}>מק״ט</th>
+              <th style={{ padding: '6px', textAlign: 'right' }}>שם</th>
+              <th style={{ padding: '6px', textAlign: 'center' }}>כמות</th>
+              <th style={{ padding: '6px', textAlign: 'center' }}>נפח</th>
+              {pdfWithPrice && <th style={{ padding: '6px', textAlign: 'center' }}>מחיר</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {selectedOptionals.length === 0 ? (
+              <tr><td colSpan={pdfWithPrice ? 5 : 4} style={{ padding: '10px', textAlign: 'center', color: '#888', border: '1px solid #e2e8f0' }}>לא נוספו אביזרים</td></tr>
+            ) : selectedOptionals.map((o: any, i: number) => (
+              <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                <td style={{ padding: '5px 6px', border: '1px solid #e2e8f0' }}>{o.pn}</td>
+                <td style={{ padding: '5px 6px', border: '1px solid #e2e8f0' }}>{o.name || o.description}</td>
+                <td style={{ padding: '5px 6px', textAlign: 'center', border: '1px solid #e2e8f0' }}>{o.quantity || 1}</td>
+                <td style={{ padding: '5px 6px', textAlign: 'center', border: '1px solid #e2e8f0' }}>{o.uSize > 0 ? `${o.uSize}U` : '—'}</td>
+                {pdfWithPrice && <td style={{ padding: '5px 6px', textAlign: 'center', border: '1px solid #e2e8f0' }}>₪{(Math.round(Number(o.price) || 0) * (o.quantity || 1)).toLocaleString('he-IL')}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {pdfWithPrice && (
+          <div style={{ marginTop: '14px', textAlign: 'left', fontSize: '15px', fontWeight: 800, color: '#0c2d57' }}>
+            סה״כ (ארון + אביזרים): ₪{pdfGrandTotal.toLocaleString('he-IL')}
+            <div style={{ fontSize: '11px', fontWeight: 400, color: '#777' }}>* מחיר מומלץ, לפני מע״מ</div>
+          </div>
+        )}
+
+        <div style={{ marginTop: '22px', paddingTop: '10px', borderTop: '1px solid #ddd', fontSize: '11px', color: '#666', textAlign: 'center' }}>
+          רבס טלקום בע״מ · 077-2045522 · info@rbs-telecom.com
+        </div>
+      </div>
 
     </div>
   );

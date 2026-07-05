@@ -5937,8 +5937,15 @@ export default function App() {
               body * {
                 visibility: hidden !important;
               }
-              #printable-quote-area-root, #printable-quote-area-root * {
+              #printable-quote-area-root, #printable-quote-area-root *,
+              #printable-cabinet-area, #printable-cabinet-area * {
                 visibility: visible !important;
+              }
+              #printable-cabinet-area {
+                display: block !important;
+                position: absolute !important;
+                top: 0 !important; left: 0 !important; right: 0 !important;
+                width: 100% !important; background: white !important; color: black !important;
               }
               #printable-quote-area-root {
                 display: block !important;
