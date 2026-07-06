@@ -139,7 +139,7 @@ interface CabinetData {
 
 // Generic rack items NOT sold by RBS — for a complete visual simulation only (price 0, not ordered).
 const ILLUSTRATION_ACCESSORIES: any[] = [
-  { pn: 'NVR', sku: 'ILLUS-NVR', name: 'מקליט NVR', description: 'מקליט וידאו לרשת (להמחשה בלבד)', uSize: 1, price: 0, _illustration: true },
+  { pn: 'NVR', sku: 'ILLUS-NVR', name: 'מקליט NVR', description: 'מקליט וידאו לרשת (להמחשה בלבד)', uSize: 1, price: 0, _illustration: true, image: 'https://drive.google.com/uc?export=view&id=12dVrH0GOzPUdbiVZO8ELDulnnBGUunCN' },
 ];
 
 const getPhysicalZone = (name: string, desc: string): 'roof' | 'plinth' | 'rear' => {
@@ -925,12 +925,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
                     {/* Real product image filling the slot — like a real rack unit */}
                     {isOptional && slot.isAnchor !== false && !isShelfUpgrade && slot.accessoryRef?.image && (
-                      <>
+                      <div className="absolute inset-y-[1px] right-2 left-2 z-0 overflow-hidden flex items-center justify-center bg-white/5 rounded-sm">
                         <img referrerPolicy="no-referrer" src={slot.accessoryRef.image} alt=""
-                          className="absolute inset-0 w-full h-full object-contain object-center opacity-95 pointer-events-none select-none p-0.5 z-0"
+                          className="w-[100%] h-[150%] object-contain object-center opacity-100 pointer-events-none select-none mix-blend-screen"
                           onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
-                        <div className="absolute inset-0 bg-gradient-to-l from-black/70 via-black/25 to-transparent pointer-events-none z-10"></div>
-                      </>
+                        <div className="absolute inset-0 bg-gradient-to-l from-slate-900/90 via-slate-900/40 to-transparent pointer-events-none z-10"></div>
+                      </div>
                     )}
                     {/* Schematic shelf drawing (shelves have no proper front photo) */}
                     {(isShelf || isShelfUpgrade) && slot.isAnchor !== false && (
