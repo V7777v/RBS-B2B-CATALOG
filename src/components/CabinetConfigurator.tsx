@@ -82,6 +82,8 @@ const buildCatalogAccessories = (catalogData: any[], productSkuNorm: string, cab
     description: pp.description || '', uSize: resolveAccU(pp), suitableRange: '',
     _depth: parseDepthMmLocal(`${pp.name || ''} ${pp.description || ''}`),
     _promoted: isFlagged(pp), brand: deriveBrand(pp),
+    brandLogo: (typeof pp.brand === 'string' && pp.brand.startsWith('http')) ? pp.brand : '',
+    _pdu: String(pp.nestedSubcategory || '').includes('פסי שקעים'),
     _curated: !!compatMap[String(pp.sku ?? '').trim().toUpperCase()],
     image: (pp.images && pp.images[0]) || pp.imageURL || '',
   }));
@@ -687,7 +689,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       return rank(a) - rank(b);
     });
   const _bucketFreeAll = _filtered.filter(({ acc }: any) => !acc._promoted && acc.uSize === 0);
-  const _isPdu = ({ acc }: any) => /פס שקע|פסי שקע|\bשקע|pdu/i.test(`${acc.name || ''} ${acc.description || ''} ${acc.pn || ''}`);
+  const _isPdu = ({ acc }: any) => acc._pdu || /פס שקע|פסי שקע|שקעים|pdu/i.test(`${acc.name || ''} ${acc.description || ''} ${acc.pn || ''}`);
   const _bucketPdu = _bucketFreeAll.filter(_isPdu);
   const _bucketFree = _bucketFreeAll.filter((x: any) => !_isPdu(x));
   const _illusPairs = ILLUSTRATION_ACCESSORIES
@@ -745,14 +747,14 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     );
   };
 
-  const AccordionSection = (id: string, title: string, pairs: any[], tone: string, defaultOpen: boolean = true) => {
+  const AccordionSection = (id: string, title: string, pairs: any[], tone: string, defaultOpen: boolean = true, logoUrl: string = '') => {
     if (!pairs.length) return null;
     const open = openSections[id] ?? defaultOpen;
     return (
       <div key={id} className="border border-slate-200 rounded-none mb-2.5">
         <button type="button" onClick={() => setOpenSections(s => ({ ...s, [id]: !( s[id] !== false) }))}
           className={`w-full flex items-center justify-between px-4 py-4 font-bold text-[15px] ${tone} active:opacity-80`}>
-          <span>{title} <span className="opacity-70 font-mono">({pairs.length})</span></span>
+          <span className="flex items-center gap-2">{logoUrl ? <img src={logoUrl} alt="" className="h-5 max-w-[90px] object-contain" referrerPolicy="no-referrer" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display='none';}} /> : null}<span>{title} <span className="opacity-70 font-mono">({pairs.length})</span></span></span>
           <ChevronDown size={22} className={`transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
         </button>
         {open && <div className="space-y-3 p-2.5 max-h-[320px] overflow-y-auto">{pairs.map(({ acc, idx }: any) => renderAccCard(acc, idx))}</div>}
@@ -768,7 +770,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   // Build a self-contained HTML document and open it in a new window.
   // Reliable across desktop + mobile + PWA (unlike window.print() on the live page,
   // which iOS/PWA blocks and which clipped the layout on desktop).
-  // (g-134 נדרש להדפסה.)
   const handleDownloadPdf = (withPrice: boolean) => {
     setPdfWithPrice(withPrice);
     setShowPdfPreview(true);
@@ -877,7 +878,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 return (
                   <div 
                     key={idx}
-                    style={isMerged ? { minHeight: `${spanU * 44 + (spanU - 1) * 4}px` } : undefined}
+                    style={isOptional ? { minHeight: isMerged ? `${spanU * 58}px` : '58px' } : undefined}
                     className={`group text-xs flex items-center justify-between transition-all duration-200 border relative overflow-hidden ${slotStyles}`}
                     onClick={() => {
                       if (isEmpty) {
@@ -899,7 +900,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     {isOptional && slot.isAnchor !== false && !isShelfUpgrade && slot.accessoryRef?.image && (
                       <>
                         <img referrerPolicy="no-referrer" src={slot.accessoryRef.image} alt=""
-                          className={`absolute inset-0 w-full h-full object-center opacity-95 pointer-events-none select-none z-0 ${isMerged ? 'object-contain p-1' : 'object-cover'}`}
+                          className="absolute inset-0 w-full h-full object-contain object-center opacity-95 pointer-events-none select-none p-0.5 z-0"
                           onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                         <div className="absolute inset-0 bg-gradient-to-l from-black/70 via-black/25 to-transparent pointer-events-none z-10"></div>
                       </>
@@ -930,7 +931,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                       </div>
                     )}
                     {/* Left content description */}
-                    <div className="flex-1 min-w-0 pr-3 pl-1 text-right relative z-20">
+                    <div className="flex-1 min-w-0 pr-3 pl-1 text-right relative z-10">
                       <div className="flex items-center gap-1.5">
                         {/* Dynamic category icon */}
                         {(isFan || isFanUpgrade) && <span className="inline-block animate-spin text-cyan-400 mr-1" style={{ animationDuration: '5s' }}>🌀</span>}
@@ -939,7 +940,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                         {isBrush && <span className="text-amber-500 font-bold">💈</span>}
                         {isPdu && <span className="text-red-500 animate-pulse">⚡</span>}
                         
-                        <p className="font-semibold tracking-wide break-words leading-tight">
+                        <p className="font-semibold tracking-wide break-words leading-tight" style={{ textShadow: slot.accessoryRef?.image ? '0 1px 3px rgba(0,0,0,0.8)' : 'none' }}>
                           {isCont ? '' : slot.name}
                         </p>
                       </div>
@@ -956,7 +957,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                       )}
 
                       {slot.description && !isBrush && !isPdu && (
-                        <p className="text-[10px] text-slate-400 font-normal line-clamp-2 break-words opacity-85 mt-0.5" title={slot.description}>
+                        <p className="text-[10px] text-slate-400 font-normal line-clamp-2 break-words opacity-85 mt-0.5" title={slot.description} style={{ textShadow: slot.accessoryRef?.image ? '0 1px 2px rgba(0,0,0,0.9)' : 'none' }}>
                           {slot.description}
                         </p>
                       )}
@@ -1199,7 +1200,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               {AccordionSection('pdu', '🔌 פסי שקעים (PDU)', _bucketPdu, 'bg-red-50 text-red-800', false)}
               {AccordionSection('free', '🔧 תוספות אחרות ללא נפח', _bucketFree, 'bg-emerald-50 text-emerald-800', false)}
               {AccordionSection('illus', '🧩 אביזרי המחשה (לא נמכר ע״י RBS)', _illusPairs, 'bg-purple-50 text-purple-800', false)}
-              {Object.keys(_promotedByBrand).sort().map(brand => AccordionSection('brand:' + brand, '⭐ ' + brand, _promotedByBrand[brand], 'bg-amber-50 text-amber-800', false))}
+              {Object.keys(_promotedByBrand).sort().map(brand => {
+                const logo = (_promotedByBrand[brand][0] as any)?.acc?.brandLogo || '';
+                return AccordionSection('brand:' + brand, (logo ? '' : '⭐ ') + brand, _promotedByBrand[brand], 'bg-amber-50 text-amber-800', false, logo);
+              })}
               {_filtered.length === 0 && (
                 <div className="text-center py-8 text-slate-400 text-sm border-2 border-dashed border-gray-200">לא נמצאו תוצאות לחיפוש.</div>
               )}
@@ -1251,14 +1255,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       )}
 
       {/* PDF export: two options — with prices / without */}
-      <div className="mt-4 grid grid-cols-2 gap-2 print:hidden">
-        <button type="button" onClick={() => handleDownloadPdf(true)}
-          className="flex items-center justify-center gap-1.5 py-2.5 bg-[#004387] text-white font-bold text-sm rounded-none hover:bg-[#0c2d57] transition-colors">
-          <Download size={15} /> PDF עם מחירים
-        </button>
+      <div className="mt-4 print:hidden">
+        {/* With-price PDF is kept in code (handleDownloadPdf(true)) for future use; only the
+            price-free "save my cabinet plan" button is shown to customers for now. */}
         <button type="button" onClick={() => handleDownloadPdf(false)}
-          className="flex items-center justify-center gap-1.5 py-2.5 bg-white text-[#004387] border border-[#004387] font-bold text-sm rounded-none hover:bg-slate-50 transition-colors">
-          <Download size={15} /> PDF ללא מחירים
+          className="w-full flex items-center justify-center gap-1.5 py-3 bg-[#004387] text-white font-bold text-sm rounded-none hover:bg-[#0c2d57] transition-colors">
+          <Download size={16} /> שמור תכנון ארון (PDF)
         </button>
       </div>
 
@@ -1296,40 +1298,34 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         {slots.length > 0 && (
           <div style={{ marginBottom: '16px' }}>
             <div style={{ fontSize: '14px', fontWeight: 800, color: '#004387', marginBottom: '6px' }}>תצוגת הארון (סכמה)</div>
-            <div style={{ border: '2px solid #0c2d57', maxWidth: '360px', margin: '0 auto', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ border: '3px solid #0c2d57', maxWidth: '360px', margin: '0 auto', borderRadius: '4px', overflow: 'hidden', background: '#0f172a', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as any}>
               {roofItems.length > 0 && (
                 <div style={{ background: '#e0f2fe', borderBottom: '1px solid #94a3b8', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#075985' }}>
                   ▲ תקרה: {roofItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
                 </div>
               )}
-              {(() => {
-                const pdfSlots: any[] = [];
-                const sortedSlots = slots.slice().sort((a, b) => b.uIndex - a.uIndex);
-                for (let i = 0; i < sortedSlots.length; i++) {
-                  const s = sortedSlots[i];
-                  const isOptional = s.type === 'optional-accessory';
-                  const isCont = isOptional && s.isAnchor === false;
-                  if (isCont) {
-                    continue;
-                  }
-                  pdfSlots.push(s);
-                }
-                return pdfSlots.map((s) => {
-                  const occupied = s.type !== 'empty';
-                  const bg = s.type === 'empty' ? '#ffffff' : (s.type === 'optional-accessory' ? '#dbeafe' : '#f1f5f9');
-                  const spanU = s.spanU || 1;
-                  return (
-                    <div key={s.uIndex} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #eef2f7', minHeight: `${17 * spanU}px`, background: bg }}>
-                      <div style={{ width: '34px', textAlign: 'center', fontWeight: 700, fontSize: '9px', color: '#64748b', borderLeft: '1px solid #e2e8f0', flexShrink: 0, alignSelf: 'stretch', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                        {spanU > 1 ? `${s.uIndex}-${s.uIndex - spanU + 1}` : `${s.uIndex}U`}
-                      </div>
-                      <div style={{ flex: 1, padding: '2px 6px', fontSize: '10px', color: occupied ? '#0c2d57' : '#cbd5e1', fontWeight: occupied ? 700 : 400 }}>
-                        {occupied ? (s.name + (spanU > 1 ? ` (${spanU}U)` : '')) : '—'}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
+              {slots.slice().sort((a, b) => b.uIndex - a.uIndex).map((s) => {
+                const occupied = s.type !== 'empty';
+                const isOpt = s.type === 'optional-accessory';
+                const isCont2 = isOpt && s.isAnchor === false;
+                const isShelfItem = /מדף|shelf/.test(`${s.name || ''} ${s.description || ''}`);
+                const img = (s.accessoryRef && s.accessoryRef.image) || '';
+                const rowH = isOpt ? 40 : (occupied ? 20 : 15);
+                const bg = !occupied ? '#0f172a' : (isOpt ? '#1e3a8a' : '#334155');
+                if (isCont2) return null;
+                return (
+                  <div key={s.uIndex} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #1e293b', minHeight: isOpt && s.spanU && s.spanU > 1 ? `${s.spanU * 40}px` : `${rowH}px`, background: bg, position: 'relative', overflow: 'hidden' } as any}>
+                    <div style={{ width: '28px', textAlign: 'center', fontWeight: 700, fontSize: '8px', color: '#cbd5e1', borderLeft: '1px solid #1e293b', flexShrink: 0, position: 'relative', zIndex: 2 }}>{s.spanU && s.spanU > 1 ? `${s.uIndex}-${s.uIndex - s.spanU + 1}` : s.uIndex}</div>
+                    {isOpt && img && !isShelfItem && (
+                      <img src={img} referrerPolicy="no-referrer" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', opacity: 0.92 } as any} onError={(e: any) => { e.currentTarget.style.display = 'none'; }} />
+                    )}
+                    {isOpt && isShelfItem && (
+                      <div style={{ position: 'absolute', left: '30px', right: '4px', top: '20%', bottom: '20%', background: 'linear-gradient(#64748b,#334155)', border: '1px solid #0f172a', borderRadius: '2px' } as any}></div>
+                    )}
+                    <div style={{ flex: 1, padding: '1px 6px', fontSize: '9px', color: occupied ? '#fff' : '#64748b', fontWeight: occupied ? 700 : 400, position: 'relative', zIndex: 2, textShadow: (isOpt && img) ? '0 1px 3px rgba(0,0,0,0.9)' : 'none' } as any}>{!occupied ? '—' : (s.name + ((s.spanU && s.spanU > 1) ? `  (${s.spanU}U)` : ''))}</div>
+                  </div>
+                );
+              })}
               {plinthItems.length > 0 && (
                 <div style={{ background: '#f1f5f9', borderTop: '1px solid #94a3b8', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#475569' }}>
                   ▼ בסיס: {plinthItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
