@@ -140,8 +140,6 @@ interface CabinetData {
 // Generic rack items NOT sold by RBS — for a complete visual simulation only (price 0, not ordered).
 const ILLUSTRATION_ACCESSORIES: any[] = [
   { pn: 'NVR', sku: 'ILLUS-NVR', name: 'מקליט NVR', description: 'מקליט וידאו לרשת (להמחשה בלבד)', uSize: 1, price: 0, _illustration: true },
-  { pn: 'PATCH-24', sku: 'ILLUS-PATCH24', name: 'פאנל תקשורת 24 פורט', description: 'Patch Panel 24P (להמחשה בלבד)', uSize: 1, price: 0, _illustration: true },
-  { pn: 'CABLE-ORG', sku: 'ILLUS-CABLEORG', name: 'ארגונית כבלים 1U', description: 'Cable Organizer (להמחשה בלבד)', uSize: 1, price: 0, _illustration: true },
 ];
 
 const getPhysicalZone = (name: string, desc: string): 'roof' | 'plinth' | 'rear' => {
@@ -244,6 +242,35 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [showPdfPreview, setShowPdfPreview] = useState(false);
   const [accSearch, setAccSearch] = useState('');
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+
+  const [customAccName, setCustomAccName] = useState('');
+  const [customAccU, setCustomAccU] = useState<number>(1);
+
+  const handleAddCustomIllustration = () => {
+    if (!customAccName.trim()) return;
+    const newAcc = {
+      pn: 'CUSTOM',
+      sku: 'ILLUS-CUSTOM-' + Date.now(),
+      name: customAccName.trim(),
+      description: 'פריט מותאם אישית (להמחשה בלבד)',
+      uSize: customAccU,
+      price: 0,
+      _illustration: true,
+      _curated: false,
+    } as Accessory;
+    
+    // Instead of using handleAddOptional which might show a modal, we just force add it
+    if (newAcc.uSize > availableU) {
+       // but maybe it should check if it fits? Yes, user says they want to plan the cabinet, but they need enough space
+       // Let's just add it directly so they can manage it
+    }
+    
+    // Add logic similar to handleAddOptional but bypassing warnings for illus?
+    // Wait, handleAddOptional checks available U.
+    handleAddOptional(newAcc, -1);
+    setCustomAccName('');
+    setCustomAccU(1);
+  };
 
   const handleIncrementQuantity = (index: number) => {
     const item = selectedOptionals[index];
@@ -753,8 +780,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     return (
       <div key={id} className="border border-slate-200 rounded-none mb-2.5">
         <button type="button" onClick={() => setOpenSections(s => ({ ...s, [id]: !( s[id] !== false) }))}
-          className={`w-full flex items-center justify-between px-4 py-4 font-bold text-[15px] ${tone} active:opacity-80`}>
-          <span className="flex items-center gap-2">{logoUrl ? <img src={logoUrl} alt="" className="h-5 max-w-[90px] object-contain" referrerPolicy="no-referrer" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display='none';}} /> : null}<span>{title} <span className="opacity-70 font-mono">({pairs.length})</span></span></span>
+          className={`w-full flex items-center justify-between px-4 py-2 min-h-[50px] font-bold text-[15px] ${tone} active:opacity-80`}>
+          <span className="flex items-center gap-4">{logoUrl ? <img src={logoUrl} alt="" className="h-20 max-w-[220px] -my-6 object-contain mix-blend-multiply" referrerPolicy="no-referrer" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display='none';}} /> : null}<span>{title}{title ? ' ' : ''}<span className="opacity-70 font-mono">({pairs.length})</span></span></span>
           <ChevronDown size={22} className={`transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
         </button>
         {open && <div className="space-y-3 p-2.5 max-h-[320px] overflow-y-auto">{pairs.map(({ acc, idx }: any) => renderAccCard(acc, idx))}</div>}
@@ -1196,13 +1223,45 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               <div className="mb-3 text-[12px] font-bold text-slate-600">
                 נותרו <span className="text-[#004387]">{availableU}U</span> פנויים — מלא עם אביזרים תואמים:
               </div>
-              {AccordionSection('takesU', '📏 אביזרים שתופסים מקום', _bucketTakesU, 'bg-slate-100 text-slate-800', false)}
+              {AccordionSection('takesU', '📏 מדפים וציוד לארונות', _bucketTakesU, 'bg-slate-100 text-slate-800', false)}
               {AccordionSection('pdu', '🔌 פסי שקעים (PDU)', _bucketPdu, 'bg-red-50 text-red-800', false)}
-              {AccordionSection('free', '🔧 תוספות אחרות ללא נפח', _bucketFree, 'bg-emerald-50 text-emerald-800', false)}
-              {AccordionSection('illus', '🧩 אביזרי המחשה (לא נמכר ע״י RBS)', _illusPairs, 'bg-purple-50 text-purple-800', false)}
+              {AccordionSection('free', '🔧 אביזרים נלווים', _bucketFree, 'bg-emerald-50 text-emerald-800', false)}
+              {AccordionSection('illus', '🧩 אביזרי המחשה', _illusPairs, 'bg-purple-50 text-purple-800', false)}
+              <div className="border border-slate-200 bg-slate-50 p-3 mb-3">
+                <div className="text-sm font-bold text-slate-700 mb-2">➕ הוסף פריט מותאם אישית לארון</div>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="text" 
+                    value={customAccName} 
+                    onChange={e => setCustomAccName(e.target.value)} 
+                    placeholder="שם הפריט..." 
+                    className="flex-1 px-2 py-1.5 text-sm border border-slate-300 rounded-none focus:outline-none focus:border-[#004387]" 
+                    dir="rtl"
+                  />
+                  <select 
+                    value={customAccU} 
+                    onChange={e => setCustomAccU(parseInt(e.target.value))} 
+                    className="w-16 px-1 py-1.5 text-sm border border-slate-300 rounded-none focus:outline-none"
+                    dir="ltr"
+                  >
+                    {[1, 2, 3, 4, 5].map(u => <option key={u} value={u}>{u}U</option>)}
+                  </select>
+                  <button 
+                    type="button" 
+                    onClick={handleAddCustomIllustration}
+                    disabled={!customAccName.trim() || customAccU > availableU}
+                    className="px-3 py-1.5 bg-[#004387] text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#fe8d00] transition-colors"
+                  >
+                    הוסף
+                  </button>
+                </div>
+                {customAccU > availableU && (
+                  <div className="text-xs text-rose-500 mt-1">אין מספיק מקום פנוי בארון ({availableU}U נותר)</div>
+                )}
+              </div>
               {Object.keys(_promotedByBrand).sort().map(brand => {
                 const logo = (_promotedByBrand[brand][0] as any)?.acc?.brandLogo || '';
-                return AccordionSection('brand:' + brand, (logo ? '' : '⭐ ') + brand, _promotedByBrand[brand], 'bg-amber-50 text-amber-800', false, logo);
+                return AccordionSection('brand:' + brand, logo ? '' : ('⭐ ' + brand), _promotedByBrand[brand], 'bg-amber-50 text-amber-800', false, logo);
               })}
               {_filtered.length === 0 && (
                 <div className="text-center py-8 text-slate-400 text-sm border-2 border-dashed border-gray-200">לא נמצאו תוצאות לחיפוש.</div>
