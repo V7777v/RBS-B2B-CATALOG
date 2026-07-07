@@ -12,7 +12,7 @@ import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db, appCheck } from './firebase';
 import { getToken as getAppCheckToken } from 'firebase/app-check';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadAllQuotes, loadCustomerQuotes, updateQuoteStatus, updateQuote, deleteQuote, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder, getLastOrderError } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadAllQuotes, loadCustomerQuotes, subscribeCustomerQuotes, updateQuoteStatus, updateQuote, deleteQuote, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder, getLastOrderError } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import QuoteDocument from './QuoteDocument';
 import LegalAndCookies from './LegalAndCookies';
@@ -2431,6 +2431,7 @@ export default function App() {
   const [replaceTargetIdx, setReplaceTargetIdx] = useState<number | null>(null);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [quoteSaving, setQuoteSaving] = useState(false);
+  const [quoteSaveError, setQuoteSaveError] = useState('');
   const approvingRef = useRef(false);
   const [quoteFilterStatus, setQuoteFilterStatus] = useState<string>('all');
   const [quoteSearchTerm, setQuoteSearchTerm] = useState<string>('');
@@ -2531,6 +2532,8 @@ export default function App() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
   const [customerQuotes, setCustomerQuotes] = useState<any[]>([]);
+  const [customerQuotesLoading, setCustomerQuotesLoading] = useState(false);
+  const [customerQuotesError, setCustomerQuotesError] = useState('');
   const priceHistory = useMemo(() => {
     const rows: any[] = [];
     (customerQuotes || []).filter((q: any) => q.status === 'approved').forEach((q: any) => {
@@ -2811,45 +2814,71 @@ export default function App() {
   };
 
   const submitQuote = async (status: string) => {
+    if (quoteSaving) return;
     if (!quoteEditorCustomer || quoteItems.length === 0) return;
-    setQuoteSaving(true);
-    if (editingOrderId) {
-      const orderItems = quoteItems.map((it: any) => ({
-        id: it.id, sku: it.sku || '', name: it.name || '',
-        price: Number(it.quotedPrice) || 0, quantity: Number(it.qty) || 1, optionals: []
-      }));
-      const itemCount = orderItems.reduce((a: number, it: any) => a + (it.quantity || 0), 0);
-      const detailsText = 'הזמנה (עודכנה ע"י הסוכן)\n---------------------------------\n' +
-        orderItems.map((it: any) => `${it.name} (${it.sku}) — כמות: ${it.quantity} — מחיר: ₪${it.price}`).join('\n') +
-        `\n\nסה"כ: ₪${Math.round(quoteTotal)}`;
-      await updateOrder(editingOrderId, { items: orderItems, itemCount, total: quoteTotal, detailsText, edited: true });
-      setOrders((prev: any) => prev.map((o: any) => o.id === editingOrderId ? { ...o, items: orderItems, itemCount, total: quoteTotal, detailsText, edited: true } : o));
-      setEditingOrderId(null);
-      setQuoteSaving(false);
-      setShowQuoteEditor(false);
+    
+    const rawEmail = String(quoteEditorCustomer.email || '');
+    const normalizedCustomerEmail = rawEmail.trim().toLowerCase();
+    
+    if (!editingOrderId && !normalizedCustomerEmail) {
+      setQuoteSaveError('אימייל הלקוח חסר. יש לבחור לקוח תקין.');
       return;
     }
-    const customerFacingItems = quoteItems.map((it: any) => {
-      const { costPrice, ...rest } = it;
-      return rest;
-    });
-    const data = { 
-      agentName, 
-      agentUid: userUid, 
-      customerEmail: String(quoteEditorCustomer.email || '').toLowerCase(), 
-      customerCompany: quoteEditorCustomer.company || quoteEditorCustomer.name || '', 
-      items: customerFacingItems, 
-      note: quoteNote, 
-      total: quoteTotal, 
-      status 
-    };
-    await saveQuote(data, quoteId);
-    setQuoteSaving(false);
-    setShowQuoteEditor(false);
-    if (userRole === 'sales_manager') {
-      loadAllQuotes().then(setAgentQuotes);
-    } else if (agentName) {
-      loadAgentQuotes(agentName).then(setAgentQuotes);
+
+    setQuoteSaving(true);
+    setQuoteSaveError('');
+
+    try {
+      if (editingOrderId) {
+        const orderItems = quoteItems.map((it: any) => ({
+          id: it.id, sku: it.sku || '', name: it.name || '',
+          price: Number(it.quotedPrice) || 0, quantity: Number(it.qty) || 1, optionals: []
+        }));
+        const itemCount = orderItems.reduce((a: number, it: any) => a + (it.quantity || 0), 0);
+        const detailsText = 'הזמנה (עודכנה ע"י הסוכן)\n---------------------------------\n' +
+          orderItems.map((it: any) => `${it.name} (${it.sku}) — כמות: ${it.quantity} — מחיר: ₪${it.price}`).join('\n') +
+          `\n\nסה"כ: ₪${Math.round(quoteTotal)}`;
+        await updateOrder(editingOrderId, { items: orderItems, itemCount, total: quoteTotal, detailsText, edited: true });
+        setOrders((prev: any) => prev.map((o: any) => o.id === editingOrderId ? { ...o, items: orderItems, itemCount, total: quoteTotal, detailsText, edited: true } : o));
+        setEditingOrderId(null);
+        setShowQuoteEditor(false);
+        return;
+      }
+
+      const customerFacingItems = quoteItems.map((it: any) => {
+        const { costPrice, ...rest } = it;
+        return rest;
+      });
+      const data = { 
+        agentName, 
+        agentUid: userUid, 
+        customerEmail: normalizedCustomerEmail, 
+        customerCompany: quoteEditorCustomer.company || quoteEditorCustomer.name || '', 
+        items: customerFacingItems, 
+        note: quoteNote, 
+        total: quoteTotal, 
+        status 
+      };
+      
+      const savedQuoteId = await saveQuote(data, quoteId);
+      if (!savedQuoteId) {
+        throw new Error('QUOTE_SAVE_RETURNED_NO_ID');
+      }
+      
+      setShowQuoteEditor(false);
+      
+      if (userRole === 'sales_manager') {
+        loadAllQuotes().then(setAgentQuotes);
+      } else if (agentName) {
+        loadAgentQuotes(agentName).then(setAgentQuotes);
+      }
+    } catch (error: any) {
+      console.error('[Quotes] submit failed', {
+        code: error?.code || error?.message || 'UNKNOWN'
+      });
+      setQuoteSaveError('שמירת ההצעה נכשלה. נסה שוב. אם הבעיה נמשכת, פנה למנהל המערכת.');
+    } finally {
+      setQuoteSaving(false);
     }
   };
 
@@ -2898,7 +2927,6 @@ export default function App() {
       sourceQuoteId: q.id
     });
 
-    if (userProfile?.email) loadCustomerQuotes(userProfile.email).then(setCustomerQuotes);
     if (userRole === 'sales_manager') {
       loadAllQuotes().then(setAgentQuotes);
     } else if (agentName) {
@@ -2912,7 +2940,6 @@ export default function App() {
 
   const rejectQuote = async (q: any) => {
     await updateQuoteStatus(q.id, 'rejected');
-    if (userProfile?.email) loadCustomerQuotes(userProfile.email).then(setCustomerQuotes);
   };
   const [favorites, setFavorites] = useState<any[]>([]);
   const [selectedFavIds, setSelectedFavIds] = useState<Set<string>>(new Set());
@@ -3082,8 +3109,29 @@ export default function App() {
     if (showProfile && userUid) { loadOrders(userUid).then(setOrders); }
   }, [showProfile, userUid]);
   useEffect(() => {
-    if (showProfile && userProfile?.email) loadCustomerQuotes(userProfile.email).then(setCustomerQuotes);
-  }, [showProfile, userProfile]);
+    const email = String(userProfile?.email || auth.currentUser?.email || '').trim().toLowerCase();
+    
+    if (!showProfile || !email) {
+      return;
+    }
+
+    setCustomerQuotesLoading(true);
+    setCustomerQuotesError('');
+
+    const unsubscribe = subscribeCustomerQuotes(
+      email,
+      (quotes) => {
+        setCustomerQuotes(quotes);
+        setCustomerQuotesLoading(false);
+      },
+      (error) => {
+        setCustomerQuotesLoading(false);
+        setCustomerQuotesError('לא ניתן לטעון את ההצעות כרגע. נסה לרענן את העמוד.');
+      }
+    );
+
+    return () => unsubscribe();
+  }, [showProfile, userProfile?.email, auth.currentUser?.email]);
   // Real-time new-order notifications for agents / managers
   useEffect(() => {
     const isAgent = userRole === 'agent' && !!agentName;
@@ -5648,6 +5696,12 @@ export default function App() {
 
           {/* Main Workspace */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {quoteSaveError && (
+              <div role="alert" className="bg-rose-50 border border-rose-300 rounded-xl p-3 text-sm text-rose-900 flex items-center gap-2">
+                <span className="text-lg">❌</span>
+                <div>{quoteSaveError}</div>
+              </div>
+            )}
             
             {/* 1. Search Catalog to Add Items */}
             {editingOrderId && (
@@ -5839,14 +5893,14 @@ export default function App() {
                 disabled={quoteSaving || quoteItems.length === 0} 
                 className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-sm transition-colors disabled:opacity-50 border-none cursor-pointer"
               >
-                שמור כטיוטה
+                {quoteSaving ? 'שומר...' : 'שמור כטיוטה'}
               </button>
               <button 
                 onClick={() => submitQuote('sent')} 
                 disabled={quoteSaving || quoteItems.length === 0} 
                 className="flex-1 py-3 bg-[#004387] hover:bg-[#0c2d57] text-white rounded-xl font-extrabold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 border-none cursor-pointer"
               >
-                <CheckCircle size={18} /> שלח הצעה ללקוח
+                <CheckCircle size={18} /> {quoteSaving ? 'שומר...' : 'שלח הצעה ללקוח'}
               </button>
             </div>
           </div>
@@ -6271,9 +6325,18 @@ export default function App() {
               </div>
             </div>
             )}
-            {customerQuotes.length > 0 && (
-              <div id="sec-quotes" className="mt-5 scroll-mt-20">
-                <h3 className="text-sm font-bold text-gray-600 mb-2">הצעות מחיר ({customerQuotes.length})</h3>
+            
+            <div id="sec-quotes" className="mt-5 scroll-mt-20">
+              <h3 className="text-sm font-bold text-gray-600 mb-2">הצעות מחיר {customerQuotes.length > 0 ? `(${customerQuotes.length})` : ''}</h3>
+              {customerQuotesLoading ? (
+                <div className="text-sm text-gray-500 py-4 text-center bg-gray-50 rounded-xl">טוען הצעות...</div>
+              ) : customerQuotesError ? (
+                <div role="alert" className="text-sm text-rose-700 py-4 text-center bg-rose-50 border border-rose-200 rounded-xl">
+                  {customerQuotesError}
+                </div>
+              ) : customerQuotes.length === 0 ? (
+                <div className="text-sm text-gray-500 py-4 text-center bg-gray-50 rounded-xl">לא נמצאו הצעות מחיר.</div>
+              ) : (
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {customerQuotes.map((q: any) => (
                     <div key={q.id} className="border border-gray-100 rounded-lg p-2.5">
@@ -6321,8 +6384,8 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
             {priceHistory.length > 0 && (
               <div className="mt-5 border-t border-gray-100 pt-4">
                 <h3 className="text-sm font-bold text-gray-600 mb-2">היסטוריית מחירים ({priceHistory.length})</h3>

@@ -148,16 +148,25 @@ export function subscribeAllOrders(cb: (orders: any[]) => void): () => void {
 }
 
 // ---------- Quotes (quotes/{quoteId}) ----------
-export async function saveQuote(data: Record<string, any>, quoteId?: string | null): Promise<string | null> {
+export const normalizeEmail = (value: unknown): string => String(value ?? '').trim().toLowerCase();
+
+export async function saveQuote(data: Record<string, any>, quoteId?: string | null): Promise<string> {
   try {
+    const payload = { ...data };
+    if (payload.customerEmail) {
+      payload.customerEmail = normalizeEmail(payload.customerEmail);
+    }
     if (quoteId) {
-      await setDoc(doc(db, 'quotes', quoteId), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, 'quotes', quoteId), { ...payload, updatedAt: serverTimestamp() }, { merge: true });
       return quoteId;
     }
-    const ref = await addDoc(collection(db, 'quotes'), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    const ref = await addDoc(collection(db, 'quotes'), { ...payload, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
     return ref.id;
-  } catch {
-    return null;
+  } catch (error: any) {
+    console.error('[Firestore] saveQuote failed', {
+      code: error?.code || 'UNKNOWN'
+    });
+    throw error;
   }
 }
 
@@ -183,12 +192,47 @@ export async function loadAllQuotes(): Promise<any[]> {
 
 export async function loadCustomerQuotes(email: string): Promise<any[]> {
   try {
-    const q = query(collection(db, 'quotes'), where('customerEmail', '==', email.toLowerCase()));
+    const q = query(collection(db, 'quotes'), where('customerEmail', '==', normalizeEmail(email)));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-  } catch {
-    return [];
+  } catch (error: any) {
+    console.error('[Firestore] loadCustomerQuotes failed', {
+      code: error?.code || 'UNKNOWN'
+    });
+    throw error;
   }
+}
+
+export function subscribeCustomerQuotes(
+  email: string,
+  onData: (quotes: any[]) => void,
+  onError?: (error: unknown) => void
+): () => void {
+  const normalizedEmail = normalizeEmail(email);
+  const q = query(collection(db, 'quotes'), where('customerEmail', '==', normalizedEmail));
+  
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const rows = snapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      }));
+      // Sort in JS to avoid requiring a composite index
+      rows.sort((a: any, b: any) => {
+        const tA = b.updatedAt?.toMillis?.() || b.createdAt?.toMillis?.() || 0;
+        const tB = a.updatedAt?.toMillis?.() || a.createdAt?.toMillis?.() || 0;
+        return tA - tB;
+      });
+      onData(rows);
+    },
+    (error) => {
+      console.error('[Firestore] customer quote subscription failed', {
+        code: (error as any)?.code || 'UNKNOWN'
+      });
+      onError?.(error);
+    }
+  );
 }
 
 export async function updateQuoteStatus(quoteId: string, status: string): Promise<void> {
