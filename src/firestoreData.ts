@@ -153,9 +153,15 @@ export const normalizeEmail = (value: unknown): string => String(value ?? '').tr
 export async function saveQuote(data: Record<string, any>, quoteId?: string | null): Promise<string> {
   try {
     const payload = { ...data };
-    if (payload.customerEmail) {
-      payload.customerEmail = normalizeEmail(payload.customerEmail);
+    
+    const normalizedCustomerEmail = normalizeEmail(payload.customerEmail);
+    if (!normalizedCustomerEmail) {
+      const error = new Error('CUSTOMER_EMAIL_REQUIRED');
+      (error as any).code = 'CUSTOMER_EMAIL_REQUIRED';
+      throw error;
     }
+    payload.customerEmail = normalizedCustomerEmail;
+
     if (quoteId) {
       await setDoc(doc(db, 'quotes', quoteId), { ...payload, updatedAt: serverTimestamp() }, { merge: true });
       return quoteId;
@@ -192,7 +198,11 @@ export async function loadAllQuotes(): Promise<any[]> {
 
 export async function loadCustomerQuotes(email: string): Promise<any[]> {
   try {
-    const q = query(collection(db, 'quotes'), where('customerEmail', '==', normalizeEmail(email)));
+    const q = query(
+      collection(db, 'quotes'),
+      where('customerEmail', '==', normalizeEmail(email)),
+      where('status', 'in', ['sent', 'approved', 'rejected'])
+    );
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
   } catch (error: any) {
@@ -209,7 +219,11 @@ export function subscribeCustomerQuotes(
   onError?: (error: unknown) => void
 ): () => void {
   const normalizedEmail = normalizeEmail(email);
-  const q = query(collection(db, 'quotes'), where('customerEmail', '==', normalizedEmail));
+  const q = query(
+    collection(db, 'quotes'),
+    where('customerEmail', '==', normalizedEmail),
+    where('status', 'in', ['sent', 'approved', 'rejected'])
+  );
   
   return onSnapshot(
     q,

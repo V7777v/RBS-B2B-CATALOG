@@ -12,7 +12,7 @@ import { FirebaseAuthView } from './FirebaseAuthView';
 import { auth, db, appCheck } from './firebase';
 import { getToken as getAppCheckToken } from 'firebase/app-check';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadAllQuotes, loadCustomerQuotes, subscribeCustomerQuotes, updateQuoteStatus, updateQuote, deleteQuote, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder, getLastOrderError } from './firestoreData';
+import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavorites, loadAgentOrders, loadAllOrders, saveQuote, loadAgentQuotes, loadAllQuotes, subscribeCustomerQuotes, updateQuoteStatus, updateQuote, deleteQuote, loadUserProfile, saveUserProfile, subscribeAgentOrders, subscribeAllOrders, updateOrderStatus, updateOrder, getLastOrderError } from './firestoreData';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import QuoteDocument from './QuoteDocument';
 import LegalAndCookies from './LegalAndCookies';
@@ -2432,6 +2432,7 @@ export default function App() {
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [quoteSaving, setQuoteSaving] = useState(false);
   const [quoteSaveError, setQuoteSaveError] = useState('');
+  const [quoteSuccessMsg, setQuoteSuccessMsg] = useState('');
   const approvingRef = useRef(false);
   const [quoteFilterStatus, setQuoteFilterStatus] = useState<string>('all');
   const [quoteSearchTerm, setQuoteSearchTerm] = useState<string>('');
@@ -2587,6 +2588,7 @@ export default function App() {
     setQuoteItems(mappedItems);
     setQuoteNote(`הופק מהזמנה מתאריך ${order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('he-IL') : '—'}`);
     setQuoteSearch('');
+    setQuoteSaveError('');
     setShowQuoteEditor(true);
   };
 
@@ -2616,6 +2618,7 @@ export default function App() {
     setReplaceTargetIdx(null);
     setSelectedOrder(null);
     setEditMode(false);
+    setQuoteSaveError('');
     setShowQuoteEditor(true);
   };
 
@@ -2630,6 +2633,7 @@ export default function App() {
     })) : []));
     setQuoteNote(existing?.note || '');
     setQuoteSearch('');
+    setQuoteSaveError('');
     setShowQuoteEditor(true);
   };
 
@@ -2866,6 +2870,15 @@ export default function App() {
       }
       
       setShowQuoteEditor(false);
+      
+      if (status === 'draft') {
+        setQuoteSuccessMsg('הטיוטה נשמרה בהצלחה.');
+      } else if (status === 'sent') {
+        setQuoteSuccessMsg('ההצעה נשמרה ונשלחה ללקוח.');
+      } else {
+        setQuoteSuccessMsg('ההצעה נשמרה בהצלחה.');
+      }
+      setTimeout(() => setQuoteSuccessMsg(''), 4000);
       
       if (userRole === 'sales_manager') {
         loadAllQuotes().then(setAgentQuotes);
@@ -7524,6 +7537,17 @@ export default function App() {
       </div>
     )}
 
+    {quoteSuccessMsg && (
+      <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] bg-green-50 border border-green-300 shadow-[0_10px_25px_rgba(0,0,0,0.1)] rounded-2xl px-5 py-3 flex items-center gap-3 animate-fade-in" dir="rtl">
+        <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-700">
+          <CheckCircle size={20} />
+        </div>
+        <div className="text-sm font-bold text-green-800">{quoteSuccessMsg}</div>
+        <button onClick={() => setQuoteSuccessMsg('')} aria-label="סגור" className="text-green-600 hover:bg-green-100 rounded-full p-1 transition-colors">
+          <X size={16} />
+        </button>
+      </div>
+    )}
     </CompareContext.Provider>
     </FavoritesContext.Provider>
   );

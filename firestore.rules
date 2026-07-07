@@ -73,7 +73,7 @@ service cloud.firestore {
     match /quotes/{quoteId} {
       allow read: if request.auth != null && (
         resource.data.agentUid == request.auth.uid ||
-        resource.data.customerEmail == userEmail() ||
+        (resource.data.customerEmail == userEmail() && resource.data.get('status', '') in ['sent', 'approved', 'rejected']) ||
         isManager()
       );
 
