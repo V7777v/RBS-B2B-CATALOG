@@ -463,11 +463,6 @@ app.post("/api/advisor/chat", async (req, res) => {
           type: "ai_response",
           text: `\u26A0\uFE0F **\u05D7\u05D9\u05D1\u05D5\u05E8 \u05D4-AI \u05E0\u05DB\u05E9\u05DC \u05D1\u05E4\u05E0\u05D9\u05D9\u05D4 \u05DC\u05E9\u05E8\u05EA\u05D9 Google.**
 
-**\u05E4\u05E8\u05D8\u05D9 \u05D4\u05E9\u05D2\u05D9\u05D0\u05D4:**
-\`\`\`
-${errorMsg}
-\`\`\`
-
 **\u05D4\u05E6\u05E2\u05D5\u05EA \u05DC\u05E4\u05EA\u05E8\u05D5\u05DF \u05DC\u05E2\u05D1\u05D5\u05D3\u05D4 \u05E2\u05DD RBS Expert:**
 1. \u05E4\u05EA\u05D7 \u05D0\u05EA \u05EA\u05E4\u05E8\u05D9\u05D8 \u05D4\u05D2\u05D3\u05E8\u05D5\u05EA \u05D4-**Secrets** \u05E9\u05DC \u05D4\u05E4\u05E8\u05D5\u05D9\u05E7\u05D8 \u05D1-AI Studio.
 2. \u05D5\u05D3\u05D0 \u05E9\u05D4\u05D5\u05E1\u05E4\u05EA \u05D0\u05EA \u05D4\u05DE\u05E9\u05EA\u05E0\u05D4 \`GEMINI_API_KEY\` \u05E2\u05DD \u05DE\u05E4\u05EA\u05D7 API \u05EA\u05E7\u05D9\u05DF \u05D5\u05E4\u05E2\u05D9\u05DC.
@@ -488,10 +483,10 @@ ${errorMsg}
       sources: webSources
     });
   } catch (error) {
-    console.error("Gemini Advisor Endpoint Error:", error);
+    console.error("Gemini Advisor Endpoint Error:", { code: error.code || "UNKNOWN" });
     res.status(500).json({
       error: "Error processing request",
-      details: error.message || error
+      details: "\u05E9\u05D2\u05D9\u05D0\u05D4 \u05D1\u05D8\u05E2\u05D9\u05E0\u05EA \u05D4\u05E7\u05D8\u05DC\u05D5\u05D2. \u05E0\u05E1\u05D4 \u05E9\u05D5\u05D1."
     });
   }
 });

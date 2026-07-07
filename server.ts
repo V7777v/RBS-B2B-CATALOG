@@ -349,11 +349,6 @@ app.post("/api/advisor/chat", async (req, res) => {
           type: "ai_response",
           text: `⚠️ **חיבור ה-AI נכשל בפנייה לשרתי Google.**
 
-**פרטי השגיאה:**
-\`\`\`
-${errorMsg}
-\`\`\`
-
 **הצעות לפתרון לעבודה עם RBS Expert:**
 1. פתח את תפריט הגדרות ה-**Secrets** של הפרויקט ב-AI Studio.
 2. ודא שהוספת את המשתנה \`GEMINI_API_KEY\` עם מפתח API תקין ופעיל.
@@ -379,10 +374,10 @@ ${errorMsg}
     });
 
   } catch (error: any) {
-    console.error("Gemini Advisor Endpoint Error:", error);
+    console.error("Gemini Advisor Endpoint Error:", { code: error.code || "UNKNOWN" });
     res.status(500).json({ 
       error: "Error processing request", 
-      details: error.message || error
+      details: "שגיאה בטעינת הקטלוג. נסה שוב."
     });
   }
 });

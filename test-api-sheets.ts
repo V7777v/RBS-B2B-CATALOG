@@ -21,7 +21,6 @@ async function smokeTest() {
        console.warn("Received empty or invalid data array. Check sheet contents.");
     } else {
        console.log(`Successfully fetched ${data.length} rows.`);
-       console.log("First row preview:", data[0]);
     }
     console.log("Smoke test passed.");
     process.exit(0);

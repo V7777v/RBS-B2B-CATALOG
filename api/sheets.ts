@@ -74,7 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ success: false, code: "APP_CHECK_MISSING", message: "Unauthorized.", reason: "missing-token" });
   }
   if (!(await verifyAppCheck(appCheckToken))) {
-    console.error(`[${requestId}] [sheets] 401: App Check token INVALID. Token prefix:`, appCheckToken.slice(0, 12));
+    console.error(`[${requestId}] [sheets] 401: App Check token INVALID.`);
     return res.status(401).json({ success: false, code: "APP_CHECK_INVALID", message: "Unauthorized.", reason: "invalid-token" });
   }
 

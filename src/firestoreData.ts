@@ -99,10 +99,8 @@ export async function loadAgentOrders(agentName: string): Promise<any[]> {
     const q = query(collection(db, 'orders'), where('agent', '==', agentName), orderBy('createdAt', 'desc'), limit(200));
     const snap = await getDocs(q);
     const res = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-    console.log('[RBS] loadAgentOrders agent=', JSON.stringify(agentName), '→', res.length, 'orders');
     return res;
   } catch (e) {
-    console.error('loadAgentOrders failed:', e);
     return [];
   }
 }

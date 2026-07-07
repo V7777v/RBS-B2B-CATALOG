@@ -30,3 +30,16 @@ server.ts
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+service-account*.json
+firebase-admin*.json
+credentials*.json
+secrets/
+private/
+temp/
+tmp/
+debug/
+*.log

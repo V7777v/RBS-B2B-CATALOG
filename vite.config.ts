@@ -112,6 +112,7 @@ export default defineConfig(() => {
       },
     },
     build: {
+      sourcemap: false,
       cssCodeSplit: true,
       target: 'es2019',
       minify: 'esbuild',
