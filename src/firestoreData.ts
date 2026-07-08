@@ -154,6 +154,14 @@ export async function saveQuote(data: Record<string, any>, quoteId?: string | nu
   try {
     const payload = { ...data };
     
+    if (quoteId) {
+      delete payload.customerEmail;
+      delete payload.agentUid;
+      delete payload.createdAt;
+      await setDoc(doc(db, 'quotes', quoteId), { ...payload, updatedAt: serverTimestamp() }, { merge: true });
+      return quoteId;
+    }
+
     const normalizedCustomerEmail = normalizeEmail(payload.customerEmail);
     if (!normalizedCustomerEmail) {
       const error = new Error('CUSTOMER_EMAIL_REQUIRED');
@@ -162,10 +170,6 @@ export async function saveQuote(data: Record<string, any>, quoteId?: string | nu
     }
     payload.customerEmail = normalizedCustomerEmail;
 
-    if (quoteId) {
-      await setDoc(doc(db, 'quotes', quoteId), { ...payload, updatedAt: serverTimestamp() }, { merge: true });
-      return quoteId;
-    }
     const ref = await addDoc(collection(db, 'quotes'), { ...payload, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
     return ref.id;
   } catch (error: any) {
