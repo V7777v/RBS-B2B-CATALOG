@@ -862,8 +862,8 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
         <div className="text-[13px] sm:text-[15.5px] text-gray-600 font-bold mb-1.5 flex flex-row items-center justify-center gap-1 w-full flex-wrap">
           <span>מק״ט: {product.sku}</span>
         </div>
-        <div className="min-h-[2rem] sm:min-h-[2.5rem] flex items-start justify-center mb-2">
-          <h3 className="text-[#0c2d57] text-base sm:text-lg font-bold line-clamp-2 leading-snug text-center w-full">{product.name}</h3>
+        <div className="min-h-[4.5rem] flex items-start justify-center mb-2">
+          <h3 className="text-[#0c2d57] text-base sm:text-lg font-bold line-clamp-3 leading-snug text-center w-full">{product.name}</h3>
         </div>
         
         <div className="mt-auto pt-2 sm:pt-2 flex flex-col items-center w-full">
