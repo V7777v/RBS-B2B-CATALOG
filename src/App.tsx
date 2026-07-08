@@ -2562,6 +2562,9 @@ export default function App() {
   const [expandedQuote, setExpandedQuote] = useState<string | null>(null);
   const quoteTotal = useMemo(() => quoteItems.reduce((sum: number, l: any) => sum + (Number(l.quotedPrice) || 0) * (Number(l.qty) || 0), 0), [quoteItems]);
   const convertOrderToQuote = (order: any, customerGroup: any) => {
+    const canManageQuotes = userRole === 'agent' || userRole === 'sales_manager';
+    if (!canManageQuotes) return;
+
     const mappedItems = (order.items || []).map((it: any) => {
       const catProd = catalogData.find((cp: any) => cp.sku === it.sku || cp.id === it.id);
       const listP = catProd ? (Math.round(parsePrice(catProd.price)) || 0) : (Number(it.price) || 0);
@@ -2623,6 +2626,9 @@ export default function App() {
   };
 
   const openQuoteEditor = (customer: any, existing?: any) => {
+    const canManageQuotes = userRole === 'agent' || userRole === 'sales_manager';
+    if (!canManageQuotes) return;
+
     setQuoteEditorCustomer(customer);
     setEditingOrderId(null);
     setQuoteId(existing?.id || null);
@@ -2819,6 +2825,28 @@ export default function App() {
 
   const submitQuote = async (status: string) => {
     if (quoteSaving) return;
+    
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      setQuoteSaveError('המשתמש אינו מחובר. יש להתחבר מחדש.');
+      return;
+    }
+    if (!currentUser.uid) {
+      setQuoteSaveError('המשתמש אינו מחובר בצורה תקינה. יש להתחבר מחדש.');
+      return;
+    }
+
+    const canManageQuotes = userRole === 'agent' || userRole === 'sales_manager';
+    if (!canManageQuotes) {
+      setQuoteSaveError('רק סוכן או מנהל מכירות יכולים ליצור או לערוך הצעת מחיר.');
+      return;
+    }
+
+    if (!String(agentName || '').trim()) {
+      setQuoteSaveError('לא מוגדר שם סוכן למשתמש המחובר. פנה למנהל המערכת.');
+      return;
+    }
+
     if (!quoteEditorCustomer || quoteItems.length === 0) return;
     
     const rawEmail = String(quoteEditorCustomer.email || '');
@@ -2855,7 +2883,7 @@ export default function App() {
       });
       const data = { 
         agentName, 
-        agentUid: userUid, 
+        agentUid: currentUser.uid, 
         customerEmail: normalizedCustomerEmail, 
         customerCompany: quoteEditorCustomer.company || quoteEditorCustomer.name || '', 
         items: customerFacingItems, 
@@ -2887,7 +2915,9 @@ export default function App() {
       }
     } catch (error: any) {
       console.error('[Quotes] submit failed', {
-        code: error?.code || error?.message || 'UNKNOWN'
+        code: error?.code || error?.message || 'UNKNOWN',
+        role: userRole || 'unknown',
+        hasCurrentUser: !!auth.currentUser
       });
       setQuoteSaveError('שמירת ההצעה נכשלה. נסה שוב. אם הבעיה נמשכת, פנה למנהל המערכת.');
     } finally {
