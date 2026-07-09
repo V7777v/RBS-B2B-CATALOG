@@ -867,7 +867,29 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
         </div>
         
         <div className="mt-auto pt-2 sm:pt-2 flex flex-col items-center w-full">
-          {product.isHotSale ? (
+          {isGuest ? (
+            <div className="flex flex-col items-center leading-tight mb-2 w-full text-center">
+              {product.retailPrice && (
+                <span className="text-[9px] sm:text-xs text-gray-600 font-semibold leading-[1.2] mb-1 w-full block">
+                  צרכן: ₪{product.retailPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block mr-1">(כולל מע"מ)</span>
+                </span>
+              )}
+              {product.price > 0 ? (
+                <>
+                  <span className={`text-base sm:text-lg font-bold text-[#c2410c] leading-none block`}>
+                    ₪{product.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                    {isNetworkCableRoll(product) && <span className="inline-block text-[9px] sm:text-[10px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold align-middle select-none">מחיר למטר</span>}
+                  </span>
+                  <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
+                    מחיר מתקין (ללא מע"מ)
+                  </span>
+                </>
+              ) : (
+                <div className="text-[10px] sm:text-xs font-bold text-gray-400 mt-1">צור קשר למחירים</div>
+              )}
+            </div>
+          ) : product.isHotSale ? (
             <div className="flex flex-col items-center leading-tight mb-2 w-full text-center mt-auto">
               <div className="bg-red-50 border border-red-100 rounded-md py-1 px-2 mb-2 w-full">
                 <div className="text-[11px] sm:text-xs text-red-600 font-bold flex items-center justify-center gap-1">
@@ -931,7 +953,12 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
             </div>
           )}
           
-          {!isGuest && (product.isComingSoon ? (
+          {isGuest ? (
+            <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new Event('rbs_trigger_login')); }} className="w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold transition-all duration-300">
+              <Lock size={15} className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="text-xs sm:text-sm font-bold whitespace-nowrap">כניסת מפיצים להזמנה</span>
+            </button>
+          ) : (product.isComingSoon ? (
             <div className="w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200">
               <span className="text-xs sm:text-sm font-bold">בקרוב</span>
             </div>
@@ -1601,7 +1628,7 @@ const ProductDetailsView = (props: any) => {
                 )}
 
                 <div className="flex flex-col w-full gap-4 mt-2">
-                  {selectedProduct.isClearance && (
+                  {!isGuest && selectedProduct.isClearance && (
                     <div className="w-full bg-gradient-to-r from-teal-50 to-emerald-50 border-2 border-teal-200 rounded-lg p-3 sm:p-5 shadow-sm flex flex-col sm:flex-row items-center sm:justify-between gap-3 transform hover:scale-[1.01] transition-transform">
                       <div className="flex items-center gap-2 text-teal-700 font-black text-xl sm:text-2xl leading-none">
                         <Tag className="w-7 h-7 sm:w-9 sm:h-9 text-teal-600 fill-teal-600 animate-bounce drop-shadow-md" />
@@ -1612,7 +1639,7 @@ const ProductDetailsView = (props: any) => {
                       </div>
                     </div>
                   )}
-                  {selectedProduct.isHotSale && (
+                  {!isGuest && selectedProduct.isHotSale && (
                     <div className="w-full bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200 rounded-lg p-3 sm:p-5 shadow-sm flex flex-col sm:flex-row items-center sm:justify-between gap-3 transform hover:scale-[1.01] transition-transform">
                       <div className="flex items-center gap-2 text-red-600 font-black text-xl sm:text-2xl leading-none">
                         <Flame className="w-7 h-7 sm:w-9 sm:h-9 text-red-500 fill-red-500 animate-pulse drop-shadow-md" />
@@ -1631,7 +1658,7 @@ const ProductDetailsView = (props: any) => {
                             מחיר מומלץ לצרכן ₪{selectedProduct.retailPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-gray-500 font-normal">(כולל מע"מ)</span>
                           </span>
                        )}
-                       {selectedProduct.oldPrice && currentOptionals.length === 0 && (
+                       {!isGuest && selectedProduct.oldPrice && currentOptionals.length === 0 && (
                           <span className="text-sm sm:text-base text-red-500 font-medium mb-1 line-through block">
                             מחירון מתקין מקורי (ללא מע"מ): ₪{selectedProduct.oldPrice.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
@@ -1646,7 +1673,12 @@ const ProductDetailsView = (props: any) => {
                          </div>
                        )}
                     </div>
-                  {!isGuest && (selectedProduct.isComingSoon ? (
+                  {isGuest ? (
+                    <button onClick={() => { window.dispatchEvent(new Event('rbs_trigger_login')); }} className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold transition-all shadow-md text-sm sm:text-base h-[48px]">
+                      <Lock size={18} className="sm:w-5 sm:h-5" />
+                      כניסת מפיצים להזמנה
+                    </button>
+                  ) : (selectedProduct.isComingSoon ? (
                     <div className="w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md text-sm sm:text-base bg-gray-200 text-gray-600 cursor-not-allowed">
                        <span className="animate-pulse">בקרוב!</span>
                     </div>
@@ -1798,6 +1830,8 @@ const CheckoutView = (props: any) => {
   const { addToCart, bulkSelection, cart, catalogData, currentOptionals, handleBulkSelectionChange, handleOptionalsChange, navigateHome, navigateToCategoryAndSub, navigateToProduct, removeFromCart, selectedProduct, setCart, setIsAuthenticated, updateCartQuantity } = props;
     const [orderPlaced, setOrderPlaced] = useState(false);
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+    const [actionConfirm, setActionConfirm] = useState<'whatsapp' | 'email' | null>(null);
+    const [completedCart, setCompletedCart] = useState<any[]>([]);
     const [lastSentMethod, setLastSentMethod] = useState<'email' | 'whatsapp' | 'saved' | null>(null);
     const [companyName, setCompanyName] = useState('');
     const [companyId, setCompanyId] = useState('');
@@ -1903,7 +1937,7 @@ const CheckoutView = (props: any) => {
 
 `;
       
-      cart.forEach((item, idx) => {
+      (completedCart.length > 0 ? completedCart : cart).forEach((item, idx) => {
          orderDetails += `${idx + 1}. ${item.name}
 `;
          orderDetails += `   מק"ט: ${item.sku}
@@ -1933,52 +1967,57 @@ const CheckoutView = (props: any) => {
       
       orderDetails += `---------------------------------
 `;
-      orderDetails += `סה"כ כמות פריטים: ${cart.reduce((acc, item) => acc + item.quantity, 0)}
+      orderDetails += `סה"כ כמות פריטים: ${(completedCart.length > 0 ? completedCart : cart).reduce((acc, item) => acc + item.quantity, 0)}
 `;
 
       return orderDetails;
     };
 
-    const handleSendEmail = () => {
+    const handleSendEmailRequest = () => {
       if (!validateForm()) return;
-
       if (!recipientEmail) return;
-
-      const orderDetails = buildOrderDetailsText();
-      const subject = encodeURIComponent(`הזמנה חדשה (B2B): ${companyName || 'לקוח מזדמן'}`);
-      const body = encodeURIComponent(orderDetails);
-      
-      const ccList: string[] = [];
-      if (customerEmail) ccList.push(customerEmail);
-      if (alsoToOffice && officeAgent.email && officeAgent.email !== recipientEmail) ccList.push(officeAgent.email);
-      let mailtoLink = `mailto:${recipientEmail}?subject=${subject}&body=${body}`;
-      if (ccList.length) mailtoLink += `&cc=${ccList.join(',')}`;
-      
-      window.location.href = mailtoLink;
-      
-      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'email' }); } if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
-      setLastSentMethod('email');
-      setOrderPlaced(true);
+      setActionConfirm('email');
     };
 
-    const handleSendWhatsApp = () => {
+    const handleSendWhatsAppRequest = () => {
       if (!validateForm()) return;
-      
       if (!recipientPhone) return;
+      setActionConfirm('whatsapp');
+    };
 
+    const executeSendAction = (clearCartAfter: boolean) => {
       const orderDetails = buildOrderDetailsText();
-      const text = encodeURIComponent(orderDetails);
       
-      window.open(`https://wa.me/${recipientPhone}?text=${text}`, '_blank');
-      if (alsoToOffice && officeAgent.phone && officeAgent.phone !== recipientPhone) {
-        setTimeout(() => window.open(`https://wa.me/${officeAgent.phone}?text=${text}`, '_blank'), 700);
+      if (actionConfirm === 'email') {
+        const subject = encodeURIComponent(`הזמנה חדשה (B2B): ${companyName || 'לקוח מזדמן'}`);
+        const body = encodeURIComponent(orderDetails);
+        const ccList: string[] = [];
+        if (customerEmail) ccList.push(customerEmail);
+        if (alsoToOffice && officeAgent.email && officeAgent.email !== recipientEmail) ccList.push(officeAgent.email);
+        let mailtoLink = `mailto:${recipientEmail}?subject=${subject}&body=${body}`;
+        if (ccList.length) mailtoLink += `&cc=${ccList.join(',')}`;
+        window.location.href = mailtoLink;
+        
+        if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: (completedCart.length > 0 ? completedCart : cart).reduce((acc: number, item: any) => acc + item.quantity, 0), items: (completedCart.length > 0 ? completedCart : cart), detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'email' }); } if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
+        setLastSentMethod('email');
+      } else if (actionConfirm === 'whatsapp') {
+        const text = encodeURIComponent(orderDetails);
+        window.open(`https://wa.me/${recipientPhone}?text=${text}`, '_blank');
+        if (alsoToOffice && officeAgent.phone && officeAgent.phone !== recipientPhone) {
+          setTimeout(() => window.open(`https://wa.me/${officeAgent.phone}?text=${text}`, '_blank'), 700);
+        }
+        
+        if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: (completedCart.length > 0 ? completedCart : cart).reduce((acc: number, item: any) => acc + item.quantity, 0), items: (completedCart.length > 0 ? completedCart : cart), detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'whatsapp' }); } if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
+        setLastSentMethod('whatsapp');
       }
       
-      if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: cart.reduce((acc: number, item: any) => acc + item.quantity, 0), items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'whatsapp' }); } if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
-      setLastSentMethod('whatsapp');
+      if (clearCartAfter) {
+        setCompletedCart([...cart]);
+        props.setCart([]);
+      }
       setOrderPlaced(true);
+      setActionConfirm(null);
     };
-
     const handlePlaceOrder = async () => {
       if (!validateForm()) return;
       if (!props.userUid) return;
@@ -1986,13 +2025,15 @@ const CheckoutView = (props: any) => {
       setIsPlacingOrder(true);
       try {
         const orderDetails = buildOrderDetailsText();
-        const itemCount = cart.reduce((acc: number, item: any) => acc + item.quantity, 0);
-        const orderData = { uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount, items: cart, detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'saved' };
+        const itemCount = (completedCart.length > 0 ? completedCart : cart).reduce((acc: number, item: any) => acc + item.quantity, 0);
+        const orderData = { uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount, items: (completedCart.length > 0 ? completedCart : cart), detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'saved' };
         const newId = await addOrderRecord(orderData);
         if (!newId) { alert('שמירת ההזמנה נכשלה (' + (getLastOrderError() || 'שגיאה לא ידועה') + '). נסה שוב.'); return; }
         if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
         if (props.onOrderPlaced) props.onOrderPlaced({ id: newId, ...orderData, status: 'sent', createdAt: { toDate: () => new Date() } });
         setLastSentMethod('saved');
+        setCompletedCart([...cart]);
+        props.setCart([]);
         setOrderPlaced(true);
       } finally {
         setIsPlacingOrder(false);
@@ -2013,6 +2054,31 @@ const CheckoutView = (props: any) => {
     if (orderPlaced) {
       return (
         <div className="bg-white rounded-none shadow-sm border border-gray-100 p-8 sm:p-12 text-center max-w-2xl mx-auto mt-10">
+
+      {actionConfirm && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4" dir="rtl">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
+            <div className="bg-[#004387] p-4 text-white text-lg font-bold text-center">
+              {actionConfirm === 'whatsapp' ? 'שליחת הזמנה ב-WhatsApp' : 'שליחת הזמנה ב-Email'}
+            </div>
+            <div className="p-6 text-center text-gray-700 font-medium">
+              לאחר השליחה מומלץ לאפס את העגלה כדי למנוע בלבול בהזמנות הבאות.
+            </div>
+            <div className="p-4 flex flex-col gap-2 bg-gray-50">
+              <button onClick={() => executeSendAction(true)} className="w-full py-2.5 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-lg transition-colors">
+                שלח ונקה עגלה
+              </button>
+              <button onClick={() => executeSendAction(false)} className="w-full py-2.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 font-bold rounded-lg transition-colors">
+                שלח בלי לנקות
+              </button>
+              <button onClick={() => setActionConfirm(null)} className="w-full py-2.5 mt-2 text-gray-500 font-bold hover:bg-gray-100 rounded-lg transition-colors">
+                ביטול
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
           <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle size={40} />
           </div>
@@ -2027,7 +2093,7 @@ const CheckoutView = (props: any) => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
                {lastSentMethod !== 'email' && (
                  <button 
-                    onClick={() => handleSendEmail()}
+                    onClick={() => handleSendEmailRequest()}
                     className="bg-white text-[#004387] border border-[#004387] px-6 py-2 font-bold hover:bg-[#004387] hover:text-white transition-colors"
                  >
                     שליחת גיבוי ב-Email
@@ -2035,7 +2101,7 @@ const CheckoutView = (props: any) => {
                )}
                {lastSentMethod !== 'whatsapp' && (
                  <button 
-                    onClick={() => handleSendWhatsApp()}
+                    onClick={() => handleSendWhatsAppRequest()}
                     className="bg-green-500 text-white border border-green-500 px-6 py-2 font-bold hover:bg-green-600 transition-colors"
                  >
                     שליחת גיבוי ב-WhatsApp
@@ -2211,10 +2277,10 @@ const CheckoutView = (props: any) => {
                 <div className="pt-1 text-center">
                   <p className="text-xs text-gray-400 mb-2">רוצה גם לשלוח עותק של ההזמנה?</p>
                   <div className="flex gap-2 justify-center">
-                    <button onClick={handleSendWhatsApp} className="flex-1 max-w-[160px] flex items-center justify-center gap-1.5 text-sm font-bold text-gray-600 border border-gray-200 bg-white py-2.5 px-3 rounded-lg hover:border-green-400 hover:text-green-600 transition-colors">
+                    <button onClick={handleSendWhatsAppRequest} className="flex-1 max-w-[160px] flex items-center justify-center gap-1.5 text-sm font-bold text-gray-600 border border-gray-200 bg-white py-2.5 px-3 rounded-lg hover:border-green-400 hover:text-green-600 transition-colors">
                       שלח עותק בוואטסאפ
                     </button>
-                    <button onClick={handleSendEmail} className="flex-1 max-w-[160px] flex items-center justify-center gap-1.5 text-sm font-bold text-gray-600 border border-gray-200 bg-white py-2.5 px-3 rounded-lg hover:border-[#004387] hover:text-[#004387] transition-colors">
+                    <button onClick={handleSendEmailRequest} className="flex-1 max-w-[160px] flex items-center justify-center gap-1.5 text-sm font-bold text-gray-600 border border-gray-200 bg-white py-2.5 px-3 rounded-lg hover:border-[#004387] hover:text-[#004387] transition-colors">
                       שלח עותק במייל
                     </button>
                   </div>
@@ -2298,6 +2364,11 @@ export default function App() {
   const [userUid, setUserUid] = useState<string | null>(null);
   const [cartLoaded, setCartLoaded] = useState(false);
   const [isGuest, setIsGuest] = useState(() => { try { return sessionStorage.getItem('rbs_guest') === '1'; } catch { return false; } });
+  useEffect(() => {
+    const handleTriggerLogin = () => { try { sessionStorage.removeItem('rbs_guest'); } catch {} setIsGuest(false); };
+    window.addEventListener('rbs_trigger_login', handleTriggerLogin);
+    return () => window.removeEventListener('rbs_trigger_login', handleTriggerLogin);
+  }, []);
   
   const [showGuestNotice, setShowGuestNotice] = useState(() => {
     try {
@@ -3030,6 +3101,8 @@ export default function App() {
   const [selectedFavIds, setSelectedFavIds] = useState<Set<string>>(new Set());
   const [favQuantities, setFavQuantities] = useState<Record<string, number>>({});
   const [guestPhoneDest, setGuestPhoneDest] = useState('');
+  const [showGuestWhatsAppModal, setShowGuestWhatsAppModal] = useState(false);
+  const [guestWhatsAppToast, setGuestWhatsAppToast] = useState('');
   const favoriteIds = useMemo(() => new Set(favorites.map((f: any) => f.id)), [favorites]);
   const toggleFavorite = useCallback((product: any) => {
     setFavorites((prev: any[]) => {
@@ -3037,7 +3110,11 @@ export default function App() {
       const next = exists
         ? prev.filter((f) => f.id !== product.id)
         : [...prev, { id: product.id, name: product.name, sku: product.sku || '', image: product.images?.[0] || '' }];
-      if (userUid) saveFavorites(userUid, next);
+      if (userUid) {
+        saveFavorites(userUid, next);
+      } else {
+        try { localStorage.setItem('rbs_guest_favorites', JSON.stringify(next)); } catch {}
+      }
       return next;
     });
   }, [userUid]);
@@ -3268,7 +3345,14 @@ export default function App() {
   }, [showProfile, userRole, agentName]);
   useEffect(() => {
     if (userUid) loadFavorites(userUid).then(setFavorites);
-    else setFavorites([]);
+    else {
+      try {
+        const local = localStorage.getItem('rbs_guest_favorites');
+        setFavorites(local ? JSON.parse(local) : []);
+      } catch {
+        setFavorites([]);
+      }
+    }
   }, [userUid]);
   useEffect(() => {
     if (userUid) loadUserProfile(userUid).then(setBillingProfile);
@@ -6242,6 +6326,72 @@ export default function App() {
 
 
       {/* ADMIN SYNC MODAL OVERLAY */}
+      {showGuestWhatsAppModal && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4" dir="rtl">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
+            <div className="bg-[#004387] p-4 text-white text-lg font-bold text-center">
+              שליחת מועדפים ב-WhatsApp
+            </div>
+            <div className="p-6 text-center text-gray-700 font-medium">
+              האם לאחר השליחה לאפס את רשימת המועדפים או לשמור אותה להמשך?
+            </div>
+            <div className="p-4 flex flex-col gap-2 bg-gray-50">
+              <button onClick={() => {
+                const items = favorites.filter((f: any) => selectedFavIds.has(f.id)).map((f: any) => {
+                  const p = catalogData.find((x: any) => x.id === f.id);
+                  let priceStr = '';
+                  if (p) {
+                    const price = p.price > 0 ? `₪${p.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'צור קשר';
+                    const retail = p.retailPrice ? ` (צרכן: ₪${p.retailPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})})` : '';
+                    priceStr = ` | מחיר מתקין: ${price}${retail}`;
+                  }
+                  return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ''} - כמות: ${favQuantities[f.id] || 1}${priceStr}`;
+                });
+                const text = encodeURIComponent(`שלום רב,\n\nרשימת מועדפים:\n${items.join('\n')}`);
+                let phone = guestPhoneDest.replace(/\D/g, '');
+                if (phone.startsWith('0')) phone = '972' + phone.slice(1);
+                window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
+                setShowGuestWhatsAppModal(false);
+                setGuestWhatsAppToast('רשימת המועדפים נשמרה');
+                setTimeout(() => setGuestWhatsAppToast(''), 3000);
+              }} className="w-full py-2.5 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-lg transition-colors">
+                שלח ושמור מועדפים
+              </button>
+              <button onClick={() => {
+                const items = favorites.filter((f: any) => selectedFavIds.has(f.id)).map((f: any) => {
+                  const p = catalogData.find((x: any) => x.id === f.id);
+                  let priceStr = '';
+                  if (p) {
+                    const price = p.price > 0 ? `₪${p.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'צור קשר';
+                    const retail = p.retailPrice ? ` (צרכן: ₪${p.retailPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})})` : '';
+                    priceStr = ` | מחיר מתקין: ${price}${retail}`;
+                  }
+                  return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ''} - כמות: ${favQuantities[f.id] || 1}${priceStr}`;
+                });
+                const text = encodeURIComponent(`שלום רב,\n\nרשימת מועדפים:\n${items.join('\n')}`);
+                let phone = guestPhoneDest.replace(/\D/g, '');
+                if (phone.startsWith('0')) phone = '972' + phone.slice(1);
+                window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
+                setShowGuestWhatsAppModal(false);
+                setFavorites(prev => {
+                  const next = prev.filter(f => !selectedFavIds.has(f.id));
+                  try { localStorage.setItem('rbs_guest_favorites', JSON.stringify(next)); } catch {}
+                  return next;
+                });
+                setSelectedFavIds(new Set());
+                setGuestWhatsAppToast('רשימת המועדפים אופסה');
+                setTimeout(() => setGuestWhatsAppToast(''), 3000);
+              }} className="w-full py-2.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 font-bold rounded-lg transition-colors">
+                שלח ואפס מועדפים
+              </button>
+              <button onClick={() => setShowGuestWhatsAppModal(false)} className="w-full py-2.5 mt-2 text-gray-500 font-bold hover:bg-gray-100 rounded-lg transition-colors">
+                ביטול
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {showProfile && (
         <div className="fixed inset-0 z-50 bg-gray-100 overflow-y-auto overscroll-contain" dir="rtl" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}>
           <div className="sticky top-0 z-10 bg-[#004387] text-white shadow-md mb-4">
@@ -6286,14 +6436,11 @@ export default function App() {
                       ))}
                     </div>
                     <div className="mt-4 flex flex-col gap-2">
+                      {guestWhatsAppToast && (
+                        <div className="text-center text-sm font-bold text-green-600 bg-green-50 py-1 px-2 rounded">{guestWhatsAppToast}</div>
+                      )}
                       <input type="tel" placeholder="מספר טלפון לשליחה (למשל 0501234567)" value={guestPhoneDest} onChange={(e) => setGuestPhoneDest(e.target.value)} className="w-full border border-gray-200 rounded-lg p-2 text-sm text-right" dir="ltr" />
-                      <button disabled={selectedFavIds.size === 0 || !guestPhoneDest} onClick={() => {
-                        const items = favorites.filter((f: any) => selectedFavIds.has(f.id)).map((f: any) => `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ''} - כמות: ${favQuantities[f.id] || 1}`);
-                        const text = encodeURIComponent(`שלום רב,\n\nהזמנה:\n${items.join('\n')}`);
-                        let phone = guestPhoneDest.replace(/\D/g, '');
-                        if (phone.startsWith('0')) phone = '972' + phone.slice(1);
-                        window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
-                      }} className="w-full py-2.5 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg flex items-center justify-center gap-2 text-sm">
+                      <button disabled={selectedFavIds.size === 0 || !guestPhoneDest} onClick={() => setShowGuestWhatsAppModal(true)} className="w-full py-2.5 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg flex items-center justify-center gap-2 text-sm">
                         שלח נבחרים בוואטסאפ ({selectedFavIds.size})
                       </button>
                     </div>
