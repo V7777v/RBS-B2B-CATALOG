@@ -400,7 +400,7 @@ interface SheetsCacheEntry {
 const sheetsCacheMap = new Map<string, SheetsCacheEntry>();
 const CACHE_TTL_SHEETS_MS = 45 * 1000; // 45 seconds cache is ideal
 
-const SENSITIVE_COLS_SERVER = ["מחיר עלות", "מחיר סיטונאות", "מחיר סיטונאי"];
+const SENSITIVE_COLS_SERVER = ["מחיר עלות", "מחיר סיטונאות", "מחיר סיטונאי", "needsReview", "notes"];
 const FIREBASE_JWKS_SERVER = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
 
 async function isAgentOrManagerServer(authHeader: string | undefined): Promise<boolean> {
@@ -433,14 +433,33 @@ async function isAgentOrManagerServer(authHeader: string | undefined): Promise<b
   }
 }
 
-function stripSensitiveColumnsServer(csv: string): string {
+function stripSensitiveColumnsServer(csv: string, gid: string): string {
   const parsed = Papa.parse<string[]>(csv, { skipEmptyLines: false });
   const rows = (parsed.data || []) as string[][];
   if (!rows.length || !Array.isArray(rows[0])) return csv;
+  
   const header = rows[0];
+  const headerStrs = header.map(c => String(c).trim());
+  
+  // Is this the Products_React sheet?
+  // Check GID directly or specific product columns
+  const isProductsGid = gid === '1506812668';
+  const hasProductHeaders = headerStrs.includes('sku') && 
+                            headerStrs.includes('name') && 
+                            headerStrs.includes('price') && 
+                            headerStrs.includes('retailPrice');
+                            
+  if (!isProductsGid && !hasProductHeaders) {
+    return csv; // Do not strip other sheets like CatalogFolders or Subcategories!
+  }
+
   const dropIdx = new Set<number>();
   header.forEach((c, i) => { if (SENSITIVE_COLS_SERVER.includes(String(c).trim())) dropIdx.add(i); });
+  
   if (dropIdx.size === 0) return csv;
+  
+  console.warn('[Sheets API] Product sensitive columns removed', { removedCount: dropIdx.size });
+
   const out = rows
     .filter((r) => !(r.length === 1 && r[0] === ""))
     .map((r) => r.filter((_, i) => !dropIdx.has(i)));
@@ -472,7 +491,7 @@ app.get("/api/sheets", async (req, res) => {
     let csvString = await fetchSheetDataV4(String(gid), limit as string, offset as string);
     
     if (!authorized) {
-      csvString = stripSensitiveColumnsServer(csvString);
+      csvString = stripSensitiveColumnsServer(csvString, String(gid));
     }
 
     if (!bypassCache) {
