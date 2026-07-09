@@ -175,11 +175,11 @@ function InstallBannerInner() {
 
   const getInstructionText = () => {
     if (platform === 'ios') {
-      return "לחץ על כפתור השיתוף ⬆️ ואז בחר 'הוסף למסך הבית' / Add to Home Screen";
+      return 'באייפון: לחץ על כפתור השיתוף ⬆️ ובחר "הוסף למסך הבית" / "Add to Home Screen".';
     } else if (platform === 'android') {
-      return "פתח את תפריט הדפדפן ⋮ ובחר 'התקן אפליקציה' או 'הוסף למסך הבית'";
+      return 'אם האייקון לא הופיע במסך הבית: פתח את רשימת האפליקציות, מצא את RBS, לחץ לחיצה ארוכה וגרור למסך הבית.';
     } else {
-      return "בדוק את אייקון ההתקנה בשורת הכתובת או פתח את תפריט הדפדפן ובחר Install app";
+      return 'פתח את תפריט הדפדפן ⋮ ובחר "Install app".';
     }
   };
 
@@ -291,22 +291,25 @@ function InstallBannerInner() {
         התקן את הקטלוג כאפליקציה וקבל גישה מהירה מהמחשב או מהטלפון.
       </p>
 
-      {showInstructions && (
+      {/* Show instructions automatically on iOS and Desktop without native prompt */}
+      {(platform === 'ios' || (platform === 'desktop' && !hasNativePrompt) || (platform === 'android' && showInstructions)) && (
         <div style={instructionBoxStyle}>
           {getInstructionText()}
         </div>
       )}
 
       <div style={buttonsRow}>
-        {!showInstructions && !hasNativePrompt && platform !== 'ios' ? (
-          <button style={instructionBtn} onClick={() => setShowInstructions(true)}>
-            איך מתקינים?
-          </button>
-        ) : hasNativePrompt ? (
+        {hasNativePrompt && platform !== 'ios' && (
           <button style={primaryBtn} onClick={handleInstallClick}>
-            התקן עכשיו
+            התקן כאפליקציה
           </button>
-        ) : null}
+        )}
+
+        {platform === 'android' && !showInstructions && (
+          <button style={secondaryBtn} onClick={() => setShowInstructions(true)}>
+            איך להוסיף למסך הבית?
+          </button>
+        )}
 
         <button style={secondaryBtn} onClick={handleDismiss}>
           המשך בדפדפן
