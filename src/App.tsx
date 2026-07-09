@@ -2229,6 +2229,28 @@ const CheckoutView = (props: any) => {
   };
 /* ===== end hoisted ===== */
 
+const GuestNoticeModal = ({ onDismiss }: { onDismiss: () => void }) => {
+  return (
+    <div className="fixed inset-0 z-[9999] bg-black/70 flex items-center justify-center p-4 animate-fade-in" dir="rtl" role="dialog" aria-modal="true">
+      <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-[560px] w-full text-center shadow-2xl relative">
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0c2d57] mb-3">הקטלוג בהרצה</h2>
+        <p className="text-base sm:text-lg text-gray-700 font-medium mb-2">
+          המערכת פתוחה כעת לצפייה במצב אורח. בשלב זה יש להמשיך ללא רישום.
+        </p>
+        <p className="text-sm sm:text-base text-gray-500 mb-8">
+          בלחיצה על הכפתור אני מאשר/ת שקראתי את ההודעה וממשיך/ה לקטלוג כאורח.
+        </p>
+        <button
+          onClick={onDismiss}
+          className="w-full py-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl text-lg transition-colors"
+        >
+          קראתי, המשך כאורח
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   // --- STATE ---
   const [catalogFolders, setCatalogFolders] = useState<any[]>([]);
@@ -2276,6 +2298,26 @@ export default function App() {
   const [userUid, setUserUid] = useState<string | null>(null);
   const [cartLoaded, setCartLoaded] = useState(false);
   const [isGuest, setIsGuest] = useState(() => { try { return sessionStorage.getItem('rbs_guest') === '1'; } catch { return false; } });
+  
+  const [showGuestNotice, setShowGuestNotice] = useState(() => {
+    try {
+      return localStorage.getItem('rbs_catalog_guest_notice_v1') !== 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  const handleDismissGuestNotice = useCallback(() => {
+    try {
+      localStorage.setItem('rbs_catalog_guest_notice_v1', 'true');
+    } catch {}
+    setShowGuestNotice(false);
+    if (!isAuthenticated && !isGuest) {
+      try { sessionStorage.setItem('rbs_guest', '1'); } catch {}
+      setIsGuest(true);
+    }
+  }, [isAuthenticated, isGuest]);
+
   const [guestPrompt, setGuestPrompt] = useState(false);
   const [billingProfile, setBillingProfile] = useState<any>(null);
   const [billingSaved, setBillingSaved] = useState(false);
@@ -4474,6 +4516,15 @@ export default function App() {
           <p className="text-sm font-semibold text-gray-500">טוען קטלוג RBS B2B...</p>
         </div>
       </div>
+    );
+  }
+
+  if (showGuestNotice && !isAuthenticated) {
+    return (
+      <>
+        <GuestNoticeModal onDismiss={handleDismissGuestNotice} />
+        <FirebaseAuthView setIsAuthenticated={setIsAuthenticated} onGuest={() => { try { sessionStorage.setItem('rbs_guest', '1'); } catch {} setIsGuest(true); }} />
+      </>
     );
   }
 
