@@ -41,80 +41,17 @@ async function verifiedEmail(idToken: string): Promise<string | null> {
   } catch { return null; }
 }
 
-// --- Public Catalog Column Allowlist ---
-// Only these columns will be sent to the browser for public (guest) users.
-const PUBLIC_CATALOG_COLUMNS = new Set([
-  'מק"ט', 'sku', 'שם מוצר', 'name', 'תיאור', 'description', 'desc',
-  'קטגוריה', 'category', 'תת קטגוריה', 'subcategory',
-  'nested subcategory', 'niche category', 'מותג', 'brand', 'brands',
-  'מחיר', 'price', 'מחיר מכירה', 'מחיר צרכן', 'retailprice', 'retail price', 'oldprice', 'old price',
-  'סוג מבצע', 'sale type', 'saletype', 'סוג המבצע',
-  'ערך מבצע', 'sale value', 'salevalue', 'ערך המבצע', 'מחיר מבצע',
-  'מבצע חם', 'מבצע_חם', 'hot sale', 'hotsale', 'מבצע', 'מבצעים',
-  'מציאון', 'clearance',
-  'מחיר מציאון', 'מציאון מחיר מיוחד', 'מחיר מיוחד מציאון',
-  'תמונה', 'images', 'image', 'imageurl', 'תמונות', 'imagesjson',
-  'מפרט', 'datasheet', 'technicalsheet', 'קישור מפרט', 'labcerts', 'אישורי מעבדה',
-  'מלאי', 'זמינות', 'status', 'features', 'מאפיינים',
-  'נפח', 'נפח בארון', 'התאמה לארון', 'ארונות מתאימים', 'coming soon', 'cooming soon',
-  'id', 'count', 'orderindex', 'hidefromcatalog', 'video', 'youtube', 'link', 'url',
-  'sortorder', 'label', 'activerow', 'parentsubcategory', ''
-].map(c => c.toLowerCase()));
-
-// --- Backstop Sensitive Detector ---
-// Even if a column is somehow in the allowlist, block it if it matches these sensitive keywords.
-const SENSITIVE_KEYWORDS = [
-  'עלות', 'cost',
-  'סיטונאות', 'סיטונאי', 'wholesale',
-  'ספק', 'supplier', 'vendor',
-  'קנייה', 'רכישה', 'purchase', 'buy price',
-  'יבוא', 'margin', 'profit', 'מרווח', 'רווח',
-  'הנהלה', 'admin', 'internal', 'פנימי', 'private', 'hidden', 'secret',
-  'סוכן', 'agent', 'dealer', 'לקוח', 'הנחת'
-];
-
-function isColumnAllowed(colName: string): boolean {
-  const cleanName = String(colName).trim().toLowerCase();
-  
-  // 1. Must be in Allowlist (or be exactly empty string which is sometimes used for images)
-  if (!PUBLIC_CATALOG_COLUMNS.has(cleanName)) {
-    return false;
-  }
-  
-  // 2. Backstop Check: Must NOT contain any sensitive keywords
-  for (const keyword of SENSITIVE_KEYWORDS) {
-    if (cleanName.includes(keyword)) {
-      return false; // Blocked by backstop
-    }
-  }
-  
-  return true;
-}
-
+// --- Sensitive columns removed for non-agents (cost / wholesale) ---
+const SENSITIVE_COLS = ["מחיר עלות", "מחיר סיטונאות", "מחיר סיטונאי"];
 function stripSensitiveColumns(csv: string): string {
   const parsed = Papa.parse<string[]>(csv, { skipEmptyLines: false });
   const rows = (parsed.data || []) as string[][];
   if (!rows.length || !Array.isArray(rows[0])) return csv;
-  
   const header = rows[0];
-  const keepIdx = new Set<number>();
-  let droppedCount = 0;
-  
-  header.forEach((c, i) => { 
-    if (isColumnAllowed(c)) {
-      keepIdx.add(i);
-    } else {
-      droppedCount++;
-    }
-  });
-  
-  if (droppedCount > 0) {
-    console.warn(`[Sheets API] Public response dropped non-allowlisted columns`, { count: droppedCount });
-  }
-  
-  if (keepIdx.size === header.length) return csv; // Nothing dropped
-  
-  const out = rows.filter((r) => !(r.length === 1 && r[0] === "")).map((r) => r.filter((_, i) => keepIdx.has(i)));
+  const dropIdx = new Set<number>();
+  header.forEach((c, i) => { if (SENSITIVE_COLS.includes(String(c).trim())) dropIdx.add(i); });
+  if (dropIdx.size === 0) return csv;
+  const out = rows.filter((r) => !(r.length === 1 && r[0] === "")).map((r) => r.filter((_, i) => !dropIdx.has(i)));
   return Papa.unparse(out);
 }
 
