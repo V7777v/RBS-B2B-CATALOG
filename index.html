@@ -46,6 +46,15 @@
       /* prevent long unbroken strings (SKUs, emails, URLs) from breaking mobile layout */
       body { overflow-wrap: break-word; }
     </style>
+    <script>
+      window.__deferredPrompt = null;
+      window.__promptListeners = [];
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.__deferredPrompt = e;
+        window.__promptListeners.forEach(function(l) { l(e); });
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
