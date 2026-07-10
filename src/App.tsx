@@ -4334,6 +4334,7 @@ export default function App() {
   // --- CART FUNCTIONS ---
   const addToCart = useCallback((product: any, quantity = 1, optionals: any[] = []) => {
     if (isGuest) { setGuestPrompt(true); return; }
+    if (userRole === 'agent' || userRole === 'sales_manager') return;
     trackEvent('add_to_cart', { item_id: product.id, item_name: product.name, quantity, user_role: userRole });
     setCart(prev => {
       // Find matching item (same ID and same optionals configuration)
@@ -4356,7 +4357,7 @@ export default function App() {
       quantity: quantity,
       category: product.category || ""
     });
-  }, [isGuest]);
+  }, [isGuest, userRole]);
 
   const updateConfirmCartItemQuantity = (qty: number) => {
     if (!addedItemConfirm) return;
@@ -4973,6 +4974,7 @@ export default function App() {
 
             {/* LEFT SIDE: Cart (Protected from theme overrides) */}
             {!isGuest && (<>
+            {userRole !== 'agent' && userRole !== 'sales_manager' && (
             <div className="flex-shrink-0">
               <button 
                 className="relative flex flex-row items-center justify-center gap-2 !p-2 !px-3.5 !m-0 h-11 text-[#004387] bg-white border border-[#004387]/60 hover:bg-[#004387] hover:text-white hover:border-[#004387] hover:shadow-sm transition-all whitespace-nowrap rounded-xl box-border active:scale-95"
@@ -4989,6 +4991,7 @@ export default function App() {
                 )}
               </button>
             </div>
+            )}
 
             {/* Personal area button */}
             <div className="flex-shrink-0">
@@ -7387,10 +7390,30 @@ export default function App() {
                     </div>
                   ))}
                 </div>
+                {(userRole === 'agent' || userRole === 'sales_manager') ? (
+                <div className="flex gap-2 mt-3">
+                  <button disabled={selectedFavIds.size === 0} onClick={() => {
+                    const items = favorites.filter((f: any) => selectedFavIds.has(f.id)).map((f: any) => {
+                      const p = catalogData.find((x: any) => x.id === f.id);
+                      let priceStr = '';
+                      if (p) {
+                        const price = p.price > 0 ? `₪${p.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'צור קשר';
+                        priceStr = ` | מחיר מתקין: ${price}`;
+                      }
+                      return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ''} - כמות: ${favQuantities[f.id] || 1}${priceStr}`;
+                    });
+                    const text = encodeURIComponent(`שלום רב,\n\nרשימת מוצרים:\n${items.join('\n')}\n\nבברכה,\n${agentName}`);
+                    trackEvent('send_favorites_whatsapp', { items_count: items.length, user_role: userRole });
+                    window.open(`https://wa.me/?text=${text}`, '_blank');
+                    setSelectedFavIds(new Set());
+                  }} className="flex-1 py-2.5 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg flex items-center justify-center gap-2 text-sm"><MessageSquare size={16} /> שלח בוואטסאפ ({selectedFavIds.size})</button>
+                </div>
+                ) : (
                 <div className="flex gap-2 mt-3">
                   <button disabled={selectedFavIds.size === 0} onClick={() => { favorites.forEach((f: any) => { if (selectedFavIds.has(f.id)) { const p = catalogData.find((x: any) => x.id === f.id); if (p) addToCart(p, 1); } }); setSelectedFavIds(new Set()); setShowProfile(false); setIsCartOpen(true); }} className="flex-1 py-2.5 bg-[#004387] hover:bg-[#0c2d57] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg flex items-center justify-center gap-2 text-sm"><ShoppingCart size={16} /> הוסף נבחרים ({selectedFavIds.size})</button>
                   <button onClick={() => { favorites.forEach((f: any) => { const p = catalogData.find((x: any) => x.id === f.id); if (p) addToCart(p, 1); }); setSelectedFavIds(new Set()); setShowProfile(false); setIsCartOpen(true); }} className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-sm">הוסף הכל</button>
                 </div>
+                )}
               </div>
             )}
             {biometricSupported && (
