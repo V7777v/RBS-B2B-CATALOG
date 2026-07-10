@@ -16,6 +16,7 @@ import { loadCart, saveCart, addOrderRecord, loadOrders, loadFavorites, saveFavo
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import QuoteDocument from './QuoteDocument';
 import LegalAndCookies from './LegalAndCookies';
+import { trackPageView, trackEvent } from './lib/analytics';
 // Safari-safe lazy loading: if a chunk fails to load (stale Service Worker after a
 // redeploy points to an old chunk name), reload the page ONCE to fetch fresh assets.
 const lazyWithRetry = (factory: () => Promise<any>) =>
@@ -2000,6 +2001,7 @@ const CheckoutView = (props: any) => {
         
         if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: (completedCart.length > 0 ? completedCart : cart).reduce((acc: number, item: any) => acc + item.quantity, 0), items: (completedCart.length > 0 ? completedCart : cart), detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'email' }); } if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
         setLastSentMethod('email');
+        trackEvent('order_sent_email', { clear_cart: clearCartAfter, item_count: (completedCart.length > 0 ? completedCart : cart).reduce((acc: number, item: any) => acc + item.quantity, 0) });
       } else if (actionConfirm === 'whatsapp') {
         const text = encodeURIComponent(orderDetails);
         window.open(`https://wa.me/${recipientPhone}?text=${text}`, '_blank');
@@ -2009,6 +2011,7 @@ const CheckoutView = (props: any) => {
         
         if (props.userUid) { addOrderRecord({ uid: props.userUid, email: props.userProfile?.email || '', customerNumber: props.userProfile?.customerNumber || '', company: companyName || '', itemCount: (completedCart.length > 0 ? completedCart : cart).reduce((acc: number, item: any) => acc + item.quantity, 0), items: (completedCart.length > 0 ? completedCart : cart), detailsText: orderDetails, agent: props.userProfile?.agent || '', method: 'whatsapp' }); } if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
         setLastSentMethod('whatsapp');
+        trackEvent('order_sent_whatsapp', { clear_cart: clearCartAfter, item_count: (completedCart.length > 0 ? completedCart : cart).reduce((acc: number, item: any) => acc + item.quantity, 0) });
       }
       
       if (clearCartAfter) {
@@ -2031,6 +2034,7 @@ const CheckoutView = (props: any) => {
         if (!newId) { alert('שמירת ההזמנה נכשלה (' + (getLastOrderError() || 'שגיאה לא ידועה') + '). נסה שוב.'); return; }
         if (props.onSaveBilling) props.onSaveBilling({ companyName, companyId, phonePrefix, phone, email: customerEmail });
         if (props.onOrderPlaced) props.onOrderPlaced({ id: newId, ...orderData, status: 'sent', createdAt: { toDate: () => new Date() } });
+        trackEvent('order_saved', { order_id: newId, item_count: itemCount, company_name: companyName });
         setLastSentMethod('saved');
         setCompletedCart([...cart]);
         props.setCart([]);
@@ -2318,6 +2322,11 @@ const GuestNoticeModal = ({ onDismiss }: { onDismiss: () => void }) => {
 };
 
 export default function App() {
+  useEffect(() => {
+    trackEvent('app_loaded', { app_name: 'rbs_b2b_catalog' });
+  }, []);
+
+
   // --- STATE ---
   const [catalogFolders, setCatalogFolders] = useState<any[]>([]);
   const [subcategoriesGlobalData, setSubcategoriesGlobalData] = useState<any[]>([]);
@@ -2332,6 +2341,37 @@ export default function App() {
   const [selectedNestedSubcategory, setSelectedNestedSubcategory] = useState<string | null>(null);
   const [selectedNicheCategory, setSelectedNicheCategory] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
+
+  useEffect(() => {
+    let path = window.location.pathname + window.location.search;
+    let title = 'RBS B2B Catalog';
+
+    if (currentView === 'home') {
+      path = '/';
+      title = 'דף הבית';
+    } else if (currentView === 'catalog_subs' && selectedCatalog) {
+      path = `/catalog/${encodeURIComponent(selectedCatalog)}`;
+      title = `קטלוג - ${selectedCatalog}`;
+      trackEvent('catalog_view', { catalog_name: selectedCatalog });
+    } else if (currentView === 'products') {
+      path = `/products`;
+      if (selectedSubcategory) {
+        path += `/${encodeURIComponent(selectedSubcategory)}`;
+        trackEvent('catalog_view', { subcategory: selectedSubcategory });
+      }
+      title = `מוצרים`;
+    } else if (currentView === 'product' && selectedProduct) {
+      path = `/product/${encodeURIComponent(selectedProduct.id)}`;
+      title = `מוצר - ${selectedProduct.name}`;
+      trackEvent('product_view', { item_id: selectedProduct.id, item_name: selectedProduct.name });
+    } else if (currentView === 'checkout') {
+      path = '/checkout';
+      title = 'קופה';
+    }
+
+    trackPageView(path, title);
+  }, [currentView, selectedCatalog, selectedSubcategory, selectedProduct]);
+
   const [currentOptionals, setCurrentOptionals] = useState<any[]>([]);
   const handleOptionalsChange = useCallback((newOptionals: any[]) => {
     setCurrentOptionals(prev => {
@@ -2340,6 +2380,17 @@ export default function App() {
     });
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (searchQuery.trim()) {
+        trackEvent('search', { search_term: searchQuery });
+      }
+    }, 1500); // 1.5 second debounce for search tracking
+
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [advisorOpen, setAdvisorOpen] = useState(false);
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
@@ -3107,6 +3158,7 @@ export default function App() {
   const toggleFavorite = useCallback((product: any) => {
     setFavorites((prev: any[]) => {
       const exists = prev.some((f) => f.id === product.id);
+      if (!exists) trackEvent('add_to_favorites', { item_id: product.id, item_name: product.name });
       const next = exists
         ? prev.filter((f) => f.id !== product.id)
         : [...prev, { id: product.id, name: product.name, sku: product.sku || '', image: product.images?.[0] || '' }];
@@ -3365,6 +3417,11 @@ export default function App() {
   }, [isAuthenticated, isGuest, userUid]);
   const [isHumanVerified, setIsHumanVerified] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+
+  useEffect(() => {
+    if (isCartOpen) trackEvent('checkout_start', { cart_size: cart.length });
+  }, [isCartOpen]);
+
   const [bulkSelection, setBulkSelection] = useState<Record<string, { product: any, quantity: number }>>({});
   const [isBulkExpanded, setIsBulkExpanded] = useState(false);
 
@@ -4276,6 +4333,7 @@ export default function App() {
   // --- CART FUNCTIONS ---
   const addToCart = useCallback((product: any, quantity = 1, optionals: any[] = []) => {
     if (isGuest) { setGuestPrompt(true); return; }
+    trackEvent('add_to_cart', { item_id: product.id, item_name: product.name, quantity, user_role: userRole });
     setCart(prev => {
       // Find matching item (same ID and same optionals configuration)
       const existing = prev.find(item => 
@@ -6348,6 +6406,7 @@ export default function App() {
                   return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ''} - כמות: ${favQuantities[f.id] || 1}${priceStr}`;
                 });
                 const text = encodeURIComponent(`שלום רב,\n\nרשימת מועדפים:\n${items.join('\n')}`);
+                trackEvent('send_favorites_whatsapp', { items_count: items.length });
                 let phone = guestPhoneDest.replace(/\D/g, '');
                 if (phone.startsWith('0')) phone = '972' + phone.slice(1);
                 window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
