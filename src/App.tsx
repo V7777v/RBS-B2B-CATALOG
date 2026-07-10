@@ -3034,7 +3034,8 @@ export default function App() {
         const detailsText = 'הזמנה (עודכנה ע"י הסוכן)\n---------------------------------\n' +
           orderItems.map((it: any) => `${it.name} (${it.sku}) — כמות: ${it.quantity} — מחיר: ₪${it.price}`).join('\n') +
           `\n\nסה"כ: ₪${Math.round(quoteTotal)}`;
-        await updateOrder(editingOrderId, { items: orderItems, itemCount, total: quoteTotal, detailsText, edited: true });
+        const orderUpdated = await updateOrder(editingOrderId, { items: orderItems, itemCount, total: quoteTotal, detailsText, edited: true });
+        if (!orderUpdated) throw new Error('ORDER_UPDATE_FAILED');
         setOrders((prev: any) => prev.map((o: any) => o.id === editingOrderId ? { ...o, items: orderItems, itemCount, total: quoteTotal, detailsText, edited: true } : o));
         setEditingOrderId(null);
         setShowQuoteEditor(false);

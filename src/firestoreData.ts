@@ -121,10 +121,11 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
   } catch { /* ignore */ }
 }
 
-export async function updateOrder(orderId: string, fields: Record<string, any>): Promise<void> {
+export async function updateOrder(orderId: string, fields: Record<string, any>): Promise<boolean> {
   try {
     await setDoc(doc(db, 'orders', orderId), { ...sanitizeForFirestore(fields), updatedAt: serverTimestamp() }, { merge: true });
-  } catch (e) { console.error('updateOrder failed:', e); }
+    return true;
+  } catch (e) { console.error('updateOrder failed:', e); return false; }
 }
 
 // ---------- Real-time order notifications (agent/manager) ----------
@@ -158,7 +159,7 @@ export async function saveQuote(data: Record<string, any>, quoteId?: string | nu
       delete payload.customerEmail;
       delete payload.agentUid;
       delete payload.createdAt;
-      await setDoc(doc(db, 'quotes', quoteId), { ...payload, updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(doc(db, 'quotes', quoteId), { ...sanitizeForFirestore(payload), updatedAt: serverTimestamp() }, { merge: true });
       return quoteId;
     }
 
@@ -170,7 +171,7 @@ export async function saveQuote(data: Record<string, any>, quoteId?: string | nu
     }
     payload.customerEmail = normalizedCustomerEmail;
 
-    const ref = await addDoc(collection(db, 'quotes'), { ...payload, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    const ref = await addDoc(collection(db, 'quotes'), { ...sanitizeForFirestore(payload), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
     return ref.id;
   } catch (error: any) {
     console.error('[Firestore] saveQuote failed', {
