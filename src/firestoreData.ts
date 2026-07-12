@@ -275,9 +275,7 @@ export async function updateQuoteStatus(quoteId: string, status: string): Promis
 }
 
 export async function updateQuote(quoteId: string, fields: Record<string, any>): Promise<void> {
-  try {
-    await setDoc(doc(db, 'quotes', quoteId), { ...sanitizeForFirestore(fields), updatedAt: serverTimestamp() }, { merge: true });
-  } catch (e) { console.error('updateQuote failed:', e); }
+  await setDoc(doc(db, 'quotes', quoteId), { ...sanitizeForFirestore(fields), updatedAt: serverTimestamp() }, { merge: true });
 }
 
 export async function deleteQuote(quoteId: string): Promise<void> {

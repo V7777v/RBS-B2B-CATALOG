@@ -3194,6 +3194,9 @@ export default function App() {
     } else if (agentName) {
       loadAgentQuotes(auth.currentUser?.uid || '').then(setAgentQuotes);
     }
+    } catch (error: any) {
+      console.error('approveQuote failed:', error);
+      alert('אישור ההצעה נכשל [' + (error?.code || error?.message || 'UNKNOWN') + ']. נסה שוב או פנה לסוכן.');
     } finally {
       approvingRef.current = false;
       setQuoteSaving(false);
@@ -6284,7 +6287,15 @@ export default function App() {
                   disabled={!signingName.trim()}
                   onClick={() => {
                     const canvas = signatureCanvasRef.current;
-                    const sigDataUrl = canvas ? canvas.toDataURL('image/png') : '';
+                    if (!canvas) return;
+                    const ctx = canvas.getContext('2d');
+                    let hasInk = false;
+                    if (ctx) {
+                      const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                      for (let i = 3; i < px.length; i += 4) { if (px[i] !== 0) { hasInk = true; break; } }
+                    }
+                    if (!hasInk) { alert('יש לחתום על גבי המסך לפני האישור.'); return; }
+                    const sigDataUrl = canvas.toDataURL('image/png');
                     approveQuote(signingQuote, sigDataUrl, signingName);
                     setSigningQuote(null);
                   }}
@@ -6617,33 +6628,33 @@ export default function App() {
                   <p className="text-white/60 text-[11px] mt-2">{userRole === 'sales_manager' ? 'תצוגת כל הסוכנים' : 'הלקוחות והפעילות שלך'}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center">
                     <div className="text-[11px] text-amber-800 font-bold mb-0.5">ממתין לחתימה</div>
                     <div className="text-2xl font-extrabold text-amber-600">{managerKpis.pending}</div>
                   </div>
-                  <div className="bg-green-50 border border-green-100 rounded-xl p-3">
+                  <div className="bg-green-50 border border-green-100 rounded-xl p-3 text-center">
                     <div className="text-[11px] text-green-800 font-bold mb-0.5">נחתם החודש</div>
                     <div className="text-2xl font-extrabold text-green-700">{managerKpis.signedCount}</div>
                   </div>
-                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 text-center">
                     <div className="text-[11px] text-gray-600 font-bold mb-0.5">מחזור חתום החודש</div>
                     <div className="text-lg font-extrabold text-[#004387]">₪{Math.round(managerKpis.revenue).toLocaleString('he-IL')}</div>
                   </div>
-                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 text-center">
                     <div className="text-[11px] text-gray-600 font-bold mb-0.5">לקוחות פעילים</div>
                     <div className="text-2xl font-extrabold text-[#004387]">{customerGroups.length}</div>
                   </div>
                 </div>
 
                 {managerKpis.stale > 0 && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-3 flex items-center gap-2">
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-3 flex items-center justify-center gap-2 text-center">
                     <TrendingUp size={16} className="text-red-600 flex-shrink-0" />
                     <span className="text-[12px] font-bold text-red-800">{managerKpis.stale} הצעות ממתינות מעל 7 ימים — כדאי לעקוב</span>
                   </div>
                 )}
 
                 <div className="mb-4">
-                  <h4 className="text-xs font-bold text-gray-500 mb-2">לקוחות ({customerGroups.length})</h4>
+                  <h4 className="text-xs font-bold text-gray-500 mb-2 text-center">לקוחות ({customerGroups.length})</h4>
                   <div className="space-y-2">
                     {customerGroups.length === 0 && (
                       <p className="text-[11px] text-gray-400 text-center py-4">אין עדיין לקוחות עם הצעות או הזמנות.</p>
@@ -6661,7 +6672,7 @@ export default function App() {
                             <div className="w-10 h-10 rounded-lg bg-[#004387] text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
                               {initials || '?'}
                             </div>
-                            <div className="min-w-0 flex-1 text-right">
+                            <div className="min-w-0 flex-1 text-center">
                               <div className="font-bold text-sm text-[#0c2d57] truncate">{g.name}</div>
                               {userRole === 'sales_manager' && g.agent && (
                                 <div className="text-[11px] text-gray-500 truncate">סוכן: {g.agent}</div>
@@ -6669,13 +6680,13 @@ export default function App() {
                             </div>
                             <span className={`text-[10px] font-bold px-2 py-1 rounded-lg flex-shrink-0 ${badge.cls}`}>{badge.txt}</span>
                           </div>
-                          <div className="flex items-center gap-3 border-t border-gray-100 pt-2 text-[11px] text-gray-500">
+                          <div className="flex items-center justify-center gap-3 border-t border-gray-100 pt-2 text-[11px] text-gray-500">
                             <span><b className="text-gray-800">{g.quotes?.length || 0}</b> הצעות</span>
                             <span><b className="text-gray-800">{g.orders?.length || 0}</b> הזמנות</span>
-                            <span className="mr-auto font-bold text-[#004387]">₪{Math.round(g.quotesTotal + g.ordersTotal).toLocaleString('he-IL')}</span>
+                            <span className="font-bold text-[#004387]">₪{Math.round(g.quotesTotal + g.ordersTotal).toLocaleString('he-IL')}</span>
                           </div>
                           {g.oldestPendingDays > 7 && (
-                            <div className="mt-2 text-[10px] font-bold text-red-700 bg-red-50 border border-red-100 rounded-lg px-2 py-1">
+                            <div className="mt-2 text-[10px] font-bold text-red-700 bg-red-50 border border-red-100 rounded-lg px-2 py-1 text-center">
                               ממתין לחתימה {g.oldestPendingDays} ימים
                             </div>
                           )}
