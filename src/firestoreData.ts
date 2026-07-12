@@ -181,14 +181,28 @@ export async function saveQuote(data: Record<string, any>, quoteId?: string | nu
   }
 }
 
-export async function loadAgentQuotes(agentName: string): Promise<any[]> {
+export async function loadAgentQuotes(agentUid: string): Promise<any[]> {
   try {
-    const q = query(collection(db, 'quotes'), where('agentName', '==', agentName));
+    const q = query(collection(db, 'quotes'), where('agentUid', '==', agentUid));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
   } catch {
     return [];
   }
+}
+
+export function subscribeAgentQuotes(agentUid: string, cb: (quotes: any[]) => void): () => void {
+  try {
+    const qq = query(collection(db, 'quotes'), where('agentUid', '==', agentUid));
+    return onSnapshot(qq, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), (e) => console.error('subscribeAgentQuotes error:', e));
+  } catch { return () => {}; }
+}
+
+export function subscribeAllQuotes(cb: (quotes: any[]) => void): () => void {
+  try {
+    const qq = query(collection(db, 'quotes'), orderBy('createdAt', 'desc'), limit(200));
+    return onSnapshot(qq, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), (e) => console.error('subscribeAllQuotes error:', e));
+  } catch { return () => {}; }
 }
 
 export async function loadAllQuotes(): Promise<any[]> {
