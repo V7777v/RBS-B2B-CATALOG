@@ -1262,12 +1262,28 @@ const ProductDetailsView = (props: any) => {
                 מק״ט: <span className="font-mono text-gray-800 tracking-wide">{selectedProduct.sku}</span>
               </div>
 
-              <button
-                onClick={() => copyShareLink && copyShareLink('product', selectedProduct.sku || selectedProduct.id)}
-                className="w-full mb-4 sm:mb-6 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#004387] rounded-md font-bold text-[13px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-              >
-                <Link size={14} /> העתק קישור למוצר
-              </button>
+              <div className="grid grid-cols-2 gap-2 mb-4 sm:mb-6">
+                <button
+                  onClick={() => copyShareLink && copyShareLink('product', selectedProduct.sku || selectedProduct.id)}
+                  className="py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#004387] rounded-md font-bold text-[13px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Link size={14} /> העתק קישור
+                </button>
+                <button
+                  onClick={() => {
+                    const key = selectedProduct.sku || selectedProduct.id || '';
+                    const link = window.location.origin + '/?product=' + encodeURIComponent(String(key));
+                    const priceStr = (!isGuest && selectedProduct.price > 0)
+                      ? `\nמחיר מתקין: ₪${Number(selectedProduct.price).toLocaleString('he-IL')}`
+                      : '';
+                    const msg = `${selectedProduct.name}\nמק״ט: ${selectedProduct.sku || ''}${priceStr}\n\nקישור למוצר:\n${link}`;
+                    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+                  }}
+                  className="py-2 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 rounded-md font-bold text-[13px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <MessageSquare size={14} /> שלח בוואטסאפ
+                </button>
+              </div>
               
               <div className="mb-6 sm:mb-8 bg-white border-2 border-slate-100 p-5 sm:p-6 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_25px_rgba(0,0,0,0.06)] hover:border-[#004387]/25 transition-all duration-300 relative overflow-hidden text-right">
                 {/* Brand colored vertical accent bar on the right (RTL start) */}
@@ -4558,6 +4574,34 @@ export default function App() {
   };
 
   const deepLinkDoneRef = useRef(false);
+
+  const buildCategoryShareUrl = useCallback((): string => {
+    const p = new URLSearchParams();
+    if (selectedCatalog) p.set('cat', String(selectedCatalog));
+    if (selectedSubcategory) p.set('sub', String(selectedSubcategory));
+    if (selectedNestedSubcategory) p.set('nested', String(selectedNestedSubcategory));
+    if (selectedNicheCategory) p.set('niche', String(selectedNicheCategory));
+    return window.location.origin + '/?' + p.toString();
+  }, [selectedCatalog, selectedSubcategory, selectedNestedSubcategory, selectedNicheCategory]);
+
+  const copyShareCategoryLink = useCallback((mode: 'copy' | 'whatsapp') => {
+    const url = buildCategoryShareUrl();
+    const label = selectedNicheCategory || selectedNestedSubcategory || selectedSubcategory || selectedCatalog || '';
+    if (mode === 'whatsapp') {
+      const msg = `קטגוריה: ${label}\n\nצפה בקטלוג:\n${url}`;
+      window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+      return;
+    }
+    const done = () => {
+      setCopyToast('הקישור לקטגוריה הועתק');
+      window.setTimeout(() => setCopyToast(''), 2500);
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url).then(done).catch(() => { window.prompt('העתק את הקישור:', url); });
+    } else {
+      window.prompt('העתק את הקישור:', url);
+    }
+  }, [buildCategoryShareUrl, selectedCatalog, selectedSubcategory, selectedNestedSubcategory, selectedNicheCategory]);
   const [deepLinkError, setDeepLinkError] = useState<string>('');
   const [copyToast, setCopyToast] = useState<string>('');
 
@@ -5379,6 +5423,25 @@ export default function App() {
           }}
           aria-hidden="true" 
         />
+
+        {selectedCatalog && currentView !== 'product' && currentView !== 'checkout' && !searchQuery && (
+          <div className="container mx-auto px-4 pt-2">
+            <div className="flex gap-2">
+              <button
+                onClick={() => copyShareCategoryLink('copy')}
+                className="flex-1 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#004387] rounded-lg font-bold text-[12px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Link size={14} /> העתק קישור לקטגוריה
+              </button>
+              <button
+                onClick={() => copyShareCategoryLink('whatsapp')}
+                className="flex-1 py-2 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 rounded-lg font-bold text-[12px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <MessageSquare size={14} /> שלח קטגוריה בוואטסאפ
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="container mx-auto px-4 py-2">
           
@@ -6605,7 +6668,9 @@ export default function App() {
                     const retail = p.retailPrice ? ` (צרכן: ₪${p.retailPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})})` : '';
                     priceStr = ` | מחיר מתקין: ${price}${retail}`;
                   }
-                  return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ''} - כמות: ${favQuantities[f.id] || 1}${priceStr}`;
+                  const favKey = f.sku || f.id || '';
+                  const favLink = favKey ? `\n  ${window.location.origin}/?product=${encodeURIComponent(String(favKey))}` : '';
+                  return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ''} - כמות: ${favQuantities[f.id] || 1}${priceStr}${favLink}`;
                 });
                 const text = encodeURIComponent(`שלום רב,\n\nרשימת מועדפים:\n${items.join('\n')}`);
                 trackEvent('send_favorites_whatsapp', { items_count: items.length });
@@ -6627,7 +6692,9 @@ export default function App() {
                     const retail = p.retailPrice ? ` (צרכן: ₪${p.retailPrice.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})})` : '';
                     priceStr = ` | מחיר מתקין: ${price}${retail}`;
                   }
-                  return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ''} - כמות: ${favQuantities[f.id] || 1}${priceStr}`;
+                  const favKey = f.sku || f.id || '';
+                  const favLink = favKey ? `\n  ${window.location.origin}/?product=${encodeURIComponent(String(favKey))}` : '';
+                  return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ''} - כמות: ${favQuantities[f.id] || 1}${priceStr}${favLink}`;
                 });
                 const text = encodeURIComponent(`שלום רב,\n\nרשימת מועדפים:\n${items.join('\n')}`);
                 let phone = guestPhoneDest.replace(/\D/g, '');
@@ -7666,7 +7733,9 @@ export default function App() {
                         const price = p.price > 0 ? `₪${p.price.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'צור קשר';
                         priceStr = ` | מחיר מתקין: ${price}`;
                       }
-                      return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ''} - כמות: ${favQuantities[f.id] || 1}${priceStr}`;
+                      const favKey = f.sku || f.id || '';
+                      const favLink = favKey ? `\n  ${window.location.origin}/?product=${encodeURIComponent(String(favKey))}` : '';
+                      return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ''} - כמות: ${favQuantities[f.id] || 1}${priceStr}${favLink}`;
                     });
                     const text = encodeURIComponent(`שלום רב,\n\nרשימת מוצרים:\n${items.join('\n')}\n\nבברכה,\n${agentName}`);
                     trackEvent('send_favorites_whatsapp', { items_count: items.length, user_role: userRole });
