@@ -2453,6 +2453,7 @@ export default function App() {
   const [userRole, setUserRole] = useState<string>('user');
   const [agentName, setAgentName] = useState<string>('');
   const [teamOrders, setTeamOrders] = useState<any[]>([]);
+  const [agentQuotes, setAgentQuotes] = useState<any[]>([]);
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
 
@@ -2502,8 +2503,61 @@ export default function App() {
         if (parsed['כתובת אספקה'] && !group.address) group.address = parsed['כתובת אספקה'];
       }
     });
-    return Array.from(map.values());
-  }, [teamOrders]);
+    // Attach quotes to each customer group (matched by email), plus totals and status.
+    agentQuotes.forEach((q: any) => {
+      const key = String(q.customerEmail || q.customerCompany || 'לא ידוע').toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          name: q.customerCompany || q.customerEmail || 'לא ידוע',
+          email: q.customerEmail || '',
+          phone: '',
+          contactName: '',
+          address: '',
+          agent: (q.agentName || '').trim(),
+          orders: []
+        });
+      }
+      const g = map.get(key);
+      if (!g.quotes) g.quotes = [];
+      g.quotes.push(q);
+    });
+
+    const list = Array.from(map.values()).map((g: any) => {
+      const quotes = g.quotes || [];
+      const ordersTotal = (g.orders || []).reduce((s: number, o: any) => s + (Number(o.total) || 0), 0);
+      const quotesTotal = quotes.reduce((s: number, q: any) => s + (Number(q.total) || 0), 0);
+      const signed = quotes.filter((q: any) => q.status === 'approved').length;
+      const pending = quotes.filter((q: any) => q.status === 'sent').length;
+      const oldestPendingDays = quotes
+        .filter((q: any) => q.status === 'sent' && q.createdAt?.toDate)
+        .reduce((mx: number, q: any) => {
+          const d = Math.floor((Date.now() - q.createdAt.toDate().getTime()) / 86400000);
+          return d > mx ? d : mx;
+        }, 0);
+      const status = signed > 0 ? 'signed' : pending > 0 ? 'pending' : 'none';
+      return { ...g, quotes, ordersTotal, quotesTotal, signed, pending, oldestPendingDays, status };
+    });
+    list.sort((x: any, y: any) => (y.pending - x.pending) || (y.quotesTotal - x.quotesTotal));
+    return list;
+  }, [teamOrders, agentQuotes]);
+
+  const managerKpis = useMemo(() => {
+    const pending = agentQuotes.filter((q: any) => q.status === 'sent').length;
+    const now = Date.now();
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+    const signedThisMonth = agentQuotes.filter((q: any) => {
+      if (q.status !== 'approved') return false;
+      const d = q.updatedAt?.toDate ? q.updatedAt.toDate().getTime() : (q.createdAt?.toDate ? q.createdAt.toDate().getTime() : 0);
+      return d >= monthStart;
+    });
+    const revenue = signedThisMonth.reduce((s: number, q: any) => s + (Number(q.total) || 0), 0);
+    const stale = agentQuotes.filter((q: any) => {
+      if (q.status !== 'sent' || !q.createdAt?.toDate) return false;
+      return (now - q.createdAt.toDate().getTime()) / 86400000 > 7;
+    }).length;
+    return { pending, signedCount: signedThisMonth.length, revenue, stale };
+  }, [agentQuotes]);
 
   const agentsGroup = useMemo(() => {
     const defaultAgents = ['אברהם', 'מיכה', 'מוטי', 'ניר'];
@@ -2585,7 +2639,6 @@ export default function App() {
       return g.customers.length > 0;
     });
   }, [customerGroups]);
-  const [agentQuotes, setAgentQuotes] = useState<any[]>([]);
   const [showQuoteEditor, setShowQuoteEditor] = useState(false);
   const [quoteEditorCustomer, setQuoteEditorCustomer] = useState<any>(null);
   const [quoteId, setQuoteId] = useState<string | null>(null);
@@ -6522,11 +6575,73 @@ export default function App() {
                   </div>
                   <p className="text-white/60 text-[11px] mt-2">{userRole === 'sales_manager' ? 'תצוגת כל הסוכנים' : 'הלקוחות והפעילות שלך'}</p>
                 </div>
-                <div className="grid grid-cols-4 gap-2 mb-4">
-                  <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-[#004387]">{customerGroups.length}</div><div className="text-[11px] text-gray-500">לקוחות</div></div>
-                  <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-[#004387]">{teamOrders.length}</div><div className="text-[11px] text-gray-500">הזמנות</div></div>
-                  <div className="bg-amber-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-amber-600">{teamOrders.filter((o: any) => !o.status || o.status === 'sent').length}</div><div className="text-[11px] text-gray-500">חדשות</div></div>
-                  <div className="bg-gray-50 rounded-xl p-3 text-center"><div className="text-2xl font-bold text-[#004387]">{agentQuotes.length}</div><div className="text-[11px] text-gray-500">הצעות</div></div>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                    <div className="text-[11px] text-amber-800 font-bold mb-0.5">ממתין לחתימה</div>
+                    <div className="text-2xl font-extrabold text-amber-600">{managerKpis.pending}</div>
+                  </div>
+                  <div className="bg-green-50 border border-green-100 rounded-xl p-3">
+                    <div className="text-[11px] text-green-800 font-bold mb-0.5">נחתם החודש</div>
+                    <div className="text-2xl font-extrabold text-green-700">{managerKpis.signedCount}</div>
+                  </div>
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                    <div className="text-[11px] text-gray-600 font-bold mb-0.5">מחזור חתום החודש</div>
+                    <div className="text-lg font-extrabold text-[#004387]">₪{Math.round(managerKpis.revenue).toLocaleString('he-IL')}</div>
+                  </div>
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                    <div className="text-[11px] text-gray-600 font-bold mb-0.5">לקוחות פעילים</div>
+                    <div className="text-2xl font-extrabold text-[#004387]">{customerGroups.length}</div>
+                  </div>
+                </div>
+
+                {managerKpis.stale > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-3 flex items-center gap-2">
+                    <TrendingUp size={16} className="text-red-600 flex-shrink-0" />
+                    <span className="text-[12px] font-bold text-red-800">{managerKpis.stale} הצעות ממתינות מעל 7 ימים — כדאי לעקוב</span>
+                  </div>
+                )}
+
+                <div className="mb-4">
+                  <h4 className="text-xs font-bold text-gray-500 mb-2">לקוחות ({customerGroups.length})</h4>
+                  <div className="space-y-2">
+                    {customerGroups.length === 0 && (
+                      <p className="text-[11px] text-gray-400 text-center py-4">אין עדיין לקוחות עם הצעות או הזמנות.</p>
+                    )}
+                    {customerGroups.map((g: any) => {
+                      const initials = String(g.name || '?').trim().split(/\s+/).slice(0, 2).map((w: string) => w[0]).join('');
+                      const badge = g.status === 'signed'
+                        ? { txt: 'נחתם', cls: 'bg-green-100 text-green-800' }
+                        : g.status === 'pending'
+                        ? { txt: 'ממתין', cls: 'bg-amber-100 text-amber-800' }
+                        : { txt: 'ללא הצעה', cls: 'bg-gray-100 text-gray-600' };
+                      return (
+                        <div key={g.key} className="bg-white border border-gray-200 rounded-xl p-3">
+                          <div className="flex items-center gap-2.5 mb-2">
+                            <div className="w-10 h-10 rounded-lg bg-[#004387] text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
+                              {initials || '?'}
+                            </div>
+                            <div className="min-w-0 flex-1 text-right">
+                              <div className="font-bold text-sm text-[#0c2d57] truncate">{g.name}</div>
+                              {userRole === 'sales_manager' && g.agent && (
+                                <div className="text-[11px] text-gray-500 truncate">סוכן: {g.agent}</div>
+                              )}
+                            </div>
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-lg flex-shrink-0 ${badge.cls}`}>{badge.txt}</span>
+                          </div>
+                          <div className="flex items-center gap-3 border-t border-gray-100 pt-2 text-[11px] text-gray-500">
+                            <span><b className="text-gray-800">{g.quotes?.length || 0}</b> הצעות</span>
+                            <span><b className="text-gray-800">{g.orders?.length || 0}</b> הזמנות</span>
+                            <span className="mr-auto font-bold text-[#004387]">₪{Math.round(g.quotesTotal + g.ordersTotal).toLocaleString('he-IL')}</span>
+                          </div>
+                          {g.oldestPendingDays > 7 && (
+                            <div className="mt-2 text-[10px] font-bold text-red-700 bg-red-50 border border-red-100 rounded-lg px-2 py-1">
+                              ממתין לחתימה {g.oldestPendingDays} ימים
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </>
             ) : (
