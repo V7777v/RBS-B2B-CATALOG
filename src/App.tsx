@@ -3084,7 +3084,7 @@ export default function App() {
         role: userRole || 'unknown',
         hasCurrentUser: !!auth.currentUser
       });
-      setQuoteSaveError('שמירת ההצעה נכשלה. נסה שוב. אם הבעיה נמשכת, פנה למנהל המערכת.');
+      setQuoteSaveError('שמירת ההצעה נכשלה [' + (error?.code || error?.message || 'UNKNOWN') + ']. נסה שוב או פנה למנהל המערכת.');
     } finally {
       setQuoteSaving(false);
     }
