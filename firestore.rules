@@ -1,104 +1,287 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ---------- helpers ----------
+    // ==================================================
+    // Authentication helpers
+    // ==================================================
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function authEmailRaw() {
+      return signedIn()
+        ? request.auth.token.get('email', '')
+        : '';
+    }
+
+    function hasEmail() {
+      return signedIn()
+        && authEmailRaw() is string
+        && authEmailRaw().size() > 0;
+    }
+
     function userEmail() {
-      return request.auth.token.email.lower();
+      return authEmailRaw().lower().trim();
     }
-    function distDoc() {
-      return get(/databases/$(database)/documents/approvedDistributors/$(userEmail())).data;
-    }
+
+    // approvedDistributors document IDs must be:
+    // lowercase email, without leading/trailing spaces.
     function isApproved() {
-      return request.auth != null
-        && exists(/databases/$(database)/documents/approvedDistributors/$(userEmail()));
+      return hasEmail()
+        && exists(
+          /databases/$(database)/documents/approvedDistributors/$(userEmail())
+        );
     }
+
     function myRole() {
-      return distDoc().get('role', 'user');
+      return isApproved()
+        ? get(
+            /databases/$(database)/documents/approvedDistributors/$(userEmail())
+          ).data.get('role', 'user').lower().trim()
+        : 'user';
     }
+
     function isManager() {
       return isApproved() && myRole() == 'sales_manager';
     }
+
     function isAgent() {
-      return isApproved() && (myRole() == 'agent' || myRole() == 'sales_manager');
+      return isApproved()
+        && (
+          myRole() == 'agent'
+          || myRole() == 'sales_manager'
+        );
     }
+
     function myAgentName() {
-      return distDoc().get('agentName', '').trim();
+      return isApproved()
+        ? get(
+            /databases/$(database)/documents/approvedDistributors/$(userEmail())
+          ).data.get('agentName', '').trim()
+        : '';
     }
 
-    // ---------- approved distributors: self-read only ----------
+    function isNormalizedEmail(value) {
+      return value is string
+        && value.size() > 3
+        && value == value.lower().trim();
+    }
+
+    // ==================================================
+    // Approved distributors
+    // ==================================================
+
     match /approvedDistributors/{docEmail} {
-      allow get: if request.auth != null && userEmail() == docEmail;
+
+      // User may read only their own distributor record.
+      // The document ID must equal the normalized auth email.
+      allow get: if hasEmail()
+        && userEmail() == docEmail;
+
       allow list: if isManager();
-      allow write: if false;
+
+      // Managed only from Firebase Admin / Console.
+      allow create, update, delete: if false;
     }
 
-    // ---------- per-user private data ----------
+    // ==================================================
+    // Per-user private data
+    // ==================================================
+
     match /carts/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-    match /favorites/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-    match /userProfiles/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-    match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if signedIn()
+        && request.auth.uid == uid;
     }
 
-    // ---------- orders ----------
+    match /favorites/{uid} {
+      allow read, write: if signedIn()
+        && request.auth.uid == uid;
+    }
+
+    match /userProfiles/{uid} {
+      allow read, write: if signedIn()
+        && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read, write: if signedIn()
+        && request.auth.uid == uid;
+    }
+
+    // ==================================================
+    // Orders
+    // ==================================================
+
     match /orders/{orderId} {
-      // only approved customers/agents may create, and only as themselves
+
+      // Approved customers or agents may create
+      // an order only for their own authenticated UID.
       allow create: if isApproved()
         && request.resource.data.uid == request.auth.uid;
 
-      allow read: if request.auth != null && (
-        resource.data.uid == request.auth.uid ||
-        isManager() ||
-        (isAgent() && myAgentName() != '' && myAgentName() == resource.data.get('agent', '').trim())
+      allow read: if signedIn() && (
+        resource.data.uid == request.auth.uid
+        || isManager()
+        || (
+          isAgent()
+          && myAgentName() != ''
+          && myAgentName()
+            == resource.data.get('agent', '').trim()
+        )
       );
 
-      // identity fields are immutable; owner / matching agent / manager may update the rest
-      allow update: if request.auth != null
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'email', 'createdAt'])
+      // Preserve identity fields.
+      allow update: if signedIn()
+        && !request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasAny([
+            'uid',
+            'email',
+            'createdAt'
+          ])
         && (
-          resource.data.uid == request.auth.uid ||
-          isManager() ||
-          (isAgent() && myAgentName() != '' && myAgentName() == resource.data.get('agent', '').trim())
+          resource.data.uid == request.auth.uid
+          || isManager()
+          || (
+            isAgent()
+            && myAgentName() != ''
+            && myAgentName()
+              == resource.data.get('agent', '').trim()
+          )
         );
+
+      allow delete: if false;
     }
 
-    // ---------- quotes ----------
+    // ==================================================
+    // Quotes helpers
+    // ==================================================
+
+    function validNewQuote() {
+      return request.resource.data.keys().hasAll([
+          'agentUid',
+          'customerEmail',
+          'status'
+        ])
+        && request.resource.data.agentUid is string
+        && request.resource.data.agentUid
+          == request.auth.uid
+        && isNormalizedEmail(
+          request.resource.data.customerEmail
+        )
+        && request.resource.data.status is string
+        && request.resource.data.status in [
+          'draft',
+          'sent'
+        ];
+    }
+
+    function quoteIdentityUnchanged() {
+      return !request.resource.data
+        .diff(resource.data)
+        .affectedKeys()
+        .hasAny([
+          'agentUid',
+          'customerEmail',
+          'createdAt'
+        ]);
+    }
+
+    function isOwningAgent() {
+      return isAgent()
+        && resource.data.agentUid == request.auth.uid;
+    }
+
+    function isPublishedCustomerQuote() {
+      return hasEmail()
+        && resource.data.customerEmail == userEmail()
+        && resource.data.get('status', '') in [
+          'sent',
+          'approved',
+          'rejected'
+        ];
+    }
+
+    function validCustomerQuoteUpdate() {
+      return hasEmail()
+        && resource.data.customerEmail == userEmail()
+
+        // Customer may act only on a quote that was sent.
+        && resource.data.get('status', '') == 'sent'
+
+        // Customer may only approve or reject.
+        && request.resource.data.get('status', '') in [
+          'approved',
+          'rejected'
+        ]
+
+        // Customer may not change products, prices,
+        // discounts, customerEmail or agent data.
+        && request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasOnly([
+            'status',
+            'updatedAt',
+            'signature',
+            'signedBy'
+          ]);
+    }
+
+    // ==================================================
+    // Quotes
+    // ==================================================
+
     match /quotes/{quoteId} {
-      allow read: if request.auth != null && (
-        resource.data.agentUid == request.auth.uid ||
-        (resource.data.customerEmail == userEmail() && resource.data.get('status', '') in ['sent', 'approved', 'rejected']) ||
-        isManager()
+
+      // Agent reads their own quotes.
+      // Manager reads all quotes.
+      // Customer sees only published statuses — never draft.
+      allow read: if signedIn() && (
+        isOwningAgent()
+        || isManager()
+        || isPublishedCustomerQuote()
       );
 
-      // only real agents/managers may create quotes, and only as themselves
-      allow create: if isAgent() && request.resource.data.agentUid == request.auth.uid;
+      // Only an actual agent/manager may create a quote.
+      // agentUid must always be their current Firebase Auth UID.
+      allow create: if isAgent()
+        && validNewQuote();
 
-      allow update: if request.auth != null
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['agentUid', 'customerEmail', 'createdAt'])
+      allow update: if signedIn()
+        && quoteIdentityUnchanged()
         && (
-          // owning agent: full edit only while the quote is NOT approved/signed
-          (resource.data.agentUid == request.auth.uid && resource.data.get('status', '') != 'approved') ||
-          // manager: escape hatch (corrections)
-          isManager() ||
-          // customer: signing path only — 4 fields, one-way, never after approval
-          (resource.data.customerEmail == userEmail()
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'signature', 'signedBy'])
-            && resource.data.get('status', '') != 'approved')
+          // Owning agent may edit until approval.
+          (
+            isOwningAgent()
+            && resource.data.get('status', '') != 'approved'
+          )
+
+          // Manager correction path.
+          || isManager()
+
+          // Customer one-way approval/rejection path.
+          || validCustomerQuoteUpdate()
         );
 
-      // approved (signed) quotes cannot be deleted by the agent — manager only
+      // Signed quotes cannot be deleted by an agent.
       allow delete: if isManager()
-        || (request.auth != null
-            && resource.data.agentUid == request.auth.uid
-            && resource.data.get('status', '') != 'approved');
+        || (
+          isOwningAgent()
+          && resource.data.get('status', '') != 'approved'
+        );
     }
 
+    // ==================================================
+    // Default deny
+    // ==================================================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }

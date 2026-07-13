@@ -3150,11 +3150,6 @@ export default function App() {
       }
       setTimeout(() => setQuoteSuccessMsg(''), 4000);
       
-      if (userRole === 'sales_manager') {
-        loadAllQuotes().then(setAgentQuotes);
-      } else if (agentName) {
-        loadAgentQuotes(auth.currentUser?.uid || '').then(setAgentQuotes);
-      }
     } catch (error: any) {
       console.error('[Quotes] submit failed', {
         code: error?.code || error?.message || 'UNKNOWN',
@@ -3212,11 +3207,6 @@ export default function App() {
       sourceQuoteId: q.id
     });
 
-    if (userRole === 'sales_manager') {
-      loadAllQuotes().then(setAgentQuotes);
-    } else if (agentName) {
-      loadAgentQuotes(auth.currentUser?.uid || '').then(setAgentQuotes);
-    }
     } catch (error: any) {
       console.error('approveQuote failed:', error);
       alert('אישור ההצעה נכשל [' + (error?.code || error?.message || 'UNKNOWN') + ']. נסה שוב או פנה לסוכן.');
@@ -7334,11 +7324,6 @@ export default function App() {
                                 onClick={async () => {
                                   if (confirm('האם למחוק טיוטה זו?')) {
                                     await deleteQuote(q.id);
-                                    if (userRole === 'sales_manager') {
-                                      loadAllQuotes().then(setAgentQuotes);
-                                    } else if (agentName) {
-                                      loadAgentQuotes(auth.currentUser?.uid || '').then(setAgentQuotes);
-                                    }
                                   }
                                 }}
                                 className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg border-none cursor-pointer flex items-center justify-center"
@@ -7815,32 +7800,9 @@ export default function App() {
                     <p className="text-gray-500 font-normal">אינך צריך להקליד שוב את הסיסמה.</p>
                   </div>
                 ) : (
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5">הזן סיסמת מנהל:</label>
-                    <input 
-                      type="password" 
-                      placeholder="הזן את סיסמת המנהל..." 
-                      className="w-full bg-[#fdfdfd] border border-gray-200 px-3 py-2 text-sm font-medium outline-none focus:border-[#004387] transition-all"
-                      value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
-                      required
-                      name="admin_pwd_field"
-                      autoComplete="current-password"
-                    />
-
-                    {/* Checkbox to remember password inside browser */}
-                    <div className="flex items-center gap-2 mt-3 select-none">
-                      <input 
-                        type="checkbox" 
-                        id="save-pwd-checkbox"
-                        checked={saveAdminPassword}
-                        onChange={(e) => setSaveAdminPassword(e.target.checked)}
-                        className="w-3.5 h-3.5 border-gray-300 rounded text-[#004387] focus:ring-[#004387]"
-                      />
-                      <label htmlFor="save-pwd-checkbox" className="text-[11px] text-gray-500 font-medium cursor-pointer">
-                        שמור סיסמה במכשיר לצורך סנכרון מהיר בעתיד
-                      </label>
-                    </div>
+                  <div className="bg-blue-50/70 p-3 border border-blue-100 text-[11px] text-[#004387] leading-relaxed mb-1">
+                    <p className="font-bold mb-1">מחובר כמנהל מערכת</p>
+                    <p className="text-gray-500 font-normal">ההרשאה מזוהה אוטומטית מחשבון המנהל שלך — אין צורך בסיסמה. לחץ על הכפתור לסנכרון מיידי.</p>
                   </div>
                 )}
 
@@ -7866,7 +7828,7 @@ export default function App() {
                     ) : (
                       <>
                         <RefreshCw size={14} />
-                        <span>{isAdminAuth ? 'סנכרן כעת בזמן אמת' : 'אמת סיסמה וסנכרן'}</span>
+                        <span>סנכרן כעת בזמן אמת</span>
                       </>
                     )}
                   </button>
