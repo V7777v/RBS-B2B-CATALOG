@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { 
-  Star, ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut, User, Heart, Calculator, Percent, TrendingUp, PenTool, Scale, Users, Phone, Mail, MessageSquare
+  ArrowLeft, Star, ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut, User, Heart, Calculator, Percent, TrendingUp, PenTool, Scale, Users, Phone, Mail, MessageSquare
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -6098,24 +6098,26 @@ export default function App() {
                 </div>
               </div>
 
-              {/* User Action Buttons */}
-              <div className="space-y-2">
+              {/* User Action Buttons — primary = continue to catalog, secondary = deals */}
+              <div className="space-y-2.5">
                 <motion.button
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.99 }}
-                  onClick={handleGoToPromos}
-                  className="w-full bg-gradient-to-r from-[#c2410c] to-orange-500 hover:from-orange-500 hover:to-red-500 text-white font-bold py-2.5 px-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 text-xs sm:text-sm cursor-pointer border-none"
+                  onClick={handleDismissPromos}
+                  className="w-full bg-gradient-to-r from-[#004387] to-[#0c2d57] hover:from-[#0c2d57] hover:to-[#004387] text-white font-bold py-3 px-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 text-sm cursor-pointer border-none"
+                  type="button"
                 >
-                  <Flame size={14} />
-                  <span>מעבר מהיר למבצעים ומציאון</span>
+                  <span>המשך לקטלוג המלא</span>
+                  <ArrowLeft size={16} />
                 </motion.button>
 
                 <button
-                  onClick={handleDismissPromos}
-                  className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold py-2 px-3 rounded-lg text-[11px] border border-slate-200 transition-colors cursor-pointer text-center"
+                  onClick={handleGoToPromos}
+                  className="w-full bg-orange-50 hover:bg-orange-100 text-[#c2410c] font-bold py-2 px-3 rounded-lg text-xs border border-orange-200 transition-colors cursor-pointer text-center flex items-center justify-center gap-1.5"
                   type="button"
                 >
-                  המשך לקטלוג הרגיל
+                  <Flame size={13} />
+                  <span>או דלג ישר למבצעים ({(hotSaleCount || 0) + (clearanceCount || 0)})</span>
                 </button>
               </div>
             </motion.div>
