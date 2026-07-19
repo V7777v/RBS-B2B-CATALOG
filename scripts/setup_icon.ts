@@ -33,6 +33,12 @@ async function main() {
     if (!fs.existsSync(iconsDir)) fs.mkdirSync(iconsDir, { recursive: true });
 
     const buffer = await fetchImage(GOOGLE_DRIVE_ID);
+    
+    // Fetch new logo
+    const newLogoBuffer = await fetchImage('1zLQmLHHe7x2ZzGv9dYPayNUMnIGDEQli');
+    fs.writeFileSync(path.join(pubDir, 'new-logo.png'), newLogoBuffer);
+    console.log("Downloaded new-logo.png for Vercel");
+
     console.log(`Downloaded image of size ${buffer.byteLength} bytes.`);
     
     // Save original if needed
