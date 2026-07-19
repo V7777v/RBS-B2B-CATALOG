@@ -4962,16 +4962,15 @@ export default function App() {
                     setSearchQuery('');
                     navigateHome();
                   }}
-                  className="flex items-center justify-center h-10 px-1 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                  className="flex items-center justify-center h-20 w-32 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
                   aria-label="דף הבית"
                   title="דף הבית - RBS"
-                  style={{ minWidth: '5.2rem' }}
                 >
                   <img 
                     referrerPolicy="no-referrer" 
-                    src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
+                    src="/new-logo.png" 
                     alt="RBS Logo" 
-                    className="h-7 w-auto object-contain max-w-[44px] select-none" 
+                    className="h-16 w-28 object-contain select-none" 
                   />
                 </button>
 
@@ -4998,9 +4997,9 @@ export default function App() {
               <div className="hidden md:flex items-center text-sm text-[#0c2d57] opacity-85 whitespace-nowrap gap-2">
                 <img 
                   referrerPolicy="no-referrer" 
-                  src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
+                  src="/new-logo.png" 
                   alt="RBS Logo" 
-                  className="h-8 object-contain cursor-pointer hover:opacity-80 active:scale-95 transition-all" 
+                  className="h-28 w-auto object-contain cursor-pointer hover:opacity-80 active:scale-95 transition-all" 
                   onClick={() => {
                     setSearchQuery('');
                     navigateHome();
