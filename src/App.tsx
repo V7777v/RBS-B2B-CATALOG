@@ -667,9 +667,6 @@ const isNetworkCableRoll = (product: any): boolean => {
   // Is a copper network cable category/subcategory OR name mentions network cable
   const isNetworkCable = 
     cat.includes('תשתיות') ||
-    cat.includes('hikvision') ||
-    name.includes('hikvision') ||
-    (product.brand && String(product.brand).toLowerCase().includes('hikvision')) ||
     subcat.includes('כבלי רשת') ||
     subcat.includes('כבלים ואביזרים') ||
     subcat.includes('cat5') ||
