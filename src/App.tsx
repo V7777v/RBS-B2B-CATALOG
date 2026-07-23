@@ -4802,7 +4802,6 @@ export default function App() {
     const nested = (params.get('nested') || '').trim();
     const niche = (params.get('niche') || '').trim();
     if (!productKey && !cat) { deepLinkDoneRef.current = true; return; }
-    deepLinkDoneRef.current = true;
 
     if (productKey) {
       const needle = productKey.toLowerCase();
@@ -4812,11 +4811,15 @@ export default function App() {
       if (found) {
         setCurrentOptionals([]);
         navigateForward({ currentView: 'product', selectedProduct: found });
-      } else {
+        deepLinkDoneRef.current = true;
+      } else if (!hasMoreProducts) {
         setDeepLinkError('המוצר לא נמצא');
+        deepLinkDoneRef.current = true;
       }
       return;
     }
+    
+    deepLinkDoneRef.current = true;
 
     navigateForward({
       currentView: niche ? 'niche_subs' : nested ? 'nested_subs' : sub ? 'products' : 'catalog_subs',
@@ -4826,7 +4829,7 @@ export default function App() {
       selectedNicheCategory: niche || null,
       selectedProduct: null
     });
-  }, [catalogData, navigateForward]);
+  }, [catalogData, navigateForward, hasMoreProducts]);
 
   const handleCheckout = () => {
     navigateForward({
