@@ -562,15 +562,7 @@ const BrandBadge: React.FC<{brand: string}> = ({brand}) => {
 interface CatalogCardProps { catalog: any; navigateToCatalog: (name: string) => void; isNew?: boolean; }
 const CatalogCard: React.FC<CatalogCardProps> = ({catalog, navigateToCatalog, isNew}) => (
   <div onClick={() => navigateToCatalog(catalog.name)} className="group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative">
-    {isNew && (
-      <div className="absolute top-3 left-3 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[11px] sm:text-[12px] font-black px-3.5 py-1.5 rounded-full shadow-[0_4px_12px_rgba(16,185,129,0.45)] flex items-center gap-2 select-none transform -rotate-3 hover:rotate-0 hover:scale-105 transition-all">
-        <span className="relative flex h-2.5 w-2.5">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-        </span>
-        <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
-      </div>
-    )}
+    
     <div className="aspect-square w-full relative border-b border-gray-100 bg-white flex items-center justify-center p-3 sm:p-6 overflow-hidden">
       {catalog.brand && (
         <div className="absolute top-2 right-2 z-10">
@@ -579,7 +571,16 @@ const CatalogCard: React.FC<CatalogCardProps> = ({catalog, navigateToCatalog, is
       )}
       <img referrerPolicy="no-referrer" src={transformImageLink(catalog.image, 400)} alt={catalog.name} loading="lazy" decoding="async" onError={handleImageError} className="max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105"/>
     </div>
-    <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right">
+    <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right relative">
+      {isNew && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[10px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(16,185,129,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+          </span>
+          <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
+        </div>
+      )}
       <div className="min-h-[2.5rem] sm:min-h-0 flex items-center justify-center sm:justify-start mb-1 sm:mb-2 w-full">
         <h3 className="font-semibold text-[#0c2d57] text-sm sm:text-lg line-clamp-2 leading-tight text-center sm:text-right w-full">
           {catalog.name}
@@ -604,21 +605,8 @@ interface SubcategoryCardProps {
 }
 const SubcategoryCard: React.FC<SubcategoryCardProps> = ({sub, onClick, navigateToSubcategory}) => (
   <div onClick={onClick || (() => navigateToSubcategory && navigateToSubcategory(sub.name))} className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 relative border border-gray-100">
-    {sub.isComingSoon && (
-      <div className="absolute top-3 left-3 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[2px] border-white text-[11px] sm:text-[12px] font-black px-3.5 py-1.5 rounded-full shadow-[0_4px_12px_rgba(220,38,38,0.45)] flex items-center gap-2 select-none transform -rotate-3 hover:rotate-0 hover:scale-105 transition-all">
-        <Fingerprint size={14} className="text-red-100 animate-pulse" />
-        <span className="drop-shadow-md tracking-wide">בקרוב!</span>
-      </div>
-    )}
-    {sub.isNew && !sub.isComingSoon && (
-      <div className="absolute top-3 left-3 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[11px] sm:text-[12px] font-black px-3.5 py-1.5 rounded-full shadow-[0_4px_12px_rgba(16,185,129,0.45)] flex items-center gap-2 select-none transform -rotate-3 hover:rotate-0 hover:scale-105 transition-all">
-        <span className="relative flex h-2.5 w-2.5">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-        </span>
-        <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
-      </div>
-    )}
+    
+    
     <div className="relative aspect-square w-full p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
       {sub.brand && (
         <div className="absolute top-2 right-2 z-10">
@@ -631,7 +619,22 @@ const SubcategoryCard: React.FC<SubcategoryCardProps> = ({sub, onClick, navigate
         <FolderOpen className="text-gray-400 w-10 h-10 sm:w-12 sm:h-12"/>
       )}
     </div>
-    <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white text-center justify-between">
+    <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white text-center justify-between relative">
+      {sub.isComingSoon && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[2px] border-white text-[10px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(220,38,38,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
+          <Fingerprint size={12} className="text-red-100 animate-pulse" />
+          <span className="drop-shadow-md tracking-wide">בקרוב!</span>
+        </div>
+      )}
+      {sub.isNew && !sub.isComingSoon && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[10px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(16,185,129,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+          </span>
+          <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
+        </div>
+      )}
       <div className="w-full">
         <div className="min-h-[2.75rem] sm:min-h-[3rem] flex items-center justify-center mb-1 sm:mb-2 w-full">
           <h3 className="font-bold text-[#0c2d57] text-base sm:text-xl leading-snug line-clamp-2 text-center w-full">
@@ -776,21 +779,8 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
   
   return (
     <div onClick={() => navigateToProduct(product)} className={`group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}>
-      {product.isComingSoon && (
-        <div className="absolute top-3 left-3 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[2px] border-white text-[11px] sm:text-[12px] font-black px-3.5 py-1.5 rounded-full shadow-[0_4px_12px_rgba(220,38,38,0.45)] flex items-center gap-2 select-none transform rotate-3 hover:rotate-0 hover:scale-105 transition-all">
-          <Fingerprint size={14} className="text-red-100 animate-pulse" />
-          <span className="drop-shadow-md tracking-wide">בקרוב!</span>
-        </div>
-      )}
-      {product.isNew && !product.isComingSoon && (
-        <div className="absolute top-3 left-3 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[11px] sm:text-[12px] font-black px-3.5 py-1.5 rounded-full shadow-[0_4px_12px_rgba(16,185,129,0.45)] flex items-center gap-2 select-none transform rotate-3 hover:rotate-0 hover:scale-105 transition-all">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-          </span>
-          <span className="drop-shadow-md tracking-wide">חדש!</span>
-        </div>
-      )}
+      
+      
 
       {onBulkSelectionChange && !isGuest && !product.isComingSoon && (
         <div 
@@ -891,7 +881,22 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
         </button>
       </div>
       
-      <div className="p-3 sm:p-4 flex flex-col flex-grow text-center">
+      <div className="p-3 sm:p-4 flex flex-col flex-grow text-center relative">
+      {product.isComingSoon && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[2px] border-white text-[10px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(220,38,38,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
+          <Fingerprint size={12} className="text-red-100 animate-pulse" />
+          <span className="drop-shadow-md tracking-wide">בקרוב!</span>
+        </div>
+      )}
+      {product.isNew && !product.isComingSoon && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[10px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(16,185,129,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+          </span>
+          <span className="drop-shadow-md tracking-wide">חדש!</span>
+        </div>
+      )}
         <div className="text-[13px] sm:text-[15.5px] text-gray-600 font-bold mb-1.5 flex flex-row items-center justify-center gap-1 w-full flex-wrap">
           <span>מק״ט: {product.sku}</span>
         </div>

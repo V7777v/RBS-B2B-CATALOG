@@ -2,39 +2,33 @@ import fs from 'fs';
 
 let content = fs.readFileSync('src/App.tsx', 'utf-8');
 
-const t1 = `interface CatalogCardProps { catalog: any; navigateToCatalog: (name: string) => void; }
-const CatalogCard: React.FC<CatalogCardProps> = ({catalog, navigateToCatalog}) => (
-  <div onClick={() => navigateToCatalog(catalog.name)} className="group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100">`;
-
-const r1 = `interface CatalogCardProps { catalog: any; navigateToCatalog: (name: string) => void; isNew?: boolean; }
-const CatalogCard: React.FC<CatalogCardProps> = ({catalog, navigateToCatalog, isNew}) => (
-  <div onClick={() => navigateToCatalog(catalog.name)} className="group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative">
-    {isNew && (
-      <div className="absolute top-3.5 left-[-33px] z-10 w-32 py-1 bg-gradient-to-r from-emerald-700 via-emerald-500 to-emerald-700 text-white text-[9px] sm:text-[10px] font-extrabold text-center uppercase tracking-widest transform -rotate-45 shadow-[0_4px_10px_rgba(16,185,129,0.45)] border-y border-emerald-400 flex items-center justify-center gap-1.5 select-none">
-        <Sparkles size={10} className="text-emerald-100 animate-pulse" />
-        <span>חדש!</span>
+const targetBadge = `{isNew && (
+      <div className="absolute top-3 left-3 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[11px] sm:text-[12px] font-black px-3.5 py-1.5 rounded-full shadow-[0_4px_12px_rgba(16,185,129,0.45)] flex items-center gap-2 select-none transform -rotate-3 hover:rotate-0 hover:scale-105 transition-all">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+        </span>
+        <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
       </div>
     )}`;
+    
+const targetTextContainer = `<div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right relative">`;
+    
+const replacementBadge = `{isNew && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[10px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(16,185,129,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+          </span>
+          <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
+        </div>
+      )}`;
 
-const t2 = `                  {catalogFolders.map((catalog) => (
-                    <CatalogCard key={catalog.name} catalog={catalog} navigateToCatalog={navigateToCatalog} />
-                  ))}`;
-
-const r2 = `                  {catalogFolders.map((catalog) => (
-                    <CatalogCard 
-                      key={catalog.name} 
-                      catalog={catalog} 
-                      navigateToCatalog={navigateToCatalog} 
-                      isNew={catalogData.some(p => p.category === catalog.name && p.isNew)}
-                    />
-                  ))}`;
-
-
-let fails = 0;
-if (content.includes(t1)) { content = content.replace(t1, r1); } else { console.log('t1 failed'); fails++; }
-if (content.includes(t2)) { content = content.replace(t2, r2); } else { console.log('t2 failed'); fails++; }
-
-if (fails === 0) {
-  fs.writeFileSync('src/App.tsx', content);
-  console.log('SUCCESS');
+if (content.includes(targetBadge)) {
+    content = content.replace(targetBadge, ''); // remove from original place
+    content = content.replace(targetTextContainer, targetTextContainer + '\\n      ' + replacementBadge);
+    fs.writeFileSync('src/App.tsx', content);
+    console.log('SUCCESS CatalogCard');
+} else {
+    console.log('FAILED to find CatalogCard badge');
 }
