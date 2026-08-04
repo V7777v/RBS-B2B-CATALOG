@@ -372,6 +372,8 @@ const parseProductRow = (row: any) => {
   const nestedSubcategoryName = typeof row['Nested subcategory'] === 'string' ? row['Nested subcategory'].trim() : (row['Nested subcategory'] || null);
   const nicheCategoryName = typeof row['Niche Category'] === 'string' ? row['Niche Category'].trim() : (row['Niche Category'] || null);
   const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
+  const isNewColKey = Object.keys(row).find(k => k.trim().toLowerCase() === 'isnew');
+  const isNew = isNewColKey ? (row[isNewColKey]?.toString()?.trim()?.toUpperCase() === 'TRUE' || row[isNewColKey]?.toString()?.trim()?.toUpperCase() === 'YES' || row[isNewColKey]?.toString()?.trim() === 'כן') : false;
   const hotSaleKey = Object.keys(row).find((k: string) => {
       const clean = k.trim().replace(/\s+/g, ' ').toLowerCase();
       if (clean.includes('מחיר') || clean.includes('price') || clean.includes('צרכן') || clean.includes('retail') || clean.includes('ש"ח') || clean.includes('₪') || clean.includes('old') || clean.includes('קוד')) return false;
@@ -424,6 +426,7 @@ const parseProductRow = (row: any) => {
     nestedSubcategory: nestedSubcategoryName,
     nicheCategory: nicheCategoryName,
     isComingSoon: isComingSoon,
+    isNew: isNew,
     isHotSale: isHotSale,
     isClearance: isClearance,
     clearancePrice: clearancePrice,
@@ -556,9 +559,15 @@ const BrandBadge: React.FC<{brand: string}> = ({brand}) => {
   );
 };
 
-interface CatalogCardProps { catalog: any; navigateToCatalog: (name: string) => void; }
-const CatalogCard: React.FC<CatalogCardProps> = ({catalog, navigateToCatalog}) => (
-  <div onClick={() => navigateToCatalog(catalog.name)} className="group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100">
+interface CatalogCardProps { catalog: any; navigateToCatalog: (name: string) => void; isNew?: boolean; }
+const CatalogCard: React.FC<CatalogCardProps> = ({catalog, navigateToCatalog, isNew}) => (
+  <div onClick={() => navigateToCatalog(catalog.name)} className="group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative">
+    {isNew && (
+      <div className="absolute top-2 left-2 z-10 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] sm:text-[11px] font-bold px-2 py-1 rounded shadow-sm flex items-center gap-1.5 select-none transition-transform hover:scale-105">
+        <Sparkles size={12} className="text-emerald-600 animate-pulse" />
+        <span>מוצרים חדשים</span>
+      </div>
+    )}
     <div className="aspect-square w-full relative border-b border-gray-100 bg-white flex items-center justify-center p-3 sm:p-6 overflow-hidden">
       {catalog.brand && (
         <div className="absolute top-2 right-2 z-10">
@@ -596,6 +605,12 @@ const SubcategoryCard: React.FC<SubcategoryCardProps> = ({sub, onClick, navigate
       <div className="absolute top-3.5 left-[-33px] z-10 w-32 py-1 bg-gradient-to-r from-slate-900 via-red-600 to-slate-900 text-white text-[9px] sm:text-[10px] font-extrabold text-center uppercase tracking-widest transform -rotate-45 shadow-[0_4px_10px_rgba(220,38,38,0.45)] border-y border-red-500/50 flex items-center justify-center gap-1.5 select-none">
         <Fingerprint size={10} className="text-red-200 animate-pulse" />
         <span>בקרוב!</span>
+      </div>
+    )}
+    {sub.isNew && !sub.isComingSoon && (
+      <div className="absolute top-2 left-2 z-10 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] sm:text-[11px] font-bold px-2 py-1 rounded shadow-sm flex items-center gap-1.5 select-none transition-transform hover:scale-105">
+        <Sparkles size={12} className="text-emerald-600 animate-pulse" />
+        <span>מוצרים חדשים</span>
       </div>
     )}
     <div className="relative aspect-square w-full p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
@@ -759,6 +774,12 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
         <div className="absolute top-3.5 left-[-33px] z-20 w-32 py-1 bg-gradient-to-r from-slate-900 via-red-600 to-slate-900 text-white text-[9px] sm:text-[10px] font-extrabold text-center uppercase tracking-widest transform -rotate-45 shadow-[0_4px_10px_rgba(220,38,38,0.45)] border-y border-red-500/50 flex items-center justify-center gap-1.5 select-none">
           <Fingerprint size={10} className="text-red-200 animate-pulse" />
           <span>בקרוב!</span>
+        </div>
+      )}
+      {product.isNew && !product.isComingSoon && (
+        <div className="absolute top-3.5 left-[-33px] z-20 w-32 py-1 bg-gradient-to-r from-emerald-700 via-emerald-500 to-emerald-700 text-white text-[9px] sm:text-[10px] font-extrabold text-center uppercase tracking-widest transform -rotate-45 shadow-[0_4px_10px_rgba(16,185,129,0.45)] border-y border-emerald-400 flex items-center justify-center gap-1.5 select-none">
+          <Sparkles size={10} className="text-emerald-100 animate-pulse" />
+          <span>חדש!</span>
         </div>
       )}
 
@@ -1167,6 +1188,18 @@ const ProductDetailsView = (props: any) => {
                   }}
                 />
 
+                {selectedProduct.isComingSoon && (
+                  <div className="absolute top-6 left-[-40px] z-20 w-40 py-1.5 bg-gradient-to-r from-slate-900 via-red-600 to-slate-900 text-white text-xs sm:text-sm font-extrabold text-center uppercase tracking-widest transform -rotate-45 shadow-[0_4px_10px_rgba(220,38,38,0.45)] border-y border-red-500/50 flex items-center justify-center gap-2 select-none pointer-events-none">
+                    <Fingerprint size={14} className="text-red-200 animate-pulse" />
+                    <span>בקרוב!</span>
+                  </div>
+                )}
+                {selectedProduct.isNew && !selectedProduct.isComingSoon && (
+                  <div className="absolute top-6 left-[-40px] z-20 w-40 py-1.5 bg-gradient-to-r from-emerald-700 via-emerald-500 to-emerald-700 text-white text-xs sm:text-sm font-extrabold text-center uppercase tracking-widest transform -rotate-45 shadow-[0_4px_10px_rgba(16,185,129,0.45)] border-y border-emerald-400 flex items-center justify-center gap-2 select-none pointer-events-none">
+                    <Sparkles size={14} className="text-emerald-100 animate-pulse" />
+                    <span>חדש!</span>
+                  </div>
+                )}
                 {/* Visual disclaimer overlay */}
                 <div className="absolute bottom-3 left-3 bg-white/95 border border-slate-200/90 rounded-md px-2 py-1 text-[10px] sm:text-xs text-slate-500 font-extrabold shadow-sm select-none pointer-events-none z-10">
                   התמונות להמחשה בלבד
@@ -3893,6 +3926,8 @@ export default function App() {
          nicheCategory = typeof nicheCategory === 'string' ? nicheCategory.trim() : nicheCategory;
 
          const isComingSoon = row['Coming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE' || row['Cooming Soon']?.toString()?.trim()?.toUpperCase() === 'TRUE';
+         const isNewColKey = Object.keys(row).find(k => k.trim().toLowerCase() === 'isnew');
+         const isNew = isNewColKey ? (row[isNewColKey]?.toString()?.trim()?.toUpperCase() === 'TRUE' || row[isNewColKey]?.toString()?.trim()?.toUpperCase() === 'YES' || row[isNewColKey]?.toString()?.trim() === 'כן') : false;
 
          // Normalize active to boolean robustly:
          let isActive = true;
@@ -3912,6 +3947,7 @@ export default function App() {
            parentSubcategory: parentSubcategory,
            nicheCategory: nicheCategory,
            isComingSoon: isComingSoon,
+           isNew: isNew,
            image: subImage,
            active: isActive,
            brand: typeof brandValue === 'string' ? brandValue.trim() : String(brandValue).trim()
@@ -4195,6 +4231,7 @@ export default function App() {
         name: subName,
         count: count,
         isComingSoon: sheetSub?.isComingSoon === true,
+        isNew: (sheetSub?.isNew === true) || productsInCat.some(p => (p.subcategory === subName || (subName === 'Inginium Full Channel' && p.subcategory?.startsWith('Inginium - '))) && p.isNew),
         image: customImage || getFallbackImage(subName) || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(subName),
         brand: sheetSub?.brand
       };
@@ -4269,6 +4306,7 @@ export default function App() {
         name: nestedName,
         count: count,
         isComingSoon: sheetSub?.isComingSoon === true,
+        isNew: (sheetSub?.isNew === true) || prods.some(p => p.nestedSubcategory === nestedName && p.isNew),
         image: customImage || getFallbackImage(nestedName) || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(nestedName),
         brand: sheetSub?.brand
       };
@@ -4408,6 +4446,7 @@ export default function App() {
         name: nicheName,
         count: count,
         isComingSoon: sheetSub?.isComingSoon === true,
+        isNew: (sheetSub?.isNew === true) || prods.some(p => p.nicheCategory === nicheName && p.isNew),
         image: customImage || firstProductImage || 'https://placehold.co/600x400/f3f4f6/000000?text=' + encodeURIComponent(nicheName),
         brand: sheetSub?.brand
       };
@@ -5601,7 +5640,12 @@ export default function App() {
                   : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6"
                 }>
                   {catalogFolders.map((catalog) => (
-                    <CatalogCard key={catalog.name} catalog={catalog} navigateToCatalog={navigateToCatalog} />
+                    <CatalogCard 
+                      key={catalog.name} 
+                      catalog={catalog} 
+                      navigateToCatalog={navigateToCatalog} 
+                      isNew={catalogData.some(p => p.category === catalog.name && p.isNew)}
+                    />
                   ))}
                 </div>
               </div>
