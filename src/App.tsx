@@ -563,9 +563,12 @@ interface CatalogCardProps { catalog: any; navigateToCatalog: (name: string) => 
 const CatalogCard: React.FC<CatalogCardProps> = ({catalog, navigateToCatalog, isNew}) => (
   <div onClick={() => navigateToCatalog(catalog.name)} className="group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative">
     {isNew && (
-      <div className="absolute top-2 left-2 z-10 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] sm:text-[11px] font-bold px-2 py-1 rounded shadow-sm flex items-center gap-1.5 select-none transition-transform hover:scale-105">
-        <Sparkles size={12} className="text-emerald-600 animate-pulse" />
-        <span>מוצרים חדשים</span>
+      <div className="absolute top-3 left-3 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[11px] sm:text-[12px] font-black px-3.5 py-1.5 rounded-full shadow-[0_4px_12px_rgba(16,185,129,0.45)] flex items-center gap-2 select-none transform -rotate-3 hover:rotate-0 hover:scale-105 transition-all">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+        </span>
+        <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
       </div>
     )}
     <div className="aspect-square w-full relative border-b border-gray-100 bg-white flex items-center justify-center p-3 sm:p-6 overflow-hidden">
@@ -602,15 +605,18 @@ interface SubcategoryCardProps {
 const SubcategoryCard: React.FC<SubcategoryCardProps> = ({sub, onClick, navigateToSubcategory}) => (
   <div onClick={onClick || (() => navigateToSubcategory && navigateToSubcategory(sub.name))} className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 relative border border-gray-100">
     {sub.isComingSoon && (
-      <div className="absolute top-3.5 left-[-33px] z-10 w-32 py-1 bg-gradient-to-r from-slate-900 via-red-600 to-slate-900 text-white text-[9px] sm:text-[10px] font-extrabold text-center uppercase tracking-widest transform -rotate-45 shadow-[0_4px_10px_rgba(220,38,38,0.45)] border-y border-red-500/50 flex items-center justify-center gap-1.5 select-none">
-        <Fingerprint size={10} className="text-red-200 animate-pulse" />
-        <span>בקרוב!</span>
+      <div className="absolute top-3 left-3 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[2px] border-white text-[11px] sm:text-[12px] font-black px-3.5 py-1.5 rounded-full shadow-[0_4px_12px_rgba(220,38,38,0.45)] flex items-center gap-2 select-none transform -rotate-3 hover:rotate-0 hover:scale-105 transition-all">
+        <Fingerprint size={14} className="text-red-100 animate-pulse" />
+        <span className="drop-shadow-md tracking-wide">בקרוב!</span>
       </div>
     )}
     {sub.isNew && !sub.isComingSoon && (
-      <div className="absolute top-2 left-2 z-10 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] sm:text-[11px] font-bold px-2 py-1 rounded shadow-sm flex items-center gap-1.5 select-none transition-transform hover:scale-105">
-        <Sparkles size={12} className="text-emerald-600 animate-pulse" />
-        <span>מוצרים חדשים</span>
+      <div className="absolute top-3 left-3 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[11px] sm:text-[12px] font-black px-3.5 py-1.5 rounded-full shadow-[0_4px_12px_rgba(16,185,129,0.45)] flex items-center gap-2 select-none transform -rotate-3 hover:rotate-0 hover:scale-105 transition-all">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+        </span>
+        <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
       </div>
     )}
     <div className="relative aspect-square w-full p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
@@ -771,15 +777,18 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
   return (
     <div onClick={() => navigateToProduct(product)} className={`group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}>
       {product.isComingSoon && (
-        <div className="absolute top-3.5 left-[-33px] z-20 w-32 py-1 bg-gradient-to-r from-slate-900 via-red-600 to-slate-900 text-white text-[9px] sm:text-[10px] font-extrabold text-center uppercase tracking-widest transform -rotate-45 shadow-[0_4px_10px_rgba(220,38,38,0.45)] border-y border-red-500/50 flex items-center justify-center gap-1.5 select-none">
-          <Fingerprint size={10} className="text-red-200 animate-pulse" />
-          <span>בקרוב!</span>
+        <div className="absolute top-3 left-3 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[2px] border-white text-[11px] sm:text-[12px] font-black px-3.5 py-1.5 rounded-full shadow-[0_4px_12px_rgba(220,38,38,0.45)] flex items-center gap-2 select-none transform rotate-3 hover:rotate-0 hover:scale-105 transition-all">
+          <Fingerprint size={14} className="text-red-100 animate-pulse" />
+          <span className="drop-shadow-md tracking-wide">בקרוב!</span>
         </div>
       )}
       {product.isNew && !product.isComingSoon && (
-        <div className="absolute top-3.5 left-[-33px] z-20 w-32 py-1 bg-gradient-to-r from-emerald-700 via-emerald-500 to-emerald-700 text-white text-[9px] sm:text-[10px] font-extrabold text-center uppercase tracking-widest transform -rotate-45 shadow-[0_4px_10px_rgba(16,185,129,0.45)] border-y border-emerald-400 flex items-center justify-center gap-1.5 select-none">
-          <Sparkles size={10} className="text-emerald-100 animate-pulse" />
-          <span>חדש!</span>
+        <div className="absolute top-3 left-3 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[11px] sm:text-[12px] font-black px-3.5 py-1.5 rounded-full shadow-[0_4px_12px_rgba(16,185,129,0.45)] flex items-center gap-2 select-none transform rotate-3 hover:rotate-0 hover:scale-105 transition-all">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+          </span>
+          <span className="drop-shadow-md tracking-wide">חדש!</span>
         </div>
       )}
 
@@ -1189,15 +1198,18 @@ const ProductDetailsView = (props: any) => {
                 />
 
                 {selectedProduct.isComingSoon && (
-                  <div className="absolute top-6 left-[-40px] z-20 w-40 py-1.5 bg-gradient-to-r from-slate-900 via-red-600 to-slate-900 text-white text-xs sm:text-sm font-extrabold text-center uppercase tracking-widest transform -rotate-45 shadow-[0_4px_10px_rgba(220,38,38,0.45)] border-y border-red-500/50 flex items-center justify-center gap-2 select-none pointer-events-none">
-                    <Fingerprint size={14} className="text-red-200 animate-pulse" />
-                    <span>בקרוב!</span>
+                  <div className="absolute top-4 left-4 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[3px] border-white text-[12px] sm:text-[14px] font-black px-4 py-2 rounded-full shadow-[0_4px_12px_rgba(220,38,38,0.45)] flex items-center gap-2.5 select-none transform rotate-2 pointer-events-none">
+                    <Fingerprint size={16} className="text-red-100 animate-pulse" />
+                    <span className="drop-shadow-md tracking-wide">בקרוב!</span>
                   </div>
                 )}
                 {selectedProduct.isNew && !selectedProduct.isComingSoon && (
-                  <div className="absolute top-6 left-[-40px] z-20 w-40 py-1.5 bg-gradient-to-r from-emerald-700 via-emerald-500 to-emerald-700 text-white text-xs sm:text-sm font-extrabold text-center uppercase tracking-widest transform -rotate-45 shadow-[0_4px_10px_rgba(16,185,129,0.45)] border-y border-emerald-400 flex items-center justify-center gap-2 select-none pointer-events-none">
-                    <Sparkles size={14} className="text-emerald-100 animate-pulse" />
-                    <span>חדש!</span>
+                  <div className="absolute top-4 left-4 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[3px] border-white text-[12px] sm:text-[14px] font-black px-4 py-2 rounded-full shadow-[0_4px_12px_rgba(16,185,129,0.45)] flex items-center gap-2.5 select-none transform rotate-2 animate-pulse pointer-events-none">
+                    <span className="relative flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                    </span>
+                    <span className="drop-shadow-md tracking-wide">מוצר חדש!</span>
                   </div>
                 )}
                 {/* Visual disclaimer overlay */}
