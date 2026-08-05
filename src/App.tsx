@@ -4302,13 +4302,14 @@ export default function App() {
       let count = 0;
       let firstProductImage = null;
       
+      let prods: any[] = [];
       if (selectedSubcategory === 'Inginium Full Channel' || selectedSubcategory === 'מתגי ליבה ורשת מנוהלים') {
          // for these, the nested name is actually the subcategory name in products
-         const prods = productsInCat.filter(p => p.subcategory === nestedName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם');
+         prods = productsInCat.filter(p => p.subcategory === nestedName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם');
          count = prods.length;
          firstProductImage = prods.find(p => p.images[0] && !p.images[0].includes('No+Image') && !p.images[0].includes('no+image') && !p.images[0].includes('placehold.co'))?.images[0];
       } else {
-         const prods = productsInCat.filter(p => p.subcategory === selectedSubcategory && p.nestedSubcategory === nestedName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם');
+         prods = productsInCat.filter(p => p.subcategory === selectedSubcategory && p.nestedSubcategory === nestedName && p.name !== 'מוצר הדגמה' && p.name !== 'קטגוריית אם');
          count = prods.length;
          firstProductImage = prods.find(p => p.images[0] && !p.images[0].includes('No+Image') && !p.images[0].includes('no+image') && !p.images[0].includes('placehold.co'))?.images[0];
          // Fallback if they are directly subcategories instead of nested

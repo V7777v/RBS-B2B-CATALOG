@@ -74,7 +74,7 @@ class AppErrorBoundary extends React.Component<{ children: React.ReactNode }, St
           <h1 style={{ fontSize: '21px', fontWeight: 800, color: '#0c2d57', margin: '0 0 8px' }}>
             אירעה שגיאה בלתי צפויה
           </h1>
-          <p style={{ fontSize: '15px', color: '#5b6675', lineHeight: 1.6, margin: '0 0 22px' }}>
+          <p style={{ fontSize: '15px', color: '#5b6675', lineHeight: 1.6, margin: '0 0 22px' }}>{this.state.message}<br/>
             משהו השתבש בטעינת העמוד. אפשר לרענן — ואם זה חוזר, נקו את המטמון וטענו מחדש.
           </p>
 
