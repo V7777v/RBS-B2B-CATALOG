@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { 
-  ArrowLeft, Star, ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut, User, Heart, Calculator, Percent, TrendingUp, PenTool, Scale, Users, Phone, Mail, MessageSquare
+  ArrowLeft, Star, ShoppingCart, Search, Menu, X, ChevronLeft, ChevronRight, FileText, File, Video, Home, Plus, Minus, Trash2, CheckCircle, Package, FolderOpen, Loader2, Lock, Server, Eye, EyeOff, Flame, ZoomIn, Youtube, PlayCircle, BookOpen, ShieldCheck, Download, Link, Fingerprint, RefreshCw, Tag, Check, ChevronUp, ChevronDown, Sparkles, LogOut, User, Heart, Calculator, Percent, TrendingUp, PenTool, Scale, Users, Phone, Mail, MessageSquare, Copy
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { motion, AnimatePresence } from 'motion/react';
@@ -559,6 +559,28 @@ const BrandBadge: React.FC<{brand: string}> = ({brand}) => {
   );
 };
 
+
+const CopyToClipboard = ({ text }: { text: string }) => {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button 
+      onClick={handleCopy} 
+      title="העתק מק״ט"
+      className="p-1 text-gray-400 hover:text-[#004387] bg-white rounded-md border border-gray-200 hover:border-[#004387] hover:bg-blue-50 transition-colors mr-1.5 focus:outline-none flex-shrink-0 flex items-center justify-center active:scale-95"
+    >
+      {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+    </button>
+  );
+};
+
 interface CatalogCardProps { catalog: any; navigateToCatalog: (name: string) => void; isNew?: boolean; }
 const CatalogCard: React.FC<CatalogCardProps> = ({catalog, navigateToCatalog, isNew}) => (
   <div onClick={() => navigateToCatalog(catalog.name)} className="group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative">
@@ -898,7 +920,7 @@ const ProductCard = React.memo(({product, navigateToProduct, addToCart, bulkSele
         </div>
       )}
         <div className="text-[13px] sm:text-[15.5px] text-gray-600 font-bold mb-1.5 flex flex-row items-center justify-center gap-1 w-full flex-wrap">
-          <span>מק״ט: {product.sku}</span>
+          <span className="flex items-center justify-center">מק״ט: <span className="font-mono mr-1">{product.sku}</span><CopyToClipboard text={product.sku} /></span>
         </div>
         <div className="min-h-[4.5rem] flex items-start justify-center mb-2">
           <h3 className="text-[#0c2d57] text-base sm:text-lg font-bold line-clamp-3 leading-snug text-center w-full">{product.name}</h3>
@@ -1310,8 +1332,8 @@ const ProductDetailsView = (props: any) => {
                 )}
               </div>
               <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] mb-2 leading-tight">{selectedProduct.name}</h1>
-              <div className="text-gray-600 mb-2 text-[15px] sm:text-[18px] font-bold text-center bg-gray-50 py-2 border border-gray-200 rounded-md">
-                מק״ט: <span className="font-mono text-gray-800 tracking-wide">{selectedProduct.sku}</span>
+              <div className="text-gray-600 mb-2 text-[15px] sm:text-[18px] font-bold bg-gray-50 py-2 border border-gray-200 rounded-md flex items-center justify-center">
+                <div className="flex items-center justify-center">מק״ט: <span className="font-mono text-gray-800 tracking-wide mr-1.5">{selectedProduct.sku}</span><CopyToClipboard text={selectedProduct.sku} /></div>
               </div>
 
               <div className="grid grid-cols-2 gap-2 mb-4 sm:mb-6">
@@ -2258,7 +2280,7 @@ const CheckoutView = (props: any) => {
                     <img referrerPolicy="no-referrer" loading="lazy" src={transformImageLink(item.images[0], 120)} alt={item.name} onError={handleImageError} className="w-16 h-16 object-contain bg-[#f2f2f2] p-1" />
                     <div className="flex-grow">
                       <div className="font-semibold text-[#0c2d57]">{item.name}</div>
-                      <div className="text-[15px] font-bold text-gray-600 mb-2 text-center bg-gray-50 py-1 rounded border border-gray-100">מק״ט: <span className="font-mono">{item.sku}</span></div>
+                      <div className="text-[15px] font-bold text-gray-600 mb-2 flex items-center justify-center bg-gray-50 py-1 rounded border border-gray-100">מק״ט: <span className="font-mono">{item.sku}</span><CopyToClipboard text={item.sku} /></div>
                       {item.optionals && item.optionals.length > 0 && (
                         <div className="text-xs text-gray-600 mb-2 bg-gray-50 border border-gray-200 p-2 rounded">
                           <strong className="block mb-1">תוספות מצורפות לארון:</strong>
@@ -5849,7 +5871,7 @@ export default function App() {
                       </div>
                       <div className="flex-col flex flex-grow">
                         <div className="font-semibold text-sm text-[#0c2d57] line-clamp-2">{item.name}</div>
-                        <div className="text-[15px] font-bold text-gray-700 mt-2 text-center bg-gray-50 py-1.5 rounded border border-gray-100">מק״ט: <span className="font-mono">{item.sku}</span></div>
+                        <div className="text-[15px] font-bold text-gray-700 mt-2 flex items-center justify-center bg-gray-50 py-1.5 rounded border border-gray-100">מק״ט: <span className="font-mono">{item.sku}</span><CopyToClipboard text={item.sku} /></div>
                         
                         {item.isClearance && (
                           <div className="text-[10px] text-teal-700 font-bold mt-1.5 flex items-center gap-1 bg-teal-50/50 p-1 w-fit rounded border border-teal-100">
