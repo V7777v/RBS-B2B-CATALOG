@@ -5345,7 +5345,7 @@ export default function App() {
                   }}
                   className="text-sm font-bold text-[#004387] px-2 py-1.5 focus:outline-none shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                 >
-                  биטול
+                  ביטול
                 </button>
               )}
             </div>
