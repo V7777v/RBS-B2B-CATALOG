@@ -857,11 +857,11 @@ const MakatBadge = ({
     <button
       onClick={handleCopy}
       title="העתק מק״ט"
-      className={`group/makat inline-flex items-center justify-center gap-2.5 bg-gray-50 hover:bg-blue-50 active:bg-blue-100/80 border border-gray-200 hover:border-[#004387] active:border-[#002f5e] transition-all rounded-xl py-3.5 px-5 sm:py-2 sm:px-4 w-full sm:w-auto cursor-pointer focus:outline-none select-none touch-manipulation min-h-[48px] sm:min-h-[auto] ${className}`}
+      className={`group/makat inline-flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 bg-gray-50 hover:bg-blue-50 active:bg-blue-100/80 border border-gray-200 hover:border-[#004387] active:border-[#002f5e] transition-all rounded-xl py-3.5 px-5 sm:py-2 sm:px-4 w-full sm:w-auto cursor-pointer focus:outline-none select-none touch-manipulation min-h-[48px] sm:min-h-[auto] ${className}`}
     >
-      <span className="text-gray-600 group-hover/makat:text-[#0c2d57] transition-colors text-base sm:text-sm font-bold flex items-center">
+      <span className="text-gray-600 group-hover/makat:text-[#0c2d57] transition-colors text-sm sm:text-sm font-bold flex flex-wrap items-center justify-center text-center">
         מק״ט:{" "}
-        <span className="font-mono mr-1.5 tracking-wide text-gray-800 group-hover/makat:text-[#004387]">
+        <span dir="ltr" className="font-mono mx-1 tracking-wide text-gray-800 group-hover/makat:text-[#004387] break-all">
           {sku}
         </span>
       </span>
@@ -1241,8 +1241,8 @@ const ProductCard = React.memo(
             className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105 ${product.isComingSoon ? "opacity-70" : ""}`}
           />
 
-          {/* Visual disclaimer overlay */}
-          <div className="absolute bottom-2 left-2 bg-white/90 border border-gray-200/80 rounded px-1.5 py-0.5 text-[8px] sm:text-[9px] text-gray-500 font-semibold shadow-2xs select-none pointer-events-none">
+          {/* Visual disclaimer overlay - Moved to top left to avoid overlap with action buttons */}
+          <div className="absolute top-2 left-2 z-10 bg-white/90 border border-gray-200/80 rounded px-1.5 py-0.5 text-[8px] sm:text-[9px] text-gray-500 font-semibold shadow-2xs select-none pointer-events-none">
             תמונות להמחשה בלבד
           </div>
           {/* BrandBadge stays peaceful and elegant on the top right */}
@@ -1662,11 +1662,7 @@ const ProductDetailsView = (props: any) => {
       if (carousel) {
         const activeThumb = carousel.children[newIndex] as HTMLElement;
         if (activeThumb) {
-          const scrollLeft =
-            activeThumb.offsetLeft -
-            carousel.clientWidth / 2 +
-            activeThumb.clientWidth / 2;
-          carousel.scrollTo({ left: scrollLeft, behavior: "smooth" });
+          activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
         }
       }
     }, 50);
@@ -1681,11 +1677,7 @@ const ProductDetailsView = (props: any) => {
       if (carousel) {
         const activeThumb = carousel.children[newIndex] as HTMLElement;
         if (activeThumb) {
-          const scrollLeft =
-            activeThumb.offsetLeft -
-            carousel.clientWidth / 2 +
-            activeThumb.clientWidth / 2;
-          carousel.scrollTo({ left: scrollLeft, behavior: "smooth" });
+          activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
         }
       }
     }, 50);
@@ -1809,14 +1801,7 @@ const ProductDetailsView = (props: any) => {
                             idx
                           ] as HTMLElement;
                           if (activeThumb) {
-                            const scrollLeft =
-                              activeThumb.offsetLeft -
-                              carousel.clientWidth / 2 +
-                              activeThumb.clientWidth / 2;
-                            carousel.scrollTo({
-                              left: scrollLeft,
-                              behavior: "smooth",
-                            });
+                            activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
                           }
                         }
                       }}
@@ -7145,11 +7130,11 @@ export default function App() {
                     id="mobile-nav-hamburger"
                     type="button"
                     onClick={() => setMobileMenuOpen(true)}
-                    className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 rounded-lg shadow-sm transition-all duration-200 active:scale-95 flex-shrink-0"
+                    className="flex items-center justify-center w-[42px] h-[42px] sm:w-12 sm:h-12 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 rounded-lg shadow-sm transition-all duration-200 active:scale-95 flex-shrink-0"
                     aria-label="פתח תפריט"
                     title="תפריט ניווט"
                   >
-                    <Menu size={30} className="stroke-[2.5]" />
+                    <Menu size={26} className="stroke-[2.5] sm:w-[30px] sm:h-[30px]" />
                   </button>
                   <div className="h-9 w-[1px] bg-gray-300/60 mx-0.5"></div>
                   {/* 2. Back Button (ChevronRight for RTL back) */}
@@ -7157,11 +7142,11 @@ export default function App() {
                     id="mobile-nav-back"
                     type="button"
                     onClick={() => goBack()}
-                    className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                    className="flex items-center justify-center w-[42px] h-[42px] sm:w-12 sm:h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
                     aria-label="אחורה"
                     title="חזור אחורה"
                   >
-                    <ChevronRight size={28} className="stroke-[2.5]" />
+                    <ChevronRight size={26} className="stroke-[2.5] sm:w-[28px] sm:h-[28px]" />
                   </button>
                   {/* 3. Forward Button (ChevronLeft for RTL forward) */}
                   <button
@@ -7172,11 +7157,11 @@ export default function App() {
                         window.history.forward();
                       }
                     }}
-                    className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                    className="flex items-center justify-center w-[42px] h-[42px] sm:w-12 sm:h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
                     aria-label="קדימה"
                     title="חזור קדימה"
                   >
-                    <ChevronLeft size={28} className="stroke-[2.5]" />
+                    <ChevronLeft size={26} className="stroke-[2.5] sm:w-[28px] sm:h-[28px]" />
                   </button>
                   {/* 4. Clickable RBS Logo / Home Button */}
                   <button
@@ -7186,7 +7171,7 @@ export default function App() {
                       setSearchQuery("");
                       navigateHome();
                     }}
-                    className="flex items-center justify-center h-20 w-32 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                    className="flex items-center justify-center h-[42px] w-[88px] sm:h-12 sm:w-28 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
                     aria-label="דף הבית"
                     title="דף הבית - RBS"
                   >
@@ -7194,7 +7179,7 @@ export default function App() {
                       referrerPolicy="no-referrer"
                       src="/new-logo.png"
                       alt="RBS Logo"
-                      className="h-16 w-28 object-contain select-none"
+                      className="h-[32px] w-[72px] sm:h-10 sm:w-24 object-contain select-none"
                     />
                   </button>
                 </div>
@@ -7817,27 +7802,30 @@ export default function App() {
                   className="fixed inset-0 bg-black/60 backdrop-blur-sm"
                   onClick={() => setMobileMenuOpen(false)}
                 ></div>
-                <div className="relative w-4/5 max-w-sm bg-white h-full shadow-xl p-4 overflow-y-auto">
-                  <button
-                    className="absolute top-4 left-4 !p-2 !m-0 bg-[#f2f2f2] text-gray-600 hover:text-[#004387] border-none"
-                    onClick={() => setMobileMenuOpen(false)}
-                    aria-label="סגור תפריט"
-                  >
-                    <X size={20} />
-                  </button>
-                  <h2
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      if (!isAdmin) return;
-                      setAdminError("");
-                      setSyncSuccessMsg("");
-                      setShowAdminSyncModal(true);
-                    }}
-                    className="font-bold text-xl mb-6 mt-2 text-[#0c2d57] cursor-pointer select-none active:text-[#c2410c] transition-colors"
-                  >
-                    ניווט מהיר
-                  </h2>
-                  <ul className="space-y-4">
+                <div className="relative w-4/5 max-w-sm bg-white h-full shadow-xl flex flex-col">
+                  <div className="flex-shrink-0 flex items-center justify-between p-4 border-b border-gray-100">
+                    <h2
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        if (!isAdmin) return;
+                        setAdminError("");
+                        setSyncSuccessMsg("");
+                        setShowAdminSyncModal(true);
+                      }}
+                      className="font-bold text-xl text-[#0c2d57] cursor-pointer select-none active:text-[#c2410c] transition-colors"
+                    >
+                      ניווט מהיר
+                    </h2>
+                    <button
+                      className="!p-2 !m-0 bg-[#f2f2f2] text-gray-600 hover:text-[#004387] border-none rounded-md"
+                      onClick={() => setMobileMenuOpen(false)}
+                      aria-label="סגור תפריט"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4">
+                    <ul className="space-y-4">
                     <li>
                       <button
                         onClick={navigateHome}
@@ -7858,6 +7846,7 @@ export default function App() {
                       </li>
                     ))}
                   </ul>
+                  </div>
                 </div>
               </div>
             )}
@@ -12702,7 +12691,7 @@ export default function App() {
               </div>
               <div
                 className="overflow-auto flex-grow"
-                style={{ WebkitOverflowScrolling: "touch" }}
+                style={{ WebkitOverflowScrolling: "touch", paddingBottom: "env(safe-area-inset-bottom)" }}
               >
                 <table
                   className="text-sm border-collapse"
