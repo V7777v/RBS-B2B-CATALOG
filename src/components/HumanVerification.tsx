@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShieldCheck, Lock, Sparkles, Shield, MousePointerClick } from 'lucide-react';
+import { ShieldCheck, Lock, Sparkles, Shield, Fingerprint } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const HumanVerification = ({ onVerified }: { onVerified: () => void }) => {
@@ -226,7 +226,7 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
                 />
               )}
               
-              <MousePointerClick size={42} className={`${isPressing && !isVerified ? 'animate-pulse text-cyan-200' : ''}`} />
+              <Fingerprint size={42} className={`${isPressing && !isVerified ? 'animate-pulse text-cyan-200' : ''}`} />
               
               <span className="text-[10px] mt-1.5 font-bold uppercase tracking-wider opacity-90 block">
                 {isVerified ? 'מאומת' : isPressing ? 'מחזיק...' : 'החזק כאן'}

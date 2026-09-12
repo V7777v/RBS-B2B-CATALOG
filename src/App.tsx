@@ -5138,10 +5138,11 @@ export default function App() {
       const hasSeen =
         sessionStorage.getItem("dismissed_promo_banner") === "true";
       if (hasPromos && !hasSeen) {
-        const timer = setTimeout(() => {
-          setShowPromoBanner(true);
-        }, 1200); // 1.2s delay for a highly native & elegant pop-in effect
-        return () => clearTimeout(timer);
+        // Hot Sale popup disabled for now
+        // const timer = setTimeout(() => {
+        //   setShowPromoBanner(true);
+        // }, 1200);
+        // return () => clearTimeout(timer);
       }
     }
   }, [isLoading, catalogData, currentView]);
