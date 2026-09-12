@@ -491,6 +491,14 @@ const parseProductRow = (row: any) => {
     typeof row["Niche Category"] === "string"
       ? row["Niche Category"].trim()
       : row["Niche Category"] || null;
+  const activeColKey = Object.keys(row).find(
+    (k) => k.trim().toLowerCase() === "active" || k.trim() === "פעיל",
+  );
+  const activeVal = activeColKey ? String(row[activeColKey] || "").trim().toLowerCase() : "";
+  const isActive = activeColKey
+    ? !(activeVal === "false" || activeVal === "no" || activeVal === "0" || activeVal === "לא" || activeVal === "n" || activeVal === "f" || activeVal === "לא פעיל")
+    : true;
+
   const isComingSoon =
     row["Coming Soon"]?.toString()?.trim()?.toUpperCase() === "TRUE" ||
     row["Cooming Soon"]?.toString()?.trim()?.toUpperCase() === "TRUE";
@@ -637,6 +645,7 @@ const parseProductRow = (row: any) => {
     nestedSubcategory: nestedSubcategoryName,
     nicheCategory: nicheCategoryName,
     isComingSoon: isComingSoon,
+    active: isActive,
     isNew: isNew,
     isHotSale: isHotSale,
     isClearance: isClearance,
@@ -886,6 +895,14 @@ const CatalogCard: React.FC<CatalogCardProps> = ({
   isNew,
 }) => (
   <div
+    role="button"
+    tabIndex={0}
+    onKeyDown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        navigateToCatalog(catalog.name);
+      }
+    }}
     onClick={() => navigateToCatalog(catalog.name)}
     className="group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative"
   >
@@ -1164,6 +1181,14 @@ const ProductCard = React.memo(
 
     return (
       <div
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            navigateToProduct(product);
+          }
+        }}
         onClick={() => navigateToProduct(product)}
         className={`group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}
       >
@@ -3485,14 +3510,23 @@ const CheckoutView = (props: any) => {
 };
 /* ===== end hoisted ===== */
 const GuestNoticeModal = ({ onDismiss }: { onDismiss: () => void }) => {
+  React.useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onDismiss();
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [onDismiss]);
+
   return (
     <div
       className="fixed inset-0 z-[9999] bg-black/70 flex items-center justify-center p-4 animate-fade-in"
       dir="rtl"
       role="dialog"
       aria-modal="true"
+      onClick={onDismiss}
     >
-      <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-[560px] w-full text-center shadow-2xl relative">
+      <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-[560px] w-full text-center shadow-2xl relative" onClick={e => e.stopPropagation()}>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0c2d57] mb-3">
           הקטלוג בהרצה
         </h2>

@@ -186,200 +186,13 @@ const LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS = 30; // 30 queries per hour
 
 // API endpoint to serve chat requests safely
+import advisorHandler from "./api/advisor/chat.js";
+
+// API endpoint to serve chat requests safely
 app.post("/api/advisor/chat", async (req, res) => {
-  try {
-    const { message, history = [], forceAI = false } = req.body;
-    if (!message) {
-      return res.status(400).json({ error: "Message content is required" });
-    }
-
-    // Rate Limiting to protect tokens
-    const ip = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || 'unknown-ip').split(',')[0].trim();
-    const now = Date.now();
-    let userLimit = chatRateLimits.get(ip);
-    
-    if (!userLimit || now > userLimit.resetTime) {
-      userLimit = {
-        count: 0,
-        resetTime: now + LIMIT_WINDOW_MS
-      };
-      chatRateLimits.set(ip, userLimit);
-    }
-    
-    if (userLimit.count >= MAX_REQUESTS) {
-      const remainingMinutes = Math.max(1, Math.ceil((userLimit.resetTime - now) / 60000));
-      return res.json({
-        type: "ai_response",
-        text: `⚠️ **הגעת למכסת השאלות המותרת ב-RBS Expert לסבב זה.**\n\nעל מנת לשמור על יציבות המערכת ולמנוע עומס על משאבי השרת ומפתחות ה-API, השימוש ביועץ ההנדסי מוגבל לעד ${MAX_REQUESTS} פניות בשעה לכל משתמש.\n\nמכסת הפניות שלך תתאפס אוטומטית בעוד כ-**${remainingMinutes} דקות**. תודה על ההבנה והסבלנות! ⏱️`,
-        sources: []
-      });
-    }
-    
-    // Increment count
-    userLimit.count += 1;
-
-    // Check if GEMINI_API_KEY is defined and is valid
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey.trim() === "") {
-      return res.json({
-        type: "ai_response",
-        text: `⚠️ **חיבור ה-API של Google אינו פעיל עדיין לחשבונך במערכת.**
-
-כדי שתוכל להשתמש ב-**RBS Expert** (היועץ ההנדסי והטכני החכם), מנהל המערכת צריך להגדיר את מפתח ה-API האישי שלכם בפורטל הבנייה:
-1. פתח את תפריט **Settings** (הגדרות) ב-AI Studio בצד העמוד.
-2. לחץ על **Secrets** (סודות ומפתחות).
-3. הוסף רשומה חדשה עם השם \`GEMINI_API_KEY\` והדבק שם את מפתח ה-API האישי שקיבלת מ-Google AI Studio.
-
-ברגע שתגדיר מפתח זה, המערכת תתחבר אוטומטית ללא מידע חסר לפאנל! ✨`,
-        sources: []
-      });
-    }
-
-    // 1. Get complete context from RBS catalog
-    const products = await getCatalogDataContext();
-
-    // 2. Pre-filter relevant products
-    const { matches: relevantProducts, maxScore, tokenCount } = findRelevantProducts(message, products);
-
-    // Check if we can do a direct response
-    // If it's not forced to AI, and we have a strong match (max score > 1 or it's a short product-like query)
-    const isStrongMatch = relevantProducts.length > 0 && (maxScore >= 2 || (maxScore === 1 && tokenCount <= 3));
-    if (!forceAI && isStrongMatch) {
-      return res.json({
-        type: "direct_products",
-        products: relevantProducts.slice(0, 5), // Return up to 5 top products directly
-        text: "מצאתי את המוצרים הבאים בקטלוג שיכולים להתאים לשאלתך:",
-        sources: []
-      });
-    }
-
-    // Decide whether to use AI caching or inline catalog
-    let catalogSummaryString = "";
-    if (relevantProducts.length > 0) {
-      catalogSummaryString = relevantProducts.map(p => {
-        let line = `SKU: ${p.sku} | Name: ${p.name} | Category: ${p.category} | Sub: ${p.subcategory} | Desc: ${p.desc}`;
-        if (p.specsLink) line += ` | Specs Link: ${p.specsLink}`;
-        if (p.manualLink) line += ` | Manual Link: ${p.manualLink}`;
-        return line;
-      }).join("\n");
-    } else {
-      catalogSummaryString = products.map(p => {
-        let line = `SKU: ${p.sku} | Name: ${p.name} | Category: ${p.category} | Sub: ${p.subcategory}`;
-        return line;
-      }).join("\n");
-    }
-
-    const systemInstruction = getSystemInstructionTemplate(catalogSummaryString);
-
-    // 3. Initialize Gemini structure safely and run content generation with Google Search Grounding enabled
-    const ai = getGeminiClient();
-    
-    // Convert previous simple messages structure into contents argument for the Gemini API
-    const contents: any[] = [];
-    
-    // Add history safely to reinforce context
-    for (const h of history) {
-      contents.push({
-        role: h.role === "user" ? "user" : "model",
-        parts: [{ text: h.text }]
-      });
-    }
-    
-    // Add current user prompt
-    contents.push({
-      role: "user",
-      parts: [{ text: message }]
-    });
-
-    const config: any = {
-      systemInstruction
-    };
-
-    let response;
-    // Single model usage: try gemini-3.5-flash first, and fall back to gemini-3.1-flash-lite if needed
-    try {
-      console.log("Advisor: Attempting gemini-3.5-flash...");
-      response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: contents,
-        config: config
-      });
-      console.log("Advisor: Successfully generated content using gemini-3.5-flash");
-    } catch (primaryError: any) {
-      console.warn("Advisor: gemini-3.5-flash failed, attempting fallback to gemini-3.1-flash-lite...", primaryError.message || primaryError);
-      try {
-        response = await ai.models.generateContent({
-          model: "gemini-3.1-flash-lite",
-          contents: contents,
-          config: config
-        });
-        console.log("Advisor: Successfully generated content using fallback gemini-3.1-flash-lite");
-      } catch (liteError: any) {
-        console.error("Advisor: gemini-3.1-flash-lite fallback also failed.", liteError.message || liteError);
-        
-        const errorMsg = liteError.message || String(liteError);
-        const isQuotaExceeded = errorMsg.includes("RESOURCE_EXHAUSTED") || 
-                                errorMsg.includes("quota") || 
-                                errorMsg.includes("exceeded") || 
-                                errorMsg.includes("429");
-
-        if (isQuotaExceeded) {
-          return res.json({
-            type: "ai_response",
-            text: `🚦 **מכסת השימוש במפתח ה-Gemini API שלך הסתיימה או נחסמה על ידי גוגל (RESOURCE_EXHAUSTED).**
-
-**הסבר חשוב – למה זה קורה גם אם לא השתמשת ביועץ היום?**
-1. **סטטוס פרויקט וחשבון תשלום (Billing):** לעיתים קרובות, גוגל מסווגת מפתחות כ-RESOURCE_EXHAUSTED אם הפרויקט בו הם נוצרו ב-Cloud Console אינו פעיל, שייך לחשבון אירוח שאינו בתוקף, או שהכרטיס המקושר אליו פג תוקף, גם אם לא ניצלת אחוז קטן מהמכסה היום.
-2. **מכסות קשיחות של הרמה החינמית:** מפתחות חינמיים ב-Google AI Studio מוגבלים מאוד ברמה היומית והחודשית, והמכסה מתאפסת לפי שעון גוגל העולמי ולא לפי יום קלנדרי מקומי.
-3. **מפתח משותף:** במידה והמפתח משמש אפליקציות, ניסויים או מערכות אחרות שלך או של מפתחים נוספים, צריכת הטוקנים משותפת והיא זו שמילאה את המכסה.
-
-**איך לראות בדיוק מה קרה ולפתור זאת כעת?**
-אנא בצע את השלבים הפשוטים הבאים כדי להחזיר את ה-Expert לפעילות מיידית:
-1. **הפקת מפתח חדש (מומלץ ביותר):** כנס לאתר הרשמי להפקת המפתחות [Google AI Studio](https://aistudio.google.com/) וצור מפתח API חדש לחלוטין (זה לוקח דקה אחת והוא חינמי לגמרי).
-2. **הגדרת המפתח החדש:**
-   - בעמוד הנוכחי, פתח את תפריט ה-**Settings** (סמל של גלגל שיניים בפינה השמאלית/צדדית של העמוד).
-   - לחץ על **Secrets** (סודות ומפתחות).
-   - מצא את הרשומה בשם \`GEMINI_API_KEY\` והדבק שם את המפתח החדש שיצרת (ללא רווחים לפני או אחרי).
-3. **שדרוג במידת הצורך:** במידה ואתה משתמש במפתח באופן רציף, כדאי לשקול להעביר אותו למודל **Pay-as-you-go** ב-AI Studio. הוא מציע תמחור זול ביותר (חלקי סנט לפליטה) ומסיר לחלוטין את כל חסימות הקצב ומכסות החינם של גוגל!`,
-            sources: []
-          });
-        }
-
-        return res.json({
-          type: "ai_response",
-          text: `⚠️ **חיבור ה-AI נכשל בפנייה לשרתי Google.**
-
-**הצעות לפתרון לעבודה עם RBS Expert:**
-1. פתח את תפריט הגדרות ה-**Secrets** של הפרויקט ב-AI Studio.
-2. ודא שהוספת את המשתנה \`GEMINI_API_KEY\` עם מפתח API תקין ופעיל.
-3. ודא שאין רווחים מיותרים בהתחלה או בסוף של המפתח.`,
-          sources: []
-        });
-      }
-    }
-
-    const textOutput = response.text || "סליחה, לא הצלחתי לעבד את התשובה. אנא נסה שוב.";
-    
-    // Extract grounding sources to display if available
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    const webSources = groundingChunks.map((chunk: any) => ({
-      title: chunk.web?.title || "מקור מידע חיצוני",
-      uri: chunk.web?.uri || ""
-    })).filter((s: any) => s.uri);
-
-    res.json({
-      type: "ai_response",
-      text: textOutput,
-      sources: webSources
-    });
-
-  } catch (error: any) {
-    console.error("Gemini Advisor Endpoint Error:", { code: error.code || "UNKNOWN" });
-    res.status(500).json({ 
-      error: "Error processing request", 
-      details: "שגיאה בטעינת הקטלוג. נסה שוב."
-    });
-  }
+  // Mock Vercel environment for local Express
+  req.query = req.query || {};
+  await advisorHandler(req as any, res as any);
 });
 
 // Serve health status
@@ -433,38 +246,123 @@ async function isAgentOrManagerServer(authHeader: string | undefined): Promise<b
   }
 }
 
-function stripSensitiveColumnsServer(csv: string, gid: string): string {
-  const parsed = Papa.parse<string[]>(csv, { skipEmptyLines: false });
-  const rows = (parsed.data || []) as string[][];
-  if (!rows.length || !Array.isArray(rows[0])) return csv;
+
+function isAllowedForGuest(colName: string): boolean {
+  const clean = colName.trim().replace(/\s+/g, " ").toLowerCase();
   
-  const header = rows[0];
-  const headerStrs = header.map(c => String(c).trim());
-  
-  // Is this the Products_React sheet?
-  // Check GID directly or specific product columns
-  const isProductsGid = gid === '1506812668';
-  const hasProductHeaders = headerStrs.includes('sku') && 
-                            headerStrs.includes('name') && 
-                            headerStrs.includes('price') && 
-                            headerStrs.includes('retailPrice');
-                            
-  if (!isProductsGid && !hasProductHeaders) {
-    return csv; // Do not strip other sheets like CatalogFolders or Subcategories!
+  // Exact matches
+  const exactAllowed = [
+    "sku", "id", "מק״ט", "מקט", "מק'ט",
+    "name", "שם", "שם מוצר",
+    "category", "קטגוריה", 
+    "subcategory", "תת קטגוריה",
+    "nested subcategory", "niche category",
+    "images", "תמונות", "imagesjson", "imageurl",
+    "price", "מחיר", "retailprice", "מחיר צרכן",
+    "description", "תיאור",
+    "brand", "מותג",
+    "isnew", "coming soon", "cooming soon",
+    "active", "פעיל",
+    "manuallink", "videolink", "specslink",
+    "סקירת מוצרים", "סקירת מוצר", "reviewlink",
+    "אישורי מעבדה", "labcerts"
+  ];
+  if (exactAllowed.includes(clean)) return true;
+
+  // Partial matches for sales & clearance
+  if (
+    clean.includes("מבצע חם") || clean.includes("מבצע_חם") || clean.includes("hot sale") || clean.includes("hotsale") || clean === "מבצע" || clean === "מבצעים" ||
+    clean.includes("סוג מבצע") || clean.includes("sale type") || clean.includes("saletype") || clean.includes("סוג המבצע") ||
+    clean.includes("ערך מבצע") || clean.includes("sale value") || clean.includes("salevalue") || clean.includes("ערך המבצע") || clean.includes("מחיר מבצע") ||
+    clean.includes("מציאון") || clean.includes("clearance") || clean.includes("מציאון מחיר מיוחד") || clean.includes("מחיר מיוחד מציאון") || clean.includes("מחיר מציאון")
+  ) {
+    // Make sure we don't accidentally allow "cost price" if it has these words (though unlikely)
+    if (clean.includes("עלות") || clean.includes("סיטונאות") || clean.includes("סיטונאי")) return false;
+    return true;
   }
 
-  const dropIdx = new Set<number>();
-  header.forEach((c, i) => { if (SENSITIVE_COLS_SERVER.includes(String(c).trim())) dropIdx.add(i); });
-  
-  if (dropIdx.size === 0) return csv;
-  
-  console.warn('[Sheets API] Product sensitive columns removed', { removedCount: dropIdx.size });
-
-  const out = rows
-    .filter((r) => !(r.length === 1 && r[0] === ""))
-    .map((r) => r.filter((_, i) => !dropIdx.has(i)));
-  return Papa.unparse(out);
+  return false;
 }
+
+function processProductsSheet(csv: string, isAgentView: boolean, limit?: string, offset?: string): string {
+  const parsed = Papa.parse<string[]>(csv, { skipEmptyLines: false });
+  const rows = (parsed.data || []) as string[][];
+  if (rows.length < 1) return csv;
+  const header = rows[0];
+  
+  let keepIdx = new Set<number>();
+  let activeColIdx = -1;
+  
+  header.forEach((c, i) => {
+    const clean = String(c).trim().toLowerCase();
+    if (clean === "active" || clean === "פעיל") {
+      activeColIdx = i;
+    }
+    if (isAgentView) {
+      keepIdx.add(i);
+    } else {
+      if (isAllowedForGuest(clean)) {
+        keepIdx.add(i);
+      }
+    }
+  });
+
+  let dataRows = rows.slice(1).filter(r => !(r.length === 1 && r[0] === ""));
+  
+  // Filter inactive for guests
+  if (!isAgentView) {
+    dataRows = dataRows.filter(row => {
+      if (activeColIdx === -1) return true;
+      const val = String(row[activeColIdx] || "").trim().toLowerCase();
+      if (val === "false" || val === "no" || val === "0" || val === "לא" || val === "n" || val === "f" || val === "לא פעיל") {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  // Apply offset and limit
+  if (offset) {
+    const off = parseInt(offset, 10);
+    if (!isNaN(off) && off > 0) dataRows = dataRows.slice(off);
+  }
+  if (limit) {
+    const lim = parseInt(limit, 10);
+    if (!isNaN(lim) && lim > 0) dataRows = dataRows.slice(0, lim);
+  }
+
+  const outRows = [header, ...dataRows].map(r => r.filter((_, i) => keepIdx.has(i)));
+  return Papa.unparse(outRows);
+}
+
+function processOtherSheet(csv: string, isAgentView: boolean, limit?: string, offset?: string): string {
+  const parsed = Papa.parse<string[]>(csv, { skipEmptyLines: false });
+  const rows = (parsed.data || []) as string[][];
+  if (rows.length < 1) return csv;
+  const header = rows[0];
+  
+  let dropIdx = new Set<number>();
+  if (!isAgentView) {
+    header.forEach((c, i) => { 
+      if (SENSITIVE_COLS_SERVER.includes(String(c).trim())) dropIdx.add(i); 
+    });
+  }
+
+  let dataRows = rows.slice(1).filter(r => !(r.length === 1 && r[0] === ""));
+
+  if (offset) {
+    const off = parseInt(offset, 10);
+    if (!isNaN(off) && off > 0) dataRows = dataRows.slice(off);
+  }
+  if (limit) {
+    const lim = parseInt(limit, 10);
+    if (!isNaN(lim) && lim > 0) dataRows = dataRows.slice(0, lim);
+  }
+
+  const outRows = [header, ...dataRows].map(r => r.filter((_, i) => !dropIdx.has(i)));
+  return Papa.unparse(outRows);
+}
+
 
 // Proxy endpoint for cached Google Sheets access on Express
 app.get("/api/sheets", async (req, res) => {
@@ -488,10 +386,12 @@ app.get("/api/sheets", async (req, res) => {
   }
 
   try {
-    let csvString = await fetchSheetDataV4(String(gid), limit as string, offset as string);
+    let csvString = await fetchSheetDataV4(String(gid), undefined, undefined);
     
-    if (!authorized) {
-      csvString = stripSensitiveColumnsServer(csvString, String(gid));
+    if (String(gid) === PRODUCTS_GID) {
+      csvString = processProductsSheet(csvString, authorized, limit as string, offset as string);
+    } else {
+      csvString = processOtherSheet(csvString, authorized, limit as string, offset as string);
     }
 
     if (!bypassCache) {

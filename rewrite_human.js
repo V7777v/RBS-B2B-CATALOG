@@ -1,4 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import fs from 'fs';
+
+const newContent = `import React, { useState, useRef, useEffect } from 'react';
 import { ShieldCheck, Lock, Sparkles, Shield, MousePointerClick } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -96,7 +98,7 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-gray-100/50">
           <motion.div 
             className="h-full bg-gradient-to-r from-blue-500 to-[#004387] shadow-[0_2px_10px_rgba(37,99,235,0.4)]"
-            style={{ width: `${progress}%` }}
+            style={{ width: \`\${progress}%\` }}
           />
         </div>
 
@@ -119,13 +121,13 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
                 initial={{ scale: 0.9 }}
                 animate={isPressing ? { scale: [1, 1.05, 1], rotate: [0, -2, 2, 0] } : { scale: 1 }}
                 transition={{ duration: 0.8, repeat: isPressing ? Infinity : 0 }}
-                className={`w-20 h-20 rounded-full flex items-center justify-center shadow-md transition-colors ${
+                className={\`w-20 h-20 rounded-full flex items-center justify-center shadow-md transition-colors \${
                   isPressing 
                     ? 'bg-blue-50 text-[#004387] border-2 border-blue-200' 
                     : 'bg-[#004387]/5 text-[#004387] border border-gray-150'
-                }`}
+                }\`}
               >
-                <Lock size={36} className={`${isPressing ? 'scale-110 text-blue-600' : 'text-[#004387]'}`} />
+                <Lock size={36} className={\`\${isPressing ? 'scale-110 text-blue-600' : 'text-[#004387]'}\`} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -190,7 +192,7 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
                 cx="50" 
                 cy="50" 
                 r="44" 
-                className={`fill-none transition-colors duration-150 ${isVerified ? 'stroke-emerald-500' : 'stroke-[#004387]'}`}
+                className={\`fill-none transition-colors duration-150 \${isVerified ? 'stroke-emerald-500' : 'stroke-[#004387]'}\`}
                 strokeWidth="6" 
                 strokeDasharray="276"
                 strokeDashoffset={276 - (276 * progress) / 100}
@@ -200,13 +202,13 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
 
             {/* Inner Button */}
             <button 
-              className={`relative z-10 w-28 h-28 rounded-full flex flex-col items-center justify-center touch-none outline-none transition-all duration-300 pointer-events-auto cursor-pointer shadow-inner border-0 select-none focus-visible:ring-4 focus-visible:ring-blue-500/50 ${
+              className={\`relative z-10 w-28 h-28 rounded-full flex flex-col items-center justify-center touch-none outline-none transition-all duration-300 pointer-events-auto cursor-pointer shadow-inner border-0 select-none focus-visible:ring-4 focus-visible:ring-blue-500/50 \${
                 isVerified 
                   ? 'bg-emerald-500 text-white shadow-emerald-500/20' 
                   : isPressing 
                     ? 'bg-[#004387] text-white shadow-[#004387]/30 scale-95' 
                     : 'bg-white text-[#004387] border border-gray-200 shadow-sm hover:border-gray-300'
-              }`}
+              }\`}
               onPointerDown={startPress}
               onPointerUp={endPress}
               onPointerLeave={endPress}
@@ -226,7 +228,7 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
                 />
               )}
               
-              <MousePointerClick size={42} className={`${isPressing && !isVerified ? 'animate-pulse text-cyan-200' : ''}`} />
+              <MousePointerClick size={42} className={\`\${isPressing && !isVerified ? 'animate-pulse text-cyan-200' : ''}\`} />
               
               <span className="text-[10px] mt-1.5 font-bold uppercase tracking-wider opacity-90 block">
                 {isVerified ? 'מאומת' : isPressing ? 'מחזיק...' : 'החזק כאן'}
@@ -236,7 +238,7 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
 
           {/* Micro-interaction status readout */}
           <div className="text-center h-12 flex flex-col justify-center items-center">
-            <div className={`text-xs font-bold transition-colors ${isPressing ? 'text-[#004387]' : 'text-gray-400'}`} aria-live="polite">
+            <div className={\`text-xs font-bold transition-colors \${isPressing ? 'text-[#004387]' : 'text-gray-400'}\`} aria-live="polite">
               {getScannerStatus()}
             </div>
             
@@ -262,3 +264,5 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
     </div>
   );
 };
+`;
+fs.writeFileSync('src/components/HumanVerification.tsx', newContent);

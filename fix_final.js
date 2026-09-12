@@ -1,15 +1,7 @@
 import fs from 'fs';
-let lines = fs.readFileSync('src/App.tsx', 'utf-8').split('\n');
 
-const errs = [330, 339, 390, 2444, 3033, 3035, 3116, 6178, 6398, 6426, 6852, 6854, 7440];
+let content = fs.readFileSync('api/advisor/chat.ts', 'utf-8');
 
-// Sort descending so joining doesn't mess up earlier indices
-errs.sort((a,b) => b - a);
+content = content.replace(/quotaInfo: \{ current: currentUsage, limit: dailyLimit, debug: true \}/g, 'quotaInfo: { current: currentUsage, limit: dailyLimit }');
 
-for (let e of errs) {
-    let idx = e - 1;
-    lines[idx] = lines[idx] + "\\n" + lines[idx + 1];
-    lines.splice(idx + 1, 1);
-}
-
-fs.writeFileSync('src/App.tsx', lines.join('\n'));
+fs.writeFileSync('api/advisor/chat.ts', content);
