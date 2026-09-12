@@ -2575,7 +2575,7 @@ const ProductDetailsView = (props: any) => {
                                 (p) => p.sku === opt.sku || p.sku === opt.pn,
                               );
                               if (catItem) {
-                                addToCart(catItem, 1, []);
+                                addToCart(catItem, opt.quantity || 1, []);
                               }
                             });
                             setIsAdded(true);

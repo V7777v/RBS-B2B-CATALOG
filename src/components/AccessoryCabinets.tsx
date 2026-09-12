@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Server, Loader2, ExternalLink, ShoppingCart, CheckCircle2, BadgePercent, ArrowUpRight, HelpCircle, AlertCircle, Sparkles } from 'lucide-react';
 import { CabinetConfigurator } from './CabinetConfigurator';
 import Papa from 'papaparse';
+import { fetchCabinetMatrix, fetchCompatMap, checkAccessoryFitsCabinet, isAccessoryAShelf, normalizeSku } from '../utils/cabinetData';
 import { getToken as getAppCheckToken } from 'firebase/app-check';
 import { appCheck } from '../firebase';
 
@@ -81,8 +82,7 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
     const fetchAndParse = async () => {
       try {
         setLoading(true);
-        const CABINETS_CSV_URL = '/api/sheets?gid=250535112';
-        let appCheckTok = '';
+                let appCheckTok = '';
         try { 
           appCheckTok = (await getAppCheckToken(appCheck)).token; 
         } catch (e) {
@@ -95,55 +95,36 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
             throw new Error("אבטחת המערכת (App Check) נכשלה. אנא רענן את העמוד.");
           }
         }
-        const res = await fetch(CABINETS_CSV_URL, { headers: { 'X-Firebase-AppCheck': appCheckTok } });
-        const csvText = await res.text();
-        const parsed = Papa.parse(csvText, { header: false, skipEmptyLines: false });
 
-        const normalizeSku = (val: any): string => String(val ?? '').trim().toUpperCase();
         const productSkuNorm = normalizeSku(product.sku);
-        const accText = `${productSkuNorm} ${(product.name || '')} ${((product as any).description || '')}`.toLowerCase();
-        const isGeneralAccessory =
-          accText.includes('עיוור') || accText.includes('blank') || accText.includes('מברשת') || accText.includes('שערות') || accText.includes('brush') ||
-          accText.includes('מאוורר') || accText.includes('fan') || accText.includes('מפוח') || accText.includes('איוורור') ||
-          accText.includes('שקע') || accText.includes('pdu') || accText.includes('power') || accText.includes('פס כח') || accText.includes('פס כוח') ||
-          accText.includes('סידור') || accText.includes('כבל') || accText.includes('ניהול') || accText.includes('cable') || accText.includes('organizer') ||
-          accText.includes('בורג') || accText.includes('ברגים') || accText.includes('screw') || accText.includes('cage') ||
-          accText.includes('גלגל') || accText.includes('wheel') || accText.includes('רגליות') || accText.includes('feet') || accText.includes('leveling') ||
-          accText.includes('מגירה') || accText.includes('drawer') || accText.includes('תאורת') || accText.includes('תאורה') || accText.includes('led');
+        const accText = `${product.name || ''} ${(product as any).description || ''}`;
+        const isShelf = isAccessoryAShelf(accText);
+        
+        const mDepth = accText.match(/עומק[:\s]*([0-9]{2,4})/);
+        let accDepthFallback: number | null = null;
+        if (mDepth) {
+          accDepthFallback = parseInt(mDepth[1], 10);
+          if (accDepthFallback < 150) accDepthFallback *= 10;
+        }
 
-        const cabRows = parsed.data as any[][];
+        const matrix = await fetchCabinetMatrix(appCheckTok);
+        const compatMap = await fetchCompatMap(appCheckTok);
         
         const compatibleSkus = new Set<string>();
         const specsMap = new Map<string, CabinetSpec>();
 
-        // Start from row 2 (skipping header rows)
-        for (let i = 2; i < cabRows.length; i++) {
-           const row = cabRows[i];
-           if (!row) continue;
+        for (const cabSku in matrix) {
+           const cabinet = matrix[cabSku];
+           const result = checkAccessoryFitsCabinet(productSkuNorm, isShelf, cabinet, compatMap, accDepthFallback);
            
-           const cabSku = row[0];
-           if (cabSku === undefined || cabSku === null) continue;
-
-           const suitableStandard = row[12]?.toString() || '';
-           const suitableHanging = row[13]?.toString() || '';
-           const suitableSliding = row[14]?.toString() || '';
-
-           const splitRobust = (str: string) => String(str || '').split(/[,\s;]+/).map(s => normalizeSku(s)).filter(s => s && s !== 'X');
-           const allSuitable = [
-               ...splitRobust(suitableStandard),
-               ...splitRobust(suitableHanging),
-               ...splitRobust(suitableSliding)
-           ];
-
-           if (isGeneralAccessory || allSuitable.includes(productSkuNorm)) {
-               const normalizedUnit = normalizeSku(cabSku);
-               compatibleSkus.add(normalizedUnit);
-               specsMap.set(normalizedUnit, {
-                  u: row[2]?.toString() || 'N/A',
-                  fans: row[8]?.toString() || 'X',
-                  wheels: row[9]?.toString() || 'X',
-                  levelingFeet: row[10]?.toString() || 'X',
-                  shelvesQty: row[11]?.toString() || '0'
+           if (result.fits) {
+               compatibleSkus.add(cabSku);
+               specsMap.set(cabSku, {
+                  u: cabinet.u > 0 ? cabinet.u.toString() : 'N/A',
+                  fans: cabinet.fans || 'X',
+                  wheels: cabinet.wheels || 'X',
+                  levelingFeet: cabinet.levelingFeet || 'X',
+                  shelvesQty: cabinet.shelvesQty || '0'
                });
            }
         }
@@ -158,7 +139,7 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
              };
           });
 
-        setDbg({ sku: productSkuNorm, rows: cabRows.length, suitableHits: compatibleSkus.size, matched: matchedCabinets.length });
+        setDbg({ sku: productSkuNorm, suitableHits: compatibleSkus.size, matched: matchedCabinets.length });
         setCompatibleCabinets(matchedCabinets);
         if (matchedCabinets.length > 0) {
           setSelectedCabinetId(matchedCabinets[0].id);
