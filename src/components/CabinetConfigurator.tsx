@@ -3,6 +3,13 @@ import { motion, AnimatePresence } from "motion/react";
 import { AlertCircle, CheckCircle, Plus, Minus, X, Server, Download, Box, AlertTriangle, ChevronDown, Search } from 'lucide-react';
 import Papa from 'papaparse';
 import { fetchCabinetMatrix, fetchCompatMap, checkAccessoryFitsCabinet, isAccessoryAShelf, normalizeSku, parseCompatibleSkus, CabinetMatrixData } from '../utils/cabinetData';
+import { 
+  VERIFIED_ZERO_U_EXCEPTIONS, 
+  isFlaggedForCabinetSuitability, 
+  parseNormalizedVolume, 
+  resolveUConsumption, 
+  checkTrackBAccessoryCompatibility 
+} from '../utils/cabinetRules';
 import { getToken as getAppCheckToken } from 'firebase/app-check';
 import { appCheck } from '../firebase';
 
@@ -15,6 +22,15 @@ interface Accessory {
   price?: number;
   suitableRange?: string;
   image?: string;
+  brand?: string;
+  brandLogo?: string;
+  _pdu?: boolean;
+  _curated?: boolean;
+  _promoted?: boolean;
+  _depth?: number;
+  _illustration?: boolean;
+  isShelf?: boolean;
+  _source?: string;
 }
 
 // Match a shelf to a cabinet using the accessory sheet's "ארונות מתאימים" range
@@ -40,68 +56,6 @@ const parseCompatRange = (s: string): any => {
 };
 
 
-
-const isFlaggedForSuitability = (pp: any): boolean => {
-  if (!pp) return false;
-  const raw = String(pp?.['התאמה לארון '] || pp?.['התאמה לארון'] || pp?.tags || '').trim().toLowerCase();
-  // Do NOT use Boolean(raw) - 'false' is non-empty string!
-  return raw === 'true' || raw === 'כן' || raw === 'yes' || raw === 'v' || raw === '1' || raw.includes('cfg-acc');
-};
-
-const parseVolumeU = (pp: any): number => {
-  const raw = String(pp?.['נפח '] || pp?.['נפח'] || pp?.['נפח בארון'] || '');
-  const trimmed = raw.trim();
-  if (trimmed === '') return 1; // Approved business rule: empty cell = 1U
-
-  // Explicit 0
-  if (trimmed === '0' || trimmed === '0u' || trimmed === '0U') return 0;
-
-  const m = trimmed.match(/^([0-9.]+)\s*[uU]?$/i);
-  if (m) {
-    const v = parseFloat(m[1]);
-    if (!isNaN(v) && v >= 0) return v;
-  }
-
-  console.warn(`[Data Error] Invalid volume value "${raw}" for SKU ${pp?.sku}`);
-  return 1;
-};
-
-const resolveAccU = (pp: any): number => {
-  const rawVol = String(pp?.['נפח '] || pp?.['נפח'] || pp?.['נפח בארון'] || '').trim();
-  if (rawVol !== '') {
-    return parseVolumeU(pp);
-  }
-  // If volume is empty in the sheet:
-  // If flagged as general equipment, business rule says empty = 1U
-  if (isFlaggedForSuitability(pp)) {
-    return 1;
-  }
-  // For accessories/hardware from compat map or catalog without explicit volume:
-  // Preserve explicit hardware 0U mapping from previous logic
-  const text = `${pp?.sku || ''} ${pp?.name || ''} ${pp?.description || ''}`.toLowerCase();
-  if (isAccessoryAShelf(pp?.name || '')) {
-    const um = text.match(/(\d+)\s*u/i);
-    return um ? parseInt(um[1], 10) : 1;
-  }
-  if (text.includes('פנל') || text.includes('panel') || text.includes('עיוור') || text.includes('מברשת') || text.includes('שערות')) {
-    const um = text.match(/(\d+)\s*u/i);
-    return um ? parseInt(um[1], 10) : 1;
-  }
-  // High priority 0U hardware
-  if (
-    text.includes('בורג') || text.includes('ברגים') || text.includes('screw') || text.includes('cage') || text.includes('nut') ||
-    text.includes('גלגל') || text.includes('wheels') || text.includes('wheel') ||
-    text.includes('רגליות') || text.includes('feet') || text.includes('leveling') ||
-    text.includes('מסיל') || text.includes('rails') || text.includes('rail') ||
-    text.includes('סט תל') || text.includes('התקנה') || text.includes('kit') ||
-    text.includes('מחבר') || text.includes('connector') ||
-    text.includes('מאוורר') || text.includes('fan') || text.includes('מפוח') || text.includes('איוורור') ||
-    text.includes('תקרה') || text.includes('roof') || text.includes('ceiling')
-  ) {
-    return 0;
-  }
-  return 1;
-};
 
 const parseDepthMmLocal = (txt: string): number => {
   if (!txt) return 0;
@@ -136,6 +90,19 @@ const isCabinetProduct = (pp: any): boolean => {
   return false;
 };
 
+const getPhysicalZone = (sku: string, name: string, desc: string): 'roof' | 'plinth' | 'vertical' | 'hardware' => {
+  const norm = normalizeSku(sku);
+  if (norm && VERIFIED_ZERO_U_EXCEPTIONS[norm]) {
+    return VERIFIED_ZERO_U_EXCEPTIONS[norm].zone;
+  }
+  const s = `${name || ''} ${desc || ''}`.toLowerCase();
+  if (/מאוורר|fan|מפוח|איוורור|נורת|נורה|led|לד|תאורה|light|כניסה עליונה/.test(s)) return 'roof';
+  if (/פס 12|ורטיקל|vertical|תעלה|מסתיר/.test(s)) return 'vertical';
+  if (/גלגל|wheel|רגלי|feet|בסיס|plinth/.test(s)) return 'plinth';
+  if (/בורג|ברגים|screw|cage|nut|אום|רלס|rail|hardware/.test(s)) return 'hardware';
+  return 'hardware';
+};
+
 const buildCatalogAccessories = (
   catalogData: any[],
   productSkuNorm: string,
@@ -157,16 +124,19 @@ const buildCatalogAccessories = (
     }
   });
 
-  const itemsMap = new Map<string, any>();
+  const itemsMap = new Map<string, Accessory>();
 
-  // 1. Shelves permitted in cabinet matrix (authoritative source for shelves)
+  // ==========================================
+  // Track 1: Shelves permitted in Cabinet Matrix (authoritative source for shelves)
+  // ==========================================
   inMatrixShelves.forEach(shelfSku => {
     const prod = catalogMap.get(shelfSku);
     const origSku = prod?.sku || shelfSku;
     const name = prod?.name || `מדף מק"ט ${shelfSku}`;
     const desc = prod?.description || '';
-    const uSize = prod ? resolveAccU(prod) : 1;
+    const uSize = resolveUConsumption(prod).u;
     const price = prod?.price ? parseFloat(String(prod.price).replace(/,/g, '')) : 0;
+    
     itemsMap.set(shelfSku, {
       pn: origSku,
       sku: origSku,
@@ -187,59 +157,112 @@ const buildCatalogAccessories = (
     });
   });
 
-  // 2. Accessories from "מדפים ואביזרים" sheet (gid=1366808268)
-  Object.keys(compatMap || {}).forEach(compSku => {
-    if (compSku === productSkuNorm) return;
-    const prod = catalogMap.get(compSku);
-    const isShelf = isAccessoryAShelf(prod?.name || '');
+  // ==========================================
+  // Track 2: Cabinet Accessories & PDUs ("מדפים ואביזרים" + accessories category)
+  // ==========================================
+  (catalogData || []).forEach((pp: any) => {
+    if (!pp || !pp.sku) return;
+    const normSku = normalizeSku(pp.sku);
+    if (!normSku || normSku === productSkuNorm) return;
+
+    // Check if this item is in the accessories domain
+    const cat = String(pp.category || '');
+    const sub = String(pp.subcategory || '');
+    const nested = String(pp['Nested subcategory'] || pp.nestedSubcategory || '');
+    const isAccCategory = 
+      sub.includes('ארונות תקשורת') || 
+      cat.includes('ארונות תקשורת') || 
+      nested.includes('אביזרים') || 
+      nested.includes('פסי שקעים') ||
+      compatMap[normSku] !== undefined ||
+      VERIFIED_ZERO_U_EXCEPTIONS[normSku] !== undefined;
+
+    if (!isAccCategory) return;
+    if (isCabinetProduct(pp)) return;
+
+    const isShelf = isAccessoryAShelf(pp.name || '');
     if (isShelf) {
-      // Matrix is authoritative for shelves!
-      if (!inMatrixShelves.has(compSku)) {
-        // Document conflict explicitly
-        checkAccessoryFitsCabinet(compSku, true, cabinet, compatMap, null);
-        return;
-      }
-      return; // Already added in step 1
+      // Matrix is the sole authority on shelves!
+      if (!inMatrixShelves.has(normSku)) return;
+      if (itemsMap.has(normSku)) return; // Already loaded via Track 1
     }
 
-    // Non-shelf accessory from compat sheet
-    const fitRes = checkAccessoryFitsCabinet(compSku, false, cabinet, compatMap, null);
-    if (fitRes.fits) {
-      const origSku = prod?.sku || compSku;
-      const name = prod?.name || `אביזר מק"ט ${compSku}`;
-      const desc = prod?.description || '';
-      const uSize = prod ? resolveAccU(prod) : 0;
-      const price = prod?.price ? parseFloat(String(prod.price).replace(/,/g, '')) : 0;
-      itemsMap.set(compSku, {
-        pn: origSku,
-        sku: origSku,
-        name,
-        description: desc,
-        price,
-        uSize,
-        suitableRange: '',
-        _depth: parseDepthMmLocal(`${name} ${desc}`),
-        _promoted: false,
-        brand: prod ? deriveBrand(prod) : 'כללי',
-        brandLogo: (typeof prod?.brand === 'string' && prod.brand.startsWith('http')) ? prod.brand : '',
-        _pdu: false,
-        _curated: true,
-        image: (prod?.images && prod.images[0]) || prod?.imageURL || '',
-        isShelf: false,
-        _source: 'compat_sheet'
-      });
+    // Validate physical compatibility with cabinet
+    const compatResult = checkTrackBAccessoryCompatibility(pp, cabinet, compatMap);
+    if (!compatResult.fits) return;
+
+    if (itemsMap.has(normSku)) {
+      // Enrich existing record if needed
+      const existing = itemsMap.get(normSku)!;
+      if (!existing.image && ((pp.images && pp.images[0]) || pp.imageURL)) {
+        existing.image = (pp.images && pp.images[0]) || pp.imageURL;
+      }
+      return;
     }
+
+    const uSize = resolveUConsumption(pp).u;
+    const isPdu = nested.includes('פסי שקעים') || /פס שקע|שקעים|pdu/i.test(`${pp.name || ''} ${pp.description || ''}`);
+    const price = pp.price ? parseFloat(String(pp.price).replace(/,/g, '')) : 0;
+
+    itemsMap.set(normSku, {
+      pn: pp.sku,
+      sku: pp.sku,
+      name: pp.name || `אביזר מק"ט ${pp.sku}`,
+      description: pp.description || '',
+      price,
+      uSize,
+      suitableRange: '',
+      _depth: parseDepthMmLocal(`${pp.name || ''} ${pp.description || ''}`),
+      _promoted: false,
+      brand: deriveBrand(pp),
+      brandLogo: (typeof pp.brand === 'string' && pp.brand.startsWith('http')) ? pp.brand : '',
+      _pdu: isPdu,
+      _curated: true,
+      image: (pp.images && pp.images[0]) || pp.imageURL || '',
+      isShelf,
+      _source: 'cabinet_accessory'
+    });
   });
 
-  // 3. Additional equipment marked "התאמה לארון" in Products_React
+  // Also ensure any items in compatMap that weren't in catalogData are included
+  Object.keys(compatMap || {}).forEach(compSku => {
+    if (compSku === productSkuNorm || itemsMap.has(compSku)) return;
+    const isShelf = isAccessoryAShelf(compSku);
+    if (isShelf && !inMatrixShelves.has(compSku)) return;
+
+    const compatResult = checkTrackBAccessoryCompatibility({ sku: compSku }, cabinet, compatMap);
+    if (!compatResult.fits) return;
+
+    const uSize = resolveUConsumption({ sku: compSku }).u;
+    itemsMap.set(compSku, {
+      pn: compSku,
+      sku: compSku,
+      name: `אביזר מק"ט ${compSku}`,
+      description: '',
+      price: 0,
+      uSize,
+      suitableRange: '',
+      _depth: 0,
+      _promoted: false,
+      brand: 'כללי',
+      _pdu: false,
+      _curated: true,
+      image: '',
+      isShelf,
+      _source: 'compat_sheet'
+    });
+  });
+
+  // ==========================================
+  // Track 3: Additional equipment flagged "התאמה לארון" in Products_React
+  // ==========================================
   (catalogData || []).forEach((pp: any) => {
     if (!pp || !pp.sku) return;
     const normSku = normalizeSku(pp.sku);
     if (!normSku || normSku === productSkuNorm) return;
 
     if (itemsMap.has(normSku)) {
-      // Enrich existing record with catalog details if previously sparse
-      const existing = itemsMap.get(normSku);
+      const existing = itemsMap.get(normSku)!;
       if (!existing.image && ((pp.images && pp.images[0]) || pp.imageURL)) {
         existing.image = (pp.images && pp.images[0]) || pp.imageURL;
       }
@@ -254,33 +277,33 @@ const buildCatalogAccessories = (
     if (/מחלץ|extractor|כלי\b|tool\b/.test(nameDesc)) return;
 
     // Check suitability flag
-    const flagged = isFlaggedForSuitability(pp);
-    if (!flagged) return; // Not marked suitable, cannot enter via this path
+    const flagged = isFlaggedForCabinetSuitability(pp);
+    if (!flagged) return;
 
     const isShelf = isAccessoryAShelf(nameDesc);
     if (isShelf) {
-      // General suitability flag in Products_React must NOT override the matrix for shelves!
       if (!inMatrixShelves.has(normSku)) {
-        console.warn(`[Conflict] Shelf ${pp.sku} is flagged 'התאמה לארון' in Products_React, but is NOT permitted in Cabinet Matrix for cabinet ${cabinet?.sku}. Matrix is authoritative. Rejecting match.`);
+        // General suitability flag must not override matrix for shelves
         return;
       }
     }
 
-    // Depth constraint check if known
+    // Depth check
     const itemDepth = parseDepthMmLocal(nameDesc);
     if (cabinet && cabinet.depth !== null && itemDepth > 0 && itemDepth > cabinet.depth + 40) {
-      return; // Physically too deep for this cabinet
+      return;
     }
 
-    const uSize = resolveAccU(pp);
+    const uSize = resolveUConsumption(pp, true).u;
     const isPdu = String(pp.nestedSubcategory || '').includes('פסי שקעים') || /פס שקע|שקעים|pdu/i.test(nameDesc);
+    const price = pp.price ? parseFloat(String(pp.price).replace(/,/g, '')) : 0;
 
     itemsMap.set(normSku, {
       pn: pp.sku,
       sku: pp.sku,
       name: pp.name,
       description: pp.description || '',
-      price: pp.price ? parseFloat(String(pp.price).replace(/,/g, '')) : 0,
+      price,
       uSize,
       suitableRange: '',
       _depth: itemDepth,
@@ -298,71 +321,22 @@ const buildCatalogAccessories = (
   return Array.from(itemsMap.values());
 };
 
+const usePrefersReducedMotion = (): boolean => {
+  const [prefersReduced, setPrefersReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReduced(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setPrefersReduced(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return prefersReduced;
+};
+
 const ILLUSTRATION_ACCESSORIES: any[] = [
   { pn: 'NVR', sku: 'ILLUS-NVR', name: 'מקליט NVR', description: 'מקליט וידאו לרשת (להמחשה בלבד)', uSize: 1, price: 0, _illustration: true, image: 'https://drive.google.com/uc?export=view&id=12dVrH0GOzPUdbiVZO8ELDulnnBGUunCN' },
 ];
-
-const getPhysicalZone = (name: string, desc: string): 'roof' | 'plinth' | 'rear' => {
-  const s = `${name || ''} ${desc || ''}`.toLowerCase();
-  if (/מאוורר|fan|מפוח|איוורור|נורת|נורה|led|לד|תאורה|light/.test(s)) return 'roof'; // fans + LED lamp -> top frame/ceiling
-  if (/פס שקע|שקע|pdu|כבל חשמל|power strip/.test(s)) return 'rear';      // PDUs -> rear/side
-  return 'plinth';                                                        // feet / wheels / screws / kits -> base
-};
-
-const determineUSize = (pn: string, desc: string): number => {
-  const text = `${pn} ${desc}`.toLowerCase();
-
-  // A shelf/panel ALWAYS occupies U — even if its description mentions rails/sliding
-  // (e.g. "מדף נשלף על מסילות"). Check this before the 0U-hardware list below.
-  if (text.includes('מדף') || text.includes('shelf')) {
-    const um0 = text.match(/(\d+)\s*u/i);
-    return um0 ? parseInt(um0[1]) : 1;
-  }
-  if (text.includes('פנל') || text.includes('panel') || text.includes('עיוור') || text.includes('מברשת') || text.includes('שערות')) {
-    const um1 = text.match(/(\d+)\s*u/i);
-    return um1 ? parseInt(um1[1]) : 1;
-  }
-  if (text.includes('שקע') || text.includes('pdu') || text.includes('power') || text.includes('פס כח')) {
-    const um2 = text.match(/(\d+)\s*u/i);
-    return um2 ? parseInt(um2[1]) : 1;
-  }
-
-  // High Priority: if it's a non-rack-mounted or side-mounted accessory, it occupies 0U of the frontal rail slots
-  if (
-    text.includes('בורג') || text.includes('ברגים') || text.includes('screw') || text.includes('cage') || text.includes('nut') ||
-    text.includes('גלגל') || text.includes('wheels') || text.includes('wheel') ||
-    text.includes('רגליות') || text.includes('feet') || text.includes('leveling') ||
-    text.includes('מסיל') || text.includes('rails') || text.includes('rail') ||
-    text.includes('סט תל') || text.includes('התקנה') || text.includes('kit') ||
-    text.includes('מחבר') || text.includes('connector') ||
-    text.includes('מאוורר') || text.includes('fan') || text.includes('מפוח') || text.includes('איוורור') ||
-    text.includes('תקרה') || text.includes('roof') || text.includes('ceiling')
-  ) {
-    return 0; // Fans/feet/PDU/hardware have dedicated space — do not consume frame rail U height
-  }
-  
-  // Extract U size
-  const uMatch = text.match(/(\d+)\s*u/i);
-  if (uMatch) {
-    return parseInt(uMatch[1]);
-  }
-  
-  // Default sizes for common items
-  if (text.includes('מדף') || text.includes('shelf')) {
-    return 1;
-  }
-  if (text.includes('פנל') || text.includes('panel') || text.includes('עיוור') || text.includes('עור') || text.includes('מברשת') || text.includes('שערות') || text.includes('שעירות')) {
-    if (text.includes('2u')) return 2;
-    if (text.includes('3u')) return 3;
-    if (text.includes('4u')) return 4;
-    return 1; // standard panels are usually 1U
-  }
-  if (text.includes('שקע') || text.includes('pdu') || text.includes('power') || text.includes('פס כח')) {
-    return 1; // horizontal PDUs are 1U
-  }
-  
-  return 1; // default to 1U if not specified and not a 0U accessory
-};
 
 interface CabinetConfiguratorProps {
   product: any;
@@ -439,17 +413,18 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
     // 2. Optional accessories added by user (Contiguous allocation)
     const optionalItemsAssignment: { uIndex: number; name: string; description: string; accessoryRef: any; optionalIdx: number; isAnchor: boolean; spanU: number; error?: string; instanceId?: string }[] = [];
-    const nonUAccessories: { name: string; quantity: number; description: string; accessoryRef: any; optionalIdx: number; zone: 'roof' | 'plinth' | 'rear' }[] = [];
+    const nonUAccessories: { name: string; sku: string; quantity: number; description: string; accessoryRef: any; optionalIdx: number; zone: 'roof' | 'plinth' | 'vertical' | 'hardware' }[] = [];
     
     selectedOptionals.forEach((opt: any, optIdx: number) => {
       if (opt.uSize === 0) {
         nonUAccessories.push({
-          name: opt.pn,
+          name: opt.name || opt.pn,
+          sku: opt.sku || opt.pn,
           quantity: opt.quantity || 1,
-          description: opt.name || opt.description || '',
+          description: opt.description || opt.name || '',
           accessoryRef: opt,
           optionalIdx: optIdx,
-          zone: getPhysicalZone(opt.pn, opt.name || opt.description || ''),
+          zone: getPhysicalZone(opt.sku || opt.pn, opt.name || '', opt.description || ''),
         });
         return;
       }
@@ -475,18 +450,19 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         
         if (foundStart !== -1) {
           // Mark allocated
+          const instId = `${opt.sku || opt.pn}-unit-${q}`;
           for (let j = 0; j < size; j++) {
             visualSlotsAlloc[foundStart + j] = 'opt';
             const currentU = foundStart + j + 1;
             optionalItemsAssignment.push({
               uIndex: currentU,
-              name: opt.pn,
-              description: opt.name || opt.description || '',
+              name: opt.name || opt.pn,
+              description: opt.description || '',
               accessoryRef: opt,
               optionalIdx: optIdx,
               isAnchor: j === size - 1, // anchor at the TOP of the span
               spanU: size,
-              instanceId: `${opt.id || opt.pn}-${q}`
+              instanceId: instId
             });
           }
         } else {
@@ -528,7 +504,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           builtSlots.push({
             uIndex: u,
             type: 'empty',
-            name: 'תושבת פנויה'
+            name: `U${u} פנוי`,
+            description: 'מקום פנוי להתקנת ציוד'
           });
         }
       }
@@ -540,11 +517,14 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const totalSlotsU = totalU || 0;
   const availableU = totalU - usedU;
 
-  
   const [warningModalOpen, setWarningModalOpen] = useState(false);
   const [pendingAccessory, setPendingAccessory] = useState<Accessory | null>(null);
   const [addedIdx, setAddedIdx] = useState<number | null>(null);
   const [highlightedOptIdx, setHighlightedOptIdx] = useState<number | null>(null);
+  const [lastAddedInstanceId, setLastAddedInstanceId] = useState<string | null>(null);
+  const [zoomMode, setZoomMode] = useState(false);
+  const prefersReducedMotion = usePrefersReducedMotion();
+
   const [a11yMessage, setA11yMessage] = useState<string>('');
   const [highlightedSku, setHighlightedSku] = useState<string | null>(null);
   const [chassisPulse, setChassisPulse] = useState(false);
@@ -555,7 +535,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
   const [customAccName, setCustomAccName] = useState('');
   const [customAccU, setCustomAccU] = useState<number>(1);
-  const [mobileTab, setMobileTab] = useState<'accessories' | 'cabinet' | 'summary'>('cabinet');
 
   const handleAddCustomIllustration = () => {
     if (!customAccName.trim()) return;
@@ -570,14 +549,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       _curated: false,
     } as Accessory;
     
-    // Instead of using handleAddOptional which might show a modal, we just force add it
-    if (newAcc.uSize > availableU) {
-       // but maybe it should check if it fits? Yes, user says they want to plan the cabinet, but they need enough space
-       // Let's just add it directly so they can manage it
-    }
-    
-    // Add logic similar to handleAddOptional but bypassing warnings for illus?
-    // Wait, handleAddOptional checks available U.
     handleAddOptional(newAcc, -1);
     setCustomAccName('');
     setCustomAccU(1);
@@ -594,11 +565,25 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       return;
     }
 
+    const nextUnitIdx = item.quantity;
+    const newInstId = `${item.sku || item.pn}-unit-${nextUnitIdx}`;
+    setLastAddedInstanceId(newInstId);
+    setHighlightedOptIdx(index);
+    setChassisPulse(true);
+
     setSelectedOptionals(prev => {
       const newArr = [...prev];
       newArr[index] = { ...newArr[index], quantity: newArr[index].quantity + 1 };
       return newArr;
     });
+
+    setTimeout(() => {
+      setLastAddedInstanceId(null);
+      setChassisPulse(false);
+    }, 1400);
+    setTimeout(() => {
+      setHighlightedOptIdx(null);
+    }, 2200);
   };
 
   useEffect(() => {
@@ -679,7 +664,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
            
            let initialAvailableU = parsedTotalU;
            if (initialAccessory) {
-             const uSz = determineUSize(initialAccessory.sku, initialAccessory.name || '');
+             const uSz = resolveUConsumption(initialAccessory).u;
              initialAvailableU -= uSz;
              setSelectedOptionals([{
                 pn: initialAccessory.sku,
@@ -751,7 +736,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         let initialAvailableU = parsedTotalU - initialUsedU;
 
         if (initialAccessory) {
-          const uSz = determineUSize(initialAccessory.sku, initialAccessory.name || '');
+          const uSz = resolveUConsumption(initialAccessory).u;
           initialAvailableU -= uSz;
           setSelectedOptionals([{
              pn: initialAccessory.sku,
@@ -833,6 +818,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   }, [selectedOptionals]);
 
   const handleAddOptional = (acc: Accessory, idx: number) => {
+    const existingItem = selectedOptionals.find(item => item.pn === acc.pn);
+    const nextUnitIdx = existingItem ? existingItem.quantity : 0;
+    const newInstId = `${acc.sku || acc.pn}-unit-${nextUnitIdx}`;
+
     // Advisory capacity only: always add. Over-capacity is shown by the red "מקום פנוי" badge, never silently blocked.
     setSelectedOptionals(prev => {
       const existingIdx = prev.findIndex(item => item.pn === acc.pn);
@@ -841,12 +830,21 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         newArr[existingIdx] = { ...newArr[existingIdx], quantity: newArr[existingIdx].quantity + 1 };
         return newArr;
       }
-      return [...prev, { ...acc, quantity: 1, id: Math.random().toString() }];
+      return [...prev, { ...acc, quantity: 1, id: acc.sku || acc.pn || Math.random().toString() }];
     });
+    setLastAddedInstanceId(newInstId);
     setAddedIdx(idx);
+    setHighlightedOptIdx(idx);
     setChassisPulse(true);
-    setTimeout(() => setAddedIdx(null), 1000);
-    setTimeout(() => setChassisPulse(false), 700);
+
+    setTimeout(() => {
+      setLastAddedInstanceId(null);
+      setChassisPulse(false);
+    }, 1400);
+    setTimeout(() => {
+      setAddedIdx(null);
+      setHighlightedOptIdx(null);
+    }, 2200);
   };
 
   const handleRemoveOptional = (index: number, fullyRemove = false) => {
@@ -900,8 +898,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
 
   const roofItems = nonUAccessories.filter(a => a.zone === 'roof');
-  const rearItems = nonUAccessories.filter(a => a.zone === 'rear');
-  const plinthItems = nonUAccessories.filter(a => a.zone !== 'roof' && a.zone !== 'rear');
+  const verticalItems = nonUAccessories.filter(a => a.zone === 'vertical');
+  const plinthItems = nonUAccessories.filter(a => a.zone === 'plinth');
+  const hardwareItems = nonUAccessories.filter(a => a.zone === 'hardware');
 
   // --- Accessory grouping: search + accordion buckets (promoted grouped by BRAND) ---
   const _accPairs = compatibleAccessories.map((acc, idx) => ({ acc, idx }));
@@ -913,16 +912,24 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     return _qTokens.every((tok: string) => hay.includes(tok)); // all words, any order
   };
   const _filtered = _accPairs.filter(_accMatch);
+  const _isPdu = ({ acc }: any) => acc._pdu || /פס שקע|פסי שקע|שקעים|pdu/i.test(`${acc.name || ''} ${acc.description || ''} ${acc.pn || ''}`);
+
+  // All PDUs (horizontal and vertical)
+  const _bucketPdu = _filtered
+    .filter(({ acc }: any) => !acc._promoted && _isPdu({ acc }))
+    .sort((a: any, b: any) => (b.acc.uSize - a.acc.uSize));
+
+  // Occupies U slots (excluding PDUs and promoted items)
   const _bucketTakesU = _filtered
-    .filter(({ acc }: any) => !acc._promoted && acc.uSize > 0)
+    .filter(({ acc }: any) => !acc._promoted && !_isPdu({ acc }) && acc.uSize > 0)
     .sort((a: any, b: any) => {
       const rank = (x: any) => (x.acc._curated ? 0 : (x.acc._depth ? 1 : 2));
       return rank(a) - rank(b);
     });
-  const _bucketFreeAll = _filtered.filter(({ acc }: any) => !acc._promoted && acc.uSize === 0);
-  const _isPdu = ({ acc }: any) => acc._pdu || /פס שקע|פסי שקע|שקעים|pdu/i.test(`${acc.name || ''} ${acc.description || ''} ${acc.pn || ''}`);
-  const _bucketPdu = _bucketFreeAll.filter(_isPdu);
-  const _bucketFree = _bucketFreeAll.filter((x: any) => !_isPdu(x));
+
+  // Zero U accessories (excluding PDUs and promoted items)
+  const _bucketFree = _filtered
+    .filter(({ acc }: any) => !acc._promoted && !_isPdu({ acc }) && acc.uSize === 0);
   
   const _illusPairs = ILLUSTRATION_ACCESSORIES
     .map((acc, i) => ({ acc, idx: 100000 + i }))
@@ -1043,17 +1050,30 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       <div className="p-6 grid grid-cols-1 @4xl:grid-cols-3 gap-8">
         
         {/* Column 1: Interactive Server Rack Simulator (Right side) */}
-        <div className="@4xl:col-span-1 space-y-3">
-          <div className="text-sm font-bold text-gray-800 flex items-center gap-2 mb-1 justify-between">
-            <span>🖥️ הדמיית ארון תקשורת פיזי (Rack Simulator)</span>
-            <span className="text-xs text-gray-400 font-mono">1U = 44.45mm</span>
+        <div className="@4xl:col-span-1 space-y-3 lg:sticky lg:top-4 self-start max-h-[calc(100vh-2rem)] flex flex-col">
+          <div className="text-sm font-bold text-gray-800 flex items-center gap-2 mb-1 justify-between flex-wrap">
+            <span className="flex items-center gap-1.5">
+              <span>🖥️ הדמיית ארון תקשורת פיזי</span>
+              <span className="text-xs font-normal text-slate-500">({totalSlotsU}U)</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setZoomMode(z => !z)}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition-colors cursor-pointer"
+                title={zoomMode ? 'חזור לתצוגת ארון מלאה' : 'עבור לתצוגת תקריב מפורטת'}
+              >
+                {zoomMode ? '🔍 תצוגה מלאה' : '🔍 תקריב מפורט'}
+              </button>
+              <span className="text-xs text-gray-400 font-mono hidden sm:inline">1U = 44.45mm</span>
+            </div>
           </div>
 
           {/* Visual Rack Container */}
-          <div className={`relative border-4 bg-slate-950 p-3 shadow-2xl overflow-hidden flex flex-col min-h-[140px] max-h-[520px] transition-all duration-300 ${chassisPulse ? 'border-emerald-400 ring-4 ring-emerald-400/40 scale-[1.01]' : 'border-slate-700'}`}>
+          <div className={`relative border-4 bg-slate-950 p-2 sm:p-3 shadow-2xl flex flex-col flex-1 min-h-[440px] max-h-[calc(100vh-6rem)] overflow-hidden transition-all duration-300 ${chassisPulse ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-slate-700'}`}>
             
             {/* Simulated Glass Door Gloss Effect */}
-            <div className="absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-white/5 to-transparent pointer-events-none z-10 select-none"></div>
+            <div className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-white/5 to-transparent pointer-events-none z-10 select-none"></div>
             
             {/* Left and Right Rack Rails with mounting holes */}
             <div className="absolute right-1 top-0 bottom-0 w-3 bg-gradient-to-r from-gray-800 via-gray-600 to-gray-900 border-l border-slate-700 flex flex-col justify-around py-2 z-10 pointer-events-none">
@@ -1070,19 +1090,28 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
             {/* ROOF ZONE — fans physically sit in the cabinet ceiling, not the frontal U-rails */}
             {roofItems.length > 0 && (
-              <div className="mx-4 mb-1 rounded-none border border-cyan-500/70 bg-gradient-to-r from-cyan-950/80 via-slate-900 to-cyan-950/80 px-3 py-2">
-                <div className="text-[9px] font-black tracking-widest text-cyan-300/90 uppercase text-center mb-1 select-none">◄ תקרת הארון · איוורור ►</div>
+              <div className="mx-3 mb-1 rounded-none border border-cyan-500/70 bg-gradient-to-r from-cyan-950/80 via-slate-900 to-cyan-950/80 px-2.5 py-1.5 flex-shrink-0">
+                <div className="text-[9px] font-black tracking-widest text-cyan-300/90 uppercase text-center mb-1 select-none">◄ תקרת הארון (Roof) · איוורור ותאורה ►</div>
                 {roofItems.map((r, i) => (
                   <div key={i} className="flex items-center justify-between text-cyan-100 text-[11px] py-0.5">
-                    <span className="flex items-center gap-1.5"><span className="inline-block animate-spin" style={{ animationDuration: '4s' }}>🌀</span>{r.description || r.name}</span>
-                    <span className="font-mono font-bold bg-cyan-900/60 px-1.5 rounded">{r.quantity}x</span>
+                    <span className="flex items-center gap-1.5 truncate">
+                      <span className="inline-block animate-spin text-cyan-300" style={{ animationDuration: '4s' }}>🌀</span>
+                      <span className="truncate">{r.description || r.name}</span>
+                    </span>
+                    <span className="font-mono font-bold bg-cyan-900/60 px-1.5 rounded text-[10px] shrink-0 mr-1">{r.quantity}x</span>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Scrollable Chassis Interior */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-1 px-4 relative z-0 custom-scrollbar pr-1" style={{ contain: 'layout' }}>
+            {/* Chassis Interior: Full proportional view or scrollable zoom */}
+            <div 
+              className={zoomMode 
+                ? "flex-1 overflow-y-auto overflow-x-hidden space-y-1 px-2 sm:px-3 py-1 relative z-0 custom-scrollbar pr-1" 
+                : "flex-1 flex flex-col justify-between w-full h-full min-h-0 relative z-0 px-2 sm:px-3 py-1 space-y-0.5 overflow-hidden select-none"
+              }
+              style={{ contain: 'layout' }}
+            >
               <AnimatePresence mode="popLayout" initial={false}>
               {slots.map((slot, idx) => {
                 const isEmpty = slot.type === 'empty';
@@ -1090,6 +1119,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 const isShelf = slot.type === 'preset-shelf';
                 const isOptional = slot.type === 'optional-accessory';
                 const isCont = isOptional && slot.isAnchor === false; // continuation row of a multi-U item
+
+                if (isCont) return null; // merged into the anchor cell above (multi-U block)
 
                 const nameLower = (slot.name || '').toLowerCase();
                 const descLower = (slot.description || '').toLowerCase();
@@ -1101,29 +1132,42 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 const isShelfUpgrade = isOptional && (nameLower.includes('מדף') || descLower.includes('מדף') || nameLower.includes('shelf') || descLower.includes('shelf') || nameLower.includes('מגירה') || descLower.includes('sliding'));
 
                 // Choose ClassNames based on type
-                let slotStyles = 'bg-slate-900/20 hover:bg-slate-900/50 border-slate-800/60 text-slate-500 py-2 px-3 border-dashed hover:text-slate-300 hover:border-[#004387]/70 cursor-pointer';
+                let slotStyles = 'bg-slate-900/30 hover:bg-slate-900/60 border-slate-800/60 text-slate-500 py-1.5 px-2.5 border-dashed hover:text-slate-300 hover:border-[#004387]/70 cursor-pointer';
                 if (isFan || isFanUpgrade) {
-                  slotStyles = 'bg-gradient-to-r from-cyan-950/80 via-slate-900 to-cyan-950/80 border-cyan-500/80 text-cyan-200 py-2.5 px-3 shadow-md hover:border-cyan-400';
+                  slotStyles = 'bg-gradient-to-r from-cyan-950/80 via-slate-900 to-cyan-950/80 border-cyan-500/80 text-cyan-200 py-1.5 px-2.5 shadow-md hover:border-cyan-400';
                 } else if (isShelf || isShelfUpgrade) {
-                  slotStyles = 'bg-gradient-to-r from-emerald-950/80 via-slate-900 to-emerald-950/80 border-emerald-500/80 text-emerald-200 py-2.5 px-3 shadow-md hover:border-emerald-400';
+                  slotStyles = 'bg-gradient-to-r from-emerald-950/80 via-slate-900 to-emerald-950/80 border-emerald-500/80 text-emerald-200 py-1.5 px-2.5 shadow-md hover:border-emerald-400';
                 } else if (isBlank) {
-                  slotStyles = 'bg-gradient-to-r from-neutral-800 via-neutral-900 to-neutral-800 border-neutral-600/80 text-neutral-300 py-2.5 px-3 shadow-sm hover:border-neutral-400';
+                  slotStyles = 'bg-gradient-to-r from-neutral-800 via-neutral-900 to-neutral-800 border-neutral-600/80 text-neutral-300 py-1.5 px-2.5 shadow-sm hover:border-neutral-400';
                 } else if (isBrush) {
-                  slotStyles = 'bg-gradient-to-r from-black via-zinc-900 to-black border-amber-600/60 text-amber-200 py-2.5 px-3 shadow-sm hover:border-amber-400';
+                  slotStyles = 'bg-gradient-to-r from-black via-zinc-900 to-black border-amber-600/60 text-amber-200 py-1.5 px-2.5 shadow-sm hover:border-amber-400';
                 } else if (isPdu) {
-                  slotStyles = 'bg-gradient-to-r from-red-950/90 via-zinc-950 to-red-900 border-red-600/70 text-red-100 py-2.5 px-3 shadow-md hover:border-red-400';
+                  slotStyles = 'bg-gradient-to-r from-red-950/90 via-zinc-950 to-red-900 border-red-600/70 text-red-100 py-1.5 px-2.5 shadow-md hover:border-red-400';
                 } else if (isOptional) {
-                  slotStyles = 'bg-gradient-to-r from-indigo-950/40 via-slate-900 to-indigo-950/40 border-indigo-600/60 text-indigo-200 py-2.5 px-3 shadow-sm hover:border-indigo-400';
+                  slotStyles = 'bg-gradient-to-r from-indigo-950/40 via-slate-900 to-indigo-950/40 border-indigo-600/60 text-indigo-200 py-1.5 px-2.5 shadow-sm hover:border-indigo-400';
                 }
 
-                if (isCont) return null; // merged into the anchor cell above (multi-U block)
                 const spanU = slot.spanU || 1;
                 const isMerged = isOptional && spanU > 1;
+                const isNewlyAdded = slot.instanceId === lastAddedInstanceId;
+                const isHighlighted = isNewlyAdded || (typeof slot.optionalIdx === 'number' && highlightedOptIdx === slot.optionalIdx);
+
+                const slotKey = slot.instanceId || `slot-${slot.type}-${slot.uIndex}`;
+
                 return (
-                  <div 
-                    key={idx}
-                    style={isOptional ? { minHeight: isMerged ? `${spanU * 58}px` : '58px' } : undefined}
-                    className={`group text-xs flex items-center justify-between transition-all duration-200 border relative overflow-hidden ${slotStyles} ${highlightedOptIdx === slot.optionalIdx ? 'ring-2 ring-amber-400 border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6)] z-50' : ''}`}
+                  <motion.div 
+                    key={slotKey}
+                    layout={prefersReducedMotion ? false : "position"}
+                    initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.96 }}
+                    animate={{ 
+                      opacity: 1, 
+                      scale: 1,
+                      boxShadow: isHighlighted ? '0 0 14px rgba(251,191,36,0.85)' : 'none'
+                    }}
+                    exit={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.94, transition: { duration: 0.16 } }}
+                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                    style={zoomMode ? { minHeight: `${spanU * 48}px` } : { flex: `${spanU} ${spanU} 0px` }}
+                    className={`group text-xs flex items-center justify-between transition-colors duration-150 border relative overflow-hidden ${slotStyles} ${isHighlighted ? 'ring-2 ring-amber-400 border-amber-400 z-30' : ''}`}
                     onClick={() => {
                       if (isEmpty) {
                         const el = document.getElementById('com-accessories-list');
@@ -1139,25 +1183,16 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     }}
                   >
                     {/* Position indicator */}
-                    <div className={`font-mono font-bold text-[10px] tabular-nums bg-slate-800/80 text-slate-300 flex flex-col items-center justify-center rounded border border-slate-700/50 flex-shrink-0 relative z-20 ${isMerged ? 'w-11 py-1' : 'w-8 h-5'}`}>
+                    <div className={`font-mono font-bold text-[10px] tabular-nums bg-slate-800/90 text-slate-300 flex flex-col items-center justify-center rounded border border-slate-700/50 flex-shrink-0 relative z-20 ${isMerged ? 'w-11 py-0.5' : 'w-8 h-4 sm:h-5'}`}>
                       {isMerged ? (<><span>{slot.uIndex}-{slot.uIndex - spanU + 1}</span><span className="text-[8px] text-emerald-300">{spanU}U</span></>) : `${slot.uIndex}U`}
                     </div>
 
-                    {/* Real product image filling the slot — like a real rack unit */}
-                    {isOptional && slot.isAnchor !== false && !isShelfUpgrade && slot.accessoryRef?.image && (
-                      <div className="absolute inset-y-[1px] right-2 left-2 z-0 overflow-hidden flex items-center justify-center bg-white/5 rounded-sm">
-                        <img referrerPolicy="no-referrer" src={slot.accessoryRef.image} alt=""
-                          className="w-full h-full object-contain object-center opacity-100 pointer-events-none select-none mix-blend-screen"
-                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
-                        <div className="absolute inset-0 bg-gradient-to-l from-slate-900/90 via-slate-900/40 to-transparent pointer-events-none z-10"></div>
-                      </div>
-                    )}
-                    {/* Schematic shelf drawing (shelves have no proper front photo) */}
+                    {/* Schematic shelf drawing */}
                     {(isShelf || isShelfUpgrade) && slot.isAnchor !== false && (
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-1 z-0" aria-hidden="true">
                         <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="w-full h-full opacity-90">
                           <defs>
-                            <linearGradient id="shelfGrad" x1="0" y1="0" x2="0" y2="1">
+                            <linearGradient id={`shelfGrad-${slot.uIndex}`} x1="0" y1="0" x2="0" y2="1">
                               <stop offset="0" stopColor="#64748b" />
                               <stop offset="0.55" stopColor="#475569" />
                               <stop offset="1" stopColor="#334155" />
@@ -1169,7 +1204,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                           <circle cx="14" cy="29" r="1.5" fill="#0f172a" />
                           <circle cx="186" cy="13" r="1.5" fill="#0f172a" />
                           <circle cx="186" cy="29" r="1.5" fill="#0f172a" />
-                          <rect x="16" y="11" width="168" height="21" rx="1.5" fill="url(#shelfGrad)" stroke="#1e293b" strokeWidth="0.8" />
+                          <rect x="16" y="11" width="168" height="21" rx="1.5" fill={`url(#shelfGrad-${slot.uIndex})`} stroke="#1e293b" strokeWidth="0.8" />
                           <rect x="16" y="28" width="168" height="4" fill="#1e293b" opacity="0.45" />
                           {Array.from({ length: 9 }).map((_, i) => (
                             <rect key={i} x={26 + i * 18} y="15" width="10" height="11" rx="1" fill="#1e293b" opacity="0.4" />
@@ -1177,43 +1212,57 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                         </svg>
                       </div>
                     )}
-                    {/* Left content description */}
-                    <div className="flex-1 min-w-0 pr-3 pl-1 text-right relative z-10">
+
+                    {/* Clean product representation */}
+                    {isOptional && !isShelfUpgrade && slot.accessoryRef?.image && zoomMode && (
+                      <div className="absolute inset-y-[2px] right-10 left-16 z-0 overflow-hidden flex items-center justify-center opacity-30 pointer-events-none">
+                        <img 
+                          referrerPolicy="no-referrer" 
+                          src={slot.accessoryRef.image} 
+                          alt=""
+                          className="h-full object-contain"
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} 
+                        />
+                      </div>
+                    )}
+
+                    {/* Content description */}
+                    <div className="flex-1 min-w-0 pr-2 pl-1 text-right relative z-10">
                       <div className="flex items-center gap-1.5">
                         {/* Dynamic category icon */}
-                        {(isFan || isFanUpgrade) && <span className="inline-block animate-spin text-cyan-400 mr-1" style={{ animationDuration: '5s' }}>🌀</span>}
-                        {(isShelf || isShelfUpgrade) && <span className="text-emerald-400">📥</span>}
-                        {isBlank && <span className="text-neutral-500">🔩</span>}
-                        {isBrush && <span className="text-amber-500 font-bold">💈</span>}
-                        {isPdu && <span className="text-red-500 animate-pulse">⚡</span>}
+                        {(isFan || isFanUpgrade) && <span className="inline-block animate-spin text-cyan-400 mr-0.5" style={{ animationDuration: '5s' }}>🌀</span>}
+                        {(isShelf || isShelfUpgrade) && <span className="text-emerald-400 text-xs">📥</span>}
+                        {isBlank && <span className="text-neutral-400 text-xs">🔩</span>}
+                        {isBrush && <span className="text-amber-400 font-bold text-xs">💈</span>}
+                        {isPdu && <span className="text-red-400 animate-pulse text-xs">⚡</span>}
                         
-                        <p className="font-semibold tracking-wide break-words leading-tight" style={{ textShadow: slot.accessoryRef?.image ? '0 1px 3px rgba(0,0,0,0.8)' : 'none' }}>
-                          {isCont ? '' : slot.name}
+                        <p className="font-semibold tracking-wide truncate leading-tight text-[11px] sm:text-xs">
+                          {slot.name}
                         </p>
                       </div>
 
                       {isBrush && (
-                        <div className="text-[8px] text-amber-500/80 font-mono tracking-widest mt-0.5 select-none opacity-60">
+                        <div className="text-[7px] text-amber-500/80 font-mono tracking-widest select-none opacity-70">
                           ||||||||||||||||||||||||||||||||||||||||||||
                         </div>
                       )}
                       {isPdu && (
-                        <div className="text-[8px] text-red-500/80 font-mono tracking-widest mt-0.5 select-none opacity-80">
+                        <div className="text-[7px] text-red-500/80 font-mono tracking-widest select-none opacity-80">
                           [::] [::] [::] [::] [::] [::]
                         </div>
                       )}
 
-                      {slot.description && !isBrush && !isPdu && (
-                        <p className="text-[10px] text-slate-400 font-normal line-clamp-2 break-words opacity-85 mt-0.5" title={slot.description} style={{ textShadow: slot.accessoryRef?.image ? '0 1px 2px rgba(0,0,0,0.9)' : 'none' }}>
+                      {slot.description && !isBrush && !isPdu && zoomMode && (
+                        <p className="text-[10px] text-slate-400 font-normal truncate opacity-85 mt-0.5" title={slot.description}>
                           {slot.description}
                         </p>
                       )}
                     </div>
 
                     {/* Action buttons inside interactive slots */}
-                    {(!isCont) && <div className="flex items-center gap-1 relative z-20">
+                    <div className="flex items-center gap-1 relative z-20 flex-shrink-0">
                       {isOptional && typeof slot.optionalIdx === 'number' && (
-                        <div className="flex items-center gap-1 bg-slate-900/80 border border-slate-700 px-1 py-0.5 rounded opacity-80 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-700 px-1 py-0.5 rounded opacity-90 group-hover:opacity-100 transition-opacity">
                           <button 
                             type="button"
                             title="הוסף יחידה"
@@ -1221,11 +1270,11 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                               e.stopPropagation();
                               if (typeof slot.optionalIdx === 'number') handleIncrementQuantity(slot.optionalIdx);
                             }}
-                            className="p-1 hover:bg-slate-800 rounded text-amber-300"
+                            className="p-0.5 hover:bg-slate-800 rounded text-amber-300 cursor-pointer"
                           >
-                            <Plus size={12} />
+                            <Plus size={11} />
                           </button>
-                          <span className="text-amber-400 px-1 font-bold font-mono text-[11px]">
+                          <span className="text-amber-400 px-0.5 font-bold font-mono text-[10px]">
                             {slot.accessoryRef.quantity}x
                           </span>
                           <button 
@@ -1235,9 +1284,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                               e.stopPropagation();
                               if (typeof slot.optionalIdx === 'number') handleRemoveOptional(slot.optionalIdx);
                             }}
-                            className="p-1 hover:bg-slate-800 rounded text-red-400"
+                            className="p-0.5 hover:bg-slate-800 rounded text-red-400 cursor-pointer"
                           >
-                            <Minus size={12} />
+                            <Minus size={11} />
                           </button>
                         </div>
                       )}
@@ -1249,83 +1298,87 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                       {isShelf && (
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                       )}
-                    </div>}
-                  </div>
+                    </div>
+                  </motion.div>
                 );
               })}
               </AnimatePresence>
             </div>
 
-            {/* Ground-level or side-rail zero-U accessories (screws, wheels, cable management) */}
-            {(plinthItems.length + rearItems.length) > 0 && (
-              <div className="mt-2 pt-2 border-t border-slate-800/80 space-y-1">
-                <div className="text-[9px] font-black tracking-widest text-[#fe8d00]/90 uppercase text-center mb-1 select-none">
-                  ◄ פריטי חיבור והתקנה מופעלים (Side Rail / 0U) ►
-                </div>
-                <div className="max-h-[140px] overflow-y-auto space-y-1 custom-scrollbar pr-1">
-                  {[...plinthItems, ...rearItems].map((nonU, index) => {
-                    const nameLower = (String(nonU.name || '') + " " + String(nonU.description || '')).toLowerCase();
-                    const isScrew = nameLower.includes('בורג') || nameLower.includes('ברגים') || nameLower.includes('screw') || nameLower.includes('nut');
-                    const isWheel = nameLower.includes('גלגל') || nameLower.includes('wheel') || nameLower.includes('wheels');
-                    const isFeet = nameLower.includes('רגליות') || nameLower.includes('feet');
-                    const isCable = nameLower.includes('כביל') || nameLower.includes('cable');
-                    
-                    let icon = '⚙️';
-                    if (isScrew) icon = '🔩';
-                    else if (isWheel) icon = '🛞';
-                    else if (isFeet) icon = '🪜';
-                    else if (isCable) icon = '🔗';
-
-                    return (
-                      <div key={index} className="flex items-center justify-between bg-slate-900/60 border border-slate-800/70 p-1.5 px-2 text-[10px] text-slate-300">
-                        <div className="flex items-center gap-1.5 min-w-0 pr-1">
-                          <span className="text-xs flex-shrink-0">{icon}</span>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-extrabold text-slate-100 truncate">{nonU.name}</p>
-                            <p className="text-slate-400 text-[8px] truncate">{nonU.description}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 bg-slate-950 px-1 py-0.5 border border-slate-800 rounded flex-shrink-0 mr-1">
-                          <button 
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleIncrementQuantity(nonU.optionalIdx);
-                            }}
-                            className="text-amber-400 hover:bg-slate-800 p-0.5 rounded cursor-pointer"
-                          >
-                            <Plus size={10} />
-                          </button>
-                          <span className="font-mono font-bold text-amber-500 min-w-[16px] text-center text-[10px]">
-                            {nonU.quantity}x
-                          </span>
-                          <button 
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRemoveOptional(nonU.optionalIdx);
-                            }}
-                            className="text-red-400 hover:bg-slate-800 p-0.5 rounded cursor-pointer"
-                          >
-                            <Minus size={10} />
-                          </button>
+            {/* Non-U Physical Accessory Zones */}
+            <div className="mt-1 pt-1.5 border-t border-slate-800/80 space-y-1 flex-shrink-0">
+              {/* 1. Vertical & Side Rails Zone */}
+              {verticalItems.length > 0 && (
+                <div className="rounded border border-indigo-500/40 bg-indigo-950/40 px-2 py-1">
+                  <div className="text-[9px] font-black tracking-widest text-indigo-300 uppercase text-center mb-0.5 select-none">
+                    ◄ דופן ורטיקלית וצדית (Vertical Rails) ►
+                  </div>
+                  <div className="space-y-0.5 max-h-[80px] overflow-y-auto custom-scrollbar">
+                    {verticalItems.map((item, i) => (
+                      <div key={i} className="flex items-center justify-between text-[10px] text-slate-200">
+                        <span className="truncate pr-1">⚡ {item.name || item.description}</span>
+                        <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded shrink-0">
+                          <button type="button" onClick={() => handleIncrementQuantity(item.optionalIdx)} className="text-amber-300 hover:bg-slate-800 p-0.5 cursor-pointer"><Plus size={9} /></button>
+                          <span className="font-mono text-amber-400 font-bold text-[9px]">{item.quantity}x</span>
+                          <button type="button" onClick={() => handleRemoveOptional(item.optionalIdx)} className="text-red-400 hover:bg-slate-800 p-0.5 cursor-pointer"><Minus size={9} /></button>
                         </div>
                       </div>
-                    );
-                  })}
+                    ))}
+                  </div>
                 </div>
+              )}
+
+              {/* 2. Plinth & Base Zone (Wheels, Leveling Feet) */}
+              {plinthItems.length > 0 && (
+                <div className="rounded border border-emerald-500/40 bg-emerald-950/40 px-2 py-1">
+                  <div className="text-[9px] font-black tracking-widest text-emerald-300 uppercase text-center mb-0.5 select-none">
+                    ◄ בסיס ותחתית הארון (Plinth / Base) ►
+                  </div>
+                  <div className="space-y-0.5 max-h-[80px] overflow-y-auto custom-scrollbar">
+                    {plinthItems.map((item, i) => (
+                      <div key={i} className="flex items-center justify-between text-[10px] text-slate-200">
+                        <span className="truncate pr-1">🛞 {item.name || item.description}</span>
+                        <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded shrink-0">
+                          <button type="button" onClick={() => handleIncrementQuantity(item.optionalIdx)} className="text-amber-300 hover:bg-slate-800 p-0.5 cursor-pointer"><Plus size={9} /></button>
+                          <span className="font-mono text-amber-400 font-bold text-[9px]">{item.quantity}x</span>
+                          <button type="button" onClick={() => handleRemoveOptional(item.optionalIdx)} className="text-red-400 hover:bg-slate-800 p-0.5 cursor-pointer"><Minus size={9} /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 3. Hardware & Mounting Zone (Screws, Support Rails) */}
+              {hardwareItems.length > 0 && (
+                <div className="rounded border border-amber-500/40 bg-amber-950/30 px-2 py-1">
+                  <div className="text-[9px] font-black tracking-widest text-amber-300 uppercase text-center mb-0.5 select-none">
+                    ◄ חומרת הרכבה וציוד נלווה (Hardware) ►
+                  </div>
+                  <div className="space-y-0.5 max-h-[80px] overflow-y-auto custom-scrollbar">
+                    {hardwareItems.map((item, i) => (
+                      <div key={i} className="flex items-center justify-between text-[10px] text-slate-200">
+                        <span className="truncate pr-1">🔩 {item.name || item.description}</span>
+                        <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded shrink-0">
+                          <button type="button" onClick={() => handleIncrementQuantity(item.optionalIdx)} className="text-amber-300 hover:bg-slate-800 p-0.5 cursor-pointer"><Plus size={9} /></button>
+                          <span className="font-mono text-amber-400 font-bold text-[9px]">{item.quantity}x</span>
+                          <button type="button" onClick={() => handleRemoveOptional(item.optionalIdx)} className="text-red-400 hover:bg-slate-800 p-0.5 cursor-pointer"><Minus size={9} /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {unallocatedItems.length > 0 && (
+              <div className="mx-2 mt-1.5 p-2 bg-red-950/80 border border-red-500/80 rounded text-red-200 text-[10px] text-center font-bold flex-shrink-0">
+                שים לב: {unallocatedItems.length} פריטים לא הוצגו בשרטוט כיוון שאין עבורם רצף פנוי מספיק גדול.
               </div>
             )}
-            
-          {unallocatedItems.length > 0 && (
-            <div className="mx-4 mt-2 mb-4 p-3 bg-red-50 border border-red-200 rounded-none text-red-700 text-[11px] text-center font-bold">
-              שים לב: {unallocatedItems.length} פריטים לא הוצגו בשרטוט כיוון שאין עבורם רצף פנוי מספיק גדול.
-              <br />
-              הפריטים מופיעים ברשימת הקונפיגורציה בסטטוס התקנה שגוי.
-            </div>
-          )}
+
             {/* Simulated Server Room Floor Shadow */}
-            <div className="mt-2 text-center text-[10px] font-semibold text-slate-500 tracking-wide select-none border-t border-slate-800/80 pt-1.5 uppercase font-mono">
+            <div className="mt-1 text-center text-[9px] font-semibold text-slate-500 tracking-wider select-none border-t border-slate-800/80 pt-1 uppercase font-mono flex-shrink-0">
               ◄ STEEL FRAME CHASSIS INTERLINKED ►
             </div>
           </div>
@@ -1368,16 +1421,21 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             
             {selectedOptionals.length > 0 ? (
               <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto pr-1">
+                <AnimatePresence initial={false}>
                  {selectedOptionals.map((item, idx) => (
-                   <div 
-                    key={item.id} 
+                   <motion.div 
+                    key={item.sku || item.pn || item.id} 
                     id={`selected-opt-${idx}`}
+                    layout={prefersReducedMotion ? false : "position"}
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
                     onClick={() => {
                       // Highlight in chassis
                       setHighlightedOptIdx(idx);
                       setTimeout(() => setHighlightedOptIdx(null), 2000);
                     }}
-                    className={`flex flex-col bg-white border p-3 rounded-none text-sm font-medium animate-in zoom-in duration-200 shadow-sm transition-all cursor-pointer ${highlightedOptIdx === idx ? 'border-amber-500 ring-2 ring-amber-500/50 bg-amber-50/30' : 'border-[#b3d4f5] hover:border-[#004387]'}`}
+                    className={`flex flex-col bg-white border p-3 rounded-none text-sm font-medium shadow-sm transition-all cursor-pointer ${highlightedOptIdx === idx ? 'border-amber-500 ring-2 ring-amber-500/50 bg-amber-50/30' : 'border-[#b3d4f5] hover:border-[#004387]'}`}
                    >
                      <div className="flex items-start justify-between gap-2">
                        <div className="flex items-center gap-2 overflow-hidden">
@@ -1435,8 +1493,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                          </button>
                        </div>
                      </div>
-                   </div>
+                   </motion.div>
                  ))}
+                </AnimatePresence>
               </div>
             ) : (
               <div className="py-8 text-center text-gray-500 text-sm italic bg-white border border-[#b3d4f5]/60">
@@ -1641,9 +1700,14 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                   ▼ בסיס: {plinthItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
                 </div>
               )}
-              {rearItems.length > 0 && (
+              {verticalItems.length > 0 && (
                 <div style={{ background: '#fef2f2', borderTop: '1px solid #fca5a5', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#b91c1c' }}>
-                  ◄ אחורי (PDU): {rearItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
+                  ◄ ורטיקלי / צדי: {verticalItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
+                </div>
+              )}
+              {hardwareItems.length > 0 && (
+                <div style={{ background: '#fffbeb', borderTop: '1px solid #fde68a', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#b45309' }}>
+                  ◄ חומרה וברגים: {hardwareItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
                 </div>
               )}
             </div>
