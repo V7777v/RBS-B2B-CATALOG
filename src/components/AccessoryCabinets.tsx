@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Server, Loader2, ExternalLink, ShoppingCart, CheckCircle2, BadgePercent, ArrowUpRight, HelpCircle, AlertCircle, Sparkles } from 'lucide-react';
 import { CabinetConfigurator } from './CabinetConfigurator';
 import Papa from 'papaparse';
-import { fetchCabinetMatrix, fetchCompatMap, checkAccessoryFitsCabinet, isAccessoryAShelf, normalizeSku } from '../utils/cabinetData';
+import { fetchCabinetMatrix, fetchCompatMap, checkAccessoryFitsCabinet, isAccessoryAShelf, isProductShelf, extractAllMatrixShelfSkus, normalizeSku } from '../utils/cabinetData';
 import { getToken as getAppCheckToken } from 'firebase/app-check';
 import { appCheck } from '../firebase';
 
@@ -98,7 +98,6 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
 
         const productSkuNorm = normalizeSku(product.sku);
         const accText = `${product.name || ''} ${(product as any).description || ''}`;
-        const isShelf = isAccessoryAShelf(accText);
         
         const mDepth = accText.match(/עומק[:\s]*([0-9]{2,4})/);
         let accDepthFallback: number | null = null;
@@ -109,6 +108,8 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
 
         const matrix = await fetchCabinetMatrix(appCheckTok);
         const compatMap = await fetchCompatMap(appCheckTok);
+        const allMatrixShelves = extractAllMatrixShelfSkus(matrix);
+        const isShelf = isProductShelf(product, undefined, allMatrixShelves);
         
         const compatibleSkus = new Set<string>();
         const specsMap = new Map<string, CabinetSpec>();

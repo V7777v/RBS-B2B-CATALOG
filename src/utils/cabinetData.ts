@@ -104,8 +104,86 @@ export const fetchCompatMap = async (appCheckTok: string): Promise<Record<string
   return compatMap;
 };
 
-export const isAccessoryAShelf = (accNameOrDesc: string): boolean => {
-  const text = accNameOrDesc.toLowerCase();
+export const KNOWN_MATRIX_SHELF_SKUS = new Set<string>([
+  '1024',
+  '1152',
+  '2234',
+  '1179',
+  '117909',
+  '117911',
+  '117913',
+  '117914',
+  '117915',
+  '117916',
+  '150460',
+  '150461',
+  '150463',
+  '150467',
+  '150470',
+  '130460D',
+]);
+
+export const extractAllMatrixShelfSkus = (matrix: Record<string, CabinetMatrixData>): Set<string> => {
+  const set = new Set<string>(KNOWN_MATRIX_SHELF_SKUS);
+  for (const cabSku in matrix) {
+    const cab = matrix[cabSku];
+    if (!cab) continue;
+    (cab.suitableStandard || []).forEach(s => s && s !== 'X' && set.add(normalizeSku(s)));
+    (cab.suitableHanging || []).forEach(s => s && s !== 'X' && set.add(normalizeSku(s)));
+    (cab.suitableSliding || []).forEach(s => s && s !== 'X' && set.add(normalizeSku(s)));
+  }
+  return set;
+};
+
+export const isProductShelf = (
+  prodOrSku: any,
+  catalogMap?: Map<string, any>,
+  allMatrixShelfSkus?: Set<string>
+): boolean => {
+  if (!prodOrSku) return false;
+
+  let sku = '';
+  let prod: any = null;
+
+  if (typeof prodOrSku === 'string') {
+    sku = normalizeSku(prodOrSku);
+    if (catalogMap && catalogMap.has(sku)) {
+      prod = catalogMap.get(sku);
+    }
+  } else if (typeof prodOrSku === 'object') {
+    sku = normalizeSku(prodOrSku.sku || prodOrSku.pn);
+    prod = prodOrSku;
+    if ((!prod.name || !prod.description) && catalogMap && catalogMap.has(sku)) {
+      prod = { ...catalogMap.get(sku), ...prod };
+    }
+  }
+
+  // 1. Check SKU against matrix shelf columns across the matrix
+  if (sku) {
+    if (allMatrixShelfSkus && allMatrixShelfSkus.has(sku)) return true;
+    if (KNOWN_MATRIX_SHELF_SKUS.has(sku)) return true;
+  }
+
+  // 2. Check product text / subcategories
+  if (prod) {
+    const name = String(prod.name || prod['שם פריט'] || '').toLowerCase();
+    const desc = String(prod.description || prod['תיאור'] || '').toLowerCase();
+    const sub = String(prod.subcategory || prod['קטגוריה'] || '').toLowerCase();
+    const nested = String(prod.nestedSubcategory || prod['תת קטגוריה'] || prod['Nested subcategory'] || '').toLowerCase();
+
+    if (/מדף|shelf|מגירה|drawer/i.test(name)) return true;
+    if (/מדף|shelf|מגירה|drawer/i.test(desc)) return true;
+    if (nested.includes('מדפ') || sub.includes('מדפ')) return true;
+  }
+
+  return false;
+};
+
+export const isAccessoryAShelf = (accNameOrDescOrSku: string): boolean => {
+  if (!accNameOrDescOrSku) return false;
+  const norm = normalizeSku(accNameOrDescOrSku);
+  if (KNOWN_MATRIX_SHELF_SKUS.has(norm)) return true;
+  const text = accNameOrDescOrSku.toLowerCase();
   return text.includes('מדף') || text.includes('shelf') || text.includes('מגירה') || text.includes('drawer');
 };
 

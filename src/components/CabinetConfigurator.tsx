@@ -2,7 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from "motion/react";
 import { AlertCircle, CheckCircle, Plus, Minus, X, Server, Download, Box, AlertTriangle, ChevronDown, Search, ZoomIn, Eye, Maximize2 } from 'lucide-react';
 import Papa from 'papaparse';
-import { fetchCabinetMatrix, fetchCompatMap, checkAccessoryFitsCabinet, isAccessoryAShelf, normalizeSku, parseCompatibleSkus, CabinetMatrixData } from '../utils/cabinetData';
+import { 
+  fetchCabinetMatrix, 
+  fetchCompatMap, 
+  checkAccessoryFitsCabinet, 
+  isAccessoryAShelf, 
+  isProductShelf, 
+  extractAllMatrixShelfSkus, 
+  KNOWN_MATRIX_SHELF_SKUS, 
+  normalizeSku, 
+  parseCompatibleSkus, 
+  CabinetMatrixData 
+} from '../utils/cabinetData';
 import { 
   VERIFIED_ZERO_U_EXCEPTIONS, 
   isFlaggedForCabinetSuitability, 
@@ -30,6 +41,7 @@ interface Accessory {
   _depth?: number;
   _illustration?: boolean;
   isShelf?: boolean;
+  shelfType?: string;
   _source?: string;
 }
 
@@ -145,13 +157,33 @@ const buildCatalogAccessories = (
   catalogData: any[],
   productSkuNorm: string,
   cabinet: CabinetMatrixData | null,
-  compatMap: Record<string, any>
+  compatMap: Record<string, any>,
+  allMatrixShelves?: Set<string>
 ): Accessory[] => {
   const inMatrixShelves = new Set<string>();
+  const shelfTypeMap = new Map<string, string>();
   if (cabinet) {
-    (cabinet.suitableStandard || []).forEach(s => s && s !== 'X' && inMatrixShelves.add(s));
-    (cabinet.suitableHanging || []).forEach(s => s && s !== 'X' && inMatrixShelves.add(s));
-    (cabinet.suitableSliding || []).forEach(s => s && s !== 'X' && inMatrixShelves.add(s));
+    (cabinet.suitableStandard || []).forEach(s => {
+      const n = normalizeSku(s);
+      if (n && n !== 'X') {
+        inMatrixShelves.add(n);
+        shelfTypeMap.set(n, 'סטנדרטי');
+      }
+    });
+    (cabinet.suitableHanging || []).forEach(s => {
+      const n = normalizeSku(s);
+      if (n && n !== 'X') {
+        inMatrixShelves.add(n);
+        shelfTypeMap.set(n, 'תלוי');
+      }
+    });
+    (cabinet.suitableSliding || []).forEach(s => {
+      const n = normalizeSku(s);
+      if (n && n !== 'X') {
+        inMatrixShelves.add(n);
+        shelfTypeMap.set(n, 'נשלף');
+      }
+    });
   }
 
   const catalogMap = new Map<string, any>();
@@ -165,7 +197,7 @@ const buildCatalogAccessories = (
   const itemsMap = new Map<string, Accessory>();
 
   // ==========================================
-  // Track 1: Shelves permitted in Cabinet Matrix (authoritative source for shelves)
+  // Track 1: Shelves permitted in Cabinet Matrix (authoritative and sole source for shelves)
   // ==========================================
   inMatrixShelves.forEach(shelfSku => {
     const prod = catalogMap.get(shelfSku);
@@ -191,20 +223,25 @@ const buildCatalogAccessories = (
       _curated: true,
       image: (prod?.images && prod.images[0]) || prod?.imageURL || '',
       isShelf: true,
+      shelfType: shelfTypeMap.get(shelfSku) || 'סטנדרטי',
       _source: 'matrix_shelf'
     });
   });
 
   // ==========================================
-  // Track 2: Cabinet Accessories & PDUs ("מדפים ואביזרים" + accessories category)
+  // Track 2: Cabinet Accessories & PDUs (Strictly non-shelf items only)
   // ==========================================
   (catalogData || []).forEach((pp: any) => {
     if (!pp || !pp.sku) return;
     const normSku = normalizeSku(pp.sku);
     if (!normSku || normSku === productSkuNorm) return;
 
-    // Check if this item is in the accessories domain and belongs to Infrastructure pricelist
+    // Check if this item belongs to Infrastructure pricelist
     if (!isInfrastructureItem(pp)) return;
+    if (isCabinetProduct(pp)) return;
+
+    // Any item identified as a shelf is completely excluded from non-shelf tracks!
+    if (isProductShelf(pp, catalogMap, allMatrixShelves)) return;
 
     const cat = String(pp.category || '');
     const sub = String(pp.subcategory || '');
@@ -218,14 +255,6 @@ const buildCatalogAccessories = (
       VERIFIED_ZERO_U_EXCEPTIONS[normSku] !== undefined;
 
     if (!isAccCategory) return;
-    if (isCabinetProduct(pp)) return;
-
-    const isShelf = isAccessoryAShelf(pp.name || '');
-    if (isShelf) {
-      // Matrix is the sole authority on shelves!
-      if (!inMatrixShelves.has(normSku)) return;
-      if (itemsMap.has(normSku)) return; // Already loaded via Track 1
-    }
 
     // Validate physical compatibility with cabinet
     const compatResult = checkTrackBAccessoryCompatibility(pp, cabinet, compatMap);
@@ -259,18 +288,20 @@ const buildCatalogAccessories = (
       _pdu: isPdu,
       _curated: true,
       image: (pp.images && pp.images[0]) || pp.imageURL || '',
-      isShelf,
+      isShelf: false,
       _source: 'cabinet_accessory'
     });
   });
 
-  // Also ensure any items in compatMap that weren't in catalogData are included
+  // Also ensure any non-shelf items in compatMap that weren't in catalogData are included
   Object.keys(compatMap || {}).forEach(compSku => {
     if (compSku === productSkuNorm || itemsMap.has(compSku)) return;
+
+    // Any item identified as a shelf in compatMap is excluded here!
+    if (isProductShelf(compSku, catalogMap, allMatrixShelves)) return;
+
     const catProd = catalogMap.get(compSku);
     if (catProd && !isInfrastructureItem(catProd)) return;
-    const isShelf = isAccessoryAShelf(compSku);
-    if (isShelf && !inMatrixShelves.has(compSku)) return;
 
     const compatResult = checkTrackBAccessoryCompatibility({ sku: compSku }, cabinet, compatMap);
     if (!compatResult.fits) return;
@@ -279,24 +310,24 @@ const buildCatalogAccessories = (
     itemsMap.set(compSku, {
       pn: compSku,
       sku: compSku,
-      name: `אביזר מק"ט ${compSku}`,
-      description: '',
-      price: 0,
+      name: catProd ? (catProd.name || `אביזר מק"ט ${compSku}`) : `אביזר מק"ט ${compSku}`,
+      description: catProd?.description || '',
+      price: catProd?.price ? parseFloat(String(catProd.price).replace(/,/g, '')) : 0,
       uSize,
       suitableRange: '',
       _depth: 0,
       _promoted: false,
-      brand: 'כללי',
+      brand: catProd ? deriveBrand(catProd) : 'כללי',
       _pdu: false,
       _curated: true,
-      image: '',
-      isShelf,
+      image: (catProd?.images && catProd.images[0]) || catProd?.imageURL || '',
+      isShelf: false,
       _source: 'compat_sheet'
     });
   });
 
   // ==========================================
-  // Track 3: Additional equipment flagged "התאמה לארון" in Products_React
+  // Track 3: Additional equipment flagged "התאמה לארון" in Products_React (Strictly non-shelf items only)
   // ==========================================
   (catalogData || []).forEach((pp: any) => {
     if (!pp || !pp.sku) return;
@@ -317,20 +348,16 @@ const buildCatalogAccessories = (
     if (isCabinetProduct(pp)) return;
     // Strictly ensure item belongs to Infrastructure domain
     if (!isInfrastructureItem(pp)) return;
+
+    // Any item identified as a shelf is completely excluded from non-shelf tracks!
+    if (isProductShelf(pp, catalogMap, allMatrixShelves)) return;
+
     const nameDesc = `${pp.name || ''} ${pp.description || ''}`.toLowerCase();
     if (/מחלץ|extractor|כלי\b|tool\b/.test(nameDesc)) return;
 
     // Check suitability flag
     const flagged = isFlaggedForCabinetSuitability(pp);
     if (!flagged) return;
-
-    const isShelf = isAccessoryAShelf(nameDesc);
-    if (isShelf) {
-      if (!inMatrixShelves.has(normSku)) {
-        // General suitability flag must not override matrix for shelves
-        return;
-      }
-    }
 
     // Depth check
     const itemDepth = parseDepthMmLocal(nameDesc);
@@ -357,12 +384,31 @@ const buildCatalogAccessories = (
       _pdu: isPdu,
       _curated: false,
       image: (pp.images && pp.images[0]) || pp.imageURL || '',
-      isShelf,
+      isShelf: false,
       _source: 'flagged_equipment'
     });
   });
 
-  return Array.from(itemsMap.values());
+  // Final unified safeguard filtering:
+  // Shelves can ONLY exist if they are listed in inMatrixShelves for this cabinet!
+  const finalUnified: Accessory[] = [];
+  for (const item of itemsMap.values()) {
+    const isShelf = isProductShelf(item, catalogMap, allMatrixShelves);
+    const normSku = normalizeSku(item.sku || item.pn);
+    if (isShelf) {
+      if (inMatrixShelves.has(normSku)) {
+        item.isShelf = true;
+        if (!item.shelfType) item.shelfType = shelfTypeMap.get(normSku) || 'סטנדרטי';
+        finalUnified.push(item);
+      }
+      // Shelves not in inMatrixShelves are dropped!
+    } else {
+      item.isShelf = false;
+      finalUnified.push(item);
+    }
+  }
+
+  return finalUnified;
 };
 
 const usePrefersReducedMotion = (): boolean => {
@@ -507,6 +553,19 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [includedItems, setIncludedItems] = useState<string[]>([]);
   const [compatibleAccessories, setCompatibleAccessories] = useState<Accessory[]>([]);
   const [selectedOptionals, setSelectedOptionals] = useState<(Accessory & { quantity: number; id: string })[]>(() => (CABINET_CFG_STORE[product?.sku] as any) ?? []);
+
+  const allMatrixShelvesRef = React.useRef<Set<string>>(new Set<string>(KNOWN_MATRIX_SHELF_SKUS));
+  const inMatrixShelvesRef = React.useRef<Set<string>>(new Set<string>());
+  const catalogMapRef = React.useRef<Map<string, any>>(new Map<string, any>());
+
+  useEffect(() => {
+    const map = new Map<string, any>();
+    (catalogData || []).forEach((p: any) => {
+      if (p && p.sku) map.set(normalizeSku(p.sku), p);
+    });
+    catalogMapRef.current = map;
+  }, [catalogData]);
+
   useEffect(() => {
     if (product?.sku) CABINET_CFG_STORE[product.sku] = selectedOptionals;
   }, [selectedOptionals, product?.sku]);
@@ -515,7 +574,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   useEffect(() => {
     if (!product || !cabinetData) return;
     const productSkuNorm = normalizeSku(product.sku);
-    setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, cabinetData, compatMap));
+    setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, cabinetData, compatMap, allMatrixShelvesRef.current));
   }, [catalogData, cabinetData, compatMap, product?.sku]);
 
   // ACCURACY: availableU is DERIVED (never mutated incrementally) so the counter
@@ -808,6 +867,23 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         } catch (e) { console.warn('[CabinetConfigurator] compat sheet optional - skipped', e); }
         setCompatMap(compatMap);
 
+        // Extract all shelf SKUs appearing anywhere in the matrix (columns 12, 13, 14)
+        const allMatrixShelves = new Set<string>(KNOWN_MATRIX_SHELF_SKUS);
+        for (let i = 2; i < cabRows.length; i++) {
+          const row = cabRows[i];
+          if (!row) continue;
+          [row[12], row[13], row[14]].forEach(cell => {
+            if (!cell) return;
+            const str = cell.toString().trim();
+            if (str.toUpperCase() === 'X') return;
+            str.split(/[\s,;\n]+/).forEach((s: string) => {
+              const norm = normalizeSku(s);
+              if (norm && norm !== 'X') allMatrixShelves.add(norm);
+            });
+          });
+        }
+        allMatrixShelvesRef.current = allMatrixShelves;
+
         let cabRow: any[] | null = null;
         for (let i = 2; i < cabRows.length; i++) {
            if (cabRows[i] && cabRows[i][0] !== undefined && cabRows[i][0] !== null) {
@@ -826,19 +902,27 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
            setTotalU(parsedTotalU);
            
            let initialAvailableU = parsedTotalU;
+           inMatrixShelvesRef.current = new Set<string>();
            if (initialAccessory) {
-             const uSz = resolveUConsumption(initialAccessory).u;
-             initialAvailableU -= uSz;
-             setSelectedOptionals([{
-                pn: initialAccessory.sku,
-                sku: initialAccessory.sku,
-                name: initialAccessory.name,
-                description: initialAccessory.description || '',
-                price: initialAccessory.price || 0,
-                uSize: uSz,
-                quantity: 1,
-                id: 'initial-' + initialAccessory.sku
-             }]);
+             const initSku = normalizeSku(initialAccessory.sku || initialAccessory.pn);
+             const isInitShelf = isProductShelf(initialAccessory, catalogMapRef.current, allMatrixShelves);
+             if (isInitShelf) {
+               console.warn(`[CabinetConfigurator] initialAccessory ${initSku} is a shelf not in matrix for fallback cabinet. Ignored.`);
+             } else {
+               const uSz = resolveUConsumption(initialAccessory).u;
+               initialAvailableU -= uSz;
+               setSelectedOptionals([{
+                  pn: initialAccessory.sku,
+                  sku: initialAccessory.sku,
+                  name: initialAccessory.name,
+                  description: initialAccessory.description || '',
+                  price: initialAccessory.price || 0,
+                  uSize: uSz,
+                  quantity: 1,
+                  isShelf: false,
+                  id: 'initial-' + initialAccessory.sku
+               }]);
+             }
            } else {
              if (!CABINET_CFG_INIT.has(product.sku)) setSelectedOptionals([]);
            }
@@ -862,7 +946,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
              suitableSliding: []
            };
            setCabinetData(fallbackCabinet);
-           setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, fallbackCabinet, compatMap));
+           setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, fallbackCabinet, compatMap, allMatrixShelves));
            setLoading(false);
            return;
         }
@@ -888,7 +972,14 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
         setCabinetData(data);
 
-                // U capacity
+        const inMatrixShelves = new Set<string>([
+          ...data.suitableStandard,
+          ...data.suitableHanging,
+          ...data.suitableSliding
+        ].map(normalizeSku).filter(s => s && s !== 'X'));
+        inMatrixShelvesRef.current = inMatrixShelves;
+
+        // U capacity
         let parsedTotalU = data.u > 0 ? data.u : (parseInt((product.name || '').match(/(\d+)U/i)?.[1] || '0') || 0); // do not fallback to 42
         console.log('[CabinetConfigurator] Resolved cabinet U capacity:', parsedTotalU, 'for SKU', product.sku);
         setTotalU(parsedTotalU);
@@ -899,18 +990,25 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         let initialAvailableU = parsedTotalU - initialUsedU;
 
         if (initialAccessory) {
-          const uSz = resolveUConsumption(initialAccessory).u;
-          initialAvailableU -= uSz;
-          setSelectedOptionals([{
-             pn: initialAccessory.sku,
-             sku: initialAccessory.sku,
-             name: initialAccessory.name,
-             description: initialAccessory.description || '',
-             price: initialAccessory.price || 0,
-             uSize: uSz,
-             quantity: 1,
-             id: 'initial-' + initialAccessory.sku
-          }]);
+          const initSku = normalizeSku(initialAccessory.sku || initialAccessory.pn);
+          const isInitShelf = isProductShelf(initialAccessory, catalogMapRef.current, allMatrixShelves);
+          if (isInitShelf && !inMatrixShelves.has(initSku)) {
+            console.warn(`[CabinetConfigurator] initialAccessory ${initSku} is a shelf not permitted by cabinet matrix for ${productSkuNorm}. Ignored.`);
+          } else {
+            const uSz = resolveUConsumption(initialAccessory).u;
+            initialAvailableU -= uSz;
+            setSelectedOptionals([{
+               pn: initialAccessory.sku,
+               sku: initialAccessory.sku,
+               name: initialAccessory.name,
+               description: initialAccessory.description || '',
+               price: initialAccessory.price || 0,
+               uSize: uSz,
+               quantity: 1,
+               isShelf: isInitShelf,
+               id: 'initial-' + initialAccessory.sku
+            }]);
+          }
         } else if (!CABINET_CFG_INIT.has(product.sku)) {
           setSelectedOptionals([]);
         }
@@ -934,7 +1032,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         setIncludedItems(included);
 
         // 3. Catalog-driven compatibility
-        setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, data, compatMap));
+        setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, data, compatMap, allMatrixShelves));
         setLoading(false);
         
       } catch (error) {
@@ -945,7 +1043,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           setBuiltInUsedU(0);
           setIncludedItems([]);
           const uM = product.name?.match(/(\d+)U/i) || product.description?.match(/(\d+)U/i);
-          const pSku = String(product.sku ?? '').trim().toUpperCase(); const pU = uM ? parseInt(uM[1]) : 0; setCompatibleAccessories(buildCatalogAccessories(catalogData, pSku, { sku: pSku, u: pU, depth: parseCabinetDepthFromName(product.name || ''), width: null, frontDoor: '', rearDoor: '', color: '', fans: '', wheels: '', levelingFeet: '', shelvesQty: '', suitableStandard: [], suitableHanging: [], suitableSliding: [] }, {}));
+          const pSku = String(product.sku ?? '').trim().toUpperCase(); const pU = uM ? parseInt(uM[1]) : 0; setCompatibleAccessories(buildCatalogAccessories(catalogData, pSku, { sku: pSku, u: pU, depth: parseCabinetDepthFromName(product.name || ''), width: null, frontDoor: '', rearDoor: '', color: '', fans: '', wheels: '', levelingFeet: '', shelvesQty: '', suitableStandard: [], suitableHanging: [], suitableSliding: [] }, {}, allMatrixShelvesRef.current));
           setErrorMsg(null);
         } catch (e2) {
           console.error('[CabinetConfigurator] catalog fallback also failed', e2);
@@ -981,6 +1079,15 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   }, [selectedOptionals]);
 
   const handleAddOptional = (acc: Accessory, idx: number) => {
+    const normSku = normalizeSku(acc.sku || acc.pn);
+    const isShelf = isProductShelf(acc, catalogMapRef.current, allMatrixShelvesRef.current);
+    if (isShelf) {
+      if (!inMatrixShelvesRef.current.has(normSku)) {
+        console.warn(`[CabinetConfigurator] Shelf ${normSku} is not permitted for cabinet ${cabinetData?.sku}. Blocked.`);
+        return;
+      }
+    }
+
     const existingItem = selectedOptionals.find(item => item.pn === acc.pn);
     const nextUnitIdx = existingItem ? existingItem.quantity : 0;
     const newInstId = `${acc.sku || acc.pn}-unit-${nextUnitIdx}`;
@@ -1161,24 +1268,35 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     return _qTokens.every((tok: string) => hay.includes(tok)); // all words, any order
   };
   const _filtered = _accPairs.filter(_accMatch);
-  const _isPdu = ({ acc }: any) => acc._pdu || /פס שקע|פסי שקע|שקעים|pdu/i.test(`${acc.name || ''} ${acc.description || ''} ${acc.pn || ''}`);
 
-  // All PDUs (horizontal and vertical)
-  const _bucketPdu = _filtered
-    .filter(({ acc }: any) => !acc._promoted && _isPdu({ acc }))
-    .sort((a: any, b: any) => (b.acc.uSize - a.acc.uSize));
-
-  // Occupies U slots (excluding PDUs and promoted items)
-  const _bucketTakesU = _filtered
-    .filter(({ acc }: any) => !acc._promoted && !_isPdu({ acc }) && acc.uSize > 0)
+  // Rubric 1: Shelves matching cabinet matrix
+  const _bucketShelves = _filtered
+    .filter(({ acc }: any) => acc.isShelf)
     .sort((a: any, b: any) => {
-      const rank = (x: any) => (x.acc._curated ? 0 : (x.acc._depth ? 1 : 2));
-      return rank(a) - rank(b);
+      const order: Record<string, number> = { 'סטנדרטי': 1, 'תלוי': 2, 'נשלף': 3 };
+      const oa = order[a.acc.shelfType] || 4;
+      const ob = order[b.acc.shelfType] || 4;
+      if (oa !== ob) return oa - ob;
+      return (a.acc.pn || '').localeCompare(b.acc.pn || '');
     });
 
-  // Zero U accessories (excluding PDUs and promoted items)
+  // Rubric 2: Additional equipment taking space (>0U)
+  const _bucketTakesU = _filtered
+    .filter(({ acc }: any) => !acc.isShelf && acc.uSize > 0)
+    .sort((a: any, b: any) => {
+      const rank = (x: any) => (x.acc._curated ? 0 : (x.acc._depth ? 1 : 2));
+      const rDiff = rank(a) - rank(b);
+      if (rDiff !== 0) return rDiff;
+      return b.acc.uSize - a.acc.uSize;
+    });
+
+  // Rubric 3: Accessories taking no space (0U)
   const _bucketFree = _filtered
-    .filter(({ acc }: any) => !acc._promoted && !_isPdu({ acc }) && acc.uSize === 0);
+    .filter(({ acc }: any) => !acc.isShelf && acc.uSize === 0)
+    .sort((a: any, b: any) => {
+      const rank = (x: any) => (x.acc._curated ? 0 : 1);
+      return rank(a) - rank(b);
+    });
   
   const _illusPairs = ILLUSTRATION_ACCESSORIES
     .map((acc, i) => ({ acc, idx: 100000 + i }))
@@ -1231,7 +1349,14 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         </div>
         <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-200/60 gap-2">
           <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1 flex-1 flex-wrap">
-            {acc._curated && <span className="text-emerald-600 font-bold bg-emerald-50 px-1 py-0.5 rounded">✓ הותאם לארון</span>}
+            {acc.isShelf && acc.shelfType && (
+              <span className="text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200">
+                מדף {acc.shelfType}
+              </span>
+            )}
+            {!acc.isShelf && acc._curated && (
+              <span className="text-emerald-600 font-bold bg-emerald-50 px-1 py-0.5 rounded">✓ הותאם לארון</span>
+            )}
             {acc._illustration && <span className="text-purple-600 font-bold bg-purple-50 px-1 py-0.5 rounded">להמחשה בלבד</span>}
             {acc.uSize > 0 && !fitsRemaining && <span className="text-rose-600 font-bold bg-rose-50 px-1 py-0.5 rounded whitespace-nowrap">⚠️ חסר מקום פנוי</span>}
           </span>
@@ -1978,9 +2103,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               <div className="mb-3 text-[12px] font-bold text-slate-600">
                 נותרו <span className="text-[#004387]">{availableU}U</span> פנויים — מלא עם אביזרים תואמים:
               </div>
-              {_bucketTakesU.length > 0 && AccordionSection('takesU', '📏 תופס מקום בארון (U)', _bucketTakesU, 'bg-[#e6f0fa] text-[#004387]')}
-              {_bucketFree.length > 0 && AccordionSection('freeU', '🔌 אביזרים ללא שימוש ב-U (אופקי/תלוי)', _bucketFree, 'bg-slate-50 text-slate-700', false)}
-              {_bucketPdu.length > 0 && AccordionSection('pdu', '⚡ פסי שקעים וחלוקת מתח', _bucketPdu, 'bg-rose-50 text-rose-800', false)}
+              {_bucketShelves.length > 0 && AccordionSection('shelves', '🗄️ מדפים מתאימים לארון', _bucketShelves, 'bg-emerald-50 text-emerald-900', true)}
+              {_bucketTakesU.length > 0 && AccordionSection('takesU', '📏 ציוד נוסף שתופס מקום בארון', _bucketTakesU, 'bg-[#e6f0fa] text-[#004387]', true)}
+              {_bucketFree.length > 0 && AccordionSection('freeU', '🔌 אביזרים ללא תפיסת מקום', _bucketFree, 'bg-slate-50 text-slate-700', false)}
               {_illusPairs.length > 0 && AccordionSection('illus', '🧩 תצוגת הדמיה (ללא מחיר)', _illusPairs, 'bg-indigo-50 text-indigo-800', false)}
               {_filtered.length === 0 && _illusPairs.length === 0 && (
                 <div className="text-center py-8 text-gray-500 bg-gray-50 border border-gray-200 rounded-none text-sm">
