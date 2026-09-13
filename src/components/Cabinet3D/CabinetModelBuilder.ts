@@ -267,17 +267,9 @@ export function buildCabinetFrameGroup(
   const brandBadgeMesh = new THREE.Mesh(badgeGeom, badgeMaterials);
   brandBadgeMesh.position.set(0, halfH - roofHeight / 2, halfD + badgeDepth / 2 + 0.005);
   brandBadgeMesh.name = 'boost-rackmount-header-badge';
+  // Pure aesthetic cabinet frame badge - not an interactive product mesh
   (brandBadgeMesh as any).userData = {
-    isProductMesh: true,
-    item: {
-      instanceId: 'boost-rackmount-logo',
-      sku: 'BOOST-RACKMOUNT-OEM',
-      name: 'BOOST RACKMOUNT - מותג ארונות תקשורת ומסדים',
-      description: 'ארון תקשורת ושרתים מקצועי 19 אינץ׳ מתוצרת BOOST RACKMOUNT - קונסטרוקציית פלדה מחוזקת בתקן תעשייתי.',
-      price: 0,
-      isIncluded: true,
-      type: 'active',
-    },
+    isCabinetStructure: true,
   };
   group.add(brandBadgeMesh);
 

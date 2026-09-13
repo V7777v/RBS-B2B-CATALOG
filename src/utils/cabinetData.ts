@@ -42,6 +42,20 @@ export const parseAccessoryCount = (val: any): number => {
   if (match) {
     return parseInt(match[0], 10);
   }
+  // If positive inclusion phrasing is present without an explicit number, default to 1
+  if (
+    str.includes('כלול') ||
+    str.includes('כולל') ||
+    str.includes('מדף') ||
+    str.includes('מאוורר') ||
+    str.includes('גלגל') ||
+    str.includes('רגליות') ||
+    str.includes('V') ||
+    str.includes('YES') ||
+    str.includes('TRUE')
+  ) {
+    return 1;
+  }
   return 0;
 };
 

@@ -111,13 +111,13 @@ export function buildProduct3DMesh(
     group.add(lipBevel);
 
     // 19" Heavy-Duty Mounting Ears with Chrome Screws
-    const earGeom = new THREE.BoxGeometry(0.22, spanHeight * 0.88, 0.06);
+    const earGeom = new THREE.BoxGeometry(0.22, spanHeight * 0.90, 0.06);
     const leftEar = new THREE.Mesh(earGeom, materials.earMat);
-    leftEar.position.set(-RACK_19_WIDTH_UNITS / 2 + 0.10, -spanHeight / 2 + (spanHeight * 0.88) / 2, 0.025);
+    leftEar.position.set(-RACK_19_WIDTH_UNITS / 2 + 0.10, 0, 0.025);
     group.add(leftEar);
 
     const rightEar = new THREE.Mesh(earGeom, materials.earMat);
-    rightEar.position.set(RACK_19_WIDTH_UNITS / 2 - 0.10, -spanHeight / 2 + (spanHeight * 0.88) / 2, 0.025);
+    rightEar.position.set(RACK_19_WIDTH_UNITS / 2 - 0.10, 0, 0.025);
     group.add(rightEar);
 
     // Chrome Cage Screws on mounting ears
@@ -126,11 +126,11 @@ export function buildProduct3DMesh(
     const screwMat = materials.metalMat || materials.earMat;
     [-RACK_19_WIDTH_UNITS / 2 + 0.10, RACK_19_WIDTH_UNITS / 2 - 0.10].forEach(sx => {
       const screwTop = new THREE.Mesh(screwGeom, screwMat);
-      screwTop.position.set(sx, -spanHeight / 2 + spanHeight * 0.70, 0.06);
+      screwTop.position.set(sx, spanHeight * 0.25, 0.06);
       group.add(screwTop);
 
       const screwBottom = new THREE.Mesh(screwGeom, screwMat);
-      screwBottom.position.set(sx, -spanHeight / 2 + spanHeight * 0.20, 0.06);
+      screwBottom.position.set(sx, -spanHeight * 0.25, 0.06);
       group.add(screwBottom);
     });
 
@@ -244,13 +244,12 @@ export function buildProduct3DMesh(
     clearFrontFaceGroup();
 
     if (isShelf) {
-      const shelfWidth = USABLE_OPENING_WIDTH * 0.98;
-      const shelfDepth = Math.max(1.8, Math.min(innerDepthUnits * 0.85, 5.0));
-      const shelfThick = 0.05;
-      const ventGeom = new THREE.BoxGeometry(shelfWidth * 0.7, 0.01, shelfDepth * 0.6);
-      const ventMesh = new THREE.Mesh(ventGeom, materials.accentMat);
-      ventMesh.position.set(0, -spanHeight / 2 + shelfThick + 0.005, -shelfDepth / 2);
-      frontFaceGroup.add(ventMesh);
+      // Shelf geometry and vent slots are already completely built in primary chassis pass
+      const lipLabelGeom = new THREE.BoxGeometry(USABLE_OPENING_WIDTH * 0.40, 0.04, 0.01);
+      const labelMat = item.isIncluded ? materials.includedShelfMat : materials.accentMat;
+      const lipLabel = new THREE.Mesh(lipLabelGeom, labelMat);
+      lipLabel.position.set(0, -spanHeight / 2 + 0.08, 0.038);
+      frontFaceGroup.add(lipLabel);
 
     } else if (isPdu) {
       const switchGeom = new THREE.BoxGeometry(0.22, 0.14, 0.04);
@@ -343,11 +342,9 @@ export function buildProduct3DMesh(
   };
 
   // 3. IMAGE LOADING & PRESENTATION PIPELINE
-  // Priority order:
-  // 1. Dedicated orthographic front panel texture (frontTextureUrl)
-  // 2. Real catalog photo (item.image)
-  // 3. Procedural fallback (when no image available)
-  const rawImage = assetDef?.frontTextureUrl || extractSafeProductImage(item.image);
+  // For shelves, the physical 3D horizontal tray with venting and mounting ears is rendered directly.
+  // For front-panel equipment (switches, servers, blank panels, PDUs), front textures or orthographic catalog images are mapped onto the 19" faceplate.
+  const rawImage = isShelf ? null : (assetDef?.frontTextureUrl || extractSafeProductImage(item.image));
 
   if (rawImage) {
     const imageUrl = transformImageLink(rawImage, 800);
