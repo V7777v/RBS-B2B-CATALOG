@@ -189,6 +189,28 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     needsRenderRef.current = true;
   }, [dims]);
 
+  // Focus directly on the selected product or slot
+  const focusOnSelectedProduct = useCallback(() => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+
+    let targetY = 0;
+    if (selectedSlotU && uCentersRef.current[selectedSlotU - 1] !== undefined) {
+      targetY = uCentersRef.current[selectedSlotU - 1];
+    } else {
+      const firstOccupied = slotsRef.current.find(s => s.type !== 'empty');
+      if (firstOccupied && uCentersRef.current[firstOccupied.uIndex - 1] !== undefined) {
+        targetY = uCentersRef.current[firstOccupied.uIndex - 1];
+      }
+    }
+
+    controls.target.set(0, targetY, 0);
+    camera.position.set(0, targetY, 2.5);
+    controls.update();
+    needsRenderRef.current = true;
+  }, [selectedSlotU]);
+
   // Helper to cleanly dispose all meshes, geometries, and textures inside a group
   const disposeHierarchy = (group: THREE.Group) => {
     group.traverse((child) => {
@@ -857,10 +879,20 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           <button
             type="button"
             onClick={() => fitCameraToCabinet(false)}
-            className="p-1.5 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            className="px-2 py-1 text-[10.5px] font-semibold hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
             title="הצג את כל הארון (איפוס מצלמה)"
           >
-            <RotateCcw size={14} />
+            <RotateCcw size={13} />
+            <span className="hidden sm:inline">ארון מלא</span>
+          </button>
+          <button
+            type="button"
+            onClick={focusOnSelectedProduct}
+            className="px-2 py-1 text-[10.5px] font-semibold hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1 border-r border-slate-800"
+            title="התמקדות במוצר הנבחר"
+          >
+            <ZoomIn size={13} />
+            <span className="hidden sm:inline">התמקדות במוצר</span>
           </button>
           <button
             type="button"

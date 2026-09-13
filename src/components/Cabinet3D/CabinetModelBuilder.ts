@@ -275,15 +275,69 @@ export function buildCabinetFrameGroup(
     });
   }
 
-  // 6. U MARKER TICKS ON FRONT RAILS
-  const tickGeom = new THREE.BoxGeometry(0.06, 0.015, 0.02);
+  // 6. U MARKER TICKS & READABLE U NUMBERING ON FRONT RAILS
+  // Placed on outer rail edge to prevent occlusion by installed equipment
+  const tickGeom = new THREE.BoxGeometry(0.08, 0.015, 0.02);
+  const labelPlaneGeom = new THREE.PlaneGeometry(0.32, U_HEIGHT_UNITS * 0.55);
+
+  // Cached canvas textures for U numbers (1..totalU)
+  const uTextureCache = new Map<number, THREE.CanvasTexture>();
+  const getUTexture = (uNum: number) => {
+    let tex = uTextureCache.get(uNum);
+    if (!tex) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#0f172a'; // slate-900 high contrast badge
+        ctx.fillRect(0, 0, 128, 64);
+        ctx.strokeStyle = '#38bdf8'; // sky blue border
+        ctx.lineWidth = 4;
+        ctx.strokeRect(2, 2, 124, 60);
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 34px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`U${uNum}`, 64, 34);
+      }
+      tex = new THREE.CanvasTexture(canvas);
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      uTextureCache.set(uNum, tex);
+    }
+    return tex;
+  };
+
   for (let u = 1; u <= totalU; u++) {
-    const y = u1BottomY + u * U_HEIGHT_UNITS; // Boundary between U_u and U_{u+1}
+    const yTick = u1BottomY + u * U_HEIGHT_UNITS; // Boundary between U_u and U_{u+1}
+    const yCenter = uCenters[u - 1]; // Center of this U slot
+
+    // Rail boundary tick line
     [-railX, railX].forEach(rx => {
       const tick = new THREE.Mesh(tickGeom, materials.accentMat);
-      tick.position.set(rx, y, frontRailZ + 0.095);
+      tick.position.set(rx, yTick, frontRailZ + 0.095);
       group.add(tick);
     });
+
+    // Outer-edge readable U badges (left and right)
+    const uTex = getUTexture(u);
+    const uLabelMat = new THREE.MeshBasicMaterial({
+      map: uTex,
+      transparent: false,
+      toneMapped: false,
+    });
+
+    // Left rail outer label
+    const leftLabelMesh = new THREE.Mesh(labelPlaneGeom, uLabelMat);
+    leftLabelMesh.position.set(-railX - 0.22, yCenter, frontRailZ + 0.096);
+    group.add(leftLabelMesh);
+
+    // Right rail outer label
+    const rightLabelMesh = new THREE.Mesh(labelPlaneGeom, uLabelMat);
+    rightLabelMesh.position.set(railX + 0.22, yCenter, frontRailZ + 0.096);
+    group.add(rightLabelMesh);
   }
 
   // 7. BASE WHEELS (Casters), LEVELING FEET, and WALL MOUNT BRACKETS

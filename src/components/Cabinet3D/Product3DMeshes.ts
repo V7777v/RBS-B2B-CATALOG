@@ -31,21 +31,29 @@ export function buildProduct3DMesh(
   const nameLower = (item.name || '').toLowerCase();
   const descLower = (item.description || '').toLowerCase();
 
-  const isShelf = item.type === 'shelf' || /מדף|shelf|sliding|נשלף|תלוי/i.test(nameLower) || /מדף|shelf/i.test(descLower);
-  const isPdu = item.type === 'pdu' || /שקע|pdu|power|כח|כוח/i.test(nameLower) || /שקע|pdu/i.test(descLower);
-  const isBrush = /מברשת|שערות|brush/i.test(nameLower) || /מברשת|שערות|brush/i.test(descLower);
-  const isBlank = /עיוור|blank/i.test(nameLower) || /עיוור|blank/i.test(descLower);
-  const isPanel = item.type === 'panel' || isBrush || isBlank || /פנל|panel|סיכוך/i.test(nameLower);
-  const isAudioAmp = assetDef?.categoryProfile === 'audio-amplifier' || /מגבר|polman|xl600|amplifier|סאונד/i.test(nameLower) || /מגבר/i.test(descLower);
-  const isUps = assetDef?.categoryProfile === 'ups-online' || /ups|אל פסק|סוללה|power supply/i.test(nameLower) || /ups|אל פסק/i.test(descLower);
-  const isSwitchOrRouter = assetDef?.categoryProfile?.startsWith('switch') || assetDef?.categoryProfile === 'router-vpn';
+  // Normalized classification:
+  // Amplifiers or switches mentioning "מדף" in their description will NEVER be treated as shelves!
+  const isAudioAmp = assetDef?.categoryProfile === 'audio-amplifier' || /מגבר|amplifier|polman|xl600|סאונד/i.test(nameLower);
+  const isUps = assetDef?.categoryProfile === 'ups-online' || /אל פסק|ups\b|סוללה|power supply/i.test(nameLower);
+  const isSwitchOrRouter = assetDef?.categoryProfile?.startsWith('switch') || assetDef?.categoryProfile === 'router-vpn' || /מתג|switch|ראוטר|router/i.test(nameLower);
+  const isPdu = item.type === 'pdu' || /שקע|pdu|פס כוח|פס שקעים/i.test(nameLower);
+  const isBrush = /מברשת|brush/i.test(nameLower);
+  const isBlank = /עיוור|blank/i.test(nameLower);
+  const isPanel = item.type === 'panel' || isBrush || isBlank || /פנל|panel|פאנל/i.test(nameLower);
 
-  // 1. SHELF REPRESENTATION
+  const isShelf = !isAudioAmp && !isUps && !isSwitchOrRouter && !isPdu && !isPanel && (
+    item.type === 'shelf' ||
+    Boolean((item as any).isShelf) ||
+    Boolean(item.accessoryRef?.isShelf) ||
+    /^\s*(מדף|מגירה|shelf|drawer)\b/i.test(nameLower)
+  );
+
+  // 1. PHYSICAL CHASSIS & MOUNTING EARS (Body & Depth)
   if (isShelf) {
     const shelfMat = item.isIncluded ? materials.includedShelfMat : materials.shelfMat;
     const shelfWidth = USABLE_OPENING_WIDTH * 0.98;
     const shelfDepth = Math.max(1.8, Math.min(innerDepthUnits * 0.85, 5.0));
-    const shelfThick = 0.05; // 5mm sheet steel
+    const shelfThick = 0.05;
 
     // Main horizontal surface
     const surfaceGeom = new THREE.BoxGeometry(shelfWidth, shelfThick, shelfDepth);
@@ -55,13 +63,13 @@ export function buildProduct3DMesh(
     surfaceMesh.receiveShadow = true;
     group.add(surfaceMesh);
 
-    // Front lip (turned down/up edge)
+    // Front lip
     const lipGeom = new THREE.BoxGeometry(shelfWidth, 0.12, 0.04);
     const lipMesh = new THREE.Mesh(lipGeom, shelfMat);
     lipMesh.position.set(0, -spanHeight / 2 + 0.06, 0);
     group.add(lipMesh);
 
-    // Left and Right mounting ears (attaching to 19" rails)
+    // Mounting ears
     const earGeom = new THREE.BoxGeometry(0.20, spanHeight * 0.8, 0.06);
     const leftEar = new THREE.Mesh(earGeom, materials.earMat);
     leftEar.position.set(-RACK_19_WIDTH_UNITS / 2 + 0.09, 0, 0.02);
@@ -71,17 +79,7 @@ export function buildProduct3DMesh(
     rightEar.position.set(RACK_19_WIDTH_UNITS / 2 - 0.09, 0, 0.02);
     group.add(rightEar);
 
-    // Subtle ventilation slot markings on shelf
-    const ventGeom = new THREE.BoxGeometry(shelfWidth * 0.7, 0.01, shelfDepth * 0.6);
-    const ventMesh = new THREE.Mesh(ventGeom, materials.accentMat);
-    ventMesh.position.set(0, -spanHeight / 2 + shelfThick + 0.005, -shelfDepth / 2);
-    group.add(ventMesh);
-
-    return group;
-  }
-
-  // 2. PDU / POWER STRIP REPRESENTATION
-  if (isPdu) {
+  } else if (isPdu) {
     const pduDepth = 0.65;
     const pduChassisGeom = new THREE.BoxGeometry(RACK_19_WIDTH_UNITS, spanHeight, pduDepth);
     const pduMesh = new THREE.Mesh(pduChassisGeom, materials.pduMat);
@@ -89,21 +87,6 @@ export function buildProduct3DMesh(
     pduMesh.castShadow = true;
     group.add(pduMesh);
 
-    // Red illuminated power rocker switch
-    const switchGeom = new THREE.BoxGeometry(0.22, 0.14, 0.04);
-    const redSwitchMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
-    const switchMesh = new THREE.Mesh(switchGeom, redSwitchMat);
-    switchMesh.position.set(RACK_19_WIDTH_UNITS * 0.38, 0, 0.02);
-    group.add(switchMesh);
-
-    // Simulated sockets (6 black socket indentations)
-    const socketGeom = new THREE.BoxGeometry(0.28, 0.18, 0.02);
-    for (let s = -3; s <= 2; s++) {
-      const socketMesh = new THREE.Mesh(socketGeom, materials.accentMat);
-      socketMesh.position.set(s * 0.45 - 0.2, 0, 0.01);
-      group.add(socketMesh);
-    }
-
     // Mounting ears
     const earGeom = new THREE.BoxGeometry(0.18, spanHeight, 0.04);
     const leftEar = new THREE.Mesh(earGeom, materials.earMat);
@@ -114,11 +97,7 @@ export function buildProduct3DMesh(
     rightEar.position.set(RACK_19_WIDTH_UNITS / 2 - 0.09, 0, 0.02);
     group.add(rightEar);
 
-    return group;
-  }
-
-  // 3. BLANK / BRUSH / PATCH PANELS
-  if (isPanel) {
+  } else if (isPanel) {
     const panelDepth = 0.20;
     const panelGeom = new THREE.BoxGeometry(RACK_19_WIDTH_UNITS, spanHeight, panelDepth);
     const panelMesh = new THREE.Mesh(panelGeom, materials.panelMat);
@@ -126,23 +105,6 @@ export function buildProduct3DMesh(
     panelMesh.castShadow = true;
     group.add(panelMesh);
 
-    if (isBrush) {
-      // Black brush bristle slit in the center
-      const brushGeom = new THREE.BoxGeometry(USABLE_OPENING_WIDTH * 0.85, spanHeight * 0.45, 0.03);
-      const brushMat = new THREE.MeshBasicMaterial({ color: 0x18181b });
-      const brushMesh = new THREE.Mesh(brushGeom, brushMat);
-      brushMesh.position.set(0, 0, 0.01);
-      group.add(brushMesh);
-    } else if (!isBlank) {
-      // Patch panel port blocks (24 ports in 4 blocks of 6)
-      const portBlockGeom = new THREE.BoxGeometry(0.65, spanHeight * 0.45, 0.03);
-      [-1.4, -0.5, 0.5, 1.4].forEach(px => {
-        const portMesh = new THREE.Mesh(portBlockGeom, materials.accentMat);
-        portMesh.position.set(px, 0, 0.01);
-        group.add(portMesh);
-      });
-    }
-
     // Mounting ears
     const earGeom = new THREE.BoxGeometry(0.18, spanHeight, 0.04);
     const leftEar = new THREE.Mesh(earGeom, materials.earMat);
@@ -153,132 +115,177 @@ export function buildProduct3DMesh(
     rightEar.position.set(RACK_19_WIDTH_UNITS / 2 - 0.09, 0, 0.02);
     group.add(rightEar);
 
-    return group;
-  }
-
-  // 4. ACTIVE EQUIPMENT (Switches, Routers, UPS, Amplifiers, Servers)
-  const activeDepth = Math.max(1.8, Math.min(innerDepthUnits * 0.8, item.uSpan > 1 ? 4.5 : 2.8));
-  const chassisWidth = USABLE_OPENING_WIDTH;
-  const chassisGeom = new THREE.BoxGeometry(chassisWidth, spanHeight, activeDepth);
-
-  // Material customization per assetDef or brand/type
-  let activeMat = materials.activeChassisMat;
-  if (assetDef?.chassisColor) {
-    activeMat = new THREE.MeshStandardMaterial({
-      color: assetDef.chassisColor,
-      roughness: assetDef.roughness ?? 0.35,
-      metalness: assetDef.metalness ?? 0.65,
-    });
-  } else if (isAudioAmp) {
-    activeMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.25, metalness: 0.8 });
-  } else if (isUps) {
-    activeMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.4, metalness: 0.6 });
-  }
-
-  const chassisMesh = new THREE.Mesh(chassisGeom, activeMat);
-  chassisMesh.position.set(0, 0, -activeDepth / 2);
-  chassisMesh.castShadow = true;
-  chassisMesh.receiveShadow = true;
-  group.add(chassisMesh);
-
-  // Front bezel faceplate (extending to full 19" width with ears)
-  const faceplateGeom = new THREE.BoxGeometry(RACK_19_WIDTH_UNITS, spanHeight, 0.05);
-  const faceplateMesh = new THREE.Mesh(faceplateGeom, activeMat);
-  faceplateMesh.position.set(0, 0, 0);
-  group.add(faceplateMesh);
-
-  // Mounting ears on left and right
-  const earGeom = new THREE.BoxGeometry(0.18, spanHeight, 0.06);
-  const leftEar = new THREE.Mesh(earGeom, materials.earMat);
-  leftEar.position.set(-RACK_19_WIDTH_UNITS / 2 + 0.09, 0, 0.03);
-  group.add(leftEar);
-
-  const rightEar = new THREE.Mesh(earGeom, materials.earMat);
-  rightEar.position.set(RACK_19_WIDTH_UNITS / 2 - 0.09, 0, 0.03);
-  group.add(rightEar);
-
-  // Silver mounting screws in ears
-  const screwGeom = new THREE.CylinderGeometry(0.025, 0.025, 0.02, 8);
-  screwGeom.rotateX(Math.PI / 2);
-  const screwMat = new THREE.MeshBasicMaterial({ color: 0xd1d5db });
-  [-RACK_19_WIDTH_UNITS / 2 + 0.09, RACK_19_WIDTH_UNITS / 2 - 0.09].forEach(sx => {
-    [-spanHeight * 0.35, spanHeight * 0.35].forEach(sy => {
-      const screw = new THREE.Mesh(screwGeom, screwMat);
-      screw.position.set(sx, sy, 0.065);
-      group.add(screw);
-    });
-  });
-
-  // Front panel visual indicators:
-  if (isAudioAmp || assetDef?.categoryProfile === 'audio-amplifier') {
-    // Polman dual volume dials
-    const knobGeom = new THREE.CylinderGeometry(0.10, 0.10, 0.06, 16);
-    knobGeom.rotateX(Math.PI / 2);
-    const knobMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, metalness: 0.9, roughness: 0.2 });
-
-    [-0.8, 0.8].forEach(kx => {
-      const knob = new THREE.Mesh(knobGeom, knobMat);
-      knob.position.set(kx, 0, 0.06);
-      group.add(knob);
-    });
-
-    // VU meter / blue LEDs
-    const vuGeom = new THREE.BoxGeometry(0.4, 0.08, 0.02);
-    const blueLedMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
-    const vuMesh = new THREE.Mesh(vuGeom, blueLedMat);
-    vuMesh.position.set(0, 0.08, 0.04);
-    group.add(vuMesh);
-
-    // Subtle front cooling vents
-    const ventGeom = new THREE.BoxGeometry(0.5, 0.03, 0.01);
-    const ventMat = new THREE.MeshBasicMaterial({ color: 0x18181b });
-    [-0.2, 0, 0.2].forEach(vy => {
-      const vent = new THREE.Mesh(ventGeom, ventMat);
-      vent.position.set(0, -0.15 + vy, 0.035);
-      group.add(vent);
-    });
-
-  } else if (isUps || assetDef?.categoryProfile === 'ups-online') {
-    // UPS LCD Status Screen
-    const screenGeom = new THREE.BoxGeometry(0.8, spanHeight * 0.5, 0.02);
-    const screenMat = new THREE.MeshBasicMaterial({ color: assetDef?.details?.lcdColor || 0x10b981 });
-    const screenMesh = new THREE.Mesh(screenGeom, screenMat);
-    screenMesh.position.set(-0.9, 0, 0.04);
-    group.add(screenMesh);
-
-    // Battery vent grille
-    const ventGeom = new THREE.BoxGeometry(1.4, spanHeight * 0.5, 0.02);
-    const ventMesh = new THREE.Mesh(ventGeom, materials.accentMat);
-    ventMesh.position.set(0.6, 0, 0.04);
-    group.add(ventMesh);
-
   } else {
-    // Switch / Router: Ethernet port clusters & status LEDs
-    const portBlocks = assetDef?.details?.portBlocks || 2;
-    const blockWidth = portBlocks >= 4 ? 0.75 : portBlocks >= 3 ? 0.95 : 1.2;
-    const startX = 0.2;
+    // Active Equipment (Switches, Routers, UPS, Amplifiers, Servers)
+    const activeDepth = Math.max(1.8, Math.min(innerDepthUnits * 0.8, item.uSpan > 1 ? 4.5 : 2.8));
+    const chassisWidth = USABLE_OPENING_WIDTH;
+    const chassisGeom = new THREE.BoxGeometry(chassisWidth, spanHeight, activeDepth);
 
-    for (let b = 0; b < portBlocks; b++) {
-      const portClusterGeom = new THREE.BoxGeometry(blockWidth, spanHeight * 0.45, 0.02);
-      const portMesh = new THREE.Mesh(portClusterGeom, materials.accentMat);
-      portMesh.position.set(startX + b * (blockWidth + 0.18), 0, 0.035);
-      group.add(portMesh);
+    let activeMat = materials.activeChassisMat;
+    if (assetDef?.chassisColor) {
+      activeMat = new THREE.MeshStandardMaterial({
+        color: assetDef.chassisColor,
+        roughness: assetDef.roughness ?? 0.35,
+        metalness: assetDef.metalness ?? 0.65,
+      });
+    } else if (isAudioAmp) {
+      activeMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.25, metalness: 0.8 });
+    } else if (isUps) {
+      activeMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.4, metalness: 0.6 });
     }
 
-    // Green/Amber status LEDs
-    const ledCount = assetDef?.details?.ledCount || 8;
-    const displayLeds = Math.min(ledCount, 16);
-    const ledGeom = new THREE.BoxGeometry(0.04, 0.04, 0.02);
-    for (let l = 0; l < displayLeds; l++) {
-      const led = new THREE.Mesh(ledGeom, materials.ledMat);
-      led.position.set(-1.6 + l * 0.10, spanHeight * 0.18, 0.035);
-      group.add(led);
-    }
+    const chassisMesh = new THREE.Mesh(chassisGeom, activeMat);
+    chassisMesh.position.set(0, 0, -activeDepth / 2);
+    chassisMesh.castShadow = true;
+    chassisMesh.receiveShadow = true;
+    group.add(chassisMesh);
+
+    // Front bezel faceplate
+    const faceplateGeom = new THREE.BoxGeometry(RACK_19_WIDTH_UNITS, spanHeight, 0.05);
+    const faceplateMesh = new THREE.Mesh(faceplateGeom, activeMat);
+    faceplateMesh.position.set(0, 0, 0);
+    group.add(faceplateMesh);
+
+    // Mounting ears
+    const earGeom = new THREE.BoxGeometry(0.18, spanHeight, 0.06);
+    const leftEar = new THREE.Mesh(earGeom, materials.earMat);
+    leftEar.position.set(-RACK_19_WIDTH_UNITS / 2 + 0.09, 0, 0.03);
+    group.add(leftEar);
+
+    const rightEar = new THREE.Mesh(earGeom, materials.earMat);
+    rightEar.position.set(RACK_19_WIDTH_UNITS / 2 - 0.09, 0, 0.03);
+    group.add(rightEar);
+
+    // Silver mounting screws
+    const screwGeom = new THREE.CylinderGeometry(0.025, 0.025, 0.02, 8);
+    screwGeom.rotateX(Math.PI / 2);
+    const screwMat = new THREE.MeshBasicMaterial({ color: 0xd1d5db });
+    [-RACK_19_WIDTH_UNITS / 2 + 0.09, RACK_19_WIDTH_UNITS / 2 - 0.09].forEach(sx => {
+      [-spanHeight * 0.35, spanHeight * 0.35].forEach(sy => {
+        const screw = new THREE.Mesh(screwGeom, screwMat);
+        screw.position.set(sx, sy, 0.065);
+        group.add(screw);
+      });
+    });
   }
 
-  // 5. REAL PRODUCT IMAGE INTEGRATION
-  // Prefer dedicated front face texture from asset registry; fallback to catalog image
+  // 2. UNIFIED VISUAL FRONT FACE LAYER (Image Presentation or Procedural Fallback)
+  const frontFaceGroup = new THREE.Group();
+  frontFaceGroup.name = `front-face-${item.instanceId}`;
+  group.add(frontFaceGroup);
+
+  const renderProceduralFallback = () => {
+    // Clear any existing children in frontFaceGroup
+    while (frontFaceGroup.children.length > 0) {
+      frontFaceGroup.remove(frontFaceGroup.children[0]);
+    }
+
+    if (isShelf) {
+      const shelfWidth = USABLE_OPENING_WIDTH * 0.98;
+      const shelfDepth = Math.max(1.8, Math.min(innerDepthUnits * 0.85, 5.0));
+      const shelfThick = 0.05;
+      const ventGeom = new THREE.BoxGeometry(shelfWidth * 0.7, 0.01, shelfDepth * 0.6);
+      const ventMesh = new THREE.Mesh(ventGeom, materials.accentMat);
+      ventMesh.position.set(0, -spanHeight / 2 + shelfThick + 0.005, -shelfDepth / 2);
+      frontFaceGroup.add(ventMesh);
+
+    } else if (isPdu) {
+      const switchGeom = new THREE.BoxGeometry(0.22, 0.14, 0.04);
+      const redSwitchMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+      const switchMesh = new THREE.Mesh(switchGeom, redSwitchMat);
+      switchMesh.position.set(RACK_19_WIDTH_UNITS * 0.38, 0, 0.02);
+      frontFaceGroup.add(switchMesh);
+
+      const socketGeom = new THREE.BoxGeometry(0.28, 0.18, 0.02);
+      for (let s = -3; s <= 2; s++) {
+        const socketMesh = new THREE.Mesh(socketGeom, materials.accentMat);
+        socketMesh.position.set(s * 0.45 - 0.2, 0, 0.01);
+        frontFaceGroup.add(socketMesh);
+      }
+
+    } else if (isPanel) {
+      if (isBrush) {
+        const brushGeom = new THREE.BoxGeometry(USABLE_OPENING_WIDTH * 0.85, spanHeight * 0.45, 0.03);
+        const brushMat = new THREE.MeshBasicMaterial({ color: 0x18181b });
+        const brushMesh = new THREE.Mesh(brushGeom, brushMat);
+        brushMesh.position.set(0, 0, 0.01);
+        frontFaceGroup.add(brushMesh);
+      } else if (!isBlank) {
+        const portBlockGeom = new THREE.BoxGeometry(0.65, spanHeight * 0.45, 0.03);
+        [-1.4, -0.5, 0.5, 1.4].forEach(px => {
+          const portMesh = new THREE.Mesh(portBlockGeom, materials.accentMat);
+          portMesh.position.set(px, 0, 0.01);
+          frontFaceGroup.add(portMesh);
+        });
+      }
+
+    } else if (isAudioAmp || assetDef?.categoryProfile === 'audio-amplifier') {
+      const knobGeom = new THREE.CylinderGeometry(0.10, 0.10, 0.06, 16);
+      knobGeom.rotateX(Math.PI / 2);
+      const knobMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, metalness: 0.9, roughness: 0.2 });
+
+      [-0.8, 0.8].forEach(kx => {
+        const knob = new THREE.Mesh(knobGeom, knobMat);
+        knob.position.set(kx, 0, 0.06);
+        frontFaceGroup.add(knob);
+      });
+
+      const vuGeom = new THREE.BoxGeometry(0.4, 0.08, 0.02);
+      const blueLedMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+      const vuMesh = new THREE.Mesh(vuGeom, blueLedMat);
+      vuMesh.position.set(0, 0.08, 0.04);
+      frontFaceGroup.add(vuMesh);
+
+      const ventGeom = new THREE.BoxGeometry(0.5, 0.03, 0.01);
+      const ventMat = new THREE.MeshBasicMaterial({ color: 0x18181b });
+      [-0.2, 0, 0.2].forEach(vy => {
+        const vent = new THREE.Mesh(ventGeom, ventMat);
+        vent.position.set(0, -0.15 + vy, 0.035);
+        frontFaceGroup.add(vent);
+      });
+
+    } else if (isUps || assetDef?.categoryProfile === 'ups-online') {
+      const screenGeom = new THREE.BoxGeometry(0.8, spanHeight * 0.5, 0.02);
+      const screenMat = new THREE.MeshBasicMaterial({ color: assetDef?.details?.lcdColor || 0x10b981 });
+      const screenMesh = new THREE.Mesh(screenGeom, screenMat);
+      screenMesh.position.set(-0.9, 0, 0.04);
+      frontFaceGroup.add(screenMesh);
+
+      const ventGeom = new THREE.BoxGeometry(1.4, spanHeight * 0.5, 0.02);
+      const ventMesh = new THREE.Mesh(ventGeom, materials.accentMat);
+      ventMesh.position.set(0.6, 0, 0.04);
+      frontFaceGroup.add(ventMesh);
+
+    } else {
+      const portBlocks = assetDef?.details?.portBlocks || 2;
+      const blockWidth = portBlocks >= 4 ? 0.75 : portBlocks >= 3 ? 0.95 : 1.2;
+      const startX = 0.2;
+
+      for (let b = 0; b < portBlocks; b++) {
+        const portClusterGeom = new THREE.BoxGeometry(blockWidth, spanHeight * 0.45, 0.02);
+        const portMesh = new THREE.Mesh(portClusterGeom, materials.accentMat);
+        portMesh.position.set(startX + b * (blockWidth + 0.18), 0, 0.035);
+        frontFaceGroup.add(portMesh);
+      }
+
+      const ledCount = assetDef?.details?.ledCount || 8;
+      const displayLeds = Math.min(ledCount, 16);
+      const ledGeom = new THREE.BoxGeometry(0.04, 0.04, 0.02);
+      for (let l = 0; l < displayLeds; l++) {
+        const led = new THREE.Mesh(ledGeom, materials.ledMat);
+        led.position.set(-1.6 + l * 0.10, spanHeight * 0.18, 0.035);
+        frontFaceGroup.add(led);
+      }
+    }
+  };
+
+  // 3. IMAGE LOADING & PRESENTATION PIPELINE
+  // Priority order:
+  // 1. Dedicated orthographic front panel texture (frontTextureUrl)
+  // 2. Real catalog photo (item.image)
+  // 3. Procedural fallback (when no image available)
   const rawImage = assetDef?.frontTextureUrl || (item.image ? String(item.image).split(/[,;]+/)[0].trim() : '');
+
   if (rawImage) {
     const imageUrl = transformImageLink(rawImage, 800);
     if (imageUrl) {
@@ -291,12 +298,17 @@ export function buildProduct3DMesh(
           texture.minFilter = THREE.LinearFilter;
           texture.magFilter = THREE.LinearFilter;
 
+          // Clear any fallback elements
+          while (frontFaceGroup.children.length > 0) {
+            frontFaceGroup.remove(frontFaceGroup.children[0]);
+          }
+
           const imgW = texture.image?.naturalWidth || texture.image?.width || 1;
           const imgH = texture.image?.naturalHeight || texture.image?.height || 1;
           const imgAspect = Math.max(0.1, imgW / imgH);
 
           if (assetDef?.frontTextureUrl) {
-            // High-fidelity orthographic front panel texture
+            // Dedicated orthographic front panel texture - exact 19" chassis fit
             const frontGeom = new THREE.PlaneGeometry(USABLE_OPENING_WIDTH * 0.98, spanHeight * 0.95);
             const frontMat = new THREE.MeshStandardMaterial({
               map: texture,
@@ -305,13 +317,13 @@ export function buildProduct3DMesh(
               toneMapped: true,
             });
             const frontMesh = new THREE.Mesh(frontGeom, frontMat);
-            frontMesh.position.set(0, 0, 0.04);
-            group.add(frontMesh);
+            frontMesh.position.set(0, 0, 0.042);
+            frontFaceGroup.add(frontMesh);
           } else {
             // Real catalog photo: displayed on a dedicated front presentation surface
             // Strictly preserves original aspect ratio without distortion or cropping
             const maxW = USABLE_OPENING_WIDTH * 0.88;
-            const maxH = spanHeight * 0.84;
+            const maxH = spanHeight * 0.86;
             let planeW = maxW;
             let planeH = maxW / imgAspect;
             if (planeH > maxH) {
@@ -319,11 +331,11 @@ export function buildProduct3DMesh(
               planeW = maxH * imgAspect;
             }
 
-            // Clean dark bezel backing to seamlessly blend into 19" chassis face
+            // Dark bezel backing to seamlessly blend into 19" chassis face
             const bezelGeom = new THREE.BoxGeometry(planeW + 0.04, planeH + 0.02, 0.01);
             const bezelMesh = new THREE.Mesh(bezelGeom, materials.panelMat);
-            bezelMesh.position.set(0, 0, 0.032);
-            group.add(bezelMesh);
+            bezelMesh.position.set(0, 0, 0.035);
+            frontFaceGroup.add(bezelMesh);
 
             // Aspect-ratio-accurate textured plane
             const photoGeom = new THREE.PlaneGeometry(planeW, planeH);
@@ -333,18 +345,22 @@ export function buildProduct3DMesh(
             });
             const photoMesh = new THREE.Mesh(photoGeom, photoMat);
             photoMesh.position.set(0, 0, 0.042);
-            group.add(photoMesh);
+            frontFaceGroup.add(photoMesh);
           }
 
           if (onTextureLoaded) onTextureLoaded();
         },
         undefined,
         (err) => {
-          // Graceful fallback: procedural mesh (LEDs, dials, port blocks, vents) remains fully functional
-          console.warn(`[Product3D] Fallback procedural mesh used for ${item.sku}:`, err);
+          console.warn(`[Product3D] Failed to load texture for ${item.sku}, rendering procedural fallback:`, err);
+          renderProceduralFallback();
         }
       );
+    } else {
+      renderProceduralFallback();
     }
+  } else {
+    renderProceduralFallback();
   }
 
   return group;

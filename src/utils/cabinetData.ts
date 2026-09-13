@@ -188,20 +188,31 @@ export const transformImageLink = (url: string, size: number = 600): string => {
   if (!url) return '';
   try {
     const trimmedUrl = url.trim();
-    if (trimmedUrl.includes("drive.google.com/drive/folders/")) {
-      return "";
+    if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://')) {
+      return trimmedUrl;
     }
+    const parsed = new URL(trimmedUrl);
+    const host = parsed.hostname.toLowerCase();
+    const isGoogleDrive = host === 'drive.google.com' || host.endsWith('.drive.google.com');
+    const isGoogleLh3 = host === 'lh3.googleusercontent.com' || host.endsWith('.lh3.googleusercontent.com');
+
+    if (isGoogleDrive && parsed.pathname.includes('/folders/')) {
+      return '';
+    }
+
     let fileId: string | null = null;
-    if (trimmedUrl.includes("drive.google.com/file/d/")) {
-      const match = trimmedUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
-      if (match && match[1]) fileId = match[1];
-    } else if (trimmedUrl.includes("id=")) {
-      const match = trimmedUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-      if (match && match[1]) fileId = match[1];
-    } else if (trimmedUrl.includes("lh3.googleusercontent.com/d/")) {
-      const match = trimmedUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (isGoogleDrive) {
+      if (parsed.pathname.includes('/file/d/')) {
+        const match = parsed.pathname.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) fileId = match[1];
+      } else if (parsed.searchParams.has('id')) {
+        fileId = parsed.searchParams.get('id');
+      }
+    } else if (isGoogleLh3) {
+      const match = parsed.pathname.match(/\/d\/([a-zA-Z0-9_-]+)/);
       if (match && match[1]) fileId = match[1];
     }
+
     if (fileId) {
       return `https://lh3.googleusercontent.com/d/${fileId}=w${size}`;
     }
