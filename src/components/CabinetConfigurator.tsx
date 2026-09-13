@@ -23,6 +23,24 @@ import {
 } from '../utils/cabinetRules';
 import { getToken as getAppCheckToken } from 'firebase/app-check';
 import { appCheck } from '../firebase';
+import { Cabinet3DErrorBoundary } from './Cabinet3D/Cabinet3DErrorBoundary';
+import { AddSlotModal } from './Cabinet3D/AddSlotModal';
+
+const Cabinet3DViewer = React.lazy(() =>
+  import('./Cabinet3D/Cabinet3DViewer').then(m => ({ default: m.Cabinet3DViewer }))
+);
+
+export interface VisualSlot {
+  uIndex: number;
+  type: 'empty' | 'preset-fan' | 'preset-shelf' | 'optional-accessory';
+  isAnchor?: boolean;
+  instanceId?: string;
+  spanU?: number;
+  name: string;
+  description?: string;
+  accessoryRef?: any;
+  optionalIdx?: number;
+}
 
 interface Accessory {
   pn: string;
@@ -43,6 +61,8 @@ interface Accessory {
   isShelf?: boolean;
   shelfType?: string;
   _source?: string;
+  targetU?: number;
+  id?: string;
 }
 
 // Match a shelf to a cabinet using the accessory sheet's "ארונות מתאימים" range
@@ -102,7 +122,7 @@ const isCabinetProduct = (pp: any): boolean => {
   return false;
 };
 
-// Only items belonging to Infrastructure pricelist / categories should appear as cabinet accessories
+// Only items belonging to Infrastructure pricelist / categories should appear as cabinet accessories (Track 2)
 const isInfrastructureItem = (pp: any): boolean => {
   if (!pp) return false;
   const cat = String(pp.category || '').toLowerCase();
@@ -110,15 +130,12 @@ const isInfrastructureItem = (pp: any): boolean => {
   const nested = String(pp['Nested subcategory'] || pp.nestedSubcategory || '').toLowerCase();
   const name = String(pp.name || '').toLowerCase();
 
-  // Explicit exclude non-infrastructure products like vacuum cleaners, keypads, intercoms, CCTV, etc.
+  // Explicit exclude non-infrastructure products like vacuum cleaners, keypads, intercoms, alarms, etc.
   if (
     sub.includes('שואב') || cat.includes('שואב') || name.includes('שואב') ||
     sub.includes('קודן') || cat.includes('קודן') || name.includes('קודן') ||
     sub.includes('אינטרקום') || cat.includes('אינטרקום') ||
-    sub.includes('אזעק') || cat.includes('אזעק') ||
-    sub.includes('שמע') || cat.includes('שמע') ||
-    sub.includes('הגברה') || cat.includes('הגברה') ||
-    cat.includes('ezviz') || cat.includes('hikvision') || cat.includes('polman') || cat.includes('סאונד')
+    sub.includes('אזעק') || cat.includes('אזעק')
   ) {
     return false;
   }
@@ -334,6 +351,29 @@ const buildCatalogAccessories = (
     const normSku = normalizeSku(pp.sku);
     if (!normSku || normSku === productSkuNorm) return;
 
+    // Check active status
+    if (pp.status === false || pp.status === 'false' || pp.active === false || pp.active === 'false') return;
+
+    // RULE: Shelf classification precedes suitability approval.
+    // "התאמה לארון", brand or category CANNOT override the cabinet matrix for shelves.
+    if (isProductShelf(pp, catalogMap, allMatrixShelves)) return;
+
+    // Business entry condition: item must be explicitly flagged "התאמה לארון"
+    const flagged = isFlaggedForCabinetSuitability(pp);
+    if (!flagged) return;
+
+    // Exclude the cabinet itself and other cabinets
+    if (isCabinetProduct(pp)) return;
+
+    const nameDesc = `${pp.name || ''} ${pp.description || ''}`.toLowerCase();
+    if (/מחלץ|extractor|כלי\b|tool\b/.test(nameDesc)) return;
+
+    // Explicit physical constraints: Depth check
+    const itemDepth = parseDepthMmLocal(nameDesc);
+    if (cabinet && cabinet.depth !== null && itemDepth > 0 && itemDepth > cabinet.depth + 40) {
+      return;
+    }
+
     if (itemsMap.has(normSku)) {
       const existing = itemsMap.get(normSku)!;
       if (!existing.image && ((pp.images && pp.images[0]) || pp.imageURL)) {
@@ -342,26 +382,6 @@ const buildCatalogAccessories = (
       if (!existing.price && pp.price) {
         existing.price = parseFloat(String(pp.price).replace(/,/g, '')) || 0;
       }
-      return;
-    }
-
-    if (isCabinetProduct(pp)) return;
-    // Strictly ensure item belongs to Infrastructure domain
-    if (!isInfrastructureItem(pp)) return;
-
-    // Any item identified as a shelf is completely excluded from non-shelf tracks!
-    if (isProductShelf(pp, catalogMap, allMatrixShelves)) return;
-
-    const nameDesc = `${pp.name || ''} ${pp.description || ''}`.toLowerCase();
-    if (/מחלץ|extractor|כלי\b|tool\b/.test(nameDesc)) return;
-
-    // Check suitability flag
-    const flagged = isFlaggedForCabinetSuitability(pp);
-    if (!flagged) return;
-
-    // Depth check
-    const itemDepth = parseDepthMmLocal(nameDesc);
-    if (cabinet && cabinet.depth !== null && itemDepth > 0 && itemDepth > cabinet.depth + 40) {
       return;
     }
 
@@ -577,6 +597,41 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, cabinetData, compatMap, allMatrixShelvesRef.current));
   }, [catalogData, cabinetData, compatMap, product?.sku]);
 
+  // Ensure that when switching cabinets or updating cabinetData, no incompatible accessory or shelf remains selected!
+  // "שינוי ארון לא ישאיר מוצר לא מתאים כתוספת מאושרת."
+  useEffect(() => {
+    if (!cabinetData || !product?.sku || compatibleAccessories.length === 0) return;
+    const allowedSkus = new Set(compatibleAccessories.map(a => normalizeSku(a.sku || a.pn)));
+
+    setSelectedOptionals(prev => {
+      if (!prev || prev.length === 0) return prev;
+      let changed = false;
+      const filtered = prev.filter(item => {
+        const skuNorm = normalizeSku(item.sku || item.pn);
+        if (item._illustration) {
+          return (item.uSize || 1) <= (totalU || 42);
+        }
+        const isShelf = isProductShelf(item, catalogMapRef.current, allMatrixShelvesRef.current);
+        if (isShelf) {
+          const isAllowedShelf = inMatrixShelvesRef.current.has(skuNorm);
+          if (!isAllowedShelf) {
+            console.warn(`[CabinetConfigurator] Sanitized: removed incompatible shelf ${skuNorm} on cabinet ${cabinetData.sku}`);
+            changed = true;
+            return false;
+          }
+        }
+        if (!allowedSkus.has(skuNorm)) {
+          console.warn(`[CabinetConfigurator] Sanitized: removed incompatible accessory ${skuNorm} on cabinet ${cabinetData.sku}`);
+          changed = true;
+          return false;
+        }
+        return true;
+      });
+
+      return changed ? filtered : prev;
+    });
+  }, [cabinetData, compatibleAccessories, totalU, product?.sku]);
+
   // ACCURACY: availableU is DERIVED (never mutated incrementally) so the counter
   // can never drift — always = total − built-in − sum(selected U × qty).
   
@@ -638,24 +693,41 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       
       for (let q = 0; q < qty; q++) {
         let foundStart = -1;
-        // Search from top (totalSlotsU - 1) down to find a contiguous block of 'size'
-        for (let i = totalSlotsU - size; i >= 0; i--) {
-          let fits = true;
-          for (let j = 0; j < size; j++) {
-            if (visualSlotsAlloc[i + j] !== null) {
-              fits = false;
-              break;
+        // 1. If item has a specific targetU, ONLY allocate at targetU (do not move without user action)
+        if (opt.targetU && q === 0) {
+          const prefStart = opt.targetU - 1; // 0-based
+          if (prefStart >= 0 && prefStart + size <= totalSlotsU) {
+            let fits = true;
+            for (let j = 0; j < size; j++) {
+              if (visualSlotsAlloc[prefStart + j] !== null) {
+                fits = false;
+                break;
+              }
+            }
+            if (fits) {
+              foundStart = prefStart;
             }
           }
-          if (fits) {
-            foundStart = i;
-            break;
+        } else if (!opt.targetU) {
+          // 2. Default (non-targeted items): Search from top down to find a contiguous block of 'size'
+          for (let i = totalSlotsU - size; i >= 0; i--) {
+            let fits = true;
+            for (let j = 0; j < size; j++) {
+              if (visualSlotsAlloc[i + j] !== null) {
+                fits = false;
+                break;
+              }
+            }
+            if (fits) {
+              foundStart = i;
+              break;
+            }
           }
         }
         
         if (foundStart !== -1) {
           // Mark allocated
-          const instId = `${opt.sku || opt.pn}-unit-${q}`;
+          const instId = opt.id ? `${opt.id}-${q}` : `${opt.sku || opt.pn}-unit-${q}`;
           for (let j = 0; j < size; j++) {
             visualSlotsAlloc[foundStart + j] = 'opt';
             const currentU = foundStart + j + 1;
@@ -672,7 +744,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           }
         } else {
           unallocatedItems.push(opt);
-          console.warn('Could not find contiguous space for accessory:', opt.pn);
+          console.warn('Could not find contiguous space for accessory at target position:', opt.pn);
         }
       }
     });
@@ -688,8 +760,19 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         builtSlots.push({
           uIndex: u,
           type: 'preset-shelf',
-          name: 'מדף מובנה קבוע (המחשה) 📦',
-          description: 'מדף מתכת קבוע הכלול בארון. המיקום להמחשה.'
+          name: 'מדף מובנה קבוע (כלול בארון) 📦',
+          description: 'מדף מתכת קבוע הכלול בארון כחלק מתצורת היצרן. המיקום להמחשה.',
+          spanU: 1,
+          isAnchor: true,
+          instanceId: `builtin-shelf-${u}`,
+          accessoryRef: {
+            name: 'מדף מובנה קבוע (כלול בארון)',
+            sku: 'BUILTIN-SHELF',
+            isPreset: true,
+            price: 0,
+            uSize: 1,
+            description: 'מדף מתכת קבוע הכלול בארון כחלק מהתצורה הסטנדרטית.'
+          }
         });
       } else {
         const optMatch = optionalItemsAssignment.find(o => o.uIndex === u);
@@ -755,8 +838,53 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [accSearch, setAccSearch] = useState('');
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
+  // Reset all accordion rubrics to closed when switching to another cabinet
+  useEffect(() => {
+    setOpenSections({});
+  }, [product?.sku]);
+
   const [customAccName, setCustomAccName] = useState('');
   const [customAccU, setCustomAccU] = useState<number>(1);
+
+  const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
+  const [isAddSlotModalOpen, setIsAddSlotModalOpen] = useState(false);
+  const [addSlotTargetU, setAddSlotTargetU] = useState<number | null>(null);
+  const [isAuxiliaryModalOpen, setIsAuxiliaryModalOpen] = useState(false);
+
+  const handleAddOptionalAtSlot = (acc: Accessory, targetU: number | null) => {
+    const normSku = normalizeSku(acc.sku || acc.pn);
+    const isShelf = isProductShelf(acc, catalogMapRef.current, allMatrixShelvesRef.current);
+    if (isShelf) {
+      if (!inMatrixShelvesRef.current.has(normSku)) {
+        console.warn(`[CabinetConfigurator] Shelf ${normSku} is not permitted for cabinet ${cabinetData?.sku}. Blocked.`);
+        return;
+      }
+    }
+
+    const uSize = acc.uSize ?? 1;
+    const newInstId = `${acc.sku || acc.pn}-unit-${Date.now()}`;
+
+    setSelectedOptionals(prev => {
+      if (targetU && uSize > 0) {
+        return [...prev, { ...acc, quantity: 1, targetU, id: `${acc.sku || acc.pn}-U${targetU}-${Date.now()}` }];
+      }
+      const existingIdx = prev.findIndex(item => item.pn === acc.pn && !item.targetU);
+      if (existingIdx >= 0) {
+        const newArr = [...prev];
+        newArr[existingIdx] = { ...newArr[existingIdx], quantity: newArr[existingIdx].quantity + 1 };
+        return newArr;
+      }
+      return [...prev, { ...acc, quantity: 1, id: acc.sku || acc.pn || Math.random().toString() }];
+    });
+
+    setLastAddedInstanceId(newInstId);
+    setChassisPulse(true);
+
+    setTimeout(() => {
+      setLastAddedInstanceId(null);
+      setChassisPulse(false);
+    }, 1400);
+  };
 
   const handleAddCustomIllustration = () => {
     if (!customAccName.trim()) return;
@@ -1152,18 +1280,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   if (errorMsg) return <div className="p-8 mt-8 bg-red-50 text-center text-red-700 border border-red-200" dir="rtl">{errorMsg}</div>;
 
   // --- DYNAMIC SLOT CALCULATION FOR VISUAL CHASSIS ---
-  interface VisualSlot {
-    uIndex: number;
-    type: 'empty' | 'preset-fan' | 'preset-shelf' | 'optional-accessory';
-    isAnchor?: boolean;
-    instanceId?: string;
-    spanU?: number;
-    name: string;
-    description?: string;
-    accessoryRef?: any;
-    optionalIdx?: number;
-  }
-
   const getAccessoryImage = (acc: any): string => {
     if (!acc) return '';
     if (acc.image && typeof acc.image === 'string' && acc.image.trim() !== '') {
@@ -1258,7 +1374,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const plinthItems = nonUAccessories.filter(a => a.zone === 'plinth');
   const hardwareItems = nonUAccessories.filter(a => a.zone === 'hardware');
 
-  // --- Accessory grouping: search + accordion buckets (promoted grouped by BRAND) ---
+  // --- Accessory grouping: single candidate list divided into disjoint display rubrics ---
   const _accPairs = compatibleAccessories.map((acc, idx) => ({ acc, idx }));
   const _q = accSearch.trim().toLowerCase();
   const _qTokens = _q.split(/[\s\-/,]+/).filter(Boolean);
@@ -1269,7 +1385,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   };
   const _filtered = _accPairs.filter(_accMatch);
 
-  // Rubric 1: Shelves matching cabinet matrix
+  // Rubric 1: Shelves matching cabinet matrix (strictly shelves only)
   const _bucketShelves = _filtered
     .filter(({ acc }: any) => acc.isShelf)
     .sort((a: any, b: any) => {
@@ -1280,9 +1396,19 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       return (a.acc.pn || '').localeCompare(b.acc.pn || '');
     });
 
+  // Rubric: Promoted items grouped by brand (e.g. HIKVISION, POLMAN)
+  // These items get their own dedicated brand accordion rubrics and are excluded from "takesU"
+  const _bucketPromoted = _filtered.filter(({ acc }: any) => !acc.isShelf && acc._promoted);
+  const _promotedByBrand: Record<string, any[]> = {};
+  _bucketPromoted.forEach((pair: any) => {
+    const brand = String(pair.acc.brand || 'אחר').trim() || 'אחר';
+    (_promotedByBrand[brand] = _promotedByBrand[brand] || []).push(pair);
+  });
+
   // Rubric 2: Additional equipment taking space (>0U)
+  // Excludes shelves AND items already allocated to separate brand groups!
   const _bucketTakesU = _filtered
-    .filter(({ acc }: any) => !acc.isShelf && acc.uSize > 0)
+    .filter(({ acc }: any) => !acc.isShelf && acc.uSize > 0 && !acc._promoted)
     .sort((a: any, b: any) => {
       const rank = (x: any) => (x.acc._curated ? 0 : (x.acc._depth ? 1 : 2));
       const rDiff = rank(a) - rank(b);
@@ -1291,6 +1417,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     });
 
   // Rubric 3: Accessories taking no space (0U)
+  // Non-U accessories that do not consume vertical rail units (e.g. wheels, roof fans, screws)
   const _bucketFree = _filtered
     .filter(({ acc }: any) => !acc.isShelf && acc.uSize === 0)
     .sort((a: any, b: any) => {
@@ -1305,12 +1432,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       const hay = `${acc.pn} ${acc.name} ${acc.description}`.toLowerCase();
       return _qTokens.every((tok: string) => hay.includes(tok));
     });
-  const _bucketPromoted = _filtered.filter(({ acc }: any) => acc._promoted);
-  const _promotedByBrand: Record<string, any[]> = {};
-  _bucketPromoted.forEach((pair: any) => {
-    const brand = String(pair.acc.brand || 'אחר').trim() || 'אחר';
-    (_promotedByBrand[brand] = _promotedByBrand[brand] || []).push(pair);
-  });
 
   const renderAccCard = (acc: any, idx: number) => {
     const catalogMatch = catalogData.find(pp => pp && pp.sku && (pp.sku === acc.pn || pp.sku === acc.sku));
@@ -1370,17 +1491,49 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     );
   };
 
-  const AccordionSection = (id: string, title: string, pairs: any[], tone: string, defaultOpen: boolean = true, logoUrl: string = '') => {
+  const AccordionSection = (id: string, title: string, pairs: any[], tone: string, defaultOpen: boolean = false, logoUrl: string = '') => {
     if (!pairs.length) return null;
     const open = openSections[id] ?? defaultOpen;
     return (
       <div key={id} className="border border-slate-200 rounded-none mb-2.5">
-        <button type="button" onClick={() => setOpenSections(s => ({ ...s, [id]: !( s[id] !== false) }))}
-          className={`w-full flex items-center justify-between px-4 py-2 min-h-[50px] font-bold text-[15px] ${tone} active:opacity-80`}>
-          <span className="flex items-center gap-4">{logoUrl ? <img src={logoUrl} alt="" className="h-20 max-w-[220px] -my-6 object-contain mix-blend-multiply" referrerPolicy="no-referrer" onError={(e)=>{(e.currentTarget as HTMLImageElement).style.display='none';}} /> : null}<span>{title}{title ? ' ' : ''}<span className="opacity-70 font-mono">({pairs.length})</span></span></span>
-          <ChevronDown size={22} className={`transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
+        <button
+          type="button"
+          id={`accordion-btn-${id}`}
+          aria-expanded={open}
+          aria-controls={`accordion-content-${id}`}
+          onClick={() => setOpenSections(s => ({ ...s, [id]: !(s[id] ?? defaultOpen) }))}
+          className={`w-full flex items-center justify-between px-4 py-2 min-h-[50px] font-bold text-[15px] ${tone} active:opacity-80 transition-colors focus:outline-none focus:ring-2 focus:ring-[#004387] cursor-pointer`}
+        >
+          <span className="flex items-center gap-4">
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt=""
+                className="h-20 max-w-[220px] -my-6 object-contain mix-blend-multiply"
+                referrerPolicy="no-referrer"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              />
+            ) : null}
+            <span>
+              {title}{title ? ' ' : ''}
+              <span className="opacity-70 font-mono">({pairs.length})</span>
+            </span>
+          </span>
+          <ChevronDown
+            size={22}
+            className={`transition-transform duration-200 flex-shrink-0 ${open ? 'rotate-180' : ''}`}
+          />
         </button>
-        {open && <div className="space-y-3 p-2.5 max-h-[320px] overflow-y-auto">{pairs.map(({ acc, idx }: any) => renderAccCard(acc, idx))}</div>}
+        {open && (
+          <div
+            id={`accordion-content-${id}`}
+            role="region"
+            aria-labelledby={`accordion-btn-${id}`}
+            className="space-y-3 p-2.5 max-h-[320px] overflow-y-auto"
+          >
+            {pairs.map(({ acc, idx }: any) => renderAccCard(acc, idx))}
+          </div>
+        )}
       </div>
     );
   };
@@ -1430,32 +1583,103 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               <span>🖥️ הדמיית ארון תקשורת פיזי</span>
               <span className="text-xs font-normal text-slate-500">({totalSlotsU}U)</span>
             </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setZoomMode(z => !z)}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition-colors cursor-pointer"
-                title={zoomMode ? 'חזור לתצוגת ארון מלאה' : 'עבור לתצוגת תקריב מפורטת'}
-              >
-                {zoomMode ? '🔍 תצוגה מלאה' : '🔍 תקריב מפורט'}
-              </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* View Switcher: 2D Front / 3D Interactive */}
+              <div className="inline-flex rounded border border-slate-300 bg-slate-100 p-0.5 text-xs font-bold" role="group" aria-label="בורר מבט הדמיה">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('2d')}
+                  className={`px-2.5 py-1 transition-colors cursor-pointer rounded-xs ${
+                    viewMode === '2d'
+                      ? 'bg-[#004387] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  aria-pressed={viewMode === '2d'}
+                >
+                  מבט חזיתי
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('3d')}
+                  className={`px-2.5 py-1 transition-colors cursor-pointer rounded-xs flex items-center gap-1 ${
+                    viewMode === '3d'
+                      ? 'bg-[#004387] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  aria-pressed={viewMode === '3d'}
+                >
+                  <span>תלת־ממד</span>
+                  <span className="text-[9px] bg-amber-400 text-slate-950 px-1 py-0.2 rounded font-black">3D</span>
+                </button>
+              </div>
+
+              {viewMode === '2d' && (
+                <button
+                  type="button"
+                  onClick={() => setZoomMode(z => !z)}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition-colors cursor-pointer"
+                  title={zoomMode ? 'חזור לתצוגת ארון מלאה' : 'עבור לתצוגת תקריב מפורטת'}
+                >
+                  {zoomMode ? '🔍 תצוגה מלאה' : '🔍 תקריב מפורט'}
+                </button>
+              )}
               <span className="text-xs text-gray-400 font-mono hidden sm:inline">1U = 44.45mm</span>
             </div>
           </div>
 
-          {/* Quick Tip for Image Magnification */}
-          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-800 text-[11px] px-2.5 py-1.5 flex items-center justify-between gap-2 rounded-none font-medium">
-            <span className="flex items-center gap-1.5">
-              <ZoomIn size={14} className="text-amber-600 shrink-0" />
-              <span>הצבע בעכבר או גע במסך על מוצר בארון להגדלת התמונה והפרטים</span>
-            </span>
-            <span className="text-[10px] bg-amber-200/70 text-amber-900 font-mono px-1.5 py-0.5 rounded shrink-0">
-              תקריב פעיל
-            </span>
-          </div>
+          {viewMode === '3d' ? (
+            <Cabinet3DErrorBoundary onFallbackTo2D={() => setViewMode('2d')}>
+              <React.Suspense fallback={
+                <div className="flex flex-col items-center justify-center min-h-[480px] bg-slate-950 text-slate-300 space-y-3 border-4 border-slate-700 p-8 text-center">
+                  <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-xs font-mono">טוען מודל תלת־ממדי פרמטרי...</span>
+                </div>
+              }>
+                <Cabinet3DViewer
+                  product={product}
+                  cabinetData={cabinetData}
+                  totalU={totalSlotsU}
+                  slots={slots}
+                  selectedOptionals={selectedOptionals}
+                  nonUAccessories={nonUAccessories}
+                  includedItems={includedItems}
+                  availableU={availableU}
+                  usedU={usedU}
+                  highlightedOptIdx={highlightedOptIdx}
+                  lastAddedInstanceId={lastAddedInstanceId}
+                  selectedSlotU={addSlotTargetU}
+                  hoveredProduct={hoveredProduct}
+                  onProductHover={(slot) => setHoveredProduct(slot ? buildPreviewFromSlot(slot) : null)}
+                  onProductInspect={(slot) => setInspectedProduct(buildPreviewFromSlot(slot))}
+                  onSlotClickToAdd={(uIndex) => {
+                    setAddSlotTargetU(uIndex);
+                    setIsAddSlotModalOpen(true);
+                  }}
+                  onOpenAuxiliaryModal={() => {
+                    setAddSlotTargetU(null);
+                    setIsAuxiliaryModalOpen(true);
+                  }}
+                  onIncrementQuantity={handleIncrementQuantity}
+                  onRemoveOptional={handleRemoveOptional}
+                  onFallbackTo2D={() => setViewMode('2d')}
+                />
+              </React.Suspense>
+            </Cabinet3DErrorBoundary>
+          ) : (
+            <>
+              {/* Quick Tip for Image Magnification */}
+              <div className="bg-amber-500/10 border border-amber-500/30 text-amber-800 text-[11px] px-2.5 py-1.5 flex items-center justify-between gap-2 rounded-none font-medium">
+                <span className="flex items-center gap-1.5">
+                  <ZoomIn size={14} className="text-amber-600 shrink-0" />
+                  <span>הצבע בעכבר או גע במסך על מוצר בארון להגדלת התמונה והפרטים</span>
+                </span>
+                <span className="text-[10px] bg-amber-200/70 text-amber-900 font-mono px-1.5 py-0.5 rounded shrink-0">
+                  תקריב פעיל
+                </span>
+              </div>
 
-          {/* Visual Rack Container */}
-          <div className={`relative border-4 bg-slate-950 p-2 sm:p-3 shadow-2xl flex flex-col flex-1 min-h-[440px] max-h-[calc(100vh-6rem)] overflow-hidden transition-all duration-300 ${chassisPulse ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-slate-700'}`}>
+              {/* Visual Rack Container */}
+              <div className={`relative border-4 bg-slate-950 p-2 sm:p-3 shadow-2xl flex flex-col flex-1 min-h-[440px] max-h-[calc(100vh-6rem)] overflow-hidden transition-all duration-300 ${chassisPulse ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-slate-700'}`}>
             
             {/* Floating Magnifier HUD (Desktop Hover) */}
             <AnimatePresence>
@@ -1636,8 +1860,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     }}
                     onClick={() => {
                       if (isEmpty) {
-                        const el = document.getElementById('com-accessories-list');
-                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        setAddSlotTargetU(slot.uIndex);
+                        setIsAddSlotModalOpen(true);
                       } else if (slotPreview) {
                         setInspectedProduct(slotPreview);
                         if (isOptional && slot.accessoryRef?.pn) {
@@ -1901,6 +2125,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               ◄ STEEL FRAME CHASSIS INTERLINKED ►
             </div>
           </div>
+          </>
+        )}
         </div>
         {/* Column 2 & 3: Selected Optionals & Catalog (Left side) */}
         <div className="@4xl:col-span-2 flex flex-col gap-6">
@@ -2103,8 +2329,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               <div className="mb-3 text-[12px] font-bold text-slate-600">
                 נותרו <span className="text-[#004387]">{availableU}U</span> פנויים — מלא עם אביזרים תואמים:
               </div>
-              {_bucketShelves.length > 0 && AccordionSection('shelves', '🗄️ מדפים מתאימים לארון', _bucketShelves, 'bg-emerald-50 text-emerald-900', true)}
-              {_bucketTakesU.length > 0 && AccordionSection('takesU', '📏 ציוד נוסף שתופס מקום בארון', _bucketTakesU, 'bg-[#e6f0fa] text-[#004387]', true)}
+              {_bucketShelves.length > 0 && AccordionSection('shelves', '🗄️ מדפים מתאימים לארון', _bucketShelves, 'bg-emerald-50 text-emerald-900', false)}
+              {_bucketTakesU.length > 0 && AccordionSection('takesU', '📏 ציוד נוסף שתופס מקום בארון', _bucketTakesU, 'bg-[#e6f0fa] text-[#004387]', false)}
               {_bucketFree.length > 0 && AccordionSection('freeU', '🔌 אביזרים ללא תפיסת מקום', _bucketFree, 'bg-slate-50 text-slate-700', false)}
               {_illusPairs.length > 0 && AccordionSection('illus', '🧩 תצוגת הדמיה (ללא מחיר)', _illusPairs, 'bg-indigo-50 text-indigo-800', false)}
               {_filtered.length === 0 && _illusPairs.length === 0 && (
@@ -2556,6 +2782,23 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 3D & 2D Interactive Add Slot / Auxiliary Modal */}
+      <AddSlotModal
+        isOpen={isAddSlotModalOpen || isAuxiliaryModalOpen}
+        onClose={() => {
+          setIsAddSlotModalOpen(false);
+          setIsAuxiliaryModalOpen(false);
+          setAddSlotTargetU(null);
+        }}
+        targetU={addSlotTargetU}
+        totalU={totalSlotsU}
+        slots={slots}
+        availableU={availableU}
+        compatibleAccessories={compatibleAccessories}
+        onAddAccessoryAtSlot={handleAddOptionalAtSlot}
+        isAuxiliaryMode={isAuxiliaryModalOpen}
+      />
 
     </div>
   );

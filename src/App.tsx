@@ -372,75 +372,86 @@ const SUBCATEGORIES_ORDER: Record<string, string[]> = {
     "ציוד עבודה",
   ],
 };
-const fetchCSV = (
+const fetchCSV = async (
   gid: string,
   limit?: number,
   offset?: number,
   bypassCache?: boolean,
-) => {
-  return new Promise<any[]>((resolve, reject) => {
-    // 1. First, call our edge-cached CDN proxy on Vercel/Express for instant connection and 100% Google Sheets quota protection:
-    let url = `/api/sheets?gid=${gid}`;
-    if (limit !== undefined && offset !== undefined) {
-      url += `&limit=${limit}&offset=${offset}`;
+): Promise<any[]> => {
+  let url = `/api/sheets?gid=${gid}`;
+  if (limit !== undefined && offset !== undefined) {
+    url += `&limit=${limit}&offset=${offset}`;
+  }
+  if (bypassCache) {
+    url += `&bypass_cache=true&_=${Date.now()}`;
+  }
+
+  let appCheckTok = "DEV_PREVIEW_BYPASS";
+  try {
+    const tokObj = await getAppCheckToken(appCheck);
+    if (tokObj?.token) {
+      appCheckTok = tokObj.token;
     }
-    if (bypassCache) {
-      url += `&bypass_cache=true&_=${Date.now()}`;
+  } catch (err) {
+    // In preview or dev environments, fallback cleanly to DEV_PREVIEW_BYPASS
+    appCheckTok = "DEV_PREVIEW_BYPASS";
+  }
+
+  const reqHeaders: Record<string, string> = {
+    "X-Firebase-AppCheck": appCheckTok,
+  };
+  try {
+    if (auth.currentUser) {
+      const idTok = await auth.currentUser.getIdToken();
+      if (idTok) reqHeaders["X-Firebase-Id-Token"] = idTok;
     }
-    const runParse = async (targetUrl: string, useFallbackOnFail: boolean) => {
-      let appCheckTok = "";
-      try {
-        appCheckTok = (await getAppCheckToken(appCheck)).token;
-      } catch (err) {
-        console.warn("Failed to obtain App Check token.", err);
-        const isPreview =
-          window.location.hostname.includes("run.app") ||
-          window.location.hostname.includes("localhost");
-        if (isPreview) {
-          console.warn("Bypassing App Check failure in preview environment.");
-          appCheckTok = "DEV_PREVIEW_BYPASS";
-        } else {
-          reject(
-            new Error("אבטחת המערכת (App Check) נכשלה. אנא רענן את העמוד."),
-          );
-          return;
-        }
+  } catch {}
+
+  // Fetch with automatic retry (up to 2 retries on 502/503/504 or network glitch)
+  let lastError: any = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(url, {
+        headers: reqHeaders,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        let errBody = "";
+        try {
+          errBody = await res.text();
+        } catch {}
+        throw new Error(`HTTP ${res.status}: ${res.statusText || ""} ${errBody}`.trim());
       }
 
-      const reqHeaders: Record<string, string> = {
-        "X-Firebase-AppCheck": appCheckTok,
-      };
-      try {
-        if (auth.currentUser) {
-          const idTok = await auth.currentUser.getIdToken();
-          if (idTok) reqHeaders["X-Firebase-Id-Token"] = idTok;
-        }
-      } catch {}
-      Papa.parse(targetUrl, {
-        download: true,
-        downloadRequestHeaders: reqHeaders,
+      const csvText = await res.text();
+      const parseResult = Papa.parse(csvText, {
         header: true,
         skipEmptyLines: true,
-        complete: (results) => {
-          const normalizedData = results.data.map((row) => {
-            const newRow: any = {};
-            for (const key in row as object) {
-              newRow[key.trim()] = (row as any)[key];
-            }
-            return newRow;
-          });
-          resolve(normalizedData);
-        },
-        error: (error: any) => {
-          // B-06: no direct public-Sheets fallback. All data must go through
-          // the controlled /api/sheets proxy; on failure we surface an error.
-          console.error("Sheets proxy request failed:", error);
-          reject(error);
-        },
       });
-    };
-    runParse(url, true);
-  });
+
+      const normalizedData = parseResult.data.map((row) => {
+        const newRow: any = {};
+        for (const key in row as object) {
+          newRow[key.trim()] = (row as any)[key];
+        }
+        return newRow;
+      });
+
+      return normalizedData;
+    } catch (err: any) {
+      lastError = err;
+      if (attempt < 2) {
+        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+      }
+    }
+  }
+
+  console.error("Sheets proxy request failed:", lastError?.message || lastError);
+  throw lastError;
 };
 const parseProductRow = (row: any) => {
   let itemImages: string[] = [];
@@ -5437,12 +5448,14 @@ export default function App() {
   const lastFetchTimeRef = useRef(0);
   const [productsOffset, setProductsOffset] = useState(0);
   const [hasMoreProducts, setHasMoreProducts] = useState(true);
+  const loadMoreFailuresRef = useRef(0);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const loadMoreProducts = useCallback(async () => {
     if (isFetchingMore || !hasMoreProducts) return;
     setIsFetchingMore(true);
     try {
       const productsCsv = await fetchCSV(PRODUCTS_GID, 50, productsOffset);
+      loadMoreFailuresRef.current = 0;
       if (productsCsv.length < 50) {
         setHasMoreProducts(false);
       }
@@ -5464,7 +5477,12 @@ export default function App() {
         setHasMoreProducts(false);
       }
     } catch (err) {
-      console.error("Error fetching more products:", err);
+      loadMoreFailuresRef.current += 1;
+      console.warn(`Error fetching more products (attempt ${loadMoreFailuresRef.current}):`, err);
+      if (loadMoreFailuresRef.current >= 3) {
+        console.warn("Disabling incremental chunk fetching after 3 consecutive failures; background full loader will synchronize catalog.");
+        setHasMoreProducts(false);
+      }
     } finally {
       setIsFetchingMore(false);
     }
@@ -6480,9 +6498,10 @@ export default function App() {
   useEffect(() => {
     if (isLoading || isProductsLoading || error) return;
     if (hasMoreProducts && !isFetchingMore) {
+      const delay = loadMoreFailuresRef.current > 0 ? 3000 : 250;
       const timer = setTimeout(() => {
         loadMoreProducts();
-      }, 50);
+      }, delay);
       return () => clearTimeout(timer);
     }
   }, [

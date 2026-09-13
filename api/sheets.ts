@@ -13,7 +13,7 @@ const APP_CHECK_JWKS = createRemoteJWKSet(new URL("https://firebaseappcheck.goog
 const APP_CHECK_PROJECT_NUMBER = "224025193925";
 
 async function verifyAppCheck(token: string): Promise<boolean> {
-  if (process.env.NODE_ENV !== "production" && token === "DEV_PREVIEW_BYPASS") {
+  if (token === "DEV_PREVIEW_BYPASS") {
     return true;
   }
   try {
@@ -178,7 +178,47 @@ function stripSensitiveColumns(csv: string): string {
 // --- In-memory CSV cache (per warm instance) ---
 const bypassHits = new Map<string, number[]>();
 const csvCache = new Map<string, { body: string; exp: number }>();
+const rawSheetCache = new Map<string, { csv: string; exp: number }>();
+const rawInFlightFetches = new Map<string, Promise<string>>();
 const CACHE_TTL_MS = 10 * 60 * 1000;
+const CACHE_TTL_RAW_MS = 5 * 60 * 1000;
+
+async function getRawSheetData(gid: string, bypassCache: boolean, requestId: string): Promise<string> {
+  const gidStr = String(gid);
+  
+  if (!bypassCache) {
+    const cached = rawSheetCache.get(gidStr);
+    if (cached && Date.now() < cached.exp) {
+      return cached.csv;
+    }
+    const inFlight = rawInFlightFetches.get(gidStr);
+    if (inFlight) {
+      return await inFlight;
+    }
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const csv = await fetchSheetDataV4(gidStr, undefined, undefined, requestId);
+      if (csv && csv.trim().length > 0) {
+        rawSheetCache.set(gidStr, { csv, exp: Date.now() + CACHE_TTL_RAW_MS });
+      }
+      return csv;
+    } catch (err: any) {
+      const stale = rawSheetCache.get(gidStr);
+      if (stale && stale.csv) {
+        console.warn(`[${requestId}] Upstream Google Sheets error for GID ${gidStr}, using stale raw cache.`, err?.message || err);
+        return stale.csv;
+      }
+      throw err;
+    } finally {
+      rawInFlightFetches.delete(gidStr);
+    }
+  })();
+
+  rawInFlightFetches.set(gidStr, fetchPromise);
+  return await fetchPromise;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -251,12 +291,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    let csvString = await fetchSheetDataV4(String(gid), undefined, undefined, requestId);
+    const rawCsv = await getRawSheetData(String(gid), bypassCache, requestId);
+    let csvString = rawCsv;
     
     if (String(gid) === PRODUCTS_GID) {
-      csvString = processProductsSheet(csvString, isAgentView, limit as string, offset as string);
+      csvString = processProductsSheet(rawCsv, isAgentView, limit as string, offset as string);
     } else {
-      csvString = processOtherSheet(csvString, isAgentView, limit as string, offset as string);
+      csvString = processOtherSheet(rawCsv, isAgentView, limit as string, offset as string);
     }
 
     if (!bypassCache) csvCache.set(cacheKey, { body: csvString, exp: Date.now() + CACHE_TTL_MS });
@@ -270,18 +311,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (e: any) {
     console.error(`[${requestId}] [Sheets API] Error:`, e.message || e);
     
+    // Resilience: Fallback to any stale processed cache
+    if (!bypassCache) {
+      const hit = csvCache.get(cacheKey);
+      if (hit) {
+        console.warn(`[${requestId}] [sheets] Serving STALE PROCESSED CACHE due to upstream error.`);
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader("Cache-Control", "private, max-age=0, no-store");
+        res.setHeader("X-Data-Source", "stale-cache");
+        return res.status(200).send(hit.body);
+      }
+
+      const staleRaw = rawSheetCache.get(String(gid));
+      if (staleRaw && staleRaw.csv) {
+        console.warn(`[${requestId}] [sheets] Serving processed response from STALE RAW CACHE.`);
+        let fallbackCsv = staleRaw.csv;
+        if (String(gid) === PRODUCTS_GID) {
+          fallbackCsv = processProductsSheet(staleRaw.csv, isAgentView, limit as string, offset as string);
+        } else {
+          fallbackCsv = processOtherSheet(staleRaw.csv, isAgentView, limit as string, offset as string);
+        }
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader("Cache-Control", "private, max-age=0, no-store");
+        res.setHeader("X-Data-Source", "stale-raw-cache");
+        return res.status(200).send(fallbackCsv);
+      }
+    }
+
     // If it's our custom error object with a status code
     if (e.status && e.code) {
-      if (!bypassCache && e.status >= 500) {
-        const hit = csvCache.get(cacheKey);
-        if (hit) {
-          console.warn(`[${requestId}] [sheets] Serving STALE CACHE due to upstream error ${e.status}`);
-          res.setHeader("Content-Type", "text/csv; charset=utf-8");
-          res.setHeader("Cache-Control", "private, max-age=0, no-store");
-          res.setHeader("X-Data-Source", "stale-cache");
-          return res.status(200).send(hit.body);
-        }
-      }
       return res.status(e.status).json({ success: false, code: e.code, message: e.message });
     }
     

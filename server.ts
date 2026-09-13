@@ -211,7 +211,49 @@ interface SheetsCacheEntry {
   timestamp: number;
 }
 const sheetsCacheMap = new Map<string, SheetsCacheEntry>();
-const CACHE_TTL_SHEETS_MS = 45 * 1000; // 45 seconds cache is ideal
+const CACHE_TTL_SHEETS_MS = 60 * 1000; // 60 seconds for processed responses
+
+// Raw sheet cache and in-flight request coalescing to eliminate Google Sheets API quota pressure
+const rawSheetsCache = new Map<string, { csv: string; timestamp: number }>();
+const rawInFlightFetches = new Map<string, Promise<string>>();
+const CACHE_TTL_RAW_SHEETS_MS = 3 * 60 * 1000; // 3 minutes for raw Google Sheets data
+
+async function getRawSheetData(gid: string, bypassCache: boolean): Promise<string> {
+  const gidStr = String(gid);
+  
+  if (!bypassCache) {
+    const cached = rawSheetsCache.get(gidStr);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL_RAW_SHEETS_MS)) {
+      return cached.csv;
+    }
+    const inFlight = rawInFlightFetches.get(gidStr);
+    if (inFlight) {
+      return await inFlight;
+    }
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const csv = await fetchSheetDataV4(gidStr, undefined, undefined);
+      if (csv && csv.trim().length > 0) {
+        rawSheetsCache.set(gidStr, { csv, timestamp: Date.now() });
+      }
+      return csv;
+    } catch (err: any) {
+      const stale = rawSheetsCache.get(gidStr);
+      if (stale && stale.csv) {
+        console.warn(`[server] Upstream Google Sheets error for GID ${gidStr}, using stale in-memory cache.`, err?.message || err);
+        return stale.csv;
+      }
+      throw err;
+    } finally {
+      rawInFlightFetches.delete(gidStr);
+    }
+  })();
+
+  rawInFlightFetches.set(gidStr, fetchPromise);
+  return await fetchPromise;
+}
 
 const SENSITIVE_COLS_SERVER = ["מחיר עלות", "מחיר סיטונאות", "מחיר סיטונאי", "needsReview", "notes"];
 const FIREBASE_JWKS_SERVER = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
@@ -387,12 +429,13 @@ app.get("/api/sheets", async (req, res) => {
   }
 
   try {
-    let csvString = await fetchSheetDataV4(String(gid), undefined, undefined);
+    const rawCsv = await getRawSheetData(String(gid), bypassCache);
+    let csvString = rawCsv;
     
     if (String(gid) === PRODUCTS_GID) {
-      csvString = processProductsSheet(csvString, authorized, limit as string, offset as string);
+      csvString = processProductsSheet(rawCsv, authorized, limit as string, offset as string);
     } else {
-      csvString = processOtherSheet(csvString, authorized, limit as string, offset as string);
+      csvString = processOtherSheet(rawCsv, authorized, limit as string, offset as string);
     }
 
     if (!bypassCache) {
@@ -415,7 +458,32 @@ app.get("/api/sheets", async (req, res) => {
     return res.status(200).send(csvString);
     
   } catch (error: any) {
-    console.error("Express sheets proxy error:", error);
+    console.error(`[server] Express sheets proxy error for GID ${gid}:`, error?.message || error);
+    
+    // Resilience: Fallback to any stale cached processed result
+    const staleProcessed = sheetsCacheMap.get(cacheKey);
+    if (staleProcessed && staleProcessed.text) {
+      console.warn(`[server] Serving stale processed cache for ${cacheKey}`);
+      res.setHeader("Cache-Control", "public, max-age=10, stale-while-revalidate=30");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      return res.status(200).send(staleProcessed.text);
+    }
+
+    // Resilience: Fallback to any stale raw sheet data
+    const staleRaw = rawSheetsCache.get(String(gid));
+    if (staleRaw && staleRaw.csv) {
+      console.warn(`[server] Serving processed response from stale raw sheet for GID ${gid}`);
+      let fallbackCsv = staleRaw.csv;
+      if (String(gid) === PRODUCTS_GID) {
+        fallbackCsv = processProductsSheet(staleRaw.csv, authorized, limit as string, offset as string);
+      } else {
+        fallbackCsv = processOtherSheet(staleRaw.csv, authorized, limit as string, offset as string);
+      }
+      res.setHeader("Cache-Control", "public, max-age=10, stale-while-revalidate=30");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      return res.status(200).send(fallbackCsv);
+    }
+
     return res.status(502).json({ error: "Data source unavailable or misconfigured." });
   }
 });
