@@ -19,6 +19,32 @@ export interface CabinetMatrixData {
 
 export const normalizeSku = (sku: any): string => String(sku ?? '').trim().toUpperCase();
 
+export const parseAccessoryCount = (val: any): number => {
+  if (!val) return 0;
+  const str = String(val).trim().toUpperCase();
+  if (
+    str === 'X' ||
+    str === '0' ||
+    str === '-' ||
+    str === '--' ||
+    str.includes('לא כלול') ||
+    str.includes('ללא') ||
+    str.includes('אין') ||
+    str.includes('מידע לא זמין') ||
+    str.includes('NONE') ||
+    str.includes('NO') ||
+    str.includes('N/A') ||
+    str.includes('NA')
+  ) {
+    return 0;
+  }
+  const match = str.match(/\d+/);
+  if (match) {
+    return parseInt(match[0], 10);
+  }
+  return 0;
+};
+
 export const parseCompatibleSkus = (cellValue: string | undefined): string[] => {
   if (!cellValue) return [];
   const val = cellValue.toString().trim();

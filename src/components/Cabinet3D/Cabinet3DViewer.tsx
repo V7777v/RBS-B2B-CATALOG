@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Cabinet3DViewerProps, Product3DInstance } from './Cabinet3DTypes';
 import { resolveCabinetDimensions, buildCabinetFrameGroup, SCALE_MM_TO_UNITS, U_HEIGHT_UNITS } from './CabinetModelBuilder';
+import { parseAccessoryCount } from '../../utils/cabinetData';
 import {
   buildProduct3DMesh,
   buildEmptySlotHitbox,
@@ -163,6 +164,8 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   // Build product 3D instance list from slots
   const productInstances = useMemo(() => {
     const instances: Product3DInstance[] = [];
+    const occupiedU = new Set<number>();
+
     // We iterate through slots to find anchors
     slots.forEach(slot => {
       if (slot.type === 'empty') return;
@@ -170,26 +173,75 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
       const spanU = slot.spanU || 1;
       const uStart = slot.uIndex - spanU + 1; // 1-based bottom of the span
-      const isIncluded = slot.type === 'preset-shelf' || slot.type === 'preset-fan';
+      const isIncluded = slot.type === 'preset-shelf' || slot.type === 'preset-fan' || Boolean((slot as any).isIncluded);
       const instId = slot.instanceId || `item-${slot.uIndex}-${slot.name}`;
+
+      for (let u = uStart; u < uStart + spanU; u++) {
+        occupiedU.add(u);
+      }
 
       instances.push({
         instanceId: instId,
-        sku: slot.accessoryRef?.sku || slot.accessoryRef?.pn || (isIncluded ? 'BUILTIN' : ''),
+        sku: slot.accessoryRef?.sku || slot.accessoryRef?.pn || (isIncluded ? 'BUILTIN-SHELF' : ''),
         name: slot.name,
         description: slot.description || '',
         price: slot.accessoryRef?.price || 0,
         uStart,
         uSpan: spanU,
         isIncluded,
-        type: (slot.type === 'preset-shelf' || slot.name.includes('מדף')) ? 'shelf' : (slot.name.includes('שקע') || slot.name.includes('PDU')) ? 'pdu' : (slot.name.includes('פנל') || slot.name.includes('עיוור') || slot.name.includes('מברשת')) ? 'panel' : 'active',
+        type: (slot.type === 'preset-shelf' || slot.name.includes('מדף') || /מדף|shelf/i.test(slot.name)) ? 'shelf' : (slot.name.includes('שקע') || slot.name.includes('PDU')) ? 'pdu' : (slot.name.includes('פנל') || slot.name.includes('עיוור') || slot.name.includes('מברשת')) ? 'panel' : 'active',
         image: slot.accessoryRef?.image || slot.accessoryRef?.imageURL || (Array.isArray(slot.accessoryRef?.images) ? slot.accessoryRef?.images[0] : undefined),
         optionalIdx: slot.optionalIdx,
         accessoryRef: slot.accessoryRef,
       });
     });
+
+    // Fallback: If slots didn't contain preset-shelf instances, but cabinetData or includedSummary indicates built-in shelves:
+    const hasPresetShelf = instances.some(i => i.isIncluded && i.type === 'shelf');
+    if (!hasPresetShelf) {
+      let shelvesCount = parseAccessoryCount(cabinetData?.shelvesQty);
+      if (shelvesCount === 0 && Array.isArray(includedItems)) {
+        const item = includedItems.find(i => i.includes('מדפ') || i.includes('מדפים'));
+        if (item) shelvesCount = parseAccessoryCount(item);
+      }
+      if (shelvesCount === 0 && product?.description) {
+        const m = String(product.description).match(/(\d+)\s*מדפ/i);
+        if (m) shelvesCount = parseInt(m[1], 10);
+      }
+
+      if (shelvesCount > 0) {
+        const totalSlotsU = dims.totalU;
+        for (let s = 1; s <= shelvesCount; s++) {
+          let pos = Math.round((s * totalSlotsU) / (shelvesCount + 1));
+          while (occupiedU.has(pos) && pos < totalSlotsU) pos++;
+          while (occupiedU.has(pos) && pos > 1) pos--;
+          occupiedU.add(pos);
+
+          instances.push({
+            instanceId: `builtin-shelf-${pos}`,
+            sku: 'BUILTIN-SHELF',
+            name: 'מדף מובנה קבוע (כלול בארון) 📦',
+            description: 'מדף מתכת קבוע הכלול בארון כחלק מתצורת היצרן. מותקן על מסילות 19 אינץ׳.',
+            price: 0,
+            uStart: pos,
+            uSpan: 1,
+            isIncluded: true,
+            type: 'shelf',
+            accessoryRef: {
+              name: 'מדף מובנה קבוע (כלול בארון)',
+              sku: 'BUILTIN-SHELF',
+              isPreset: true,
+              isShelf: true,
+              price: 0,
+              uSize: 1,
+            }
+          });
+        }
+      }
+    }
+
     return instances;
-  }, [slots]);
+  }, [slots, cabinetData, includedItems, product, dims.totalU]);
 
   // Empty slots for keyboard/HTML accessible selector
   const emptySlots = useMemo(() => {
@@ -438,14 +490,14 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         metalness: 0.1,
       }),
       shelfMat: new THREE.MeshStandardMaterial({
-        color: 0x065f46,
-        roughness: 0.28,
-        metalness: 0.75,
+        color: 0x0f766e,
+        roughness: 0.24,
+        metalness: 0.82,
       }),
       includedShelfMat: new THREE.MeshStandardMaterial({
-        color: 0x334155,
-        roughness: 0.32,
-        metalness: 0.80,
+        color: 0x475569,
+        roughness: 0.22,
+        metalness: 0.88,
       }),
       activeChassisMat: new THREE.MeshStandardMaterial({
         color: 0x1e1b4b,
@@ -536,11 +588,20 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     rightRimLight.position.set(9, 8, -9);
     scene.add(rightRimLight);
 
-    const interiorDownLight = new THREE.PointLight(0xffffff, 1.1, 16);
-    interiorDownLight.position.set(0, 4, 0);
-    scene.add(interiorDownLight);
+    // Direct front and interior lights illuminating the rack cavity, ceiling fans, and shelves
+    const interiorTopLight = new THREE.PointLight(0xffffff, 1.8, 25);
+    interiorTopLight.position.set(0, 8, 1);
+    scene.add(interiorTopLight);
 
-    const bottomBounce = new THREE.DirectionalLight(0xcfd8dc, 0.6);
+    const interiorMidLight = new THREE.PointLight(0xf8fafc, 1.4, 20);
+    interiorMidLight.position.set(0, 0, 2);
+    scene.add(interiorMidLight);
+
+    const frontFaceLight = new THREE.DirectionalLight(0xffffff, 1.3);
+    frontFaceLight.position.set(0, 2, 10);
+    scene.add(frontFaceLight);
+
+    const bottomBounce = new THREE.DirectionalLight(0xcfd8dc, 0.7);
     bottomBounce.position.set(0, -8, 5);
     scene.add(bottomBounce);
 
@@ -843,6 +904,34 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     };
   }, []); // Engine mounts ONCE
 
+  // Compute optional counts for frame integrated accessories (fans, wheels, feet)
+  const optionalFansCount = useMemo(() => {
+    let count = 0;
+    (selectedOptionals || []).forEach((opt: any) => {
+      const hay = `${opt.name || ''} ${opt.description || ''} ${opt.sku || ''} ${opt.pn || ''}`.toLowerCase();
+      if (/מאוורר|fan|מפוח/i.test(hay)) {
+        const qty = opt.quantity || 1;
+        const multiplier = opt.name?.includes('4') ? 4 : opt.name?.includes('2') ? 2 : 1;
+        count += qty * multiplier;
+      }
+    });
+    return count;
+  }, [selectedOptionals]);
+
+  const isWheelsSelected = useMemo(() => {
+    return (selectedOptionals || []).some((opt: any) => {
+      const hay = `${opt.name || ''} ${opt.description || ''} ${opt.sku || ''} ${opt.pn || ''}`.toLowerCase();
+      return /גלגל|wheel|caster/i.test(hay);
+    });
+  }, [selectedOptionals]);
+
+  const isFeetSelected = useMemo(() => {
+    return (selectedOptionals || []).some((opt: any) => {
+      const hay = `${opt.name || ''} ${opt.description || ''} ${opt.sku || ''} ${opt.pn || ''}`.toLowerCase();
+      return /רגלי|פילוס|leveling|feet/i.test(hay);
+    });
+  }, [selectedOptionals]);
+
   // ==========================================
   // EFFECT 2: Frame Geometry & Cabinet Framing & Floor Pedestal
   // Runs ONLY when cabinet physical model or dimensions change
@@ -902,7 +991,12 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     const { group: newFrameGroup, uCenters, innerDepthUnits, stagingTrayGroup, stagingAccessoriesGroup, hasStagingContent } = buildCabinetFrameGroup(
       dims,
       cabinetData,
-      materialsRef.current
+      materialsRef.current,
+      {
+        additionalFansCount: optionalFansCount,
+        hasSelectedWheels: isWheelsSelected,
+        hasSelectedFeet: isFeetSelected,
+      }
     );
 
     uCentersRef.current = uCenters;
@@ -914,7 +1008,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     frameGroupRef.current.add(newFrameGroup);
     fitCameraToCabinet(true);
     needsRenderRef.current = true;
-  }, [dims.totalU, dims.widthMm, dims.depthMm, cabinetData?.sku, fitCameraToCabinet, dims]);
+  }, [dims.totalU, dims.widthMm, dims.depthMm, cabinetData?.sku, fitCameraToCabinet, dims, optionalFansCount, isWheelsSelected, isFeetSelected]);
 
   // ==========================================
   // EFFECT 3: Equipment & Slot Synchronization (Instance-Based Lifecycle)
@@ -1091,36 +1185,19 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       };
 
       if (zone === 'roof') {
-        const roofMesh = buildRoofAccessoryMesh(itemData, widthUnits, depthUnits, materials);
-        roofMesh.position.set(0, halfH + 0.12, 0);
-        nonUGroupRef.current.add(roofMesh);
+        const isFan = /מאוורר|fan|מפוח|איוורור/i.test(acc.name || '');
+        if (!isFan) {
+          // Roof brush entry / auxiliary plate
+          const roofMesh = buildRoofAccessoryMesh(itemData, widthUnits, depthUnits, materials);
+          roofMesh.position.set(0, halfH + 0.04, 0);
+          nonUGroupRef.current.add(roofMesh);
+        }
       } else if (zone === 'vertical') {
         const vertMesh = buildVerticalAccessoryMesh(itemData, dims.totalU * U_HEIGHT_UNITS, materials);
         vertMesh.position.set(widthUnits / 2 - 0.35, 0, -depthUnits / 4);
         nonUGroupRef.current.add(vertMesh);
-      } else {
-        const hwMesh = buildHardwareBoxMesh(itemData, materials);
-        const offsetX = (idx % 2 === 0 ? -0.32 : 0.32);
-        const offsetZ = -0.30 + Math.floor(idx / 2) * 0.48;
-        hwMesh.position.set(offsetX, 0.05, offsetZ);
-
-        if (stagingAccessoriesGroupRef.current) {
-          stagingAccessoriesGroupRef.current.add(hwMesh);
-        } else if (stagingTrayGroupRef.current) {
-          stagingTrayGroupRef.current.add(hwMesh);
-        } else {
-          hwMesh.position.set(widthUnits / 2 + 1.25 + offsetX, -halfH - 0.18, offsetZ);
-          nonUGroupRef.current.add(hwMesh);
-        }
       }
     });
-
-    if (stagingTrayGroupRef.current) {
-      const hasStagingHardware = Boolean(
-        stagingAccessoriesGroupRef.current && stagingAccessoriesGroupRef.current.children.length > 0
-      );
-      stagingTrayGroupRef.current.visible = Boolean(hasStagingContentRef.current || hasStagingHardware);
-    }
 
     needsRenderRef.current = true;
   }, [productInstances, slots, nonUAccessories, selectedSlotU, previewSpanU, lastAddedInstanceId, dims.depthMm, dims.totalU, dims.widthMm]);

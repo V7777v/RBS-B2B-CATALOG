@@ -33,6 +33,7 @@ export function buildProduct3DMesh(
     accentMat: THREE.Material;
     ledMat: THREE.Material;
     includedShelfMat: THREE.Material;
+    metalMat?: THREE.Material;
   },
   onTextureLoaded?: () => void
 ): THREE.Group {
@@ -44,6 +45,7 @@ export function buildProduct3DMesh(
   const spanHeight = item.uSpan * U_HEIGHT_UNITS - 0.03; // small gap for realism
   const nameLower = (item.name || '').toLowerCase();
   const descLower = (item.description || '').toLowerCase();
+  const skuLower = (item.sku || '').toLowerCase();
 
   // Normalized business classification:
   // Amplifiers or switches mentioning "מדף" in their description will NEVER be treated as shelves!
@@ -59,17 +61,19 @@ export function buildProduct3DMesh(
     item.type === 'shelf' ||
     Boolean((item as any).isShelf) ||
     Boolean(item.accessoryRef?.isShelf) ||
-    isProductShelf(item.accessoryRef || item)
+    isProductShelf(item.accessoryRef || item) ||
+    /מדף|shelf/i.test(nameLower) ||
+    /מדף|shelf/i.test(skuLower)
   );
 
   // 1. PHYSICAL CHASSIS & MOUNTING EARS (Body & Depth)
   if (isShelf) {
     const shelfMat = item.isIncluded ? materials.includedShelfMat : materials.shelfMat;
     const shelfWidth = USABLE_OPENING_WIDTH * 0.98;
-    const shelfDepth = Math.max(1.8, Math.min(innerDepthUnits * 0.85, 5.0));
-    const shelfThick = 0.05;
+    const shelfDepth = Math.max(2.8, Math.min(innerDepthUnits * 0.88, 6.2));
+    const shelfThick = 0.08;
 
-    // Main horizontal surface
+    // Main horizontal steel tray surface
     const surfaceGeom = new THREE.BoxGeometry(shelfWidth, shelfThick, shelfDepth);
     const surfaceMesh = new THREE.Mesh(surfaceGeom, shelfMat);
     surfaceMesh.position.set(0, -spanHeight / 2 + shelfThick / 2, -shelfDepth / 2);
@@ -77,21 +81,58 @@ export function buildProduct3DMesh(
     surfaceMesh.receiveShadow = true;
     group.add(surfaceMesh);
 
-    // Front lip
-    const lipGeom = new THREE.BoxGeometry(shelfWidth, 0.12, 0.04);
+    // Left and Right Side Stiffening Flanges
+    const flangeGeom = new THREE.BoxGeometry(0.04, 0.18, shelfDepth);
+    const leftFlange = new THREE.Mesh(flangeGeom, shelfMat);
+    leftFlange.position.set(-shelfWidth / 2 + 0.02, -spanHeight / 2 + 0.09, -shelfDepth / 2);
+    group.add(leftFlange);
+
+    const rightFlange = new THREE.Mesh(flangeGeom, shelfMat);
+    rightFlange.position.set(shelfWidth / 2 - 0.02, -spanHeight / 2 + 0.09, -shelfDepth / 2);
+    group.add(rightFlange);
+
+    // Realistic Airflow Ventilation Slots on the shelf surface (4 parallel slotted strips)
+    const slotStripGeom = new THREE.BoxGeometry(shelfWidth * 0.78, 0.015, 0.22);
+    [-shelfDepth * 0.25, -shelfDepth * 0.50, -shelfDepth * 0.75].forEach(slotZ => {
+      const slotMesh = new THREE.Mesh(slotStripGeom, materials.panelMat);
+      slotMesh.position.set(0, -spanHeight / 2 + shelfThick + 0.005, slotZ);
+      group.add(slotMesh);
+    });
+
+    // Front reinforced lip with metallic bevel
+    const lipGeom = new THREE.BoxGeometry(shelfWidth, 0.16, 0.05);
     const lipMesh = new THREE.Mesh(lipGeom, shelfMat);
-    lipMesh.position.set(0, -spanHeight / 2 + 0.06, 0);
+    lipMesh.position.set(0, -spanHeight / 2 + 0.08, 0.01);
     group.add(lipMesh);
 
-    // Mounting ears
-    const earGeom = new THREE.BoxGeometry(0.20, spanHeight * 0.8, 0.06);
+    const lipBevelGeom = new THREE.BoxGeometry(shelfWidth * 0.94, 0.03, 0.02);
+    const lipBevel = new THREE.Mesh(lipBevelGeom, materials.earMat);
+    lipBevel.position.set(0, -spanHeight / 2 + 0.14, 0.035);
+    group.add(lipBevel);
+
+    // 19" Heavy-Duty Mounting Ears with Chrome Screws
+    const earGeom = new THREE.BoxGeometry(0.22, spanHeight * 0.88, 0.06);
     const leftEar = new THREE.Mesh(earGeom, materials.earMat);
-    leftEar.position.set(-RACK_19_WIDTH_UNITS / 2 + 0.09, 0, 0.02);
+    leftEar.position.set(-RACK_19_WIDTH_UNITS / 2 + 0.10, -spanHeight / 2 + (spanHeight * 0.88) / 2, 0.025);
     group.add(leftEar);
 
     const rightEar = new THREE.Mesh(earGeom, materials.earMat);
-    rightEar.position.set(RACK_19_WIDTH_UNITS / 2 - 0.09, 0, 0.02);
+    rightEar.position.set(RACK_19_WIDTH_UNITS / 2 - 0.10, -spanHeight / 2 + (spanHeight * 0.88) / 2, 0.025);
     group.add(rightEar);
+
+    // Chrome Cage Screws on mounting ears
+    const screwGeom = new THREE.CylinderGeometry(0.025, 0.025, 0.03, 8);
+    screwGeom.rotateX(Math.PI / 2);
+    const screwMat = materials.metalMat || materials.earMat;
+    [-RACK_19_WIDTH_UNITS / 2 + 0.10, RACK_19_WIDTH_UNITS / 2 - 0.10].forEach(sx => {
+      const screwTop = new THREE.Mesh(screwGeom, screwMat);
+      screwTop.position.set(sx, -spanHeight / 2 + spanHeight * 0.70, 0.06);
+      group.add(screwTop);
+
+      const screwBottom = new THREE.Mesh(screwGeom, screwMat);
+      screwBottom.position.set(sx, -spanHeight / 2 + spanHeight * 0.20, 0.06);
+      group.add(screwBottom);
+    });
 
   } else if (isPdu) {
     const pduDepth = 0.65;

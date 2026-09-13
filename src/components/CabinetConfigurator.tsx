@@ -32,6 +32,7 @@ import {
   KNOWN_MATRIX_SHELF_SKUS, 
   normalizeSku, 
   parseCompatibleSkus, 
+  parseAccessoryCount,
   CabinetMatrixData,
   groupAccessoriesForDisplay,
   GroupedRubric
@@ -670,8 +671,15 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     const unallocatedItems: any[] = [];
     
     // 1. Included Shelves
-    const shelvesQtyMatch = includedItems.find(i => i.includes('מדפים:') && i.includes('כלול בכמות'));
-    const shelvesQty = shelvesQtyMatch ? parseInt(shelvesQtyMatch.replace(/[^\d]/g, '')) : 0;
+    let shelvesQty = parseAccessoryCount(cabinetData?.shelvesQty);
+    if (shelvesQty === 0 && Array.isArray(includedItems)) {
+      const shelfItem = includedItems.find(it => it.includes('מדפ') || it.includes('מדפים'));
+      if (shelfItem) shelvesQty = parseAccessoryCount(shelfItem);
+    }
+    if (shelvesQty === 0 && product?.description) {
+      const m = String(product.description).match(/(\d+)\s*מדפ/i);
+      if (m) shelvesQty = parseInt(m[1], 10);
+    }
     if (shelvesQty > 0) {
       for (let s = 1; s <= shelvesQty; s++) {
         const pos = Math.round((s * totalSlotsU) / (shelvesQty + 1));
@@ -828,7 +836,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     }
     
     return { usedU: calcUsedU, slots: builtSlots, nonUAccessories, unallocatedItems };
-  }, [totalU, includedItems, selectedOptionals]);
+  }, [totalU, includedItems, selectedOptionals, cabinetData]);
 
   const totalSlotsU = totalU || 0;
   const availableU = totalU - usedU;

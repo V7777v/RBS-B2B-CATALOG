@@ -1,11 +1,17 @@
 import * as THREE from 'three';
 import { CabinetDimensions3D } from './Cabinet3DTypes';
-import { CabinetMatrixData } from '../../utils/cabinetData';
+import { CabinetMatrixData, parseAccessoryCount } from '../../utils/cabinetData';
 
 export const SCALE_MM_TO_UNITS = 0.01; // 1 unit = 100mm (0.1 meter)
 export const U_HEIGHT_UNITS = 0.4445; // 44.45mm in 3D units
 export const RACK_19_WIDTH_UNITS = 4.826; // 482.6mm standard 19-inch mounting width
 export const USABLE_OPENING_WIDTH = 4.50; // 450mm inner aperture
+
+export interface BuildCabinetFrameOptions {
+  additionalFansCount?: number;
+  hasSelectedWheels?: boolean;
+  hasSelectedFeet?: boolean;
+}
 
 /**
  * Derives verified cabinet dimensions or provides clear schematic fallback
@@ -71,7 +77,8 @@ export function buildCabinetFrameGroup(
     metalMat: THREE.Material;
     accentMat: THREE.Material;
     rubberMat: THREE.Material;
-  }
+  },
+  options?: BuildCabinetFrameOptions
 ): {
   group: THREE.Group;
   uCenters: number[]; // Y positions for each U unit center from bottom (U1) to top (Un)
@@ -274,98 +281,230 @@ export function buildCabinetFrameGroup(
   };
   group.add(brandBadgeMesh);
 
-  // Roof ventilation grill insert
-  const grillGeom = new THREE.BoxGeometry(widthUnits * 0.6, 0.02, depthUnits * 0.5);
-  const grillMesh = new THREE.Mesh(grillGeom, materials.panelMat);
-  grillMesh.position.set(0, halfH - roofHeight / 2 + 0.02, 0);
-  group.add(grillMesh);
+  // =========================================================================
+  // 2.2 ROOF & INTERIOR CEILING VENTILATION TRAY & 120MM FAN ARRAY
+  // Fans penetrate through the roof so they are fully visible from both
+  // top exterior view AND bottom interior view (looking up into the cabinet)
+  // =========================================================================
+  const roofTopY = halfH; // Exact exterior top surface of cabinet roof
+  const roofCeilingY = halfH - roofHeight; // Exact interior ceiling surface
 
-  // Helper to parse included accessory count strictly
-  const parseAccessoryCount = (val: any): number => {
-    if (!val) return 0;
-    const str = String(val).trim().toUpperCase();
-    if (
-      str === 'X' ||
-      str === '0' ||
-      str === '-' ||
-      str === '--' ||
-      str.includes('לא כלול') ||
-      str.includes('ללא') ||
-      str.includes('אין') ||
-      str.includes('מידע לא זמין') ||
-      str.includes('NONE') ||
-      str.includes('NO') ||
-      str.includes('N/A') ||
-      str.includes('NA')
-    ) {
-      return 0;
-    }
-    const match = str.match(/\d+/);
-    if (match) {
-      return parseInt(match[0], 10);
-    }
-    return 0;
-  };
+  // Steel Ventilation Enclosure Base Tray on Top of the Roof
+  const ventCanopyWidth = widthUnits * 0.74;
+  const ventCanopyDepth = depthUnits * 0.72;
+  const ventCanopyGeom = new THREE.BoxGeometry(ventCanopyWidth, 0.035, ventCanopyDepth);
+  const ventCanopyMesh = new THREE.Mesh(ventCanopyGeom, materials.panelMat);
+  ventCanopyMesh.position.set(0, roofTopY + 0.0175, 0);
+  ventCanopyMesh.castShadow = true;
+  group.add(ventCanopyMesh);
 
-  // Roof fans (if included in matrix, e.g. 2 or 4 fans)
-  const fansCount = parseAccessoryCount(cabinetData?.fans);
-  if (fansCount > 0) {
-    const fanRadius = 0.45; // 90mm diameter fan
-    const fanCylGeom = new THREE.CylinderGeometry(fanRadius, fanRadius, 0.08, 24);
-    const fanMat = materials.accentMat;
-    const fanPositions: [number, number][] = [];
-    if (fansCount === 2) {
-      fanPositions.push([-widthUnits * 0.18, 0], [widthUnits * 0.18, 0]);
-    } else if (fansCount >= 4) {
-      fanPositions.push(
-        [-widthUnits * 0.18, -depthUnits * 0.14],
-        [widthUnits * 0.18, -depthUnits * 0.14],
-        [-widthUnits * 0.18, depthUnits * 0.14],
-        [widthUnits * 0.18, depthUnits * 0.14]
-      );
-    } else {
-      fanPositions.push([0, 0]);
-    }
+  // Beveled outer metallic border trim around ventilation tray
+  const ventTrimGeom = new THREE.BoxGeometry(ventCanopyWidth + 0.06, 0.02, ventCanopyDepth + 0.06);
+  const ventTrimMesh = new THREE.Mesh(ventTrimGeom, materials.railMat);
+  ventTrimMesh.position.set(0, roofTopY + 0.01, 0);
+  group.add(ventTrimMesh);
 
-    fanPositions.forEach(([fx, fz], idx) => {
-      const fanGroup = new THREE.Group();
-      fanGroup.name = `roof-fan-${idx + 1}`;
-      (fanGroup as any).userData = {
+  // Rear Cable Entry Brush Port on Roof
+  const cableBrushGeom = new THREE.BoxGeometry(Math.min(widthUnits * 0.45, 2.6), 0.03, 0.35);
+  const cableBrushMesh = new THREE.Mesh(cableBrushGeom, materials.rubberMat);
+  cableBrushMesh.position.set(0, roofTopY + 0.02, -depthUnits * 0.30);
+  group.add(cableBrushMesh);
+
+  // Underside Interior Ceiling Ventilation Panel (visible from inside cabinet)
+  const ceilingPanelGeom = new THREE.BoxGeometry(ventCanopyWidth, 0.03, ventCanopyDepth);
+  const ceilingPanelMesh = new THREE.Mesh(ceilingPanelGeom, materials.panelMat);
+  ceilingPanelMesh.position.set(0, roofCeilingY - 0.015, 0);
+  group.add(ceilingPanelMesh);
+
+  // 120mm High-Flow Fan Specs (SCALE_MM_TO_UNITS = 0.01 -> 120mm = 1.20 units)
+  const fanOuterSize = 1.22; // 122mm outer square housing
+  const fanRadius = 0.54;    // 108mm circular intake aperture
+  const fanThickness = 0.16; // Penetrating through full roof depth
+
+  const builtInFansCount = parseAccessoryCount(cabinetData?.fans);
+  const totalActiveFans = builtInFansCount + (options?.additionalFansCount || 0);
+
+  // Determine standard fan bay layout (4 bays for deep racks >= 600mm, 2 for compact/shallow racks)
+  const isDeepRack = depthUnits >= 6.0;
+  const bayXOffset = Math.min(widthUnits * 0.22, 0.85);
+  const bayZOffset = isDeepRack ? Math.min(depthUnits * 0.18, 0.85) : 0;
+
+  const fanBays: { id: number; label: string; x: number; z: number }[] = isDeepRack
+    ? [
+        { id: 1, label: 'BAY 1 (קדמי שמאל)', x: -bayXOffset, z: -bayZOffset },
+        { id: 2, label: 'BAY 2 (קדמי ימין)', x: bayXOffset, z: -bayZOffset },
+        { id: 3, label: 'BAY 3 (אחורי שמאל)', x: -bayXOffset, z: bayZOffset },
+        { id: 4, label: 'BAY 4 (אחורי ימין)', x: bayXOffset, z: bayZOffset },
+      ]
+    : [
+        { id: 1, label: 'BAY 1 (שמאל)', x: -bayXOffset, z: 0 },
+        { id: 2, label: 'BAY 2 (ימין)', x: bayXOffset, z: 0 },
+      ];
+
+  fanBays.forEach((bay, bayIdx) => {
+    const isInstalled = bayIdx < totalActiveFans;
+    const isBuiltIn = bayIdx < builtInFansCount;
+    const bayGroup = new THREE.Group();
+    bayGroup.name = `roof-fan-bay-${bay.id}`;
+    // Center the fan unit right between roof top and interior ceiling
+    const fanMidY = (roofTopY + roofCeilingY) / 2;
+    bayGroup.position.set(bay.x, fanMidY, bay.z);
+
+    // 1. TOP EXTERIOR BEZEL (Roof View)
+    const topBezelGeom = new THREE.TorusGeometry(fanRadius, 0.025, 8, 32);
+    topBezelGeom.rotateX(Math.PI / 2);
+    const topBezel = new THREE.Mesh(topBezelGeom, materials.railMat);
+    topBezel.position.set(0, (roofTopY - fanMidY) + 0.015, 0);
+    bayGroup.add(topBezel);
+
+    // 2. BOTTOM INTERIOR BEZEL (Ceiling / Inside Cabinet View)
+    const bottomBezelGeom = new THREE.TorusGeometry(fanRadius, 0.028, 8, 32);
+    bottomBezelGeom.rotateX(Math.PI / 2);
+    const bottomBezel = new THREE.Mesh(bottomBezelGeom, materials.railMat);
+    bottomBezel.position.set(0, (roofCeilingY - fanMidY) - 0.015, 0);
+    bayGroup.add(bottomBezel);
+
+    // 3. Four Corner Through-Mounting Hex Screws / Bolts
+    const screwDist = fanOuterSize * 0.40;
+    const screwGeom = new THREE.CylinderGeometry(0.03, 0.03, fanThickness + 0.08, 8);
+    [
+      [-screwDist, -screwDist],
+      [screwDist, -screwDist],
+      [-screwDist, screwDist],
+      [screwDist, screwDist],
+    ].forEach(([sx, sz]) => {
+      const screwMesh = new THREE.Mesh(screwGeom, materials.metalMat);
+      screwMesh.position.set(sx, 0, sz);
+      bayGroup.add(screwMesh);
+
+      // Bottom chrome nuts (visible from inside)
+      const nutGeom = new THREE.CylinderGeometry(0.04, 0.04, 0.02, 6);
+      const nutMesh = new THREE.Mesh(nutGeom, materials.metalMat);
+      nutMesh.position.set(sx, (roofCeilingY - fanMidY) - 0.03, sz);
+      bayGroup.add(nutMesh);
+    });
+
+    if (isInstalled) {
+      // ==========================================================
+      // REALISTIC DUAL-SIDED 120MM ACTIVE TURBINE FAN UNIT
+      // ==========================================================
+      // Outer square fan frame penetrating roof
+      const fanHousingGeom = new THREE.BoxGeometry(fanOuterSize, fanThickness, fanOuterSize);
+      const fanHousing = new THREE.Mesh(fanHousingGeom, materials.accentMat);
+      fanHousing.position.set(0, 0, 0);
+      bayGroup.add(fanHousing);
+
+      // Central Motor Hub (extends through center)
+      const hubRadius = 0.20;
+      const hubHeight = fanThickness + 0.04;
+      const hubGeom = new THREE.CylinderGeometry(hubRadius, hubRadius, hubHeight, 24);
+      const hubMesh = new THREE.Mesh(hubGeom, materials.metalMat);
+      hubMesh.position.set(0, 0, 0);
+      bayGroup.add(hubMesh);
+
+      // Top & Bottom Center Metallic Emblem Caps
+      const capGeom = new THREE.CylinderGeometry(hubRadius * 0.55, hubRadius * 0.55, 0.02, 16);
+      const topCap = new THREE.Mesh(capGeom, materials.railMat);
+      topCap.position.set(0, hubHeight / 2 + 0.01, 0);
+      bayGroup.add(topCap);
+
+      const bottomCap = new THREE.Mesh(capGeom, materials.railMat);
+      bottomCap.position.set(0, -hubHeight / 2 - 0.01, 0);
+      bayGroup.add(bottomCap);
+
+      // 7 High-Curvature Aerodynamic Rotor Blades
+      const bladeGeom = new THREE.BoxGeometry(fanRadius * 0.65, fanThickness * 0.6, 0.12);
+      for (let b = 0; b < 7; b++) {
+        const bladeAngle = (b * Math.PI * 2) / 7;
+        const bladeMesh = new THREE.Mesh(bladeGeom, materials.frameMat);
+        bladeMesh.position.set(
+          Math.cos(bladeAngle) * (fanRadius * 0.55),
+          0,
+          Math.sin(bladeAngle) * (fanRadius * 0.55)
+        );
+        bladeMesh.rotation.y = -bladeAngle + 0.35;
+        bladeMesh.rotation.z = 0.25; // 25 degree aerodynamic pitch
+        bayGroup.add(bladeMesh);
+      }
+
+      // 1. Top Chrome Wire Finger-Guard Grille (Exterior)
+      const topGuardY = (roofTopY - fanMidY) + 0.025;
+      [fanRadius * 0.40, fanRadius * 0.70, fanRadius * 0.95].forEach(ringR => {
+        const guardRing = new THREE.TorusGeometry(ringR, 0.012, 6, 28);
+        guardRing.rotateX(Math.PI / 2);
+        const guardRingMesh = new THREE.Mesh(guardRing, materials.metalMat);
+        guardRingMesh.position.set(0, topGuardY, 0);
+        bayGroup.add(guardRingMesh);
+      });
+
+      const spokeGeom = new THREE.BoxGeometry(fanRadius * 1.95, 0.012, 0.012);
+      const topSpoke1 = new THREE.Mesh(spokeGeom, materials.metalMat);
+      topSpoke1.position.set(0, topGuardY + 0.005, 0);
+      topSpoke1.rotation.y = Math.PI / 4;
+      bayGroup.add(topSpoke1);
+
+      const topSpoke2 = new THREE.Mesh(spokeGeom, materials.metalMat);
+      topSpoke2.position.set(0, topGuardY + 0.005, 0);
+      topSpoke2.rotation.y = -Math.PI / 4;
+      bayGroup.add(topSpoke2);
+
+      // 2. Bottom Chrome Wire Finger-Guard Grille (Interior Ceiling - Highly Visible from Inside!)
+      const bottomGuardY = (roofCeilingY - fanMidY) - 0.025;
+      [fanRadius * 0.40, fanRadius * 0.70, fanRadius * 0.95].forEach(ringR => {
+        const guardRing = new THREE.TorusGeometry(ringR, 0.014, 6, 28);
+        guardRing.rotateX(Math.PI / 2);
+        const guardRingMesh = new THREE.Mesh(guardRing, materials.metalMat);
+        guardRingMesh.position.set(0, bottomGuardY, 0);
+        bayGroup.add(guardRingMesh);
+      });
+
+      const bottomSpoke1 = new THREE.Mesh(spokeGeom, materials.metalMat);
+      bottomSpoke1.position.set(0, bottomGuardY - 0.005, 0);
+      bottomSpoke1.rotation.y = Math.PI / 4;
+      bayGroup.add(bottomSpoke1);
+
+      const bottomSpoke2 = new THREE.Mesh(spokeGeom, materials.metalMat);
+      bottomSpoke2.position.set(0, bottomGuardY - 0.005, 0);
+      bottomSpoke2.rotation.y = -Math.PI / 4;
+      bayGroup.add(bottomSpoke2);
+
+      (bayGroup as any).userData = {
         isProductMesh: true,
         item: {
-          instanceId: `builtin-fan-${idx + 1}`,
-          sku: 'BUILTIN-FAN',
-          name: `מאוורר גג (${fansCount} יחידות כלולות)`,
-          description: 'מאוורר איוורור עליון הכלול בארון. סידור סכמטי בגג (0U).',
+          instanceId: `roof-fan-${bay.id}`,
+          sku: isBuiltIn ? 'BUILTIN-FAN' : 'OPTIONAL-FAN',
+          name: isBuiltIn
+            ? `מאוורר גג תעשייתי 120 מ״מ (${builtInFansCount} יח׳ כלולות בגג הארון)`
+            : `מאוורר גג תעשייתי 120 מ״מ (ציוד אופציונלי נוסף)`,
+          description: 'מאוורר איוורור תעשייתי עליון 120 מ״מ מותקן בגג הארון לשאיבת חום ויצירת סירקולציית אוויר מיטבית.',
           price: 0,
-          isIncluded: true,
+          isIncluded: isBuiltIn,
           type: 'fan',
         },
       };
+    } else {
+      // EMPTY FAN BAY READY FOR MOUNTING (Top & Bottom aperture discs)
+      const meshDiscGeom = new THREE.CylinderGeometry(fanRadius * 0.98, fanRadius * 0.98, 0.02, 24);
+      const meshDisc = new THREE.Mesh(meshDiscGeom, materials.frameMat);
+      meshDisc.position.set(0, 0, 0);
+      bayGroup.add(meshDisc);
 
-      const fanMesh = new THREE.Mesh(fanCylGeom, fanMat);
-      fanMesh.position.set(0, 0, 0);
-      fanGroup.add(fanMesh);
+      (bayGroup as any).userData = {
+        isProductMesh: true,
+        item: {
+          instanceId: `roof-fan-bay-${bay.id}`,
+          sku: `FAN-BAY-${bay.id}`,
+          name: `מפרץ איוורור גג (${bay.label}) - פנוי להתקנה`,
+          description: 'פתח איוורור עליון ייעודי בגג הארון הכולל הכנה לברגי עיגון עבור מאוורר 120 מ״מ.',
+          price: 0,
+          isIncluded: true,
+          type: 'active',
+        },
+      };
+    }
 
-      // Fan hub / guard ring
-      const ringGeom = new THREE.TorusGeometry(fanRadius * 0.85, 0.02, 8, 20);
-      ringGeom.rotateX(Math.PI / 2);
-      const ringMesh = new THREE.Mesh(ringGeom, materials.metalMat);
-      ringMesh.position.set(0, 0.04, 0);
-      fanGroup.add(ringMesh);
-
-      // Subtle spinning blade shape inside
-      const bladeGeom = new THREE.BoxGeometry(fanRadius * 1.5, 0.015, 0.10);
-      const bladeMesh1 = new THREE.Mesh(bladeGeom, materials.frameMat);
-      fanGroup.add(bladeMesh1);
-      const bladeMesh2 = new THREE.Mesh(bladeGeom, materials.frameMat);
-      bladeMesh2.rotation.y = Math.PI / 2;
-      fanGroup.add(bladeMesh2);
-
-      fanGroup.position.set(fx, halfH - roofHeight + 0.03, fz);
-      group.add(fanGroup);
-    });
-  }
+    group.add(bayGroup);
+  });
 
   // 3. FOUR CORNER POSTS (Uprights)
   const postHeight = frameHeightUnits - roofHeight - baseHeight;
@@ -512,10 +651,12 @@ export function buildCabinetFrameGroup(
   }
 
   // 7. BASE WHEELS (Casters), LEVELING FEET, and WALL MOUNT BRACKETS
-  const wheelsCount = parseAccessoryCount(cabinetData?.wheels);
-  const feetCount = parseAccessoryCount(cabinetData?.levelingFeet);
-  const hasWheels = wheelsCount > 0;
-  const hasFeet = feetCount > 0;
+  const builtInWheelsCount = parseAccessoryCount(cabinetData?.wheels);
+  const builtInFeetCount = parseAccessoryCount(cabinetData?.levelingFeet);
+  const hasWheels = builtInWheelsCount > 0 || Boolean(options?.hasSelectedWheels);
+  const hasFeet = builtInFeetCount > 0 || Boolean(options?.hasSelectedFeet);
+  const isWheelsBuiltIn = builtInWheelsCount > 0;
+  const isFeetBuiltIn = builtInFeetCount > 0;
 
   const cornerOffsets = [
     [-halfW + 0.4, -halfD + 0.4],
@@ -532,13 +673,15 @@ export function buildCabinetFrameGroup(
       isProductMesh: true,
       item: {
         instanceId: `builtin-wheel-${idx + 1}`,
-        sku: 'BUILTIN-WHEELS',
-        name: `גלגלי נסיעה כבדים (${wheelsCount || 4} יח׳ כלולות)`,
+        sku: isWheelsBuiltIn ? 'BUILTIN-WHEELS' : 'OPTIONAL-WHEELS',
+        name: isWheelsBuiltIn
+          ? `גלגלי נסיעה כבדים (${builtInWheelsCount || 4} יח׳ כלולות בארון)`
+          : `גלגלי נסיעה כבדים (ציוד אופציונלי)`,
         description: isStaging
           ? 'ערכת גלגלים כלולה בתכולת הארון (במגש ציוד נלווה).'
-          : 'גלגלי נסיעה מסיביים מותקנים בבסיס הארון להסעה ושינוע נוח (כלול בארון).',
+          : 'גלגלי נסיעה מסיביים מותקנים בבסיס הארון להסעה ושינוע נוח.',
         price: 0,
-        isIncluded: true,
+        isIncluded: isWheelsBuiltIn,
         type: 'active',
       },
     };
@@ -567,13 +710,15 @@ export function buildCabinetFrameGroup(
       isProductMesh: true,
       item: {
         instanceId: `builtin-foot-${idx + 1}`,
-        sku: 'BUILTIN-FEET',
-        name: `רגליות פילוס מתכווננות (${feetCount || 4} יח׳ כלולות)`,
+        sku: isFeetBuiltIn ? 'BUILTIN-FEET' : 'OPTIONAL-FEET',
+        name: isFeetBuiltIn
+          ? `רגליות פילוס מתכווננות (${builtInFeetCount || 4} יח׳ כלולות בארון)`
+          : `רגליות פילוס מתכווננות (ציוד אופציונלי)`,
         description: isStaging
           ? 'ערכת רגליות פילוס כלולה בתכולת הארון (במגש ציוד נלווה).'
-          : 'רגליות פילוס ואיזון מותקנות בבסיס הארון ליציבות מרבית ומניעת רעידות (כלול בארון).',
+          : 'רגליות פילוס ואיזון מותקנות בבסיס הארון ליציבות מרבית ומניעת רעידות.',
         price: 0,
-        isIncluded: true,
+        isIncluded: isFeetBuiltIn,
         type: 'active',
       },
     };
@@ -591,80 +736,24 @@ export function buildCabinetFrameGroup(
     return footGroup;
   };
 
-  // Dedicated staging tray for unmounted included items and 0U hardware
-  const stagingTrayGroup = new THREE.Group();
-  stagingTrayGroup.name = 'cabinet-staging-tray-palette';
-  const trayWidth = 1.6;
-  const trayDepth = 1.6;
-  const trayHeight = 0.05;
-  const trayX = halfW + 1.25;
-  const trayY = -halfH - 0.22;
-  const trayZ = 0;
-  stagingTrayGroup.position.set(trayX, trayY, trayZ);
-
-  // Tray platform mesh
-  const trayGeom = new THREE.BoxGeometry(trayWidth, trayHeight, trayDepth);
-  const trayMesh = new THREE.Mesh(trayGeom, materials.panelMat);
-  trayMesh.receiveShadow = true;
-  stagingTrayGroup.add(trayMesh);
-
-  // Tray border rim
-  const rimGeom = new THREE.BoxGeometry(trayWidth + 0.04, 0.04, 0.04);
-  const frontRim = new THREE.Mesh(rimGeom, materials.accentMat);
-  frontRim.position.set(0, 0.04, trayDepth / 2);
-  stagingTrayGroup.add(frontRim);
-  const backRim = new THREE.Mesh(rimGeom, materials.accentMat);
-  backRim.position.set(0, 0.04, -trayDepth / 2);
-  stagingTrayGroup.add(backRim);
-
-  // Metallic badge on front of staging tray
-  const plaqueGeom = new THREE.BoxGeometry(0.9, 0.06, 0.02);
-  const plaqueMesh = new THREE.Mesh(plaqueGeom, materials.railMat);
-  plaqueMesh.position.set(0, 0.03, trayDepth / 2 + 0.02);
-  (plaqueMesh as any).userData = {
-    isProductMesh: true,
-    item: {
-      instanceId: 'staging-tray-plaque',
-      sku: 'STAGING-TRAY',
-      name: 'מגש תכולת מארז וציוד נלווה',
-      description: 'אזור להצגת אביזרים וחלקי תכולה נלווים.',
-      price: 0,
-      isIncluded: true,
-      type: 'active',
-    },
-  };
-  stagingTrayGroup.add(plaqueMesh);
-
-  let hasStagingContent = false;
-
   if (hasWheels && hasFeet) {
-    // Both are included in matrix: mount wheels on base, place feet on adjacent staging tray!
+    // Both are included/selected: mount wheels on base corners, and mount leveling feet directly beside them on the base
     cornerOffsets.forEach(([cx, cz], idx) => {
       const wheelGroup = createWheelGroup(idx, cx, -halfH - 0.22, cz, false);
       group.add(wheelGroup);
-    });
 
-    // Place leveling feet in a neat layout on the staging tray
-    const feetStagingOffsets = [
-      [-0.4, -0.4],
-      [0.4, -0.4],
-      [-0.4, 0.4],
-      [0.4, 0.4],
-    ];
-    feetStagingOffsets.forEach(([sx, sz], idx) => {
-      const footGroup = createFootGroup(idx, sx, 0.08, sz, true);
-      stagingTrayGroup.add(footGroup);
+      // Leveling feet mounted directly beside the wheel base bracket
+      const footGroup = createFootGroup(idx, cx * 0.78, -halfH - 0.14, cz * 0.78, false);
+      group.add(footGroup);
     });
-    hasStagingContent = true;
-
   } else if (hasWheels) {
-    // Only wheels included: mount on base corners
+    // Only wheels included/selected: mount on base corners
     cornerOffsets.forEach(([cx, cz], idx) => {
       const wheelGroup = createWheelGroup(idx, cx, -halfH - 0.22, cz, false);
       group.add(wheelGroup);
     });
   } else if (hasFeet) {
-    // Only feet included: mount on base corners
+    // Only feet included/selected: mount on base corners
     cornerOffsets.forEach(([fx, fz], idx) => {
       const footGroup = createFootGroup(idx, fx, -halfH - 0.10, fz, false);
       group.add(footGroup);
@@ -694,24 +783,16 @@ export function buildCabinetFrameGroup(
     });
   }
 
-  // Set staging tray initial visibility based on whether it has content
-  stagingTrayGroup.visible = hasStagingContent;
-
-  // Add staging accessories container to staging tray
-  const stagingAccessoriesGroup = new THREE.Group();
-  stagingAccessoriesGroup.name = 'staging-dynamic-accessories-group';
-  stagingAccessoriesGroup.position.set(0, 0, 0);
-  stagingTrayGroup.add(stagingAccessoriesGroup);
-
-  // Add staging tray to group
-  group.add(stagingTrayGroup);
+  const dummyStagingGroup = new THREE.Group();
+  dummyStagingGroup.name = 'staging-tray-disabled';
+  dummyStagingGroup.visible = false;
 
   return {
     group,
     uCenters,
     innerDepthUnits,
-    stagingTrayGroup,
-    stagingAccessoriesGroup,
-    hasStagingContent,
+    stagingTrayGroup: dummyStagingGroup,
+    stagingAccessoriesGroup: dummyStagingGroup,
+    hasStagingContent: false,
   };
 }
