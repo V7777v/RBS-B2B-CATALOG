@@ -10,7 +10,31 @@ import {
   buildHardwareBoxMesh,
   buildRoofAccessoryMesh,
 } from './Product3DMeshes';
-import { RotateCcw, Maximize2, Minimize2, ZoomIn, ZoomOut, Box, Layers, ShieldCheck, Info, HelpCircle } from 'lucide-react';
+import {
+  RotateCcw,
+  Maximize2,
+  Minimize2,
+  ZoomIn,
+  ZoomOut,
+  Box,
+  Layers,
+  ShieldCheck,
+  Info,
+  ArrowRight,
+  CornerUpLeft,
+  Sun,
+  Moon,
+  Sparkles,
+} from 'lucide-react';
+
+interface MeshCacheEntry {
+  mesh: THREE.Group;
+  uStart: number;
+  uSpan: number;
+  lastY: number;
+  cancelTexture?: () => void;
+  item: Product3DInstance;
+}
 
 export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   product,
@@ -25,7 +49,10 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   highlightedOptIdx,
   lastAddedInstanceId,
   selectedSlotU,
+  previewSpanU = 1,
   hoveredProduct,
+  inspectedProduct,
+  selectedInstanceId,
   onProductHover,
   onProductInspect,
   onSlotClickToAdd,
@@ -46,14 +73,26 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   const isAnimatingRef = useRef<boolean>(false);
 
   // Group hierarchy persisted in scene
+  const floorGroupRef = useRef<THREE.Group>(new THREE.Group());
   const frameGroupRef = useRef<THREE.Group>(new THREE.Group());
   const productsGroupRef = useRef<THREE.Group>(new THREE.Group());
   const hitboxesGroupRef = useRef<THREE.Group>(new THREE.Group());
   const nonUGroupRef = useRef<THREE.Group>(new THREE.Group());
   const stagingTrayGroupRef = useRef<THREE.Group | null>(null);
+  const stagingAccessoriesGroupRef = useRef<THREE.Group | null>(null);
+  const hasStagingContentRef = useRef<boolean>(false);
   const uCentersRef = useRef<number[]>([]);
   const innerDepthUnitsRef = useRef<number>(3.0);
   const animatedInstanceIdsRef = useRef<Set<string>>(new Set());
+
+  // Mesh cache by instanceId for smooth incremental updates and lifecycle management
+  const meshMapRef = useRef<Map<string, MeshCacheEntry>>(new Map());
+  const activeAnimationsRef = useRef<Map<string, number>>(new Map());
+
+  // Camera framing history for focus & return
+  const previousFramingRef = useRef<{ position: THREE.Vector3; target: THREE.Vector3 } | null>(null);
+  const [isFocusedOnProduct, setIsFocusedOnProduct] = useState(false);
+  const [backdropTheme, setBackdropTheme] = useState<'studio-light' | 'datacenter' | 'pure-white'>('studio-light');
 
   // Stable callback & dynamic state refs so event listeners never need rebinding
   const onProductHoverRef = useRef(onProductHover);
@@ -83,17 +122,40 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   // Extract included items count for 3D overlay summary
   const includedSummary = useMemo(() => {
     const list: string[] = [];
-    const fansMatch = (cabinetData?.fans || '').trim();
-    if (fansMatch && fansMatch !== 'X' && fansMatch !== '0') list.push(`${fansMatch} מאווררים בגג`);
+    const parseCount = (val: any) => {
+      if (!val) return 0;
+      const str = String(val).trim().toUpperCase();
+      if (
+        str === 'X' ||
+        str === '0' ||
+        str === '-' ||
+        str === '--' ||
+        str.includes('לא כלול') ||
+        str.includes('ללא') ||
+        str.includes('אין') ||
+        str.includes('מידע לא זמין') ||
+        str.includes('NONE') ||
+        str.includes('NO') ||
+        str.includes('N/A') ||
+        str.includes('NA')
+      ) {
+        return 0;
+      }
+      const match = str.match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
 
-    const wheelsMatch = (cabinetData?.wheels || '').trim();
-    if (wheelsMatch && wheelsMatch !== 'X' && wheelsMatch !== '0') list.push(`${wheelsMatch} גלגלים`);
+    const fans = parseCount(cabinetData?.fans);
+    if (fans > 0) list.push(`${fans} מאווררים בגג`);
 
-    const feetMatch = (cabinetData?.levelingFeet || '').trim();
-    if (feetMatch && feetMatch !== 'X' && feetMatch !== '0') list.push(`${feetMatch} רגליות`);
+    const wheels = parseCount(cabinetData?.wheels);
+    if (wheels > 0) list.push(`${wheels} גלגלים`);
 
-    const shelvesMatch = (cabinetData?.shelvesQty || '').trim();
-    if (shelvesMatch && shelvesMatch !== 'X' && shelvesMatch !== '0') list.push(`${shelvesMatch} מדפי מתכת`);
+    const feet = parseCount(cabinetData?.levelingFeet);
+    if (feet > 0) list.push(`${feet} רגליות`);
+
+    const shelves = parseCount(cabinetData?.shelvesQty);
+    if (shelves > 0) list.push(`${shelves} מדפי מתכת`);
 
     return list;
   }, [cabinetData]);
@@ -121,7 +183,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         uSpan: spanU,
         isIncluded,
         type: (slot.type === 'preset-shelf' || slot.name.includes('מדף')) ? 'shelf' : (slot.name.includes('שקע') || slot.name.includes('PDU')) ? 'pdu' : (slot.name.includes('פנל') || slot.name.includes('עיוור') || slot.name.includes('מברשת')) ? 'panel' : 'active',
-        image: slot.accessoryRef?.image,
+        image: slot.accessoryRef?.image || slot.accessoryRef?.imageURL || (Array.isArray(slot.accessoryRef?.images) ? slot.accessoryRef?.images[0] : undefined),
         optionalIdx: slot.optionalIdx,
         accessoryRef: slot.accessoryRef,
       });
@@ -142,7 +204,6 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     if (!camera || !controls) return;
 
     const widthUnits = dims.widthMm * SCALE_MM_TO_UNITS + 2.8; // include staging tray
-    const depthUnits = dims.depthMm * SCALE_MM_TO_UNITS;
     const heightUnits = dims.totalU * U_HEIGHT_UNITS + 1.2; // include roof and base margins
 
     const aspect = container ? (container.clientWidth / (container.clientHeight || 1)) : (camera.aspect || 1);
@@ -165,6 +226,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
     camera.position.copy(targetPos);
     controls.update();
+    setIsFocusedOnProduct(false);
     needsRenderRef.current = true;
   }, [dims]);
 
@@ -186,17 +248,37 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     controls.target.set(0, 0, 0);
     camera.position.set(0, 0, targetDist);
     controls.update();
+    setIsFocusedOnProduct(false);
     needsRenderRef.current = true;
   }, [dims]);
 
-  // Focus directly on the selected product or slot
-  const focusOnSelectedProduct = useCallback(() => {
+  // Focus directly on the selected product or slot with smooth animation and restore capability
+  const focusOnSelectedProduct = useCallback((targetInstId?: string) => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!camera || !controls) return;
 
+    // Save previous camera framing if not already saved
+    if (!isFocusedOnProduct) {
+      previousFramingRef.current = {
+        position: camera.position.clone(),
+        target: controls.target.clone(),
+      };
+    }
+
     let targetY = 0;
-    if (selectedSlotU && uCentersRef.current[selectedSlotU - 1] !== undefined) {
+    const targetId = targetInstId || inspectedProduct?.instanceId || selectedInstanceId || activeInstanceId;
+
+    if (targetId) {
+      const match = productInstances.find(p => p.instanceId === targetId);
+      if (match) {
+        const bottomCenterY = uCentersRef.current[match.uStart - 1];
+        const topCenterY = uCentersRef.current[match.uStart + match.uSpan - 2] || bottomCenterY;
+        if (bottomCenterY !== undefined) {
+          targetY = (bottomCenterY + (topCenterY || bottomCenterY)) / 2;
+        }
+      }
+    } else if (selectedSlotU && uCentersRef.current[selectedSlotU - 1] !== undefined) {
       targetY = uCentersRef.current[selectedSlotU - 1];
     } else {
       const firstOccupied = slotsRef.current.find(s => s.type !== 'empty');
@@ -205,11 +287,97 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       }
     }
 
-    controls.target.set(0, targetY, 0);
-    camera.position.set(0, targetY, 2.5);
-    controls.update();
-    needsRenderRef.current = true;
-  }, [selectedSlotU]);
+    const startPos = camera.position.clone();
+    const startTarget = controls.target.clone();
+    const endPos = new THREE.Vector3(0.3, targetY + 0.15, 2.5);
+    const endTarget = new THREE.Vector3(0, targetY, 0);
+
+    const prefersReducedMotion = typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (prefersReducedMotion) {
+      controls.target.copy(endTarget);
+      camera.position.copy(endPos);
+      controls.update();
+      setIsFocusedOnProduct(true);
+      needsRenderRef.current = true;
+      return;
+    }
+
+    let progress = 0;
+    isAnimatingRef.current = true;
+
+    const animateFocus = () => {
+      progress += 0.08;
+      if (progress < 1) {
+        const ease = Math.sin((progress * Math.PI) / 2);
+        camera.position.lerpVectors(startPos, endPos, ease);
+        controls.target.lerpVectors(startTarget, endTarget, ease);
+        controls.update();
+        needsRenderRef.current = true;
+        requestAnimationFrame(animateFocus);
+      } else {
+        camera.position.copy(endPos);
+        controls.target.copy(endTarget);
+        controls.update();
+        isAnimatingRef.current = false;
+        setIsFocusedOnProduct(true);
+        needsRenderRef.current = true;
+      }
+    };
+    requestAnimationFrame(animateFocus);
+  }, [inspectedProduct, selectedInstanceId, activeInstanceId, selectedSlotU, productInstances, isFocusedOnProduct]);
+
+  // Restore previous camera framing smoothly
+  const restorePreviousFraming = useCallback(() => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+
+    if (!previousFramingRef.current) {
+      fitCameraToCabinet(false);
+      return;
+    }
+
+    const startPos = camera.position.clone();
+    const startTarget = controls.target.clone();
+    const { position: endPos, target: endTarget } = previousFramingRef.current;
+
+    const prefersReducedMotion = typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (prefersReducedMotion) {
+      camera.position.copy(endPos);
+      controls.target.copy(endTarget);
+      controls.update();
+      setIsFocusedOnProduct(false);
+      needsRenderRef.current = true;
+      return;
+    }
+
+    let progress = 0;
+    isAnimatingRef.current = true;
+
+    const animateRestore = () => {
+      progress += 0.08;
+      if (progress < 1) {
+        const ease = Math.sin((progress * Math.PI) / 2);
+        camera.position.lerpVectors(startPos, endPos, ease);
+        controls.target.lerpVectors(startTarget, endTarget, ease);
+        controls.update();
+        needsRenderRef.current = true;
+        requestAnimationFrame(animateRestore);
+      } else {
+        camera.position.copy(endPos);
+        controls.target.copy(endTarget);
+        controls.update();
+        isAnimatingRef.current = false;
+        setIsFocusedOnProduct(false);
+        needsRenderRef.current = true;
+      }
+    };
+    requestAnimationFrame(animateRestore);
+  }, [fitCameraToCabinet]);
 
   // Helper to cleanly dispose all meshes, geometries, and textures inside a group
   const disposeHierarchy = (group: THREE.Group) => {
@@ -240,29 +408,29 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   if (!materialsRef.current) {
     materialsRef.current = {
       frameMat: new THREE.MeshStandardMaterial({
-        color: 0x1e293b,
-        roughness: 0.35,
-        metalness: 0.65,
+        color: 0x161e2e,
+        roughness: 0.28,
+        metalness: 0.75,
       }),
       railMat: new THREE.MeshStandardMaterial({
         color: 0x475569,
-        roughness: 0.25,
-        metalness: 0.85,
+        roughness: 0.20,
+        metalness: 0.90,
       }),
       panelMat: new THREE.MeshStandardMaterial({
         color: 0x0f172a,
-        roughness: 0.5,
-        metalness: 0.5,
+        roughness: 0.40,
+        metalness: 0.60,
       }),
       metalMat: new THREE.MeshStandardMaterial({
         color: 0x64748b,
-        roughness: 0.25,
-        metalness: 0.8,
+        roughness: 0.22,
+        metalness: 0.85,
       }),
       accentMat: new THREE.MeshStandardMaterial({
         color: 0x334155,
-        roughness: 0.6,
-        metalness: 0.3,
+        roughness: 0.5,
+        metalness: 0.4,
       }),
       rubberMat: new THREE.MeshStandardMaterial({
         color: 0x111827,
@@ -271,28 +439,28 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       }),
       shelfMat: new THREE.MeshStandardMaterial({
         color: 0x065f46,
-        roughness: 0.3,
-        metalness: 0.7,
+        roughness: 0.28,
+        metalness: 0.75,
       }),
       includedShelfMat: new THREE.MeshStandardMaterial({
         color: 0x334155,
-        roughness: 0.35,
-        metalness: 0.75,
+        roughness: 0.32,
+        metalness: 0.80,
       }),
       activeChassisMat: new THREE.MeshStandardMaterial({
         color: 0x1e1b4b,
-        roughness: 0.3,
-        metalness: 0.7,
+        roughness: 0.28,
+        metalness: 0.75,
       }),
       pduMat: new THREE.MeshStandardMaterial({
         color: 0x7f1d1d,
-        roughness: 0.35,
-        metalness: 0.6,
+        roughness: 0.32,
+        metalness: 0.65,
       }),
       earMat: new THREE.MeshStandardMaterial({
         color: 0x94a3b8,
-        roughness: 0.2,
-        metalness: 0.9,
+        roughness: 0.18,
+        metalness: 0.92,
       }),
       ledMat: new THREE.MeshBasicMaterial({
         color: 0x10b981,
@@ -341,28 +509,43 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     controls.maxAzimuthAngle = Math.PI * 0.44;
     controlsRef.current = controls;
 
-    // 5. Lighting (Bright, clear, industrial)
-    const ambientLight = new THREE.AmbientLight(0xf8fafc, 1.1);
-    scene.add(ambientLight);
+    // 5. Lighting (Bright, multi-point studio lighting with high edge contrast for black cabinets)
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x94a3b8, 1.4);
+    scene.add(hemiLight);
 
-    const mainDirLight = new THREE.DirectionalLight(0xffffff, 1.4);
-    mainDirLight.position.set(5, 12, 8);
+    const mainDirLight = new THREE.DirectionalLight(0xffffff, 1.6);
+    mainDirLight.position.set(6, 14, 9);
     mainDirLight.castShadow = true;
     mainDirLight.shadow.mapSize.width = 1024;
     mainDirLight.shadow.mapSize.height = 1024;
     mainDirLight.shadow.camera.near = 0.5;
     mainDirLight.shadow.camera.far = 40;
+    mainDirLight.shadow.bias = -0.0005;
     scene.add(mainDirLight);
 
-    const fillLight = new THREE.DirectionalLight(0x94a3b8, 0.7);
-    fillLight.position.set(-6, 4, 6);
+    const fillLight = new THREE.DirectionalLight(0xe2e8f0, 1.1);
+    fillLight.position.set(-7, 6, 7);
     scene.add(fillLight);
 
-    const interiorDownLight = new THREE.PointLight(0xffffff, 0.8, 12);
+    // Dual Rim / Edge Lights: Illuminate black cabinet silhouette & contours against any background
+    const leftRimLight = new THREE.DirectionalLight(0x93c5fd, 1.5);
+    leftRimLight.position.set(-9, 8, -9);
+    scene.add(leftRimLight);
+
+    const rightRimLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    rightRimLight.position.set(9, 8, -9);
+    scene.add(rightRimLight);
+
+    const interiorDownLight = new THREE.PointLight(0xffffff, 1.1, 16);
     interiorDownLight.position.set(0, 4, 0);
     scene.add(interiorDownLight);
 
+    const bottomBounce = new THREE.DirectionalLight(0xcfd8dc, 0.6);
+    bottomBounce.position.set(0, -8, 5);
+    scene.add(bottomBounce);
+
     // Attach persistent groups to scene
+    scene.add(floorGroupRef.current);
     scene.add(frameGroupRef.current);
     scene.add(productsGroupRef.current);
     scene.add(hitboxesGroupRef.current);
@@ -626,6 +809,8 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     return () => {
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
       if (hoverClearTimer) clearTimeout(hoverClearTimer);
+      activeAnimationsRef.current.forEach(id => cancelAnimationFrame(id));
+      activeAnimationsRef.current.clear();
       resizeObserver.disconnect();
 
       canvas.removeEventListener('mousedown', handlePointerDown);
@@ -638,6 +823,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       controls.removeEventListener('change', onControlsChange);
       controls.dispose();
 
+      disposeHierarchy(floorGroupRef.current);
       disposeHierarchy(frameGroupRef.current);
       disposeHierarchy(productsGroupRef.current);
       disposeHierarchy(hitboxesGroupRef.current);
@@ -658,18 +844,62 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   }, []); // Engine mounts ONCE
 
   // ==========================================
-  // EFFECT 2: Frame Geometry & Cabinet Framing
+  // EFFECT 2: Frame Geometry & Cabinet Framing & Floor Pedestal
   // Runs ONLY when cabinet physical model or dimensions change
   // ==========================================
   useEffect(() => {
     if (!sceneRef.current) return;
 
+    disposeHierarchy(floorGroupRef.current);
     disposeHierarchy(frameGroupRef.current);
     if (stagingTrayGroupRef.current) {
       disposeHierarchy(stagingTrayGroupRef.current);
     }
 
-    const { group: newFrameGroup, uCenters, innerDepthUnits, stagingTrayGroup } = buildCabinetFrameGroup(
+    const totalFrameHeight = dims.totalU * U_HEIGHT_UNITS + 0.75;
+    const halfH = totalFrameHeight / 2;
+
+    // 1. Build Studio Floor Disc / Ambient Shadow Platform
+    const floorRadius = Math.max(dims.widthMm * SCALE_MM_TO_UNITS * 2.2, 14);
+    const floorGeom = new THREE.CylinderGeometry(floorRadius, floorRadius, 0.04, 48);
+    const floorCanvas = document.createElement('canvas');
+    floorCanvas.width = 512;
+    floorCanvas.height = 512;
+    const floorCtx = floorCanvas.getContext('2d');
+    if (floorCtx) {
+      // Soft radial shadow under cabinet
+      const radGrad = floorCtx.createRadialGradient(256, 256, 30, 256, 256, 240);
+      radGrad.addColorStop(0, 'rgba(15, 23, 42, 0.35)');
+      radGrad.addColorStop(0.35, 'rgba(30, 41, 59, 0.18)');
+      radGrad.addColorStop(0.7, 'rgba(71, 85, 105, 0.06)');
+      radGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      floorCtx.fillStyle = radGrad;
+      floorCtx.fillRect(0, 0, 512, 512);
+
+      // Subtle technical concentric rings
+      floorCtx.strokeStyle = 'rgba(56, 189, 248, 0.16)';
+      floorCtx.lineWidth = 1.5;
+      [80, 150, 210].forEach(r => {
+        floorCtx.beginPath();
+        floorCtx.arc(256, 256, r, 0, Math.PI * 2);
+        floorCtx.stroke();
+      });
+    }
+    const floorTex = new THREE.CanvasTexture(floorCanvas);
+    floorTex.minFilter = THREE.LinearFilter;
+    const floorMat = new THREE.MeshBasicMaterial({
+      map: floorTex,
+      transparent: true,
+      opacity: 0.92,
+      depthWrite: false,
+    });
+    const floorMesh = new THREE.Mesh(floorGeom, floorMat);
+    floorMesh.position.set(0, -halfH - 0.28, 0);
+    floorMesh.receiveShadow = true;
+    floorGroupRef.current.add(floorMesh);
+
+    // 2. Build Cabinet Frame
+    const { group: newFrameGroup, uCenters, innerDepthUnits, stagingTrayGroup, stagingAccessoriesGroup, hasStagingContent } = buildCabinetFrameGroup(
       dims,
       cabinetData,
       materialsRef.current
@@ -678,6 +908,8 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     uCentersRef.current = uCenters;
     innerDepthUnitsRef.current = innerDepthUnits;
     stagingTrayGroupRef.current = stagingTrayGroup;
+    stagingAccessoriesGroupRef.current = stagingAccessoriesGroup;
+    hasStagingContentRef.current = Boolean(hasStagingContent);
 
     frameGroupRef.current.add(newFrameGroup);
     fitCameraToCabinet(true);
@@ -685,7 +917,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   }, [dims.totalU, dims.widthMm, dims.depthMm, cabinetData?.sku, fitCameraToCabinet, dims]);
 
   // ==========================================
-  // EFFECT 3: Equipment & Slot Synchronization
+  // EFFECT 3: Equipment & Slot Synchronization (Instance-Based Lifecycle)
   // Runs when slots, optionals, or non-U accessories change.
   // CAMERA POSITION, ANGLE AND ZOOM REMAIN COMPLETELY UNTOUCHED!
   // ==========================================
@@ -693,70 +925,151 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     if (!sceneRef.current) return;
 
     disposeHierarchy(hitboxesGroupRef.current);
-    disposeHierarchy(productsGroupRef.current);
     disposeHierarchy(nonUGroupRef.current);
+
+    // Clean ONLY staging accessories, keeping the staging tray platform, plaque and wheels/feet intact!
+    if (stagingAccessoriesGroupRef.current) {
+      disposeHierarchy(stagingAccessoriesGroupRef.current);
+    }
 
     const uCenters = uCentersRef.current;
     const innerDepthUnits = innerDepthUnitsRef.current;
     const materials = materialsRef.current;
 
-    // 1. Rebuild Hitboxes for Empty Slots
+    // 1. Rebuild Hitboxes for Empty Slots with Upward Preview Span Highlight
     slots.forEach(slot => {
       if (slot.type === 'empty') {
         const uIdx = slot.uIndex;
         const centerY = uCenters[uIdx - 1];
         if (centerY !== undefined) {
-          const isSelected = selectedSlotU === uIdx;
+          const isDirectTarget = selectedSlotU === uIdx;
+          const isInPreviewSpan = selectedSlotU !== null && selectedSlotU !== undefined &&
+            uIdx >= selectedSlotU && uIdx < selectedSlotU + previewSpanU;
+          const isSelected = isDirectTarget || isInPreviewSpan;
           const hitbox = buildEmptySlotHitbox(uIdx, centerY, innerDepthUnits, isSelected);
           hitboxesGroupRef.current.add(hitbox);
         }
       }
     });
 
-    // 2. Rebuild Installed Equipment Meshes
+    // 2. Incremental Instance-Based Equipment Management & Animations
     const prefersReducedMotion = typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
     const frontRailZ = (dims.depthMm * SCALE_MM_TO_UNITS) / 2 - 0.55;
 
+    const currentInstanceIds = new Set(productInstances.map(p => p.instanceId));
+    const cachedMeshMap = meshMapRef.current;
+
+    // A. Remove meshes that are no longer in the cabinet
+    cachedMeshMap.forEach((entry, id) => {
+      if (!currentInstanceIds.has(id)) {
+        if (activeAnimationsRef.current.has(id)) {
+          cancelAnimationFrame(activeAnimationsRef.current.get(id)!);
+          activeAnimationsRef.current.delete(id);
+        }
+        if (entry.cancelTexture) entry.cancelTexture();
+        disposeHierarchy(entry.mesh);
+        productsGroupRef.current.remove(entry.mesh);
+        cachedMeshMap.delete(id);
+      }
+    });
+
+    // B. Add or update active product meshes
     productInstances.forEach(item => {
       const bottomCenterY = uCenters[item.uStart - 1];
       const topCenterY = uCenters[item.uStart + item.uSpan - 2] || bottomCenterY;
-      const centerY = (bottomCenterY !== undefined && topCenterY !== undefined) ? (bottomCenterY + topCenterY) / 2 : 0;
+      const targetCenterY = (bottomCenterY !== undefined && topCenterY !== undefined)
+        ? (bottomCenterY + topCenterY) / 2
+        : 0;
 
-      const productMesh = buildProduct3DMesh(item, innerDepthUnits, materials, () => {
-        needsRenderRef.current = true;
-      });
+      const existing = cachedMeshMap.get(item.instanceId);
 
-      // Animate ONLY newly added instances that have not yet played their entrance animation
-      const isNew = item.instanceId === lastAddedInstanceId && !animatedInstanceIdsRef.current.has(item.instanceId);
+      if (existing) {
+        // Instance already existed: check if position changed (Move Animation)
+        if (existing.uStart !== item.uStart || existing.uSpan !== item.uSpan) {
+          const fromY = existing.lastY;
+          const toY = targetCenterY;
+          existing.uStart = item.uStart;
+          existing.uSpan = item.uSpan;
+          existing.lastY = targetCenterY;
 
-      if (isNew && !prefersReducedMotion) {
-        animatedInstanceIdsRef.current.add(item.instanceId);
-        productMesh.position.set(0, centerY, frontRailZ + 0.9);
-        let progress = 0;
-        const startZ = frontRailZ + 0.9;
-        const endZ = frontRailZ;
-        isAnimatingRef.current = true;
+          if (!prefersReducedMotion && Math.abs(fromY - toY) > 0.001) {
+            let progress = 0;
+            isAnimatingRef.current = true;
+            if (activeAnimationsRef.current.has(item.instanceId)) {
+              cancelAnimationFrame(activeAnimationsRef.current.get(item.instanceId)!);
+            }
 
-        const animateIn = () => {
-          progress += 0.09;
-          if (progress < 1) {
-            productMesh.position.z = THREE.MathUtils.lerp(startZ, endZ, Math.sin((progress * Math.PI) / 2));
-            needsRenderRef.current = true;
-            requestAnimationFrame(animateIn);
+            const animateMove = () => {
+              progress += 0.10;
+              if (progress < 1) {
+                const ease = Math.sin((progress * Math.PI) / 2);
+                existing.mesh.position.y = THREE.MathUtils.lerp(fromY, toY, ease);
+                needsRenderRef.current = true;
+                const reqId = requestAnimationFrame(animateMove);
+                activeAnimationsRef.current.set(item.instanceId, reqId);
+              } else {
+                existing.mesh.position.y = toY;
+                isAnimatingRef.current = false;
+                activeAnimationsRef.current.delete(item.instanceId);
+                needsRenderRef.current = true;
+              }
+            };
+            const reqId = requestAnimationFrame(animateMove);
+            activeAnimationsRef.current.set(item.instanceId, reqId);
           } else {
-            productMesh.position.z = endZ;
-            isAnimatingRef.current = false;
-            needsRenderRef.current = true;
+            existing.mesh.position.set(0, targetCenterY, frontRailZ);
           }
-        };
-        requestAnimationFrame(animateIn);
+        }
       } else {
-        productMesh.position.set(0, centerY, frontRailZ);
-      }
+        // New Instance: build product mesh
+        const productMesh = buildProduct3DMesh(item, innerDepthUnits, materials, () => {
+          needsRenderRef.current = true;
+        });
 
-      productsGroupRef.current.add(productMesh);
+        const cancelFn = (productMesh as any)._cancelTexture;
+        cachedMeshMap.set(item.instanceId, {
+          mesh: productMesh,
+          uStart: item.uStart,
+          uSpan: item.uSpan,
+          lastY: targetCenterY,
+          cancelTexture: cancelFn,
+          item,
+        });
+
+        // Play entrance animation ONLY for newly added item
+        const isNew = item.instanceId === lastAddedInstanceId && !animatedInstanceIdsRef.current.has(item.instanceId);
+
+        if (isNew && !prefersReducedMotion) {
+          animatedInstanceIdsRef.current.add(item.instanceId);
+          productMesh.position.set(0, targetCenterY, frontRailZ + 0.9);
+          let progress = 0;
+          const startZ = frontRailZ + 0.9;
+          const endZ = frontRailZ;
+          isAnimatingRef.current = true;
+
+          const animateIn = () => {
+            progress += 0.09;
+            if (progress < 1) {
+              productMesh.position.z = THREE.MathUtils.lerp(startZ, endZ, Math.sin((progress * Math.PI) / 2));
+              needsRenderRef.current = true;
+              const reqId = requestAnimationFrame(animateIn);
+              activeAnimationsRef.current.set(item.instanceId, reqId);
+            } else {
+              productMesh.position.z = endZ;
+              isAnimatingRef.current = false;
+              activeAnimationsRef.current.delete(item.instanceId);
+              needsRenderRef.current = true;
+            }
+          };
+          const reqId = requestAnimationFrame(animateIn);
+          activeAnimationsRef.current.set(item.instanceId, reqId);
+        } else {
+          productMesh.position.set(0, targetCenterY, frontRailZ);
+        }
+
+        productsGroupRef.current.add(productMesh);
+      }
     });
 
     // 3. Rebuild 0U / Non-U Accessories
@@ -790,7 +1103,10 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         const offsetX = (idx % 2 === 0 ? -0.32 : 0.32);
         const offsetZ = -0.30 + Math.floor(idx / 2) * 0.48;
         hwMesh.position.set(offsetX, 0.05, offsetZ);
-        if (stagingTrayGroupRef.current) {
+
+        if (stagingAccessoriesGroupRef.current) {
+          stagingAccessoriesGroupRef.current.add(hwMesh);
+        } else if (stagingTrayGroupRef.current) {
           stagingTrayGroupRef.current.add(hwMesh);
         } else {
           hwMesh.position.set(widthUnits / 2 + 1.25 + offsetX, -halfH - 0.18, offsetZ);
@@ -799,8 +1115,15 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       }
     });
 
+    if (stagingTrayGroupRef.current) {
+      const hasStagingHardware = Boolean(
+        stagingAccessoriesGroupRef.current && stagingAccessoriesGroupRef.current.children.length > 0
+      );
+      stagingTrayGroupRef.current.visible = Boolean(hasStagingContentRef.current || hasStagingHardware);
+    }
+
     needsRenderRef.current = true;
-  }, [productInstances, slots, nonUAccessories, selectedSlotU, lastAddedInstanceId, dims.depthMm, dims.totalU, dims.widthMm]);
+  }, [productInstances, slots, nonUAccessories, selectedSlotU, previewSpanU, lastAddedInstanceId, dims.depthMm, dims.totalU, dims.widthMm]);
 
   // ==========================================
   // EFFECT 4: Mobile Touch Mode
@@ -820,10 +1143,23 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     needsRenderRef.current = true;
   }, [mobileTouchMode]);
 
+  const getBackdropClass = () => {
+    switch (backdropTheme) {
+      case 'studio-light':
+        return 'bg-gradient-to-b from-slate-100 via-slate-200 to-slate-300 border-slate-300 shadow-xl';
+      case 'datacenter':
+        return 'bg-gradient-to-b from-[#0b1324] via-[#111c33] to-[#070d18] border-slate-700 shadow-2xl';
+      case 'pure-white':
+        return 'bg-gradient-to-b from-white via-slate-50 to-slate-100 border-slate-300 shadow-md';
+      default:
+        return 'bg-gradient-to-b from-slate-100 via-slate-200 to-slate-300 border-slate-300';
+    }
+  };
+
   return (
     <div
       ref={containerRef}
-      className={`relative border-4 border-slate-700 bg-slate-950 flex flex-col overflow-hidden transition-all duration-300 select-none shadow-2xl ${
+      className={`relative border-4 flex flex-col overflow-hidden transition-all duration-300 select-none ${getBackdropClass()} ${
         isWidescreen ? 'h-[650px] sm:h-[720px]' : 'h-[500px] sm:h-[580px]'
       } ${className}`}
       dir="rtl"
@@ -862,7 +1198,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           )}
         </div>
 
-        {/* Right Side: Camera Control Buttons & Mobile Touch Mode */}
+        {/* Right Side: Camera Control Buttons, Lighting Environment & Mobile Touch Mode */}
         <div className="flex items-center gap-1 bg-slate-900/90 backdrop-blur-md border border-slate-700 p-1 pointer-events-auto shadow-md">
           <button
             type="button"
@@ -876,24 +1212,72 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           >
             {mobileTouchMode === 'orbit' ? 'סיבוב 3D' : 'גלילת עמוד'}
           </button>
+          
+          {/* Backdrop Environment Switcher */}
           <button
             type="button"
-            onClick={() => fitCameraToCabinet(false)}
+            onClick={() => {
+              setBackdropTheme(curr => {
+                if (curr === 'studio-light') return 'datacenter';
+                if (curr === 'datacenter') return 'pure-white';
+                return 'studio-light';
+              });
+            }}
             className="px-2 py-1 text-[10.5px] font-semibold hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
-            title="הצג את כל הארון (איפוס מצלמה)"
+            title="החלף סביבת תאורה ורקע (סטודיו מואר / חדר שרתים / לבן נקי)"
           >
-            <RotateCcw size={13} />
-            <span className="hidden sm:inline">ארון מלא</span>
+            {backdropTheme === 'studio-light' ? (
+              <>
+                <Sun size={13} className="text-amber-400" />
+                <span className="hidden md:inline">סטודיו מואר</span>
+              </>
+            ) : backdropTheme === 'datacenter' ? (
+              <>
+                <Moon size={13} className="text-blue-400" />
+                <span className="hidden md:inline">חדר שרתים</span>
+              </>
+            ) : (
+              <>
+                <Sparkles size={13} className="text-emerald-400" />
+                <span className="hidden md:inline">לבן סטודיו</span>
+              </>
+            )}
           </button>
+
+          {isFocusedOnProduct ? (
+            <button
+              type="button"
+              onClick={restorePreviousFraming}
+              className="px-2 py-1 text-[10.5px] font-semibold bg-blue-900/80 text-blue-200 hover:text-white border border-blue-400 transition-colors cursor-pointer flex items-center gap-1 border-r border-slate-800"
+              title="חזור למבט הקודם"
+            >
+              <CornerUpLeft size={13} />
+              <span>חזור למבט קודם</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fitCameraToCabinet(false)}
+              className="px-2 py-1 text-[10.5px] font-semibold hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1 border-r border-slate-800"
+              title="הצג את כל הארון (איפוס מצלמה)"
+            >
+              <RotateCcw size={13} />
+              <span className="hidden sm:inline">ארון מלא</span>
+            </button>
+          )}
+
           <button
             type="button"
-            onClick={focusOnSelectedProduct}
-            className="px-2 py-1 text-[10.5px] font-semibold hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1 border-r border-slate-800"
+            onClick={() => focusOnSelectedProduct()}
+            className={`px-2 py-1 text-[10.5px] font-semibold transition-colors cursor-pointer flex items-center gap-1 border-r border-slate-800 ${
+              isFocusedOnProduct ? 'text-amber-400 font-bold' : 'hover:bg-slate-800 text-slate-300 hover:text-white'
+            }`}
             title="התמקדות במוצר הנבחר"
           >
             <ZoomIn size={13} />
             <span className="hidden sm:inline">התמקדות במוצר</span>
           </button>
+
           <button
             type="button"
             onClick={setFrontView}
@@ -902,10 +1286,11 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           >
             חזית
           </button>
+
           <button
             type="button"
             onClick={() => setIsWidescreen(w => !w)}
-            className="p-1.5 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
+            className="p-1.5 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer border-r border-slate-800"
             title={isWidescreen ? 'תצוגה רגילה' : 'תצוגה מוגדלת / רחבה'}
           >
             {isWidescreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}

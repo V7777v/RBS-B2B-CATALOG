@@ -222,6 +222,64 @@ export const transformImageLink = (url: string, size: number = 600): string => {
   }
 };
 
+export const KNOWN_BRANDS = ['HIKVISION', 'EZVIZ', 'POLMAN', 'BOOST', 'INGENIUM', 'UBIQUITI', 'TP-LINK', 'DAHUA', 'D-LINK', 'CISCO'];
+
+export const deriveBrand = (pp: any): string => {
+  if (!pp) return 'כללי';
+  
+  // 1. Explicit brand property from data object
+  const explicitBrand = pp.brand || pp['מותג'] || pp.Brand || pp.manufacturer || pp['יצרן'];
+  if (explicitBrand && typeof explicitBrand === 'string' && !explicitBrand.startsWith('http')) {
+    const trimmed = explicitBrand.trim();
+    if (trimmed && trimmed !== 'כללי' && trimmed !== 'אחר') {
+      const up = trimmed.toUpperCase();
+      const matched = KNOWN_BRANDS.find(b => up.includes(b));
+      if (matched) return matched;
+      return trimmed;
+    }
+  }
+
+  // 2. Scan text for known brands
+  const hay = `${pp.name || ''} ${pp.description || ''} ${pp.subcategory || ''} ${pp.category || ''} ${pp.sku || ''}`.toUpperCase();
+  for (const b of KNOWN_BRANDS) {
+    if (hay.includes(b)) return b;
+  }
+
+  // 3. Fallback to clean category
+  const c = String(pp.category || '').replace('מחירון', '').replace(/20\d\d/, '').trim();
+  return c || 'כללי';
+};
+
+export const parseDepthMmLocal = (txt: string): number => {
+  if (!txt) return 0;
+  const str = String(txt);
+
+  // Match explicit depth mention (עומק: X or depth X or D=X or בעומק X)
+  // Check for unit (mm / מ"מ vs cm / ס"מ)
+  const depthMatch = str.match(/(?:עומק|depth|עומק[:\s]|D=)\s*[:]?\s*([0-9]{2,4})\s*(מ"?מ|mm|ס"?מ|cm)?/i);
+  if (depthMatch) {
+    const val = parseInt(depthMatch[1], 10);
+    const unit = (depthMatch[2] || '').toLowerCase();
+    if (unit.includes('מ') || unit.includes('mm')) {
+      return val; // e.g. "עומק 80 mm" -> 80
+    }
+    if (unit.includes('ס') || unit.includes('cm')) {
+      return val * 10; // e.g. "עומק 60 cm" -> 600
+    }
+    // No unit: < 150 assumes cm, >= 150 assumes mm
+    return val < 150 ? val * 10 : val;
+  }
+
+  // Look for dimension patterns like 600x800 or 600*800 or 800D, but NEVER match "רוחב X cm" or "גובה X cm"
+  const dimMatch = str.match(/בגודל\s*([0-9]{2,4})\s*[*xX\u00d7]\s*([0-9]{2,4})/i);
+  if (dimMatch) {
+    const d = parseInt(dimMatch[1], 10);
+    return d < 150 ? d * 10 : d;
+  }
+
+  return 0; // No reliable depth found, do not invent one
+};
+
 export interface GroupedRubric {
   id: string;
   title: string;
@@ -244,10 +302,22 @@ export interface GroupedRubric {
  */
 export function groupAccessoriesForDisplay(
   accessories: any[],
-  searchQuery: string = ''
+  searchQuery: string = '',
+  availableU?: number
 ): GroupedRubric[] {
   const qTokens = searchQuery.trim().toLowerCase().split(/[\s\-/,]+/).filter(Boolean);
-  const filtered = accessories.filter(acc => {
+
+  // 1. Capacity filter: if availableU is provided, hide items where uSize > availableU
+  // (0U items are never filtered out by capacity)
+  const capacityFiltered = accessories.filter(acc => {
+    if (availableU === undefined || availableU === null) return true;
+    const uSize = acc.uSize ?? 1;
+    if (uSize === 0) return true;
+    return uSize <= availableU;
+  });
+
+  // 2. Search filter across SKU, Name, Description, Brand
+  const filtered = capacityFiltered.filter(acc => {
     if (qTokens.length === 0) return true;
     const hay = `${acc.pn || ''} ${acc.sku || ''} ${acc.name || ''} ${acc.description || ''} ${acc.brand || ''}`.toLowerCase();
     return qTokens.every(tok => hay.includes(tok));

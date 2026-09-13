@@ -1,6 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from "motion/react";
-import { AlertCircle, CheckCircle, Plus, Minus, X, Server, Download, Box, AlertTriangle, ChevronDown, Search, ZoomIn, Eye, Maximize2 } from 'lucide-react';
+import { 
+  AlertCircle, 
+  CheckCircle, 
+  CheckCircle2,
+  Plus, 
+  Minus, 
+  X, 
+  Server, 
+  Download, 
+  Box, 
+  AlertTriangle, 
+  ChevronDown, 
+  Search, 
+  ZoomIn, 
+  Eye, 
+  Maximize2,
+  SlidersHorizontal,
+  ArrowLeftRight,
+  RotateCcw,
+  Info
+} from 'lucide-react';
 import Papa from 'papaparse';
 import { 
   fetchCabinetMatrix, 
@@ -12,8 +32,16 @@ import {
   KNOWN_MATRIX_SHELF_SKUS, 
   normalizeSku, 
   parseCompatibleSkus, 
-  CabinetMatrixData 
+  CabinetMatrixData,
+  groupAccessoriesForDisplay,
+  GroupedRubric
 } from '../utils/cabinetData';
+import { 
+  analyzeCabinetSpace,
+  classifyItemPlacement,
+  findRearrangementPlan,
+  RearrangementPlan
+} from '../utils/cabinetPlacementEngine';
 import { 
   VERIFIED_ZERO_U_EXCEPTIONS, 
   isFlaggedForCabinetSuitability, 
@@ -851,6 +879,60 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [addSlotTargetU, setAddSlotTargetU] = useState<number | null>(null);
   const [isAuxiliaryModalOpen, setIsAuxiliaryModalOpen] = useState(false);
 
+  // Rearrangement engine proposals and undo snapshot
+  const [pendingRearrangementPlan, setPendingRearrangementPlan] = useState<{ plan: RearrangementPlan; item: any } | null>(null);
+  const [undoState, setUndoState] = useState<{ selectedOptionals: (Accessory & { quantity: number; id: string })[]; message: string } | null>(null);
+
+  const handleConfirmRearrangement = () => {
+    if (!pendingRearrangementPlan) return;
+    const { plan, item } = pendingRearrangementPlan;
+
+    // Save previous state for undo
+    setUndoState({
+      selectedOptionals: JSON.parse(JSON.stringify(selectedOptionals)),
+      message: `בוצע סידור מחדש של ${plan.moves.length} פריטים והותקן ${item.name || item.description || item.pn} ב-U${plan.targetU}`,
+    });
+
+    setSelectedOptionals(prev => {
+      // Apply moved positions
+      const updated = prev.map(opt => {
+        const move = plan.moves.find(m => {
+          const normSku = normalizeSku(m.sku);
+          const optSku = normalizeSku(opt.sku || opt.pn);
+          return normSku === optSku || (opt.id && opt.id.includes(m.instanceId));
+        });
+        if (move) {
+          return {
+            ...opt,
+            targetU: move.toU,
+          };
+        }
+        return opt;
+      });
+
+      // Add target item
+      const newEntry = {
+        ...item,
+        quantity: 1,
+        targetU: plan.targetU,
+        id: `${item.sku || item.pn}-U${plan.targetU}-${Date.now()}`,
+      };
+      return [...updated, newEntry];
+    });
+
+    setPendingRearrangementPlan(null);
+    setChassisPulse(true);
+    setTimeout(() => setChassisPulse(false), 1400);
+  };
+
+  const handleUndoLastAction = () => {
+    if (!undoState) return;
+    setSelectedOptionals(undoState.selectedOptionals);
+    setUndoState(null);
+    setChassisPulse(true);
+    setTimeout(() => setChassisPulse(false), 1400);
+  };
+
   const handleAddOptionalAtSlot = (acc: Accessory, targetU: number | null) => {
     const normSku = normalizeSku(acc.sku || acc.pn);
     const isShelf = isProductShelf(acc, catalogMapRef.current, allMatrixShelvesRef.current);
@@ -1146,16 +1228,43 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         // Determine "What's in the Box" (Included Accessories)
         const included: string[] = [];
         
-        const checkIncluded = (val: string, name: string) => {
-          if (!val) return `${name}: מידע לא זמין`;
-          if (val.toUpperCase() === 'X' || val === '0') return `${name}: לא כלול`;
-          return `${name}: כלול בכמות ${val}`;
+        const parseIncluded = (val: string | undefined, name: string) => {
+          if (!val) return null;
+          const str = String(val).trim();
+          const upper = str.toUpperCase();
+          if (
+            upper === 'X' ||
+            upper === '0' ||
+            upper === '-' ||
+            upper === '--' ||
+            upper.includes('לא כלול') ||
+            upper.includes('ללא') ||
+            upper.includes('אין') ||
+            upper.includes('מידע לא זמין') ||
+            upper.includes('NONE') ||
+            upper.includes('NO') ||
+            upper.includes('N/A') ||
+            upper.includes('NA')
+          ) {
+            return null;
+          }
+          const numMatch = str.match(/\d+/);
+          if (numMatch) {
+            const count = parseInt(numMatch[0], 10);
+            if (count <= 0) return null;
+            return `${name}: ${count} יחידות כלולות`;
+          }
+          return `${name}: ${str}`;
         };
 
-        included.push(checkIncluded(data.fans, 'מאווררים'));
-        included.push(checkIncluded(data.wheels, 'גלגלים'));
-        included.push(checkIncluded(data.levelingFeet, 'רגליות פילוס'));
-        included.push(checkIncluded(data.shelvesQty, 'מדפים'));
+        const fanItem = parseIncluded(data.fans, 'מאווררים');
+        if (fanItem) included.push(fanItem);
+        const wheelItem = parseIncluded(data.wheels, 'גלגלים');
+        if (wheelItem) included.push(wheelItem);
+        const feetItem = parseIncluded(data.levelingFeet, 'רגליות פילוס');
+        if (feetItem) included.push(feetItem);
+        const shelfItem = parseIncluded(data.shelvesQty, 'מדפים');
+        if (shelfItem) included.push(shelfItem);
 
         setIncludedItems(included);
 
@@ -1216,13 +1325,33 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       }
     }
 
-    const existingItem = selectedOptionals.find(item => item.pn === acc.pn);
+    const uSize = acc.uSize ?? 1;
+    if (uSize > 0) {
+      if (uSize > availableU) {
+        setPendingAccessory(acc);
+        setWarningModalOpen(true);
+        return;
+      }
+
+      // Check placement using placement engine
+      const analysis = analyzeCabinetSpace(totalSlotsU, slots, null);
+      const placementRes = classifyItemPlacement(acc, analysis, null, slots);
+
+      if (placementRes.category === 'rearrange' && placementRes.rearrangementPlan) {
+        setPendingRearrangementPlan({
+          plan: placementRes.rearrangementPlan,
+          item: acc,
+        });
+        return;
+      }
+    }
+
+    const existingItem = selectedOptionals.find(item => item.pn === acc.pn && !item.targetU);
     const nextUnitIdx = existingItem ? existingItem.quantity : 0;
     const newInstId = `${acc.sku || acc.pn}-unit-${nextUnitIdx}`;
 
-    // Advisory capacity only: always add. Over-capacity is shown by the red "מקום פנוי" badge, never silently blocked.
     setSelectedOptionals(prev => {
-      const existingIdx = prev.findIndex(item => item.pn === acc.pn);
+      const existingIdx = prev.findIndex(item => item.pn === acc.pn && !item.targetU);
       if (existingIdx >= 0) {
         const newArr = [...prev];
         newArr[existingIdx] = { ...newArr[existingIdx], quantity: newArr[existingIdx].quantity + 1 };
@@ -1275,9 +1404,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     setWarningModalOpen(false);
     setPendingAccessory(null);
   };
-
-  if (loading) return <div className="p-8 mt-8 bg-gray-50 text-center text-gray-500 border border-gray-200">טוען קונפיגורטור ארון מותאם אישית...</div>;
-  if (errorMsg) return <div className="p-8 mt-8 bg-red-50 text-center text-red-700 border border-red-200" dir="rtl">{errorMsg}</div>;
 
   // --- DYNAMIC SLOT CALCULATION FOR VISUAL CHASSIS ---
   const getAccessoryImage = (acc: any): string => {
@@ -1374,56 +1500,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const plinthItems = nonUAccessories.filter(a => a.zone === 'plinth');
   const hardwareItems = nonUAccessories.filter(a => a.zone === 'hardware');
 
-  // --- Accessory grouping: single candidate list divided into disjoint display rubrics ---
-  const _accPairs = compatibleAccessories.map((acc, idx) => ({ acc, idx }));
+  // --- Accessory grouping: unified single candidate list divided into disjoint display rubrics ---
   const _q = accSearch.trim().toLowerCase();
   const _qTokens = _q.split(/[\s\-/,]+/).filter(Boolean);
-  const _accMatch = ({ acc }: any) => {
-    if (!_qTokens.length) return true;
-    const hay = `${acc.pn || ''} ${acc.name || ''} ${acc.description || ''} ${acc.sku || ''}`.toLowerCase();
-    return _qTokens.every((tok: string) => hay.includes(tok)); // all words, any order
-  };
-  const _filtered = _accPairs.filter(_accMatch);
-
-  // Rubric 1: Shelves matching cabinet matrix (strictly shelves only)
-  const _bucketShelves = _filtered
-    .filter(({ acc }: any) => acc.isShelf)
-    .sort((a: any, b: any) => {
-      const order: Record<string, number> = { 'סטנדרטי': 1, 'תלוי': 2, 'נשלף': 3 };
-      const oa = order[a.acc.shelfType] || 4;
-      const ob = order[b.acc.shelfType] || 4;
-      if (oa !== ob) return oa - ob;
-      return (a.acc.pn || '').localeCompare(b.acc.pn || '');
-    });
-
-  // Rubric: Promoted items grouped by brand (e.g. HIKVISION, POLMAN)
-  // These items get their own dedicated brand accordion rubrics and are excluded from "takesU"
-  const _bucketPromoted = _filtered.filter(({ acc }: any) => !acc.isShelf && acc._promoted);
-  const _promotedByBrand: Record<string, any[]> = {};
-  _bucketPromoted.forEach((pair: any) => {
-    const brand = String(pair.acc.brand || 'אחר').trim() || 'אחר';
-    (_promotedByBrand[brand] = _promotedByBrand[brand] || []).push(pair);
-  });
-
-  // Rubric 2: Additional equipment taking space (>0U)
-  // Excludes shelves AND items already allocated to separate brand groups!
-  const _bucketTakesU = _filtered
-    .filter(({ acc }: any) => !acc.isShelf && acc.uSize > 0 && !acc._promoted)
-    .sort((a: any, b: any) => {
-      const rank = (x: any) => (x.acc._curated ? 0 : (x.acc._depth ? 1 : 2));
-      const rDiff = rank(a) - rank(b);
-      if (rDiff !== 0) return rDiff;
-      return b.acc.uSize - a.acc.uSize;
-    });
-
-  // Rubric 3: Accessories taking no space (0U)
-  // Non-U accessories that do not consume vertical rail units (e.g. wheels, roof fans, screws)
-  const _bucketFree = _filtered
-    .filter(({ acc }: any) => !acc.isShelf && acc.uSize === 0)
-    .sort((a: any, b: any) => {
-      const rank = (x: any) => (x.acc._curated ? 0 : 1);
-      return rank(a) - rank(b);
-    });
   
   const _illusPairs = ILLUSTRATION_ACCESSORIES
     .map((acc, i) => ({ acc, idx: 100000 + i }))
@@ -1433,15 +1512,15 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       return _qTokens.every((tok: string) => hay.includes(tok));
     });
 
+  const groupedRubrics = useMemo(() => {
+    return groupAccessoriesForDisplay(compatibleAccessories, accSearch, availableU);
+  }, [compatibleAccessories, accSearch, availableU]);
+
   const renderAccCard = (acc: any, idx: number) => {
     const catalogMatch = catalogData.find(pp => pp && pp.sku && (pp.sku === acc.pn || pp.sku === acc.sku));
     const showPrice = catalogMatch ? catalogMatch.price : (acc.price || 0);
     const fitsRemaining = acc.uSize === 0 || acc.uSize <= availableU;
     
-    // Calculate if we actually have enough *contiguous* space.
-    // The previous logic just checked total available U, but we need to check contiguous if uSize > 1.
-    // To simplify and not run complex logic on every render, we rely on `fitsRemaining` primarily, but we can be specific.
-
   return (
       <div id={`acc-${acc.pn}`} key={idx} className={`flex flex-col p-3.5 border group transition-all relative rounded-none hover:shadow-sm ${fitsRemaining ? 'bg-slate-50 border-slate-100 hover:border-[#004387]' : 'bg-rose-50/20 border-rose-200'} ${highlightedSku === acc.pn ? 'ring-2 ring-[#fe8d00] bg-orange-50' : ''}`}>
         <div className="flex items-start justify-between gap-3">
@@ -1491,8 +1570,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     );
   };
 
-  const AccordionSection = (id: string, title: string, pairs: any[], tone: string, defaultOpen: boolean = false, logoUrl: string = '') => {
-    if (!pairs.length) return null;
+  const AccordionSection = (id: string, title: string, items: any[], tone: string, defaultOpen: boolean = false, logoUrl: string = '') => {
+    if (!items || !items.length) return null;
     const open = openSections[id] ?? defaultOpen;
     return (
       <div key={id} className="border border-slate-200 rounded-none mb-2.5">
@@ -1516,7 +1595,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             ) : null}
             <span>
               {title}{title ? ' ' : ''}
-              <span className="opacity-70 font-mono">({pairs.length})</span>
+              <span className="opacity-70 font-mono">({items.length})</span>
             </span>
           </span>
           <ChevronDown
@@ -1531,7 +1610,11 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             aria-labelledby={`accordion-btn-${id}`}
             className="space-y-3 p-2.5 max-h-[320px] overflow-y-auto"
           >
-            {pairs.map(({ acc, idx }: any) => renderAccCard(acc, idx))}
+            {items.map((item: any, i: number) => {
+              const acc = item.acc || item;
+              const idx = item.idx !== undefined ? item.idx : i;
+              return renderAccCard(acc, idx);
+            })}
           </div>
         )}
       </div>
@@ -1550,6 +1633,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     setPdfWithPrice(withPrice);
     setShowPdfPreview(true);
   };
+
+  if (loading) return <div className="p-8 mt-8 bg-gray-50 text-center text-gray-500 border border-gray-200">טוען קונפיגורטור ארון מותאם אישית...</div>;
+  if (errorMsg) return <div className="p-8 mt-8 bg-red-50 text-center text-red-700 border border-red-200" dir="rtl">{errorMsg}</div>;
 
   return (
     <div className="@container mt-8 bg-white border-2 border-[#004387] shadow-sm relative overflow-hidden" dir="rtl">
@@ -1648,7 +1734,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                   highlightedOptIdx={highlightedOptIdx}
                   lastAddedInstanceId={lastAddedInstanceId}
                   selectedSlotU={addSlotTargetU}
+                  previewSpanU={1}
                   hoveredProduct={hoveredProduct}
+                  inspectedProduct={inspectedProduct}
+                  selectedInstanceId={inspectedProduct ? (inspectedProduct.sku || (inspectedProduct as any).instanceId) : undefined}
                   onProductHover={(slot) => setHoveredProduct(slot ? buildPreviewFromSlot(slot) : null)}
                   onProductInspect={(slot) => setInspectedProduct(buildPreviewFromSlot(slot))}
                   onSlotClickToAdd={(uIndex) => {
@@ -1877,77 +1966,94 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                       {isMerged ? (<><span>{slot.uIndex}-{slot.uIndex - spanU + 1}</span><span className="text-[8px] text-emerald-300">{spanU}U</span></>) : `${slot.uIndex}U`}
                     </div>
 
-                    {/* Schematic shelf drawing */}
-                    {(isShelf || isShelfUpgrade) && slot.isAnchor !== false && (
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-1 z-0" aria-hidden="true">
-                        <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="w-full h-full opacity-90">
-                          <defs>
-                            <linearGradient id={`shelfGrad-${slot.uIndex}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0" stopColor="#64748b" />
-                              <stop offset="0.55" stopColor="#475569" />
-                              <stop offset="1" stopColor="#334155" />
-                            </linearGradient>
-                          </defs>
-                          <rect x="10" y="8" width="8" height="26" rx="1" fill="#334155" stroke="#1e293b" strokeWidth="0.7" />
-                          <rect x="182" y="8" width="8" height="26" rx="1" fill="#334155" stroke="#1e293b" strokeWidth="0.7" />
-                          <circle cx="14" cy="13" r="1.5" fill="#0f172a" />
-                          <circle cx="14" cy="29" r="1.5" fill="#0f172a" />
-                          <circle cx="186" cy="13" r="1.5" fill="#0f172a" />
-                          <circle cx="186" cy="29" r="1.5" fill="#0f172a" />
-                          <rect x="16" y="11" width="168" height="21" rx="1.5" fill={`url(#shelfGrad-${slot.uIndex})`} stroke="#1e293b" strokeWidth="0.8" />
-                          <rect x="16" y="28" width="168" height="4" fill="#1e293b" opacity="0.45" />
-                          {Array.from({ length: 9 }).map((_, i) => (
-                            <rect key={i} x={26 + i * 18} y="15" width="10" height="11" rx="1" fill="#1e293b" opacity="0.4" />
-                          ))}
-                        </svg>
-                      </div>
-                    )}
+                    {/* 1. Full-Width Product Photo (fills the entire slot faceplate, NO text overlay) */}
+                    {(() => {
+                      const slotImage = isClickableProduct ? (getAccessoryImage(slot.accessoryRef) || slot.accessoryRef?.image || (slotPreview?.image ?? '')) : '';
+                      if (slotImage) {
+                        return (
+                          <div className="absolute inset-0 w-full h-full z-0 overflow-hidden bg-slate-900 pointer-events-none flex items-center justify-center">
+                            <img 
+                              referrerPolicy="no-referrer" 
+                              src={slotImage} 
+                              alt=""
+                              className="w-full h-full object-fill sm:object-cover"
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} 
+                            />
+                          </div>
+                        );
+                      }
 
-                    {/* Clean product representation */}
-                    {isOptional && !isShelfUpgrade && slot.accessoryRef?.image && zoomMode && (
-                      <div className="absolute inset-y-[2px] right-10 left-16 z-0 overflow-hidden flex items-center justify-center opacity-30 pointer-events-none">
-                        <img 
-                          referrerPolicy="no-referrer" 
-                          src={slot.accessoryRef.image} 
-                          alt=""
-                          className="h-full object-contain"
-                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} 
-                        />
-                      </div>
-                    )}
+                      // 2. Schematic shelf drawing fallback when no photo
+                      if ((isShelf || isShelfUpgrade) && slot.isAnchor !== false) {
+                        return (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-1 z-0" aria-hidden="true">
+                            <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="w-full h-full opacity-90">
+                              <defs>
+                                <linearGradient id={`shelfGrad-${slot.uIndex}`} x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0" stopColor="#64748b" />
+                                  <stop offset="0.55" stopColor="#475569" />
+                                  <stop offset="1" stopColor="#334155" />
+                                </linearGradient>
+                              </defs>
+                              <rect x="10" y="8" width="8" height="26" rx="1" fill="#334155" stroke="#1e293b" strokeWidth="0.7" />
+                              <rect x="182" y="8" width="8" height="26" rx="1" fill="#334155" stroke="#1e293b" strokeWidth="0.7" />
+                              <circle cx="14" cy="13" r="1.5" fill="#0f172a" />
+                              <circle cx="14" cy="29" r="1.5" fill="#0f172a" />
+                              <circle cx="186" cy="13" r="1.5" fill="#0f172a" />
+                              <circle cx="186" cy="29" r="1.5" fill="#0f172a" />
+                              <rect x="16" y="11" width="168" height="21" rx="1.5" fill={`url(#shelfGrad-${slot.uIndex})`} stroke="#1e293b" strokeWidth="0.8" />
+                              <rect x="16" y="28" width="168" height="4" fill="#1e293b" opacity="0.45" />
+                              {Array.from({ length: 9 }).map((_, i) => (
+                                <rect key={i} x={26 + i * 18} y="15" width="10" height="11" rx="1" fill="#1e293b" opacity="0.4" />
+                              ))}
+                            </svg>
+                          </div>
+                        );
+                      }
 
-                    {/* Content description */}
-                    <div className="flex-1 min-w-0 pr-2 pl-1 text-right relative z-10">
-                      <div className="flex items-center gap-1.5">
-                        {/* Dynamic category icon */}
-                        {(isFan || isFanUpgrade) && <span className="inline-block animate-spin text-cyan-400 mr-0.5" style={{ animationDuration: '5s' }}>🌀</span>}
-                        {(isShelf || isShelfUpgrade) && <span className="text-emerald-400 text-xs">📥</span>}
-                        {isBlank && <span className="text-neutral-400 text-xs">🔩</span>}
-                        {isBrush && <span className="text-amber-400 font-bold text-xs">💈</span>}
-                        {isPdu && <span className="text-red-400 animate-pulse text-xs">⚡</span>}
-                        
-                        <p className="font-semibold tracking-wide truncate leading-tight text-[11px] sm:text-xs">
-                          {slot.name}
-                        </p>
-                      </div>
+                      // 3. Schematic graphics for items without photo
+                      if (isBrush) {
+                        return (
+                          <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px] text-amber-500/80 tracking-widest pointer-events-none select-none">
+                            ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+                          </div>
+                        );
+                      }
 
-                      {isBrush && (
-                        <div className="text-[7px] text-amber-500/80 font-mono tracking-widest select-none opacity-70">
-                          ||||||||||||||||||||||||||||||||||||||||||||
+                      if (isPdu) {
+                        return (
+                          <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px] text-red-400/90 tracking-widest pointer-events-none select-none">
+                            [::] [::] [::] [::] [::] [::] [::] [::]
+                          </div>
+                        );
+                      }
+
+                      if (isBlank) {
+                        return (
+                          <div className="absolute inset-0 bg-neutral-900 flex items-center justify-center border-y border-neutral-700/60 pointer-events-none">
+                            <span className="text-[9px] font-mono text-neutral-500">BLANK PANEL 19"</span>
+                          </div>
+                        );
+                      }
+
+                      // 4. Empty slot prompt
+                      if (isEmpty) {
+                        return (
+                          <div className="flex-1 text-center text-slate-500 group-hover:text-slate-300 text-[11px] font-medium transition-colors">
+                            + לחץ להוספת ציוד (U{slot.uIndex})
+                          </div>
+                        );
+                      }
+
+                      // 5. Fallback minimal text for items with no image
+                      return (
+                        <div className="flex-1 min-w-0 pr-2 pl-1 text-right relative z-10">
+                          <p className="font-semibold tracking-wide truncate leading-tight text-[11px] sm:text-xs">
+                            {slot.name}
+                          </p>
                         </div>
-                      )}
-                      {isPdu && (
-                        <div className="text-[7px] text-red-500/80 font-mono tracking-widest select-none opacity-80">
-                          [::] [::] [::] [::] [::] [::]
-                        </div>
-                      )}
-
-                      {slot.description && !isBrush && !isPdu && zoomMode && (
-                        <p className="text-[10px] text-slate-400 font-normal truncate opacity-85 mt-0.5" title={slot.description}>
-                          {slot.description}
-                        </p>
-                      )}
-                    </div>
+                      );
+                    })()}
 
                     {/* Action buttons inside interactive slots */}
                     <div className="flex items-center gap-1 relative z-20 flex-shrink-0">
@@ -2141,17 +2247,17 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             </h3>
             {includedItems.length > 0 ? (
               <ul className="space-y-3">
-                {includedItems.map((item, idx) => {
-                  const isIncluded = !item.includes('לא כלול') && !item.includes('מידע לא זמין');
-                  return (
-                  <li key={idx} className={`flex items-center gap-3 border-b border-gray-100/60 pb-1.5 last:border-none ${isIncluded ? 'text-gray-700' : 'text-gray-400'}`}>
-                    {isIncluded ? <CheckCircle size={18} className="text-green-500 flex-shrink-0" /> : <div className="w-[18px] h-[18px] flex items-center justify-center text-gray-300 font-bold flex-shrink-0">✕</div>}
-                    <span className={`text-sm ${isIncluded ? 'font-semibold' : ''}`}>{item}</span>
+                {includedItems.map((item, idx) => (
+                  <li key={idx} className="flex items-center gap-3 border-b border-gray-100/60 pb-1.5 last:border-none text-gray-700">
+                    <CheckCircle size={18} className="text-green-500 flex-shrink-0" />
+                    <span className="text-sm font-semibold">{item}</span>
                   </li>
-                ) })}
+                ))}
               </ul>
             ) : (
-              <p className="text-gray-500 italic text-sm">אין פריטי משנה מוגדרים מראש לארון זה.</p>
+              <div className="text-gray-500 italic text-sm py-2 bg-slate-100/60 p-3 border border-slate-200/60">
+                ארון זה מגיע ללא אביזרים כלולים מראש (ניתן לבחור אביזרים להרכבה מהקטלוג).
+              </div>
             )}
           </div>
 
@@ -2329,53 +2435,14 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               <div className="mb-3 text-[12px] font-bold text-slate-600">
                 נותרו <span className="text-[#004387]">{availableU}U</span> פנויים — מלא עם אביזרים תואמים:
               </div>
-              {_bucketShelves.length > 0 && AccordionSection('shelves', '🗄️ מדפים מתאימים לארון', _bucketShelves, 'bg-emerald-50 text-emerald-900', false)}
-              {_bucketTakesU.length > 0 && AccordionSection('takesU', '📏 ציוד נוסף שתופס מקום בארון', _bucketTakesU, 'bg-[#e6f0fa] text-[#004387]', false)}
-              {_bucketFree.length > 0 && AccordionSection('freeU', '🔌 אביזרים ללא תפיסת מקום', _bucketFree, 'bg-slate-50 text-slate-700', false)}
+              {groupedRubrics.map((rubric: GroupedRubric) =>
+                AccordionSection(rubric.id, rubric.title, rubric.items, rubric.tone, false, rubric.brandLogo)
+              )}
               {_illusPairs.length > 0 && AccordionSection('illus', '🧩 תצוגת הדמיה (ללא מחיר)', _illusPairs, 'bg-indigo-50 text-indigo-800', false)}
-              {_filtered.length === 0 && _illusPairs.length === 0 && (
+              {groupedRubrics.length === 0 && _illusPairs.length === 0 && (
                 <div className="text-center py-8 text-gray-500 bg-gray-50 border border-gray-200 rounded-none text-sm">
                   {accSearch ? 'לא נמצאו פריטים התואמים לחיפוש שלך.' : 'אין אביזרים תואמים לארון זה.'}
                 </div>
-              )}
-              <div className="border border-slate-200 bg-slate-50 p-3 mb-3 hidden">
-                <div className="text-sm font-bold text-slate-700 mb-2">➕ הוסף פריט מותאם אישית לארון</div>
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="text" 
-                    value={customAccName} 
-                    onChange={e => setCustomAccName(e.target.value)} 
-                    placeholder="שם הפריט..." 
-                    className="flex-1 px-2 py-1.5 text-sm border border-slate-300 rounded-none focus:outline-none focus:border-[#004387]" 
-                    dir="rtl"
-                  />
-                  <select 
-                    value={customAccU} 
-                    onChange={e => setCustomAccU(parseInt(e.target.value))} 
-                    className="w-16 px-1 py-1.5 text-sm border border-slate-300 rounded-none focus:outline-none"
-                    dir="ltr"
-                  >
-                    {[1, 2, 3, 4, 5].map(u => <option key={u} value={u}>{u}U</option>)}
-                  </select>
-                  <button 
-                    type="button" 
-                    onClick={handleAddCustomIllustration}
-                    disabled={!customAccName.trim() || customAccU > availableU}
-                    className="px-3 py-1.5 bg-[#004387] text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#fe8d00] transition-colors"
-                  >
-                    הוסף
-                  </button>
-                </div>
-                {customAccU > availableU && (
-                  <div className="text-xs text-rose-500 mt-1">אין מספיק מקום פנוי בארון ({availableU}U נותר)</div>
-                )}
-              </div>
-              {Object.keys(_promotedByBrand).sort().map(brand => {
-                const logo = (_promotedByBrand[brand][0] as any)?.acc?.brandLogo || '';
-                return AccordionSection('brand:' + brand, logo ? '' : ('⭐ ' + brand), _promotedByBrand[brand], 'bg-amber-50 text-amber-800', false, logo);
-              })}
-              {_filtered.length === 0 && (
-                <div className="text-center py-8 text-slate-400 text-sm border-2 border-dashed border-gray-200">לא נמצאו תוצאות לחיפוש.</div>
               )}
             </div>
           ) : (
@@ -2797,8 +2864,104 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         availableU={availableU}
         compatibleAccessories={compatibleAccessories}
         onAddAccessoryAtSlot={handleAddOptionalAtSlot}
+        onRequestRearrangement={(plan, item) => {
+          setIsAddSlotModalOpen(false);
+          setIsAuxiliaryModalOpen(false);
+          setAddSlotTargetU(null);
+          setPendingRearrangementPlan({ plan, item });
+        }}
         isAuxiliaryMode={isAuxiliaryModalOpen}
       />
+
+      {/* Rearrangement Approval Modal */}
+      {pendingRearrangementPlan && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/60 p-4 animate-in fade-in duration-200" dir="rtl">
+          <div className="bg-white max-w-lg w-full p-6 text-right shadow-2xl border-t-4 border-[#fe8d00] rounded-none">
+            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-200">
+              <div className="w-10 h-10 bg-amber-50 text-amber-600 border border-amber-200 rounded-full flex items-center justify-center shrink-0">
+                <ArrowLeftRight size={20} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">הצעת סידור מחדש של הארון</h3>
+                <p className="text-xs text-slate-500">קיים מספיק מקום פנוי כולל, אך נדרשת הזזת פריטים קיימים ליצירת רצף</p>
+              </div>
+            </div>
+
+            <div className="mb-4 bg-amber-50/70 border border-amber-200 p-3.5 rounded text-sm text-amber-900">
+              <p className="font-bold mb-1">
+                התקנת {pendingRearrangementPlan.item.name || pendingRearrangementPlan.item.description || pendingRearrangementPlan.item.pn} ({pendingRearrangementPlan.item.uSize || 1}U):
+              </p>
+              <p className="text-xs text-amber-800">
+                הפריט יותקן במיקום <strong>U{pendingRearrangementPlan.plan.targetU}</strong>. כדי לפנות רצף זה, יבוצעו ההזזות הבאות:
+              </p>
+            </div>
+
+            <div className="space-y-2 mb-6 max-h-48 overflow-y-auto pr-1">
+              {pendingRearrangementPlan.plan.moves.map((move, idx) => (
+                <div key={idx} className="flex items-center justify-between text-xs bg-slate-50 p-2.5 border border-slate-200 rounded">
+                  <span className="font-bold text-slate-800">{move.name || move.sku}</span>
+                  <div className="flex items-center gap-2 font-mono" dir="ltr">
+                    <span className="text-slate-500 line-through">U{move.fromU}</span>
+                    <span className="text-amber-600 font-bold">→</span>
+                    <span className="text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded">U{move.toU}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3 justify-end pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPendingRearrangementPlan(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded transition-colors"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRearrangement}
+                className="px-5 py-2 text-xs font-bold bg-[#004387] hover:bg-[#fe8d00] text-white rounded transition-colors flex items-center gap-1.5 shadow"
+              >
+                <CheckCircle2 size={15} />
+                <span>אשר סידור מחדש והוסף</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Undo Notification Banner */}
+      <AnimatePresence>
+        {undoState && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] bg-slate-900 text-white px-5 py-3 rounded-lg shadow-2xl flex items-center gap-4 border border-slate-700"
+            dir="rtl"
+          >
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={18} className="text-emerald-400" />
+              <span className="text-sm font-medium">{undoState.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleUndoLastAction}
+              className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded transition-colors flex items-center gap-1.5 shadow cursor-pointer"
+            >
+              <RotateCcw size={13} />
+              <span>בטל שינויים</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setUndoState(null)}
+              className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

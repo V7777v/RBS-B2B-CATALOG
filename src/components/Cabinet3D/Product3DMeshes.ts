@@ -2,7 +2,21 @@ import * as THREE from 'three';
 import { Product3DInstance, NonU3DItem } from './Cabinet3DTypes';
 import { U_HEIGHT_UNITS, RACK_19_WIDTH_UNITS, USABLE_OPENING_WIDTH } from './CabinetModelBuilder';
 import { lookup3DAsset, Product3DAssetDef } from './Product3DAssets';
-import { transformImageLink } from '../../utils/cabinetData';
+import { transformImageLink, isProductShelf } from '../../utils/cabinetData';
+
+/**
+ * Safely extracts the first valid HTTP/HTTPS URL from any image field without blind splitting that breaks query strings
+ */
+export function extractSafeProductImage(rawImage: any): string {
+  if (!rawImage) return '';
+  const str = String(rawImage).trim();
+  if (!str) return '';
+  const match = str.match(/https?:\/\/[^\s"',;<>]+/i);
+  if (match && match[0]) {
+    return match[0].trim();
+  }
+  return str;
+}
 
 /**
  * Creates equipment 3D mesh representation based on product type, dimensions, and SKU asset mapping
@@ -31,7 +45,7 @@ export function buildProduct3DMesh(
   const nameLower = (item.name || '').toLowerCase();
   const descLower = (item.description || '').toLowerCase();
 
-  // Normalized classification:
+  // Normalized business classification:
   // Amplifiers or switches mentioning "מדף" in their description will NEVER be treated as shelves!
   const isAudioAmp = assetDef?.categoryProfile === 'audio-amplifier' || /מגבר|amplifier|polman|xl600|סאונד/i.test(nameLower);
   const isUps = assetDef?.categoryProfile === 'ups-online' || /אל פסק|ups\b|סוללה|power supply/i.test(nameLower);
@@ -45,7 +59,7 @@ export function buildProduct3DMesh(
     item.type === 'shelf' ||
     Boolean((item as any).isShelf) ||
     Boolean(item.accessoryRef?.isShelf) ||
-    /^\s*(מדף|מגירה|shelf|drawer)\b/i.test(nameLower)
+    isProductShelf(item.accessoryRef || item)
   );
 
   // 1. PHYSICAL CHASSIS & MOUNTING EARS (Body & Depth)
@@ -174,11 +188,19 @@ export function buildProduct3DMesh(
   frontFaceGroup.name = `front-face-${item.instanceId}`;
   group.add(frontFaceGroup);
 
-  const renderProceduralFallback = () => {
-    // Clear any existing children in frontFaceGroup
+  const clearFrontFaceGroup = () => {
     while (frontFaceGroup.children.length > 0) {
-      frontFaceGroup.remove(frontFaceGroup.children[0]);
+      const child = frontFaceGroup.children[0];
+      if ((child as THREE.Mesh).isMesh) {
+        const m = child as THREE.Mesh;
+        if (m.geometry) m.geometry.dispose();
+      }
+      frontFaceGroup.remove(child);
     }
+  };
+
+  const renderProceduralFallback = () => {
+    clearFrontFaceGroup();
 
     if (isShelf) {
       const shelfWidth = USABLE_OPENING_WIDTH * 0.98;
@@ -284,76 +306,54 @@ export function buildProduct3DMesh(
   // 1. Dedicated orthographic front panel texture (frontTextureUrl)
   // 2. Real catalog photo (item.image)
   // 3. Procedural fallback (when no image available)
-  const rawImage = assetDef?.frontTextureUrl || (item.image ? String(item.image).split(/[,;]+/)[0].trim() : '');
+  const rawImage = assetDef?.frontTextureUrl || extractSafeProductImage(item.image);
 
   if (rawImage) {
     const imageUrl = transformImageLink(rawImage, 800);
     if (imageUrl) {
+      let isCancelled = false;
+      (group as any)._cancelTexture = () => { isCancelled = true; };
+
       const loader = new THREE.TextureLoader();
       loader.setCrossOrigin('anonymous');
       loader.load(
         imageUrl,
         (texture) => {
+          if (isCancelled) {
+            texture.dispose();
+            return;
+          }
+
           texture.colorSpace = THREE.SRGBColorSpace;
           texture.minFilter = THREE.LinearFilter;
           texture.magFilter = THREE.LinearFilter;
 
-          // Clear any fallback elements
-          while (frontFaceGroup.children.length > 0) {
-            frontFaceGroup.remove(frontFaceGroup.children[0]);
-          }
+          // Clear any fallback procedural elements completely so NO fake buttons/ports overlay the image
+          clearFrontFaceGroup();
 
-          const imgW = texture.image?.naturalWidth || texture.image?.width || 1;
-          const imgH = texture.image?.naturalHeight || texture.image?.height || 1;
-          const imgAspect = Math.max(0.1, imgW / imgH);
+          // Full-width 19" rack opening faceplate presentation
+          const planeW = USABLE_OPENING_WIDTH * 0.995;
+          const planeH = spanHeight * 0.98;
 
-          if (assetDef?.frontTextureUrl) {
-            // Dedicated orthographic front panel texture - exact 19" chassis fit
-            const frontGeom = new THREE.PlaneGeometry(USABLE_OPENING_WIDTH * 0.98, spanHeight * 0.95);
-            const frontMat = new THREE.MeshStandardMaterial({
-              map: texture,
-              roughness: 0.35,
-              metalness: 0.2,
-              toneMapped: true,
-            });
-            const frontMesh = new THREE.Mesh(frontGeom, frontMat);
-            frontMesh.position.set(0, 0, 0.042);
-            frontFaceGroup.add(frontMesh);
-          } else {
-            // Real catalog photo: displayed on a dedicated front presentation surface
-            // Strictly preserves original aspect ratio without distortion or cropping
-            const maxW = USABLE_OPENING_WIDTH * 0.88;
-            const maxH = spanHeight * 0.86;
-            let planeW = maxW;
-            let planeH = maxW / imgAspect;
-            if (planeH > maxH) {
-              planeH = maxH;
-              planeW = maxH * imgAspect;
-            }
-
-            // Dark bezel backing to seamlessly blend into 19" chassis face
-            const bezelGeom = new THREE.BoxGeometry(planeW + 0.04, planeH + 0.02, 0.01);
-            const bezelMesh = new THREE.Mesh(bezelGeom, materials.panelMat);
-            bezelMesh.position.set(0, 0, 0.035);
-            frontFaceGroup.add(bezelMesh);
-
-            // Aspect-ratio-accurate textured plane
-            const photoGeom = new THREE.PlaneGeometry(planeW, planeH);
-            const photoMat = new THREE.MeshBasicMaterial({
-              map: texture,
-              toneMapped: true,
-            });
-            const photoMesh = new THREE.Mesh(photoGeom, photoMat);
-            photoMesh.position.set(0, 0, 0.042);
-            frontFaceGroup.add(photoMesh);
-          }
+          const frontGeom = new THREE.PlaneGeometry(planeW, planeH);
+          const frontMat = new THREE.MeshStandardMaterial({
+            map: texture,
+            roughness: 0.35,
+            metalness: 0.2,
+            toneMapped: true,
+          });
+          const frontMesh = new THREE.Mesh(frontGeom, frontMat);
+          frontMesh.position.set(0, 0, 0.042);
+          frontFaceGroup.add(frontMesh);
 
           if (onTextureLoaded) onTextureLoaded();
         },
         undefined,
         (err) => {
+          if (isCancelled) return;
           console.warn(`[Product3D] Failed to load texture for ${item.sku}, rendering procedural fallback:`, err);
           renderProceduralFallback();
+          if (onTextureLoaded) onTextureLoaded();
         }
       );
     } else {

@@ -49,7 +49,10 @@ export interface Cabinet3DViewerProps {
   highlightedOptIdx: number | null;
   lastAddedInstanceId: string | null;
   selectedSlotU?: number | null;
+  previewSpanU?: number;
   hoveredProduct: any;
+  inspectedProduct?: any;
+  selectedInstanceId?: string | null;
   onProductHover: (slot: VisualSlot | null) => void;
   onProductInspect: (slot: VisualSlot) => void;
   onSlotClickToAdd: (uIndex: number) => void;

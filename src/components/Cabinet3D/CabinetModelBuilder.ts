@@ -77,6 +77,7 @@ export function buildCabinetFrameGroup(
   uCenters: number[]; // Y positions for each U unit center from bottom (U1) to top (Un)
   innerDepthUnits: number;
   stagingTrayGroup?: THREE.Group;
+  stagingAccessoriesGroup?: THREE.Group;
   hasStagingContent?: boolean;
 } {
   const group = new THREE.Group();
@@ -130,15 +131,185 @@ export function buildCabinetFrameGroup(
   roofMesh.castShadow = true;
   group.add(roofMesh);
 
+  // 2.1. UPPER BEAM BRAND BADGE - "BOOST RACKMOUNT" LOGO
+  const badgeWidth = Math.min(widthUnits * 0.62, 3.6);
+  const badgeHeight = roofHeight * 0.74;
+  const badgeDepth = 0.02;
+
+  // High-resolution Canvas Texture for BOOST RACKMOUNT logo
+  const logoCanvas = document.createElement('canvas');
+  logoCanvas.width = 1024;
+  logoCanvas.height = 256;
+  const logoCtx = logoCanvas.getContext('2d');
+  if (logoCtx) {
+    // Brushed metallic / carbon plate background
+    const bgGrad = logoCtx.createLinearGradient(0, 0, 1024, 256);
+    bgGrad.addColorStop(0, '#070b14');
+    bgGrad.addColorStop(0.5, '#162032');
+    bgGrad.addColorStop(1, '#070b14');
+    logoCtx.fillStyle = bgGrad;
+    logoCtx.fillRect(0, 0, 1024, 256);
+
+    // Subtle carbon grid lines pattern
+    logoCtx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    logoCtx.lineWidth = 1;
+    for (let x = 0; x < 1024; x += 16) {
+      logoCtx.beginPath();
+      logoCtx.moveTo(x, 0);
+      logoCtx.lineTo(x, 256);
+      logoCtx.stroke();
+    }
+
+    // Outer high-contrast metallic frame
+    logoCtx.strokeStyle = '#0284c7';
+    logoCtx.lineWidth = 6;
+    logoCtx.strokeRect(6, 6, 1012, 244);
+
+    // Inner bright cyan border accent
+    logoCtx.strokeStyle = '#38bdf8';
+    logoCtx.lineWidth = 2;
+    logoCtx.strokeRect(12, 12, 1000, 232);
+
+    // Corner industrial hex rivets
+    const rivetPositions = [
+      [24, 24], [1000, 24],
+      [24, 232], [1000, 232]
+    ];
+    rivetPositions.forEach(([rx, ry]) => {
+      logoCtx.fillStyle = '#64748b';
+      logoCtx.beginPath();
+      logoCtx.arc(rx, ry, 6, 0, Math.PI * 2);
+      logoCtx.fill();
+      logoCtx.strokeStyle = '#cbd5e1';
+      logoCtx.lineWidth = 1.5;
+      logoCtx.stroke();
+    });
+
+    // Brand Icon Glyph (Stylized 19" Rack Emblem with Lightning Boost)
+    logoCtx.save();
+    logoCtx.translate(90, 128);
+    // Outer rack icon rectangle
+    logoCtx.strokeStyle = '#38bdf8';
+    logoCtx.lineWidth = 4;
+    logoCtx.strokeRect(-36, -45, 72, 90);
+    // Rack rail slots
+    logoCtx.fillStyle = '#38bdf8';
+    for (let slotY = -35; slotY <= 35; slotY += 14) {
+      logoCtx.fillRect(-30, slotY, 6, 6);
+      logoCtx.fillRect(24, slotY, 6, 6);
+    }
+    // Energy / Boost Lightning Arrow in center
+    logoCtx.fillStyle = '#f59e0b';
+    logoCtx.beginPath();
+    logoCtx.moveTo(4, -30);
+    logoCtx.lineTo(-12, 6);
+    logoCtx.lineTo(0, 6);
+    logoCtx.lineTo(-4, 30);
+    logoCtx.lineTo(14, -6);
+    logoCtx.lineTo(2, -6);
+    logoCtx.closePath();
+    logoCtx.fill();
+    logoCtx.restore();
+
+    // Main Brand Typography: "BOOST RACKMOUNT"
+    // "BOOST"
+    logoCtx.fillStyle = '#ffffff';
+    logoCtx.font = '900 84px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    logoCtx.textAlign = 'left';
+    logoCtx.textBaseline = 'middle';
+    logoCtx.shadowColor = 'rgba(56, 189, 248, 0.6)';
+    logoCtx.shadowBlur = 12;
+    logoCtx.fillText('BOOST', 160, 112);
+
+    // "RACKMOUNT"
+    logoCtx.fillStyle = '#38bdf8';
+    logoCtx.font = '800 70px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    logoCtx.shadowColor = 'rgba(56, 189, 248, 0.4)';
+    logoCtx.shadowBlur = 8;
+    logoCtx.fillText('RACKMOUNT', 475, 114);
+
+    // Subtitle / Enterprise Specification Badge
+    logoCtx.shadowBlur = 0;
+    logoCtx.fillStyle = '#94a3b8';
+    logoCtx.font = '700 24px monospace';
+    logoCtx.letterSpacing = '6px';
+    logoCtx.fillText('ENTERPRISE RACK SYSTEMS • 19" ENCLOSURE', 165, 186);
+  }
+
+  const logoTexture = new THREE.CanvasTexture(logoCanvas);
+  logoTexture.minFilter = THREE.LinearFilter;
+  logoTexture.magFilter = THREE.LinearFilter;
+
+  const badgeGeom = new THREE.BoxGeometry(badgeWidth, badgeHeight, badgeDepth);
+  const badgeFaceMat = new THREE.MeshStandardMaterial({
+    map: logoTexture,
+    roughness: 0.25,
+    metalness: 0.85,
+  });
+  const badgeEdgeMat = materials.metalMat;
+  // Apply logo map only to front face (material index 4 in Three.js BoxGeometry)
+  const badgeMaterials = [
+    badgeEdgeMat, // right
+    badgeEdgeMat, // left
+    badgeEdgeMat, // top
+    badgeEdgeMat, // bottom
+    badgeFaceMat, // front (+Z)
+    badgeEdgeMat, // back (-Z)
+  ];
+
+  const brandBadgeMesh = new THREE.Mesh(badgeGeom, badgeMaterials);
+  brandBadgeMesh.position.set(0, halfH - roofHeight / 2, halfD + badgeDepth / 2 + 0.005);
+  brandBadgeMesh.name = 'boost-rackmount-header-badge';
+  (brandBadgeMesh as any).userData = {
+    isProductMesh: true,
+    item: {
+      instanceId: 'boost-rackmount-logo',
+      sku: 'BOOST-RACKMOUNT-OEM',
+      name: 'BOOST RACKMOUNT - מותג ארונות תקשורת ומסדים',
+      description: 'ארון תקשורת ושרתים מקצועי 19 אינץ׳ מתוצרת BOOST RACKMOUNT - קונסטרוקציית פלדה מחוזקת בתקן תעשייתי.',
+      price: 0,
+      isIncluded: true,
+      type: 'active',
+    },
+  };
+  group.add(brandBadgeMesh);
+
   // Roof ventilation grill insert
   const grillGeom = new THREE.BoxGeometry(widthUnits * 0.6, 0.02, depthUnits * 0.5);
   const grillMesh = new THREE.Mesh(grillGeom, materials.panelMat);
   grillMesh.position.set(0, halfH - roofHeight / 2 + 0.02, 0);
   group.add(grillMesh);
 
+  // Helper to parse included accessory count strictly
+  const parseAccessoryCount = (val: any): number => {
+    if (!val) return 0;
+    const str = String(val).trim().toUpperCase();
+    if (
+      str === 'X' ||
+      str === '0' ||
+      str === '-' ||
+      str === '--' ||
+      str.includes('לא כלול') ||
+      str.includes('ללא') ||
+      str.includes('אין') ||
+      str.includes('מידע לא זמין') ||
+      str.includes('NONE') ||
+      str.includes('NO') ||
+      str.includes('N/A') ||
+      str.includes('NA')
+    ) {
+      return 0;
+    }
+    const match = str.match(/\d+/);
+    if (match) {
+      return parseInt(match[0], 10);
+    }
+    return 0;
+  };
+
   // Roof fans (if included in matrix, e.g. 2 or 4 fans)
-  const fansCount = parseInt(cabinetData?.fans || '0', 10);
-  if (!isNaN(fansCount) && fansCount > 0) {
+  const fansCount = parseAccessoryCount(cabinetData?.fans);
+  if (fansCount > 0) {
     const fanRadius = 0.45; // 90mm diameter fan
     const fanCylGeom = new THREE.CylinderGeometry(fanRadius, fanRadius, 0.08, 24);
     const fanMat = materials.accentMat;
@@ -341,10 +512,10 @@ export function buildCabinetFrameGroup(
   }
 
   // 7. BASE WHEELS (Casters), LEVELING FEET, and WALL MOUNT BRACKETS
-  const wheelsCount = parseInt(cabinetData?.wheels || '0', 10);
-  const feetCount = parseInt(cabinetData?.levelingFeet || '0', 10);
-  const hasWheels = (!isNaN(wheelsCount) && wheelsCount > 0) || (Boolean(cabinetData?.wheels) && cabinetData?.wheels !== 'X' && cabinetData?.wheels !== '0');
-  const hasFeet = (!isNaN(feetCount) && feetCount > 0) || (Boolean(cabinetData?.levelingFeet) && cabinetData?.levelingFeet !== 'X' && cabinetData?.levelingFeet !== '0');
+  const wheelsCount = parseAccessoryCount(cabinetData?.wheels);
+  const feetCount = parseAccessoryCount(cabinetData?.levelingFeet);
+  const hasWheels = wheelsCount > 0;
+  const hasFeet = feetCount > 0;
 
   const cornerOffsets = [
     [-halfW + 0.4, -halfD + 0.4],
@@ -364,7 +535,7 @@ export function buildCabinetFrameGroup(
         sku: 'BUILTIN-WHEELS',
         name: `גלגלי נסיעה כבדים (${wheelsCount || 4} יח׳ כלולות)`,
         description: isStaging
-          ? 'ערכת גלגלים כלולה בתכולת הארון (במגש ציוד נלווה למניעת הרכבה מומצאת).'
+          ? 'ערכת גלגלים כלולה בתכולת הארון (במגש ציוד נלווה).'
           : 'גלגלי נסיעה מסיביים מותקנים בבסיס הארון להסעה ושינוע נוח (כלול בארון).',
         price: 0,
         isIncluded: true,
@@ -399,7 +570,7 @@ export function buildCabinetFrameGroup(
         sku: 'BUILTIN-FEET',
         name: `רגליות פילוס מתכווננות (${feetCount || 4} יח׳ כלולות)`,
         description: isStaging
-          ? 'ערכת רגליות פילוס כלולה בתכולת הארון (במגש תכולה סמוך למניעת הרכבה כפולה מומצאת).'
+          ? 'ערכת רגליות פילוס כלולה בתכולת הארון (במגש ציוד נלווה).'
           : 'רגליות פילוס ואיזון מותקנות בבסיס הארון ליציבות מרבית ומניעת רעידות (כלול בארון).',
         price: 0,
         isIncluded: true,
@@ -455,8 +626,8 @@ export function buildCabinetFrameGroup(
     item: {
       instanceId: 'staging-tray-plaque',
       sku: 'STAGING-TRAY',
-      name: 'מגש תכולת מארז וציוד נלווה (כלול בארון)',
-      description: 'אזור סמוך להצגת אביזרים וחלקי תכולה כלולים ללא המצאת הרכבה פיזית שגויה.',
+      name: 'מגש תכולת מארז וציוד נלווה',
+      description: 'אזור להצגת אביזרים וחלקי תכולה נלווים.',
       price: 0,
       isIncluded: true,
       type: 'active',
@@ -473,7 +644,7 @@ export function buildCabinetFrameGroup(
       group.add(wheelGroup);
     });
 
-    // Place 4 leveling feet in a neat 2x2 layout on the staging tray
+    // Place leveling feet in a neat layout on the staging tray
     const feetStagingOffsets = [
       [-0.4, -0.4],
       [0.4, -0.4],
@@ -523,6 +694,15 @@ export function buildCabinetFrameGroup(
     });
   }
 
+  // Set staging tray initial visibility based on whether it has content
+  stagingTrayGroup.visible = hasStagingContent;
+
+  // Add staging accessories container to staging tray
+  const stagingAccessoriesGroup = new THREE.Group();
+  stagingAccessoriesGroup.name = 'staging-dynamic-accessories-group';
+  stagingAccessoriesGroup.position.set(0, 0, 0);
+  stagingTrayGroup.add(stagingAccessoriesGroup);
+
   // Add staging tray to group
   group.add(stagingTrayGroup);
 
@@ -531,6 +711,7 @@ export function buildCabinetFrameGroup(
     uCenters,
     innerDepthUnits,
     stagingTrayGroup,
+    stagingAccessoriesGroup,
     hasStagingContent,
   };
 }
