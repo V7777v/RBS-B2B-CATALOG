@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from "motion/react";
-import { AlertCircle, CheckCircle, Plus, Minus, X, Server, Download, Box, AlertTriangle, ChevronDown, Search } from 'lucide-react';
+import { AlertCircle, CheckCircle, Plus, Minus, X, Server, Download, Box, AlertTriangle, ChevronDown, Search, ZoomIn, Eye, Maximize2 } from 'lucide-react';
 import Papa from 'papaparse';
 import { fetchCabinetMatrix, fetchCompatMap, checkAccessoryFitsCabinet, isAccessoryAShelf, normalizeSku, parseCompatibleSkus, CabinetMatrixData } from '../utils/cabinetData';
 import { 
@@ -90,6 +90,44 @@ const isCabinetProduct = (pp: any): boolean => {
   return false;
 };
 
+// Only items belonging to Infrastructure pricelist / categories should appear as cabinet accessories
+const isInfrastructureItem = (pp: any): boolean => {
+  if (!pp) return false;
+  const cat = String(pp.category || '').toLowerCase();
+  const sub = String(pp.subcategory || '').toLowerCase();
+  const nested = String(pp['Nested subcategory'] || pp.nestedSubcategory || '').toLowerCase();
+  const name = String(pp.name || '').toLowerCase();
+
+  // Explicit exclude non-infrastructure products like vacuum cleaners, keypads, intercoms, CCTV, etc.
+  if (
+    sub.includes('שואב') || cat.includes('שואב') || name.includes('שואב') ||
+    sub.includes('קודן') || cat.includes('קודן') || name.includes('קודן') ||
+    sub.includes('אינטרקום') || cat.includes('אינטרקום') ||
+    sub.includes('אזעק') || cat.includes('אזעק') ||
+    sub.includes('שמע') || cat.includes('שמע') ||
+    sub.includes('הגברה') || cat.includes('הגברה') ||
+    cat.includes('ezviz') || cat.includes('hikvision') || cat.includes('polman') || cat.includes('סאונד')
+  ) {
+    return false;
+  }
+
+  // Category must be infrastructure (מחירון תשתיות), or subcategory in infrastructure domain
+  const isInfraCategory = cat.includes('תשתיות') || cat === 'מחירון תשתיות';
+  const isInfraSub = 
+    sub.includes('תשתיות') ||
+    sub.includes('ארונות תקשורת') ||
+    sub.includes('מסדים') ||
+    sub.includes('פסי שקעים') ||
+    sub.includes('ספקי כח') ||
+    sub.includes('ספקי כוח') ||
+    nested.includes('פסי שקעים') ||
+    nested.includes('אביזרים למסד') ||
+    nested.includes('אביזרים לארון') ||
+    nested.includes('מדפים ואביזרים');
+
+  return isInfraCategory || isInfraSub;
+};
+
 const getPhysicalZone = (sku: string, name: string, desc: string): 'roof' | 'plinth' | 'vertical' | 'hardware' => {
   const norm = normalizeSku(sku);
   if (norm && VERIFIED_ZERO_U_EXCEPTIONS[norm]) {
@@ -165,7 +203,9 @@ const buildCatalogAccessories = (
     const normSku = normalizeSku(pp.sku);
     if (!normSku || normSku === productSkuNorm) return;
 
-    // Check if this item is in the accessories domain
+    // Check if this item is in the accessories domain and belongs to Infrastructure pricelist
+    if (!isInfrastructureItem(pp)) return;
+
     const cat = String(pp.category || '');
     const sub = String(pp.subcategory || '');
     const nested = String(pp['Nested subcategory'] || pp.nestedSubcategory || '');
@@ -227,6 +267,8 @@ const buildCatalogAccessories = (
   // Also ensure any items in compatMap that weren't in catalogData are included
   Object.keys(compatMap || {}).forEach(compSku => {
     if (compSku === productSkuNorm || itemsMap.has(compSku)) return;
+    const catProd = catalogMap.get(compSku);
+    if (catProd && !isInfrastructureItem(catProd)) return;
     const isShelf = isAccessoryAShelf(compSku);
     if (isShelf && !inMatrixShelves.has(compSku)) return;
 
@@ -273,6 +315,8 @@ const buildCatalogAccessories = (
     }
 
     if (isCabinetProduct(pp)) return;
+    // Strictly ensure item belongs to Infrastructure domain
+    if (!isInfrastructureItem(pp)) return;
     const nameDesc = `${pp.name || ''} ${pp.description || ''}`.toLowerCase();
     if (/מחלץ|extractor|כלי\b|tool\b/.test(nameDesc)) return;
 
@@ -337,6 +381,108 @@ const usePrefersReducedMotion = (): boolean => {
 const ILLUSTRATION_ACCESSORIES: any[] = [
   { pn: 'NVR', sku: 'ILLUS-NVR', name: 'מקליט NVR', description: 'מקליט וידאו לרשת (להמחשה בלבד)', uSize: 1, price: 0, _illustration: true, image: 'https://drive.google.com/uc?export=view&id=12dVrH0GOzPUdbiVZO8ELDulnnBGUunCN' },
 ];
+
+export interface EnrichedPreviewItem {
+  name: string;
+  sku?: string;
+  description?: string;
+  image?: string;
+  uSize: number;
+  spanU?: number;
+  price?: number;
+  quantity?: number;
+  zone: string;
+  type?: string;
+  optionalIdx?: number;
+  isPreset?: boolean;
+}
+
+const RenderSchematicFallback: React.FC<{ item: EnrichedPreviewItem; isLarge?: boolean }> = ({ item, isLarge }) => {
+  const name = (item.name || '').toLowerCase();
+  const desc = (item.description || '').toLowerCase();
+  const isShelf = name.includes('מדף') || desc.includes('מדף') || name.includes('shelf') || item.type === 'preset-shelf';
+  const isFan = name.includes('מאוורר') || desc.includes('מאוורר') || name.includes('fan') || item.type === 'preset-fan';
+  const isPdu = name.includes('שקע') || desc.includes('שקע') || name.includes('pdu');
+  const isBrush = name.includes('מברשת') || desc.includes('מברשת') || name.includes('brush');
+  const isWheel = name.includes('גלגל') || desc.includes('גלגל') || name.includes('wheel') || name.includes('רגליות');
+
+  if (isShelf) {
+    return (
+      <div className="flex flex-col items-center justify-center p-3 w-full h-full text-center">
+        <svg viewBox="0 0 200 60" className={isLarge ? "w-4/5 max-h-36 drop-shadow-md" : "w-full max-h-20"}>
+          <rect x="5" y="10" width="190" height="40" rx="3" fill="#334155" stroke="#0f172a" strokeWidth="2" />
+          <rect x="15" y="18" width="170" height="24" rx="2" fill="#1e293b" />
+          {Array.from({ length: 8 }).map((_, i) => (
+            <rect key={i} x={25 + i * 20} y="22" width="12" height="16" rx="1.5" fill="#475569" opacity="0.8" />
+          ))}
+          <circle cx="10" cy="20" r="2.5" fill="#94a3b8" />
+          <circle cx="10" cy="40" r="2.5" fill="#94a3b8" />
+          <circle cx="190" cy="20" r="2.5" fill="#94a3b8" />
+          <circle cx="190" cy="40" r="2.5" fill="#94a3b8" />
+        </svg>
+        <span className="text-[11px] text-slate-400 mt-2 font-mono">19" Vented Metal Rack Shelf</span>
+      </div>
+    );
+  }
+
+  if (isFan) {
+    return (
+      <div className="flex flex-col items-center justify-center p-3 w-full h-full text-center">
+        <div className="flex items-center gap-4 text-cyan-400">
+          <span className="text-4xl animate-spin" style={{ animationDuration: '3s' }}>🌀</span>
+          <span className="text-4xl animate-spin" style={{ animationDuration: '3s' }}>🌀</span>
+        </div>
+        <span className="text-[11px] text-cyan-300 mt-3 font-mono">Roof Ventilation & Cooling Fan Unit</span>
+      </div>
+    );
+  }
+
+  if (isPdu) {
+    return (
+      <div className="flex flex-col items-center justify-center p-3 w-full h-full text-center">
+        <div className="w-full max-w-xs bg-red-950 border border-red-700 p-2 flex items-center justify-around rounded shadow">
+          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-lg shadow-red-500/50"></div>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="w-5 h-5 bg-black border border-red-800 flex items-center justify-center text-[7px] text-red-300 font-mono">
+              ::
+            </div>
+          ))}
+          <div className="w-4 h-3 bg-red-600 rounded-sm"></div>
+        </div>
+        <span className="text-[11px] text-red-300 mt-3 font-mono">19" Power Distribution Unit (PDU)</span>
+      </div>
+    );
+  }
+
+  if (isBrush) {
+    return (
+      <div className="flex flex-col items-center justify-center p-3 w-full h-full text-center">
+        <div className="w-full max-w-xs bg-zinc-900 border border-amber-600/70 p-2 rounded">
+          <div className="text-amber-400 font-mono text-[9px] tracking-widest text-center">
+            ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+          </div>
+        </div>
+        <span className="text-[11px] text-amber-300 mt-3 font-mono">1U Cable Brush Management Panel</span>
+      </div>
+    );
+  }
+
+  if (isWheel) {
+    return (
+      <div className="flex flex-col items-center justify-center p-3 w-full h-full text-center">
+        <div className="text-4xl text-emerald-400">🛞</div>
+        <span className="text-[11px] text-emerald-300 mt-2 font-mono">Heavy Duty Castor Wheels / Feet</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center p-3 w-full h-full text-center text-slate-400">
+      <Box size={isLarge ? 48 : 28} className="text-slate-500 mb-2" />
+      <span className="text-[11px] font-mono">אביזר ארון תקשורת 19 אינץ'</span>
+    </div>
+  );
+};
 
 interface CabinetConfiguratorProps {
   product: any;
@@ -523,7 +669,24 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [highlightedOptIdx, setHighlightedOptIdx] = useState<number | null>(null);
   const [lastAddedInstanceId, setLastAddedInstanceId] = useState<string | null>(null);
   const [zoomMode, setZoomMode] = useState(false);
+  const [hoveredProduct, setHoveredProduct] = useState<EnrichedPreviewItem | null>(null);
+  const [inspectedProduct, setInspectedProduct] = useState<EnrichedPreviewItem | null>(null);
+  const [modalZoomLevel, setModalZoomLevel] = useState<number>(1);
   const prefersReducedMotion = usePrefersReducedMotion();
+
+  // Close inspection modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setInspectedProduct(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Reset modal zoom level when inspected item changes
+  useEffect(() => {
+    setModalZoomLevel(1);
+  }, [inspectedProduct]);
 
   const [a11yMessage, setA11yMessage] = useState<string>('');
   const [highlightedSku, setHighlightedSku] = useState<string | null>(null);
@@ -894,6 +1057,92 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     optionalIdx?: number;
   }
 
+  const getAccessoryImage = (acc: any): string => {
+    if (!acc) return '';
+    if (acc.image && typeof acc.image === 'string' && acc.image.trim() !== '') {
+      return acc.image;
+    }
+    if (acc.accessoryRef?.image && typeof acc.accessoryRef.image === 'string' && acc.accessoryRef.image.trim() !== '') {
+      return acc.accessoryRef.image;
+    }
+    const targetSku = normalizeSku(acc.sku || acc.pn || acc.accessoryRef?.sku || acc.accessoryRef?.pn || '');
+    if (targetSku && catalogData && Array.isArray(catalogData)) {
+      const found = catalogData.find((p: any) => normalizeSku(p.sku) === targetSku);
+      if (found) {
+        if (found.images && Array.isArray(found.images) && found.images[0]) {
+          return found.images[0];
+        }
+        if (found.imageURL) return found.imageURL;
+      }
+    }
+    if ((acc.type === 'preset-shelf' || acc.isShelf) && cabinetData?.suitableStandard?.length) {
+      const stdSku = normalizeSku(cabinetData.suitableStandard[0]);
+      const foundShelf = catalogData?.find((p: any) => normalizeSku(p.sku) === stdSku);
+      if (foundShelf?.images?.[0]) return foundShelf.images[0];
+      if (foundShelf?.imageURL) return foundShelf.imageURL;
+    }
+    return '';
+  };
+
+  const buildPreviewFromSlot = (slot: VisualSlot): EnrichedPreviewItem => {
+    const isPreset = slot.type.startsWith('preset-');
+    const acc = slot.accessoryRef || {};
+    const sku = acc.sku || acc.pn || (isPreset ? 'כלול בארון' : '');
+    const name = slot.name || acc.name || (isPreset ? 'ציוד מובנה' : 'ציוד בארון');
+    const description = slot.description || acc.description || '';
+    const spanU = slot.spanU || acc.uSize || 1;
+    const uSize = slot.type === 'empty' ? 0 : spanU;
+    const image = getAccessoryImage(acc) || (isPreset ? getAccessoryImage({ isShelf: slot.type === 'preset-shelf' }) : '');
+    const price = acc.price || 0;
+    const quantity = acc.quantity || 1;
+    const zone = `מסילות U חזיתיות (U${slot.uIndex}${spanU > 1 ? ` - U${slot.uIndex - spanU + 1}` : ''})`;
+
+    return {
+      name,
+      sku,
+      description,
+      image,
+      uSize,
+      spanU,
+      price,
+      quantity,
+      zone,
+      type: slot.type,
+      optionalIdx: slot.optionalIdx,
+      isPreset,
+    };
+  };
+
+  const buildPreviewFromNonU = (item: any, zoneType: 'roof' | 'vertical' | 'plinth' | 'hardware'): EnrichedPreviewItem => {
+    const acc = item.accessoryRef || item;
+    const sku = acc.sku || acc.pn || item.sku || '';
+    const name = item.name || acc.name || item.description || '';
+    const description = item.description || acc.description || '';
+    const image = getAccessoryImage(acc) || getAccessoryImage(item);
+    const price = acc.price || item.price || 0;
+    const quantity = item.quantity || 1;
+    const zoneMap: Record<string, string> = {
+      roof: 'תקרת הארון (Roof) · איוורור ותאורה',
+      vertical: 'דופן ורטיקלית וצדית (Vertical Rails)',
+      plinth: 'בסיס ותחתית הארון (Plinth / Base)',
+      hardware: 'חומרת הרכבה וציוד נלווה (Hardware)',
+    };
+
+    return {
+      name,
+      sku,
+      description,
+      image,
+      uSize: 0,
+      price,
+      quantity,
+      zone: zoneMap[zoneType] || 'אביזר נלווה (0U)',
+      type: 'optional-accessory',
+      optionalIdx: item.optionalIdx,
+      isPreset: false,
+    };
+  };
+
 
 
 
@@ -1069,9 +1318,80 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             </div>
           </div>
 
+          {/* Quick Tip for Image Magnification */}
+          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-800 text-[11px] px-2.5 py-1.5 flex items-center justify-between gap-2 rounded-none font-medium">
+            <span className="flex items-center gap-1.5">
+              <ZoomIn size={14} className="text-amber-600 shrink-0" />
+              <span>הצבע בעכבר או גע במסך על מוצר בארון להגדלת התמונה והפרטים</span>
+            </span>
+            <span className="text-[10px] bg-amber-200/70 text-amber-900 font-mono px-1.5 py-0.5 rounded shrink-0">
+              תקריב פעיל
+            </span>
+          </div>
+
           {/* Visual Rack Container */}
           <div className={`relative border-4 bg-slate-950 p-2 sm:p-3 shadow-2xl flex flex-col flex-1 min-h-[440px] max-h-[calc(100vh-6rem)] overflow-hidden transition-all duration-300 ${chassisPulse ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-slate-700'}`}>
             
+            {/* Floating Magnifier HUD (Desktop Hover) */}
+            <AnimatePresence>
+              {hoveredProduct && !inspectedProduct && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.12 } }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute top-2 left-2 z-40 w-52 sm:w-60 bg-slate-900/95 backdrop-blur-md border-2 border-amber-400 text-white p-2.5 shadow-2xl rounded-none pointer-events-none"
+                >
+                  <div className="flex items-center justify-between gap-1 pb-1 mb-1.5 border-b border-slate-700">
+                    <span className="text-[10px] font-bold tracking-wider text-amber-400 flex items-center gap-1">
+                      <ZoomIn size={12} /> תקריב מוצר
+                    </span>
+                    {hoveredProduct.uSize > 0 ? (
+                      <span className="text-[9px] font-mono font-bold bg-amber-400/20 text-amber-300 px-1.5 py-0.5 rounded">
+                        {hoveredProduct.uSize}U
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold bg-indigo-900/80 text-indigo-200 px-1.5 py-0.5 rounded">
+                        0U
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Enlarged Image Container */}
+                  <div className="w-full h-32 sm:h-36 bg-white rounded-none border border-slate-700/60 overflow-hidden flex items-center justify-center p-1.5 mb-1.5 relative shadow-inner">
+                    {hoveredProduct.image ? (
+                      <img
+                        referrerPolicy="no-referrer"
+                        src={hoveredProduct.image}
+                        alt={hoveredProduct.name}
+                        className="w-full h-full object-contain filter drop-shadow-sm"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    ) : (
+                      <RenderSchematicFallback item={hoveredProduct} />
+                    )}
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <div className="text-[11px] font-bold text-slate-100 line-clamp-2 leading-tight">
+                      {hoveredProduct.name}
+                    </div>
+                    {hoveredProduct.sku && (
+                      <div className="text-[9.5px] font-mono text-slate-400 flex items-center justify-between">
+                        <span>מק"ט: {hoveredProduct.sku}</span>
+                        {hoveredProduct.price ? (
+                          <span className="text-amber-300 font-bold">₪{hoveredProduct.price.toLocaleString('he-IL')}</span>
+                        ) : null}
+                      </div>
+                    )}
+                    <div className="text-[9px] text-amber-300/90 font-medium pt-1 border-t border-slate-800 flex items-center justify-center gap-1">
+                      <span>👆 לחץ/גע להגדלה מלאה ופרטים</span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Simulated Glass Door Gloss Effect */}
             <div className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-white/5 to-transparent pointer-events-none z-10 select-none"></div>
             
@@ -1092,15 +1412,28 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             {roofItems.length > 0 && (
               <div className="mx-3 mb-1 rounded-none border border-cyan-500/70 bg-gradient-to-r from-cyan-950/80 via-slate-900 to-cyan-950/80 px-2.5 py-1.5 flex-shrink-0">
                 <div className="text-[9px] font-black tracking-widest text-cyan-300/90 uppercase text-center mb-1 select-none">◄ תקרת הארון (Roof) · איוורור ותאורה ►</div>
-                {roofItems.map((r, i) => (
-                  <div key={i} className="flex items-center justify-between text-cyan-100 text-[11px] py-0.5">
-                    <span className="flex items-center gap-1.5 truncate">
-                      <span className="inline-block animate-spin text-cyan-300" style={{ animationDuration: '4s' }}>🌀</span>
-                      <span className="truncate">{r.description || r.name}</span>
-                    </span>
-                    <span className="font-mono font-bold bg-cyan-900/60 px-1.5 rounded text-[10px] shrink-0 mr-1">{r.quantity}x</span>
-                  </div>
-                ))}
+                {roofItems.map((r, i) => {
+                  const preview = buildPreviewFromNonU(r, 'roof');
+                  return (
+                    <div 
+                      key={i} 
+                      className="flex items-center justify-between text-cyan-100 text-[11px] py-0.5 hover:bg-cyan-900/40 px-1 rounded cursor-pointer transition-colors group"
+                      onMouseEnter={() => setHoveredProduct(preview)}
+                      onMouseLeave={() => setHoveredProduct(null)}
+                      onClick={() => setInspectedProduct(preview)}
+                      title="לחץ להגדלת תמונה ופרטים"
+                    >
+                      <span className="flex items-center gap-1.5 truncate">
+                        <span className="inline-block animate-spin text-cyan-300" style={{ animationDuration: '4s' }}>🌀</span>
+                        <span className="truncate">{r.description || r.name}</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-cyan-400 group-hover:text-amber-300 transition-colors p-0.5"><ZoomIn size={12} /></span>
+                        <span className="font-mono font-bold bg-cyan-900/60 px-1.5 rounded text-[10px] shrink-0 mr-1">{r.quantity}x</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -1153,6 +1486,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 const isHighlighted = isNewlyAdded || (typeof slot.optionalIdx === 'number' && highlightedOptIdx === slot.optionalIdx);
 
                 const slotKey = slot.instanceId || `slot-${slot.type}-${slot.uIndex}`;
+                const isClickableProduct = !isEmpty;
+                const slotPreview = isClickableProduct ? buildPreviewFromSlot(slot) : null;
 
                 return (
                   <motion.div 
@@ -1168,19 +1503,25 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     transition={{ duration: 0.2, ease: 'easeOut' }}
                     style={zoomMode ? { minHeight: `${spanU * 48}px` } : { flex: `${spanU} ${spanU} 0px` }}
                     className={`group text-xs flex items-center justify-between transition-colors duration-150 border relative overflow-hidden ${slotStyles} ${isHighlighted ? 'ring-2 ring-amber-400 border-amber-400 z-30' : ''}`}
+                    onMouseEnter={() => {
+                      if (slotPreview) setHoveredProduct(slotPreview);
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredProduct(null);
+                    }}
                     onClick={() => {
                       if (isEmpty) {
                         const el = document.getElementById('com-accessories-list');
                         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      } else if (isOptional && slot.accessoryRef?.pn) {
-                        setHighlightedSku(slot.accessoryRef.pn);
-                        const el = document.getElementById(`acc-${slot.accessoryRef.pn}`);
-                        if (el) {
-                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      } else if (slotPreview) {
+                        setInspectedProduct(slotPreview);
+                        if (isOptional && slot.accessoryRef?.pn) {
+                          setHighlightedSku(slot.accessoryRef.pn);
+                          setTimeout(() => setHighlightedSku(null), 2000);
                         }
-                        setTimeout(() => setHighlightedSku(null), 2000);
                       }
                     }}
+                    title={isClickableProduct ? "לחץ או גע להגדלת תמונה ופרטים" : "חריץ פנוי בארון"}
                   >
                     {/* Position indicator */}
                     <div className={`font-mono font-bold text-[10px] tabular-nums bg-slate-800/90 text-slate-300 flex flex-col items-center justify-center rounded border border-slate-700/50 flex-shrink-0 relative z-20 ${isMerged ? 'w-11 py-0.5' : 'w-8 h-4 sm:h-5'}`}>
@@ -1261,6 +1602,20 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
                     {/* Action buttons inside interactive slots */}
                     <div className="flex items-center gap-1 relative z-20 flex-shrink-0">
+                      {isClickableProduct && (
+                        <button
+                          type="button"
+                          title="הגדל תמונה ופרטי מוצר"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (slotPreview) setInspectedProduct(slotPreview);
+                          }}
+                          className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-amber-300 transition-colors cursor-pointer"
+                        >
+                          <ZoomIn size={12} />
+                        </button>
+                      )}
+
                       {isOptional && typeof slot.optionalIdx === 'number' && (
                         <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-700 px-1 py-0.5 rounded opacity-90 group-hover:opacity-100 transition-opacity">
                           <button 
@@ -1314,16 +1669,29 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     ◄ דופן ורטיקלית וצדית (Vertical Rails) ►
                   </div>
                   <div className="space-y-0.5 max-h-[80px] overflow-y-auto custom-scrollbar">
-                    {verticalItems.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-[10px] text-slate-200">
-                        <span className="truncate pr-1">⚡ {item.name || item.description}</span>
-                        <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded shrink-0">
-                          <button type="button" onClick={() => handleIncrementQuantity(item.optionalIdx)} className="text-amber-300 hover:bg-slate-800 p-0.5 cursor-pointer"><Plus size={9} /></button>
-                          <span className="font-mono text-amber-400 font-bold text-[9px]">{item.quantity}x</span>
-                          <button type="button" onClick={() => handleRemoveOptional(item.optionalIdx)} className="text-red-400 hover:bg-slate-800 p-0.5 cursor-pointer"><Minus size={9} /></button>
+                    {verticalItems.map((item, i) => {
+                      const preview = buildPreviewFromNonU(item, 'vertical');
+                      return (
+                        <div 
+                          key={i} 
+                          className="flex items-center justify-between text-[10px] text-slate-200 hover:bg-indigo-900/50 p-0.5 rounded cursor-pointer transition-colors group"
+                          onMouseEnter={() => setHoveredProduct(preview)}
+                          onMouseLeave={() => setHoveredProduct(null)}
+                          onClick={() => setInspectedProduct(preview)}
+                          title="לחץ להגדלת תמונה ופרטים"
+                        >
+                          <span className="truncate pr-1">⚡ {item.name || item.description}</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-indigo-400 group-hover:text-amber-300 transition-colors p-0.5"><ZoomIn size={11} /></span>
+                            <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded" onClick={(e) => e.stopPropagation()}>
+                              <button type="button" onClick={() => handleIncrementQuantity(item.optionalIdx)} className="text-amber-300 hover:bg-slate-800 p-0.5 cursor-pointer"><Plus size={9} /></button>
+                              <span className="font-mono text-amber-400 font-bold text-[9px]">{item.quantity}x</span>
+                              <button type="button" onClick={() => handleRemoveOptional(item.optionalIdx)} className="text-red-400 hover:bg-slate-800 p-0.5 cursor-pointer"><Minus size={9} /></button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1335,16 +1703,29 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     ◄ בסיס ותחתית הארון (Plinth / Base) ►
                   </div>
                   <div className="space-y-0.5 max-h-[80px] overflow-y-auto custom-scrollbar">
-                    {plinthItems.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-[10px] text-slate-200">
-                        <span className="truncate pr-1">🛞 {item.name || item.description}</span>
-                        <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded shrink-0">
-                          <button type="button" onClick={() => handleIncrementQuantity(item.optionalIdx)} className="text-amber-300 hover:bg-slate-800 p-0.5 cursor-pointer"><Plus size={9} /></button>
-                          <span className="font-mono text-amber-400 font-bold text-[9px]">{item.quantity}x</span>
-                          <button type="button" onClick={() => handleRemoveOptional(item.optionalIdx)} className="text-red-400 hover:bg-slate-800 p-0.5 cursor-pointer"><Minus size={9} /></button>
+                    {plinthItems.map((item, i) => {
+                      const preview = buildPreviewFromNonU(item, 'plinth');
+                      return (
+                        <div 
+                          key={i} 
+                          className="flex items-center justify-between text-[10px] text-slate-200 hover:bg-emerald-900/50 p-0.5 rounded cursor-pointer transition-colors group"
+                          onMouseEnter={() => setHoveredProduct(preview)}
+                          onMouseLeave={() => setHoveredProduct(null)}
+                          onClick={() => setInspectedProduct(preview)}
+                          title="לחץ להגדלת תמונה ופרטים"
+                        >
+                          <span className="truncate pr-1">🛞 {item.name || item.description}</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-emerald-400 group-hover:text-amber-300 transition-colors p-0.5"><ZoomIn size={11} /></span>
+                            <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded" onClick={(e) => e.stopPropagation()}>
+                              <button type="button" onClick={() => handleIncrementQuantity(item.optionalIdx)} className="text-amber-300 hover:bg-slate-800 p-0.5 cursor-pointer"><Plus size={9} /></button>
+                              <span className="font-mono text-amber-400 font-bold text-[9px]">{item.quantity}x</span>
+                              <button type="button" onClick={() => handleRemoveOptional(item.optionalIdx)} className="text-red-400 hover:bg-slate-800 p-0.5 cursor-pointer"><Minus size={9} /></button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1356,16 +1737,29 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     ◄ חומרת הרכבה וציוד נלווה (Hardware) ►
                   </div>
                   <div className="space-y-0.5 max-h-[80px] overflow-y-auto custom-scrollbar">
-                    {hardwareItems.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-[10px] text-slate-200">
-                        <span className="truncate pr-1">🔩 {item.name || item.description}</span>
-                        <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded shrink-0">
-                          <button type="button" onClick={() => handleIncrementQuantity(item.optionalIdx)} className="text-amber-300 hover:bg-slate-800 p-0.5 cursor-pointer"><Plus size={9} /></button>
-                          <span className="font-mono text-amber-400 font-bold text-[9px]">{item.quantity}x</span>
-                          <button type="button" onClick={() => handleRemoveOptional(item.optionalIdx)} className="text-red-400 hover:bg-slate-800 p-0.5 cursor-pointer"><Minus size={9} /></button>
+                    {hardwareItems.map((item, i) => {
+                      const preview = buildPreviewFromNonU(item, 'hardware');
+                      return (
+                        <div 
+                          key={i} 
+                          className="flex items-center justify-between text-[10px] text-slate-200 hover:bg-amber-900/50 p-0.5 rounded cursor-pointer transition-colors group"
+                          onMouseEnter={() => setHoveredProduct(preview)}
+                          onMouseLeave={() => setHoveredProduct(null)}
+                          onClick={() => setInspectedProduct(preview)}
+                          title="לחץ להגדלת תמונה ופרטים"
+                        >
+                          <span className="truncate pr-1">🔩 {item.name || item.description}</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-amber-400 group-hover:text-amber-200 transition-colors p-0.5"><ZoomIn size={11} /></span>
+                            <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded" onClick={(e) => e.stopPropagation()}>
+                              <button type="button" onClick={() => handleIncrementQuantity(item.optionalIdx)} className="text-amber-300 hover:bg-slate-800 p-0.5 cursor-pointer"><Plus size={9} /></button>
+                              <span className="font-mono text-amber-400 font-bold text-[9px]">{item.quantity}x</span>
+                              <button type="button" onClick={() => handleRemoveOptional(item.optionalIdx)} className="text-red-400 hover:bg-slate-800 p-0.5 cursor-pointer"><Minus size={9} /></button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1421,8 +1815,23 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             
             {selectedOptionals.length > 0 ? (
               <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto pr-1">
-                <AnimatePresence initial={false}>
-                 {selectedOptionals.map((item, idx) => (
+                 <AnimatePresence initial={false}>
+                 {selectedOptionals.map((item, idx) => {
+                   const optPreview: EnrichedPreviewItem = {
+                     name: item.name || item.description || item.pn,
+                     sku: item.pn || item.sku || '',
+                     description: item.description || '',
+                     image: item.image || getAccessoryImage(item),
+                     uSize: item.uSize || 0,
+                     price: item.price || 0,
+                     quantity: item.quantity || 1,
+                     zone: item.uSize > 0 ? `תופס ${item.uSize * item.quantity}U בארון` : 'אביזר נלווה (0U)',
+                     type: 'optional-accessory',
+                     optionalIdx: idx,
+                     isPreset: false,
+                   };
+
+                   return (
                    <motion.div 
                     key={item.sku || item.pn || item.id} 
                     id={`selected-opt-${idx}`}
@@ -1430,25 +1839,63 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     initial={prefersReducedMotion ? false : { opacity: 0, y: -6 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
+                    onMouseEnter={() => setHoveredProduct(optPreview)}
+                    onMouseLeave={() => setHoveredProduct(null)}
                     onClick={() => {
-                      // Highlight in chassis
+                      // Highlight in chassis and open preview modal
                       setHighlightedOptIdx(idx);
+                      setInspectedProduct(optPreview);
                       setTimeout(() => setHighlightedOptIdx(null), 2000);
                     }}
-                    className={`flex flex-col bg-white border p-3 rounded-none text-sm font-medium shadow-sm transition-all cursor-pointer ${highlightedOptIdx === idx ? 'border-amber-500 ring-2 ring-amber-500/50 bg-amber-50/30' : 'border-[#b3d4f5] hover:border-[#004387]'}`}
+                    className={`flex flex-col bg-white border p-3 rounded-none text-sm font-medium shadow-sm transition-all cursor-pointer group ${highlightedOptIdx === idx ? 'border-amber-500 ring-2 ring-amber-500/50 bg-amber-50/30' : 'border-[#b3d4f5] hover:border-[#004387]'}`}
+                    title="לחץ או גע להגדלת תמונת המוצר ומפרט מלא"
                    >
                      <div className="flex items-start justify-between gap-2">
                        <div className="flex items-center gap-2 overflow-hidden">
-                         {item.image && (
-                           <img referrerPolicy="no-referrer" src={item.image} alt="" className="w-8 h-8 object-contain bg-white border border-slate-100 rounded" />
-                         )}
-                         <span className="text-gray-800 font-bold leading-tight truncate inline-block" dir="ltr">
-                            {item.pn}
+                         <div 
+                           className="relative w-8 h-8 flex-shrink-0 bg-white border border-slate-200 rounded overflow-hidden cursor-pointer hover:ring-2 hover:ring-[#004387] transition-all"
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             setInspectedProduct(optPreview);
+                           }}
+                           title="הגדל תמונה"
+                         >
+                           {optPreview.image ? (
+                             <img referrerPolicy="no-referrer" src={optPreview.image} alt="" className="w-full h-full object-contain p-0.5" />
+                           ) : (
+                             <div className="w-full h-full flex items-center justify-center text-slate-400"><Box size={14} /></div>
+                           )}
+                           <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                             <ZoomIn size={12} />
+                           </div>
+                         </div>
+                         <div className="min-w-0">
+                           <span className="text-gray-800 font-bold leading-tight truncate inline-block" dir="ltr">
+                              {item.pn}
+                           </span>
+                           {item.name && item.name !== item.pn && (
+                             <div className="text-[11px] text-slate-500 truncate leading-none mt-0.5">
+                               {item.name}
+                             </div>
+                           )}
+                         </div>
+                       </div>
+                       <div className="flex items-center gap-1.5 shrink-0">
+                         <button
+                           type="button"
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             setInspectedProduct(optPreview);
+                           }}
+                           className="text-slate-400 hover:text-[#004387] p-1 rounded hover:bg-slate-100 transition-colors"
+                           title="תקריב מוצר"
+                         >
+                           <ZoomIn size={14} />
+                         </button>
+                         <span className="text-xs text-[#004387] font-bold bg-[#e6f0fa] px-2 py-0.5 rounded-none font-mono whitespace-nowrap">
+                           ₪{((item.price || 0) * item.quantity).toLocaleString('he-IL', { minimumFractionDigits: 2 })}
                          </span>
                        </div>
-                       <span className="text-xs text-[#004387] font-bold bg-[#e6f0fa] px-2 py-0.5 rounded-none font-mono whitespace-nowrap shrink-0">
-                         ₪{((item.price || 0) * item.quantity).toLocaleString('he-IL', { minimumFractionDigits: 2 })}
-                       </span>
                      </div>
                      
                      <p className="text-gray-500 text-xs mt-1.5 line-clamp-2 leading-relaxed font-normal">
@@ -1459,8 +1906,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                      )}
 
                      <div className="flex items-center justify-between border-t border-gray-100 mt-2.5 pt-2">
-                       <span className="text-[11px] font-mono font-medium text-slate-400">
-                         {item.uSize > 0 ? `תופס: ${item.uSize * item.quantity}U מתוך הארון` : 'ללא נפח בארון'}
+                       <span className="text-[11px] font-mono font-medium text-slate-400 flex items-center gap-1">
+                         <span>{item.uSize > 0 ? `תופס: ${item.uSize * item.quantity}U מתוך הארון` : 'ללא נפח בארון'}</span>
+                         <span className="text-amber-600 text-[10px] font-bold">• לחץ להגדלה</span>
                        </span>
                        
                        <div className="flex bg-slate-50 border border-slate-200 rounded-none overflow-hidden h-7">
@@ -1494,7 +1942,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                        </div>
                      </div>
                    </motion.div>
-                 ))}
+                  );
+                })}
                 </AnimatePresence>
               </div>
             ) : (
@@ -1763,6 +2212,225 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         </div>
       </div>
       )}
+
+      {/* Product Image Inspection Modal */}
+      <AnimatePresence>
+        {inspectedProduct && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3 sm:p-6 overflow-y-auto"
+            onClick={() => setInspectedProduct(null)}
+            dir="rtl"
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0, y: 16 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.94, opacity: 0, y: 16 }}
+              transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-2xl bg-white border-2 border-[#004387] shadow-2xl overflow-hidden flex flex-col my-auto"
+            >
+              {/* Modal Header */}
+              <div className="bg-[#004387] text-white px-4 py-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="p-1.5 bg-white/10 rounded">
+                    <Maximize2 size={18} className="text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold leading-tight truncate">
+                      תקריב מוצר: {inspectedProduct.name}
+                    </h3>
+                    <p className="text-[11px] text-white/80 font-mono">
+                      {inspectedProduct.zone} {inspectedProduct.sku ? `· מק"ט: ${inspectedProduct.sku}` : ''}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Zoom controls */}
+                  <div className="flex items-center bg-white/10 rounded border border-white/20 p-0.5" dir="ltr">
+                    <button
+                      type="button"
+                      onClick={() => setModalZoomLevel((z) => Math.max(0.75, +(z - 0.25).toFixed(2)))}
+                      className="px-2 py-0.5 text-xs hover:bg-white/20 rounded font-mono font-bold transition-colors cursor-pointer"
+                      title="הקטן תקריב"
+                    >
+                      -
+                    </button>
+                    <span className="px-1.5 text-[11px] font-mono font-semibold min-w-[42px] text-center">
+                      {Math.round(modalZoomLevel * 100)}%
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setModalZoomLevel((z) => Math.min(2.5, +(z + 0.25).toFixed(2)))}
+                      className="px-2 py-0.5 text-xs hover:bg-white/20 rounded font-mono font-bold transition-colors cursor-pointer"
+                      title="הגדל תקריב"
+                    >
+                      +
+                    </button>
+                    {modalZoomLevel !== 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setModalZoomLevel(1)}
+                        className="px-1.5 text-[10px] text-amber-300 hover:text-white underline cursor-pointer"
+                      >
+                        איפוס
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Close button */}
+                  <button
+                    type="button"
+                    onClick={() => setInspectedProduct(null)}
+                    className="p-1.5 rounded bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                    title="סגור (Esc)"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Main Image Stage */}
+              <div className="relative w-full h-72 sm:h-96 bg-gradient-to-b from-slate-100 to-slate-200 border-b border-slate-200 overflow-hidden flex items-center justify-center p-4 select-none">
+                {/* Subtle checkered pattern to emphasize transparency */}
+                <div 
+                  className="absolute inset-0 opacity-15 pointer-events-none"
+                  style={{
+                    backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)',
+                    backgroundSize: '16px 16px',
+                  }}
+                />
+
+                <motion.div
+                  animate={{ scale: modalZoomLevel }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+                  className="w-full h-full flex items-center justify-center relative z-10"
+                >
+                  {inspectedProduct.image ? (
+                    <img
+                      referrerPolicy="no-referrer"
+                      src={inspectedProduct.image}
+                      alt={inspectedProduct.name}
+                      className="max-w-full max-h-full object-contain filter drop-shadow-xl transition-all"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center p-6">
+                      <RenderSchematicFallback item={inspectedProduct} />
+                    </div>
+                  )}
+                </motion.div>
+
+                {/* Badge on bottom right of image */}
+                <div className="absolute bottom-3 right-3 z-20 bg-slate-900/85 backdrop-blur-sm text-white px-2.5 py-1 rounded text-xs font-mono font-medium flex items-center gap-2 border border-slate-700">
+                  <Eye size={13} className="text-amber-400" />
+                  <span>{inspectedProduct.uSize > 0 ? `${inspectedProduct.uSize}U חזיתי` : 'אביזר נלווה (0U)'}</span>
+                  {inspectedProduct.isPreset && (
+                    <span className="text-emerald-400 font-bold border-r border-slate-700 pr-2">ציוד מובנה</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Product Specifications & Details */}
+              <div className="p-4 sm:p-5 bg-white space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div>
+                    <h4 className="text-lg font-bold text-slate-900 leading-tight">
+                      {inspectedProduct.name}
+                    </h4>
+                    {inspectedProduct.sku && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-slate-500 font-mono bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                          מק"ט: {inspectedProduct.sku}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          מיקום: <strong className="text-slate-700">{inspectedProduct.zone}</strong>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {inspectedProduct.price ? (
+                    <div className="text-left shrink-0">
+                      <div className="text-xs text-slate-400 font-medium">מחיר יחידה (לפני מע"מ)</div>
+                      <div className="text-lg font-bold text-[#004387] font-mono">
+                        ₪{inspectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                {inspectedProduct.description && (
+                  <p className="text-sm text-slate-600 leading-relaxed bg-slate-50 p-3 rounded border border-slate-100">
+                    {inspectedProduct.description}
+                  </p>
+                )}
+
+                {/* Interactive Configurator Actions */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  {typeof inspectedProduct.optionalIdx === 'number' ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-700">כמות מוגדרת בארון:</span>
+                      <div className="flex items-center border border-slate-300 rounded bg-slate-50">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof inspectedProduct.optionalIdx === 'number') {
+                              handleIncrementQuantity(inspectedProduct.optionalIdx);
+                              setInspectedProduct((prev) => prev ? { ...prev, quantity: prev.quantity + 1 } : null);
+                            }
+                          }}
+                          className="px-2.5 py-1 text-slate-700 hover:bg-slate-200 transition-colors font-bold text-sm"
+                          title="הוסף יחידה"
+                        >
+                          +
+                        </button>
+                        <span className="px-3 py-1 font-mono font-bold text-xs bg-white border-x border-slate-200">
+                          {inspectedProduct.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof inspectedProduct.optionalIdx === 'number') {
+                              handleRemoveOptional(inspectedProduct.optionalIdx);
+                              if (inspectedProduct.quantity <= 1) {
+                                setInspectedProduct(null);
+                              } else {
+                                setInspectedProduct((prev) => prev ? { ...prev, quantity: prev.quantity - 1 } : null);
+                              }
+                            }
+                          }}
+                          className="px-2.5 py-1 text-rose-600 hover:bg-rose-50 transition-colors font-bold text-sm"
+                          title="הפחת יחידה"
+                        >
+                          -
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-500">
+                      {inspectedProduct.isPreset ? '✓ פריט זה מותקן בארון כחלק מהתצורה הסטנדרטית' : 'פריט בהמחשה חזותית'}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInspectedProduct(null)}
+                      className="px-4 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition-colors cursor-pointer"
+                    >
+                      סגור תצוגה
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
