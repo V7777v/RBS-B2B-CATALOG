@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Product3DInstance, NonU3DItem } from './Cabinet3DTypes';
 import { U_HEIGHT_UNITS, RACK_19_WIDTH_UNITS, USABLE_OPENING_WIDTH } from './CabinetModelBuilder';
 import { lookup3DAsset, Product3DAssetDef } from './Product3DAssets';
+import { transformImageLink } from '../../utils/cabinetData';
 
 /**
  * Creates equipment 3D mesh representation based on product type, dimensions, and SKU asset mapping
@@ -18,7 +19,8 @@ export function buildProduct3DMesh(
     accentMat: THREE.Material;
     ledMat: THREE.Material;
     includedShelfMat: THREE.Material;
-  }
+  },
+  onTextureLoaded?: () => void
 ): THREE.Group {
   const group = new THREE.Group();
   group.name = `product-mesh-${item.instanceId}`;
@@ -271,6 +273,77 @@ export function buildProduct3DMesh(
       const led = new THREE.Mesh(ledGeom, materials.ledMat);
       led.position.set(-1.6 + l * 0.10, spanHeight * 0.18, 0.035);
       group.add(led);
+    }
+  }
+
+  // 5. REAL PRODUCT IMAGE INTEGRATION
+  // Prefer dedicated front face texture from asset registry; fallback to catalog image
+  const rawImage = assetDef?.frontTextureUrl || (item.image ? String(item.image).split(/[,;]+/)[0].trim() : '');
+  if (rawImage) {
+    const imageUrl = transformImageLink(rawImage, 800);
+    if (imageUrl) {
+      const loader = new THREE.TextureLoader();
+      loader.setCrossOrigin('anonymous');
+      loader.load(
+        imageUrl,
+        (texture) => {
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.minFilter = THREE.LinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+
+          const imgW = texture.image?.naturalWidth || texture.image?.width || 1;
+          const imgH = texture.image?.naturalHeight || texture.image?.height || 1;
+          const imgAspect = Math.max(0.1, imgW / imgH);
+
+          if (assetDef?.frontTextureUrl) {
+            // High-fidelity orthographic front panel texture
+            const frontGeom = new THREE.PlaneGeometry(USABLE_OPENING_WIDTH * 0.98, spanHeight * 0.95);
+            const frontMat = new THREE.MeshStandardMaterial({
+              map: texture,
+              roughness: 0.35,
+              metalness: 0.2,
+              toneMapped: true,
+            });
+            const frontMesh = new THREE.Mesh(frontGeom, frontMat);
+            frontMesh.position.set(0, 0, 0.04);
+            group.add(frontMesh);
+          } else {
+            // Real catalog photo: displayed on a dedicated front presentation surface
+            // Strictly preserves original aspect ratio without distortion or cropping
+            const maxW = USABLE_OPENING_WIDTH * 0.88;
+            const maxH = spanHeight * 0.84;
+            let planeW = maxW;
+            let planeH = maxW / imgAspect;
+            if (planeH > maxH) {
+              planeH = maxH;
+              planeW = maxH * imgAspect;
+            }
+
+            // Clean dark bezel backing to seamlessly blend into 19" chassis face
+            const bezelGeom = new THREE.BoxGeometry(planeW + 0.04, planeH + 0.02, 0.01);
+            const bezelMesh = new THREE.Mesh(bezelGeom, materials.panelMat);
+            bezelMesh.position.set(0, 0, 0.032);
+            group.add(bezelMesh);
+
+            // Aspect-ratio-accurate textured plane
+            const photoGeom = new THREE.PlaneGeometry(planeW, planeH);
+            const photoMat = new THREE.MeshBasicMaterial({
+              map: texture,
+              toneMapped: true,
+            });
+            const photoMesh = new THREE.Mesh(photoGeom, photoMat);
+            photoMesh.position.set(0, 0, 0.042);
+            group.add(photoMesh);
+          }
+
+          if (onTextureLoaded) onTextureLoaded();
+        },
+        undefined,
+        (err) => {
+          // Graceful fallback: procedural mesh (LEDs, dials, port blocks, vents) remains fully functional
+          console.warn(`[Product3D] Fallback procedural mesh used for ${item.sku}:`, err);
+        }
+      );
     }
   }
 

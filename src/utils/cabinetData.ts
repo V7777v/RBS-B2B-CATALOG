@@ -171,13 +171,170 @@ export const isProductShelf = (
     const sub = String(prod.subcategory || prod['קטגוריה'] || '').toLowerCase();
     const nested = String(prod.nestedSubcategory || prod['תת קטגוריה'] || prod['Nested subcategory'] || '').toLowerCase();
 
+    // Prevent non-shelf equipment (amplifiers, UPS, switches, PDUs, etc.) from accidental classification
+    const isExplicitNonShelf = /מגבר|amplifier|מתג|switch|נתב|router|אל פסק|ups|pdu|פס שקע|פאנל|panel|מברשת|brush|מאוורר|fan|גלגל|wheel|רגלית|feet|בורג|screw|תושבת/i.test(name);
+    if (isExplicitNonShelf) return false;
+
     if (/מדף|shelf|מגירה|drawer/i.test(name)) return true;
-    if (/מדף|shelf|מגירה|drawer/i.test(desc)) return true;
     if (nested.includes('מדפ') || sub.includes('מדפ')) return true;
+    // Strict description check: only if explicitly beginning or titled as shelf
+    if (/^\s*(מדף|מגירה|shelf|drawer)\b/i.test(desc)) return true;
   }
 
   return false;
 };
+
+export const transformImageLink = (url: string, size: number = 600): string => {
+  if (!url) return '';
+  try {
+    const trimmedUrl = url.trim();
+    if (trimmedUrl.includes("drive.google.com/drive/folders/")) {
+      return "";
+    }
+    let fileId: string | null = null;
+    if (trimmedUrl.includes("drive.google.com/file/d/")) {
+      const match = trimmedUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) fileId = match[1];
+    } else if (trimmedUrl.includes("id=")) {
+      const match = trimmedUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) fileId = match[1];
+    } else if (trimmedUrl.includes("lh3.googleusercontent.com/d/")) {
+      const match = trimmedUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) fileId = match[1];
+    }
+    if (fileId) {
+      return `https://lh3.googleusercontent.com/d/${fileId}=w${size}`;
+    }
+    return trimmedUrl;
+  } catch {
+    return url;
+  }
+};
+
+export interface GroupedRubric {
+  id: string;
+  title: string;
+  brand?: string;
+  brandLogo?: string;
+  items: any[];
+  tone: string;
+}
+
+/**
+ * Unified grouping for all accessory selection views:
+ * - Matrix Shelves
+ * - HIKVISION
+ * - POLMAN
+ * - Additional brand groups
+ * - Additional equipment taking space (>0U, no shelves, no brand items)
+ * - Accessories taking no space (0U, no brand items)
+ *
+ * Guarantees every candidate item appears in EXACTLY ONE group.
+ */
+export function groupAccessoriesForDisplay(
+  accessories: any[],
+  searchQuery: string = ''
+): GroupedRubric[] {
+  const qTokens = searchQuery.trim().toLowerCase().split(/[\s\-/,]+/).filter(Boolean);
+  const filtered = accessories.filter(acc => {
+    if (qTokens.length === 0) return true;
+    const hay = `${acc.pn || ''} ${acc.sku || ''} ${acc.name || ''} ${acc.description || ''} ${acc.brand || ''}`.toLowerCase();
+    return qTokens.every(tok => hay.includes(tok));
+  });
+
+  const shelves = filtered.filter(acc => acc.isShelf);
+  const nonShelves = filtered.filter(acc => !acc.isShelf);
+
+  const brandMap: Record<string, any[]> = {};
+  const takesU: any[] = [];
+  const freeU: any[] = [];
+
+  nonShelves.forEach(acc => {
+    const b = String(acc.brand || '').trim();
+    const isDistinctBrand = b && b !== 'כללי' && b !== 'אחר' && !b.startsWith('http');
+    if (isDistinctBrand || acc._promoted) {
+      const brandKey = isDistinctBrand ? b.toUpperCase() : 'מוצרי מותג';
+      if (!brandMap[brandKey]) brandMap[brandKey] = [];
+      brandMap[brandKey].push(acc);
+    } else {
+      if ((acc.uSize ?? 1) === 0) {
+        freeU.push(acc);
+      } else {
+        takesU.push(acc);
+      }
+    }
+  });
+
+  const rubrics: GroupedRubric[] = [];
+
+  // Group 1: Matrix Shelves
+  if (shelves.length > 0) {
+    rubrics.push({
+      id: 'shelves',
+      title: 'מדפים המתאימים לפי המטריצה',
+      items: shelves,
+      tone: 'bg-emerald-50 text-emerald-900 border-emerald-200',
+    });
+  }
+
+  // Priority Brand Groups: HIKVISION first, POLMAN second, then others alphabetically
+  const brandKeys = Object.keys(brandMap);
+  const prioritizedBrands = ['HIKVISION', 'POLMAN'];
+
+  prioritizedBrands.forEach(bName => {
+    const key = brandKeys.find(k => k.toUpperCase() === bName);
+    if (key && brandMap[key]?.length > 0) {
+      const firstWithLogo = brandMap[key].find((it: any) => it.brandLogo);
+      rubrics.push({
+        id: `brand-${bName.toLowerCase()}`,
+        title: bName,
+        brand: bName,
+        brandLogo: firstWithLogo?.brandLogo,
+        items: brandMap[key],
+        tone: 'bg-amber-50 text-amber-900 border-amber-200',
+      });
+    }
+  });
+
+  brandKeys
+    .filter(k => !prioritizedBrands.includes(k.toUpperCase()))
+    .sort()
+    .forEach(bKey => {
+      if (brandMap[bKey]?.length > 0) {
+        const firstWithLogo = brandMap[bKey].find((it: any) => it.brandLogo);
+        rubrics.push({
+          id: `brand-${bKey.toLowerCase().replace(/\s+/g, '-')}`,
+          title: bKey,
+          brand: bKey,
+          brandLogo: firstWithLogo?.brandLogo,
+          items: brandMap[bKey],
+          tone: 'bg-amber-50 text-amber-900 border-amber-200',
+        });
+      }
+    });
+
+  // Group: Additional equipment taking space (>0U)
+  if (takesU.length > 0) {
+    rubrics.push({
+      id: 'takes-u',
+      title: 'ציוד נוסף שתופס מקום בארון',
+      items: takesU,
+      tone: 'bg-[#e6f0fa] text-[#004387] border-blue-200',
+    });
+  }
+
+  // Group: Accessories taking no space (0U)
+  if (freeU.length > 0) {
+    rubrics.push({
+      id: 'free-u',
+      title: 'אביזרים ללא תפיסת נפח (0U)',
+      items: freeU,
+      tone: 'bg-slate-100 text-slate-800 border-slate-300',
+    });
+  }
+
+  return rubrics;
+}
 
 export const isAccessoryAShelf = (accNameOrDescOrSku: string): boolean => {
   if (!accNameOrDescOrSku) return false;
