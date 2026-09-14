@@ -29,14 +29,17 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
 }) => {
   const [searchFilter, setSearchFilter] = useState('');
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<'direct' | 'auxiliary'>('direct');
 
+  const spaceAnalysis = useMemo(() => {
+    return analyzeCabinetSpace(totalU, slots, targetU);
+  }, [totalU, slots, targetU]);
+
   const unifiedRubrics = useMemo(() => {
     // We filter compatible accessories depending on the mode.
-    // Wait, earlier the user just wanted it to NOT have tabs.
     // If it has no tabs, it just shows EVERYTHING from compatibleAccessories, appropriately grouped by groupAccessoriesForDisplay!
-    // Let's just group them all!
     const items = compatibleAccessories;
     return groupAccessoriesForDisplay(items, searchFilter, isAuxiliaryMode ? undefined : (targetU ? undefined : availableU));
   }, [compatibleAccessories, searchFilter, isAuxiliaryMode, targetU, availableU]);
@@ -62,12 +65,12 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
 
   const renderProductItem = (item: any, isAux = false) => {
     const uSize = item.uSize ?? (isAux ? 0 : 1);
-    const placement = !isAux && targetU ? classifyItemPlacement(item, targetU, totalU, slots) : null;
+    const placement = !isAux && targetU ? classifyItemPlacement(item, spaceAnalysis, targetU, slots) : null;
     
     return (
       <div 
         key={item.sku || item.pn} 
-        className={`bg-white border p-3 rounded flex flex-col gap-2 transition-colors ${placement?.type === 'direct' ? 'border-emerald-300 hover:border-emerald-500' : (placement?.type === 'rearrange' ? 'border-amber-300' : 'border-slate-200 hover:border-[#004387]')}`}
+        className={`bg-white border p-3 rounded flex flex-col gap-2 transition-colors ${placement?.category === 'direct' ? 'border-emerald-300 hover:border-emerald-500' : (placement?.category === 'rearrange' ? 'border-amber-300' : 'border-slate-200 hover:border-[#004387]')}`}
         onMouseEnter={() => handleProductHover(item)}
         onMouseLeave={() => handleProductHover(null)}
         onTouchStart={() => handleProductHover(item)}
@@ -91,7 +94,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
             </div>
           </div>
           
-          {placement?.type === 'direct' || isAux ? (
+          {placement?.category === 'direct' || isAux ? (
             <button
               type="button"
               onClick={() => {
@@ -106,32 +109,32 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
           ) : null}
         </div>
         
-        {!isAux && placement?.type === 'direct' && (
+        {!isAux && placement?.category === 'direct' && (
           <div className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded font-bold flex items-center gap-1 w-fit">
             <CheckCircle2 size={12} /> מותאם בדיוק למקום הפנוי (U{targetU})
           </div>
         )}
         
-        {!isAux && placement?.type === 'alternative' && (
+        {!isAux && placement?.category === 'alternative' && placement.alternateTargetU && (
           <div className="mt-1 bg-slate-50 p-2 rounded border border-slate-200 flex items-center justify-between gap-3">
             <div className="text-[11px] text-slate-700">
               <div className="font-bold text-amber-600 flex items-center gap-1"><AlertCircle size={12} /> אין מספיק רצף ב-U{targetU}</div>
-              <span className="mt-0.5 block">נמצא מקום חלופי ב-U{placement.alternativeU} (דורש {uSize}U רצופים)</span>
+              <span className="mt-0.5 block">נמצא מקום חלופי ב-U{placement.alternateTargetU} (דורש {uSize}U רצופים)</span>
             </div>
             <button
               type="button"
               onClick={() => {
-                onAddAccessoryAtSlot(item, placement.alternativeU);
+                onAddAccessoryAtSlot(item, placement.alternateTargetU);
                 onClose();
               }}
               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-bold shrink-0"
             >
-              הוסף ב-U{placement.alternativeU}
+              הוסף ב-U{placement.alternateTargetU}
             </button>
           </div>
         )}
         
-        {!isAux && placement?.type === 'rearrange' && placement.plan && (
+        {!isAux && placement?.category === 'rearrange' && placement.rearrangementPlan && (
           <div className="mt-1 bg-amber-50 p-2 rounded border border-amber-200">
             <div className="flex items-center justify-between gap-2 mb-2">
               <div className="text-[11px] text-amber-900 font-bold flex items-center gap-1">
@@ -140,7 +143,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (onRequestRearrangement) onRequestRearrangement(placement.plan!, item);
+                  if (onRequestRearrangement) onRequestRearrangement(placement.rearrangementPlan!, item);
                   onClose();
                 }}
                 className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-[11px] font-bold shrink-0"
@@ -149,9 +152,9 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
               </button>
             </div>
             <div className="text-[10px] text-amber-800 space-y-0.5">
-              <span>ההצעה (U{placement.plan.targetU}):</span>
+              <span>ההצעה (U{placement.rearrangementPlan.targetU}):</span>
               <ul className="list-disc list-inside opacity-90">
-                {placement.plan.moves.map((m, idx) => (
+                {placement.rearrangementPlan.moves.map((m, idx) => (
                   <li key={idx}>הזזת <strong>{m.name}</strong> ל-U{m.toU}</li>
                 ))}
               </ul>
@@ -159,7 +162,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
           </div>
         )}
         
-        {!isAux && placement?.type === 'impossible' && (
+        {!isAux && placement?.category === 'infeasible' && (
           <div className="text-[11px] text-rose-600 font-bold bg-rose-50 p-1.5 rounded mt-1 flex items-center gap-1 w-fit">
             <AlertCircle size={12} /> הארון מלא, לא ניתן להוסיף ({uSize}U נדרשים)
           </div>

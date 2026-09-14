@@ -88,7 +88,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
   // Mesh cache by instanceId for smooth incremental updates and lifecycle management
   const meshMapRef = useRef<Map<string, MeshCacheEntry>>(new Map());
-  const previousCabinetSkuRef = useRef<string | undefined>();
+  const previousCabinetSkuRef = useRef<string | undefined>(undefined);
   const activeAnimationsRef = useRef<Map<string, number>>(new Map());
 
   // Camera framing history for focus & return

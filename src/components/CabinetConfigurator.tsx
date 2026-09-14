@@ -436,6 +436,7 @@ export interface EnrichedPreviewItem {
   instanceId?: string;
   name: string;
   sku?: string;
+  pn?: string;
   description?: string;
   image?: string;
   uSize: number;
@@ -446,6 +447,8 @@ export interface EnrichedPreviewItem {
   type?: string;
   optionalIdx?: number;
   isPreset?: boolean;
+  minU?: number;
+  maxU?: number;
 }
 
 const RenderSchematicFallback: React.FC<{ item: EnrichedPreviewItem; isLarge?: boolean }> = ({ item, isLarge }) => {
@@ -1444,7 +1447,7 @@ setLastAddedInstanceId(newInstId);
     const zone = `מסילות U חזיתיות (U${slot.uIndex}${spanU > 1 ? ` - U${slot.uIndex - spanU + 1}` : ''})`;
 
     return {
-      instanceId: (slot as any).instanceId || slot.id || '',
+      instanceId: (slot as any).instanceId || (slot as any).id || '',
       name,
       sku,
       description,
