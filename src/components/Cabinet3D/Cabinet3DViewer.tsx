@@ -88,6 +88,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
   // Mesh cache by instanceId for smooth incremental updates and lifecycle management
   const meshMapRef = useRef<Map<string, MeshCacheEntry>>(new Map());
+  const previousCabinetSkuRef = useRef<string | undefined>();
   const activeAnimationsRef = useRef<Map<string, number>>(new Map());
 
   // Camera framing history for focus & return
@@ -196,50 +197,6 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       });
     });
 
-    // Fallback: If slots didn't contain preset-shelf instances, but cabinetData or includedSummary indicates built-in shelves:
-    const hasPresetShelf = instances.some(i => i.isIncluded && i.type === 'shelf');
-    if (!hasPresetShelf) {
-      let shelvesCount = parseAccessoryCount(cabinetData?.shelvesQty);
-      if (shelvesCount === 0 && Array.isArray(includedItems)) {
-        const item = includedItems.find(i => i.includes('מדפ') || i.includes('מדפים'));
-        if (item) shelvesCount = parseAccessoryCount(item);
-      }
-      if (shelvesCount === 0 && product?.description) {
-        const m = String(product.description).match(/(\d+)\s*מדפ/i);
-        if (m) shelvesCount = parseInt(m[1], 10);
-      }
-
-      if (shelvesCount > 0) {
-        const totalSlotsU = dims.totalU;
-        for (let s = 1; s <= shelvesCount; s++) {
-          let pos = Math.round((s * totalSlotsU) / (shelvesCount + 1));
-          while (occupiedU.has(pos) && pos < totalSlotsU) pos++;
-          while (occupiedU.has(pos) && pos > 1) pos--;
-          occupiedU.add(pos);
-
-          instances.push({
-            instanceId: `builtin-shelf-${pos}`,
-            sku: 'BUILTIN-SHELF',
-            name: 'מדף מובנה קבוע (כלול בארון) 📦',
-            description: 'מדף מתכת קבוע הכלול בארון כחלק מתצורת היצרן. מותקן על מסילות 19 אינץ׳.',
-            price: 0,
-            uStart: pos,
-            uSpan: 1,
-            isIncluded: true,
-            type: 'shelf',
-            accessoryRef: {
-              name: 'מדף מובנה קבוע (כלול בארון)',
-              sku: 'BUILTIN-SHELF',
-              isPreset: true,
-              isShelf: true,
-              price: 0,
-              uSize: 1,
-            }
-          });
-        }
-      }
-    }
-
     return instances;
   }, [slots, cabinetData, includedItems, product, dims.totalU]);
 
@@ -265,7 +222,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     const distH = (heightUnits / 2) / Math.tan(fovRad / 2);
     // Horizontal distance needed to fit cabinet width + accessories tray on any aspect ratio
     const distW = (widthUnits / 2) / (Math.tan(fovRad / 2) * Math.max(aspect, 0.45));
-    const targetDist = Math.max(distH, distW) * 1.34;
+    const targetDist = (Math.max(distH, distW) * 1.34) + ((dims.depthMm * SCALE_MM_TO_UNITS) / 2);
 
     controls.target.set(0, 0, 0);
 
@@ -295,7 +252,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     const fovRad = (camera.fov * Math.PI) / 180;
     const distH = (heightUnits / 2) / Math.tan(fovRad / 2);
     const distW = (widthUnits / 2) / (Math.tan(fovRad / 2) * Math.max(aspect, 0.45));
-    const targetDist = Math.max(distH, distW) * 1.30;
+    const targetDist = (Math.max(distH, distW) * 1.30) + ((dims.depthMm * SCALE_MM_TO_UNITS) / 2);
 
     controls.target.set(0, 0, 0);
     camera.position.set(0, 0, targetDist);
@@ -341,7 +298,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
     const startPos = camera.position.clone();
     const startTarget = controls.target.clone();
-    const endPos = new THREE.Vector3(0.3, targetY + 0.15, 2.5);
+    const endPos = new THREE.Vector3(0.3, targetY + 0.15, ((dims.depthMm * SCALE_MM_TO_UNITS) / 2) + 2.0);
     const endTarget = new THREE.Vector3(0, targetY, 0);
 
     const prefersReducedMotion = typeof window !== 'undefined' &&
@@ -433,6 +390,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
   // Helper to cleanly dispose all meshes, geometries, and textures inside a group
   const disposeHierarchy = (group: THREE.Group) => {
+    const sharedMats = Object.values(materialsRef.current);
     group.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
@@ -441,11 +399,11 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           if (Array.isArray(mesh.material)) {
             mesh.material.forEach(m => {
               if ((m as any).map) (m as any).map.dispose();
-              m.dispose();
+              if (!sharedMats.includes(m as any)) m.dispose();
             });
           } else {
             if ((mesh.material as any).map) (mesh.material as any).map.dispose();
-            mesh.material.dispose();
+            if (!sharedMats.includes(mesh.material as any)) mesh.material.dispose();
           }
         }
       }
@@ -1196,6 +1154,11 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         const vertMesh = buildVerticalAccessoryMesh(itemData, dims.totalU * U_HEIGHT_UNITS, materials);
         vertMesh.position.set(widthUnits / 2 - 0.35, 0, -depthUnits / 4);
         nonUGroupRef.current.add(vertMesh);
+      } else if (zone === 'plinth' || zone === 'hardware') {
+        // Hardware and plinth elements (like feet, wheels, screws) are drawn implicitly by the cabinet frame if included,
+        // but if they are added as accessories we don't draw extra 3D instances for them to avoid clutter.
+        // We ensure they are NOT dropped from the details array by maintaining them in nonUAccessories,
+        // but we simply skip rendering independent 3D meshes for them here.
       }
     });
 
@@ -1244,7 +1207,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       {/* 3D Canvas */}
       <canvas
         ref={canvasRef}
-        className="w-full h-full block touch-none focus:outline-none"
+        className="w-full h-full block touch-pan-y focus:outline-none"
         tabIndex={0}
         aria-label="הדמיית ארון תקשורת תלת-ממדית אינטראקטיבית"
       />

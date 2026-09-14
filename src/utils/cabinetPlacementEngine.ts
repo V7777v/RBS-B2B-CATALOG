@@ -90,7 +90,9 @@ export function analyzeCabinetSpace(
           sku: s.accessoryRef?.sku || s.accessoryRef?.pn || (isPreset ? 'PRESET' : ''),
           uStart: u,
           spanU: span,
-          isLocked: isPreset,
+          // Only lock if it has explicit lock flag or if it's hardware that absolutely cannot be moved.
+          // Included items (preset) are NOT strictly locked unless specified.
+          isLocked: s.accessoryRef?.isLocked === true || s.type === 'preset-fan',
         };
         occupiedInstancesMap.set(instId, inst);
       } else {

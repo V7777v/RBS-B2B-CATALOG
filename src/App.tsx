@@ -6037,14 +6037,7 @@ export default function App() {
             (p) => p.subcategory && p.subcategory.startsWith("Inginium - "),
           ).length;
         }
-        if (subName === "מתגי ליבה ורשת מנוהלים") {
-          count += productsInCat.filter(
-            (p) =>
-              p.subcategory ===
-                "מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)" ||
-              p.subcategory === "מתגי ליבה אופטי - Access Switches L3",
-          ).length;
-        }
+
         if (subName === "ספקי כוח ומתח") {
           const extra = productsInCat.filter(
             (p) =>
@@ -6127,16 +6120,7 @@ export default function App() {
             .map((p) => p.subcategory),
         ),
       ];
-    } else if (selectedSubcategory === "מתגי ליבה ורשת מנוהלים") {
-      const explicitSubs = productsInCat
-        .filter(
-          (p) =>
-            p.subcategory ===
-              "מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)" ||
-            p.subcategory === "מתגי ליבה אופטי - Access Switches L3",
-        )
-        .map((p) => p.subcategory);
-      nestedSubs = [...new Set(explicitSubs)];
+
     } else if (selectedSubcategory === "ספקי כוח ומתח") {
       const explicitSubs = productsInCat
         .filter((p) => p.subcategory === "ספקי כוח ומתח" && p.nestedSubcategory)
@@ -6189,8 +6173,7 @@ export default function App() {
 
         let prods: any[] = [];
         if (
-          selectedSubcategory === "Inginium Full Channel" ||
-          selectedSubcategory === "מתגי ליבה ורשת מנוהלים"
+          selectedSubcategory === "Inginium Full Channel"
         ) {
           // for these, the nested name is actually the subcategory name in products
           prods = productsInCat.filter(
@@ -6365,8 +6348,7 @@ export default function App() {
 
         if (selectedNestedSubcategory) {
           if (
-            selectedSubcategory === "Inginium Full Channel" ||
-            selectedSubcategory === "מתגי ליבה ורשת מנוהלים"
+            selectedSubcategory === "Inginium Full Channel"
           ) {
             return item.subcategory === selectedNestedSubcategory;
           }
@@ -6394,13 +6376,7 @@ export default function App() {
         if (selectedSubcategory === "Inginium Full Channel") {
           return item.subcategory && item.subcategory.startsWith("Inginium - ");
         }
-        if (selectedSubcategory === "מתגי ליבה ורשת מנוהלים") {
-          return (
-            item.subcategory ===
-              "מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)" ||
-            item.subcategory === "מתגי ליבה אופטי - Access Switches L3"
-          );
-        }
+
         if (selectedSubcategory === "ספקי כוח ומתח") {
           return (
             item.subcategory === "ספקי כוח ומתח" ||

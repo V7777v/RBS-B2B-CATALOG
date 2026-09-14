@@ -38,9 +38,19 @@ export const parseAccessoryCount = (val: any): number => {
   ) {
     return 0;
   }
-  const match = str.match(/\d+/);
-  if (match) {
-    return parseInt(match[0], 10);
+  // Clean out common false-positive numbers like voltage or inches before matching quantity
+  let cleanStr = str.replace(/[0-9]{2,3}\s*V/gi, '');
+  cleanStr = cleanStr.replace(/19\s*["״'']|19\s*inch/gi, '');
+  
+  // Look for explicit quantity patterns like "2 מדפים", "כולל 4 מאווררים"
+  const qtyMatch = cleanStr.match(/(?:כולל|עם|מכיל)?\s*(\d+)\s*(?:יח|יחידות|מדפ|מאוורר|גלגל|רגל)/i);
+  if (qtyMatch) {
+    return parseInt(qtyMatch[1], 10);
+  }
+  
+  // If it's literally just a number
+  if (/^\s*\d+\s*$/.test(cleanStr)) {
+    return parseInt(cleanStr.trim(), 10);
   }
   // If positive inclusion phrasing is present without an explicit number, default to 1
   if (
@@ -296,15 +306,17 @@ export const parseDepthMmLocal = (txt: string): number => {
 
   // Match explicit depth mention (עומק: X or depth X or D=X or בעומק X)
   // Check for unit (mm / מ"מ vs cm / ס"מ)
-  const depthMatch = str.match(/(?:עומק|depth|עומק[:\s]|D=)\s*[:]?\s*([0-9]{2,4})\s*(מ"?מ|mm|ס"?מ|cm)?/i);
+  // Match explicit depth mention (עומק: X or depth X or D=X or בעומק X)
+  // Check for unit (mm / מ"מ vs cm / ס"מ). Handle different quotes.
+  const depthMatch = str.match(/(?:עומק|depth|D=)\s*[:]?\s*([0-9]{2,4})\s*(מ[״"']?מ|mm|ס[״"']?מ|cm)?/i);
   if (depthMatch) {
     const val = parseInt(depthMatch[1], 10);
     const unit = (depthMatch[2] || '').toLowerCase();
+    if (unit.includes('ס') || unit.includes('cm')) {
+      return val * 10; // e.g. "עומק 60 cm" -> 600, "עומק 60 ס״מ" -> 600
+    }
     if (unit.includes('מ') || unit.includes('mm')) {
       return val; // e.g. "עומק 80 mm" -> 80
-    }
-    if (unit.includes('ס') || unit.includes('cm')) {
-      return val * 10; // e.g. "עומק 60 cm" -> 600
     }
     // No unit: < 150 assumes cm, >= 150 assumes mm
     return val < 150 ? val * 10 : val;
@@ -363,8 +375,17 @@ export function groupAccessoriesForDisplay(
     return qTokens.every(tok => hay.includes(tok));
   });
 
-  const shelves = filtered.filter(acc => acc.isShelf);
-  const nonShelves = filtered.filter(acc => !acc.isShelf);
+  // Ensure unique SKUs in the result
+  const seenSkus = new Set<string>();
+  const uniqueFiltered = filtered.filter(acc => {
+    const sku = (acc.sku || acc.pn || '').toUpperCase();
+    if (seenSkus.has(sku)) return false;
+    seenSkus.add(sku);
+    return true;
+  });
+
+  const shelves = uniqueFiltered.filter(acc => acc.isShelf);
+  const nonShelves = uniqueFiltered.filter(acc => !acc.isShelf);
 
   const brandMap: Record<string, any[]> = {};
   const takesU: any[] = [];
@@ -400,7 +421,7 @@ export function groupAccessoriesForDisplay(
 
   // Priority Brand Groups: HIKVISION first, POLMAN second, then others alphabetically
   const brandKeys = Object.keys(brandMap);
-  const prioritizedBrands = ['HIKVISION', 'POLMAN'];
+  const prioritizedBrands = ['תשתיות', 'HIKVISION', 'POLMAN'];
 
   prioritizedBrands.forEach(bName => {
     const key = brandKeys.find(k => k.toUpperCase() === bName);
@@ -524,4 +545,21 @@ export const checkAccessoryFitsCabinet = (
   }
   
   return { fits: true, reason: 'Universal/Unrestricted accessory' };
+};
+
+export const parseCabinetDepthFromName = (name: string): number => {
+  const m = String(name || '').match(/בגודל\s*([0-9]{2,4})\s*[*xX×]\s*([0-9]{2,4})/);
+  if (m) { const d = parseInt(m[1], 10); return d < 150 ? d * 10 : d; }
+  return 0;
+};
+
+export const isCabinetProduct = (pp: any): boolean => {
+  const name = String(pp?.name || '').trim();
+  const sub = String(pp?.subcategory || '').trim();
+  const cat = String(pp?.category || '').trim();
+  const isExcluded = /מדף|אביזר|בורג|מאוורר|פאנל|פנל|מגירה|פס|תרמוסטט|ארגונית|סט|cable|management/i.test(name);
+  if (isExcluded) return false;
+  if (/ארון|מסד|Rack|Cabinet/i.test(name)) return true;
+  if (/ארונות תקשורת/i.test(sub) && /ארון|מסד/i.test(name)) return true;
+  return false;
 };

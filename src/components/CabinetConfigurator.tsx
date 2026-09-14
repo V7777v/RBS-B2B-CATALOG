@@ -22,21 +22,7 @@ import {
   Info
 } from 'lucide-react';
 import Papa from 'papaparse';
-import { 
-  fetchCabinetMatrix, 
-  fetchCompatMap, 
-  checkAccessoryFitsCabinet, 
-  isAccessoryAShelf, 
-  isProductShelf, 
-  extractAllMatrixShelfSkus, 
-  KNOWN_MATRIX_SHELF_SKUS, 
-  normalizeSku, 
-  parseCompatibleSkus, 
-  parseAccessoryCount,
-  CabinetMatrixData,
-  groupAccessoriesForDisplay,
-  GroupedRubric
-} from '../utils/cabinetData';
+import { CabinetMatrixData, GroupedRubric, KNOWN_MATRIX_SHELF_SKUS, checkAccessoryFitsCabinet, deriveBrand, extractAllMatrixShelfSkus, fetchCabinetMatrix, fetchCompatMap, groupAccessoriesForDisplay, isAccessoryAShelf, isCabinetProduct, isProductShelf, normalizeSku, parseAccessoryCount, parseCabinetDepthFromName, parseCompatRange, parseCompatibleSkus, parseDepthMmLocal } from '../utils/cabinetData';
 import { 
   analyzeCabinetSpace,
   classifyItemPlacement,
@@ -94,62 +80,6 @@ interface Accessory {
   id?: string;
 }
 
-// Match a shelf to a cabinet using the accessory sheet's "ארונות מתאימים" range
-// Handles: "כל הארונות" (all) | "NU-MU" (U range) | "...עומק: D" / "בעומק D1-D2" (depth) | U-range guarded by shelf's own depth
-const parseCabinetDepthFromName = (name: string): number => {
-  // Cabinet name format: "... בגודל DEPTH*WIDTH ..." (first number = depth). Returns mm.
-  const m = String(name || '').match(/בגודל\s*([0-9]{2,4})\s*[*xX\u00d7]\s*([0-9]{2,4})/);
-  if (m) { const d = parseInt(m[1], 10); return d < 150 ? d * 10 : d; }
-  return 0;
-};
-
-const parseCompatRange = (s: string): any => {
-  const str = String(s || '');
-  if (str.includes('כל הארונות')) return { all: true };
-  const u = str.match(/(\d+)U?\s*-\s*(\d+)U/);
-  const uMin = u ? parseInt(u[1], 10) : null;
-  const uMax = u ? parseInt(u[2], 10) : null;
-  let dMin: number | null = null, dMax: number | null = null;
-  const dr = str.match(/עומק[:\s]*([0-9]{2,4})\s*-\s*([0-9]{2,4})/);
-  if (dr) { dMin = parseInt(dr[1], 10); dMax = parseInt(dr[2], 10); }
-  else { const d = str.match(/עומק[:\s]*([0-9]{2,4})/); if (d) { dMin = dMax = parseInt(d[1], 10); } }
-  return { uMin, uMax, dMin, dMax };
-};
-
-
-
-const parseDepthMmLocal = (txt: string): number => {
-  if (!txt) return 0;
-  const m = String(txt).match(/עומק[:\s]*([0-9]{2,4})/);
-  let n = m ? parseInt(m[1], 10) : 0;
-  if (!n) { const m2 = String(txt).match(/([0-9]{2,4})\s*(ס"?מ|cm|מ"מ|mm)/i); n = m2 ? parseInt(m2[1], 10) : 0; }
-  if (!n) return 0;
-  return n < 150 ? n * 10 : n;
-};
-
-const KNOWN_BRANDS = ['HIKVISION', 'EZVIZ', 'POLMAN', 'BOOST', 'INGENIUM', 'UBIQUITI', 'TP-LINK', 'DAHUA'];
-const deriveBrand = (pp: any): string => {
-  const hay = `${pp?.category || ''} ${pp?.subcategory || ''} ${pp?.name || ''} ${pp?.sku || ''}`.toUpperCase();
-  for (const b of KNOWN_BRANDS) if (hay.includes(b)) return b.charAt(0) + b.slice(1).toLowerCase();
-  const c = String(pp?.category || '').replace('מחירון', '').replace(/20\d\d/, '').trim();
-  return c || 'אחר';
-};
-
-const isCabinetProduct = (pp: any): boolean => {
-  const name = String(pp?.name || '').trim();
-  const sub = String(pp?.subcategory || '').trim();
-  const nested = String(pp?.['Nested subcategory'] || pp?.nestedSubcategory || '').trim();
-  if (sub === 'ארונות תקשורת ואביזרים') {
-    if (nested.includes('דלת זכוכית') || nested.includes('דלת מחוררת') || nested.includes('מסדות תקשורת')) {
-      return true;
-    }
-  }
-  if ((name.startsWith('ארון תקשורת') || name.startsWith('מסד תקשורת') || name.startsWith('ארון הסתעפות')) &&
-      !name.includes('מדף') && !name.includes('אביזר') && !name.includes('מאוורר') && !name.includes('בורג')) {
-    return true;
-  }
-  return false;
-};
 
 // Only items belonging to Infrastructure pricelist / categories should appear as cabinet accessories (Track 2)
 const isInfrastructureItem = (pp: any): boolean => {
@@ -183,7 +113,15 @@ const isInfrastructureItem = (pp: any): boolean => {
     nested.includes('אביזרים לארון') ||
     nested.includes('מדפים ואביזרים');
 
-  return isInfraCategory || isInfraSub;
+  const desc = String(pp.description || '').toLowerCase();
+  const isRackmount = 
+    name.includes('rackmount') || desc.includes('rackmount') || cat.includes('rackmount') || sub.includes('rackmount') || nested.includes('rackmount') ||
+    name.includes('rackmout') || desc.includes('rackmout') || cat.includes('rackmout') || sub.includes('rackmout') || nested.includes('rackmout'); // Handling user typo RACKMOUT
+
+  // The user explicitly requested ONLY products related to the cabinet AND ONLY from the "מחירון תשתיות" catalog.
+  // We should strictly require it to be from the infrastructure catalog, except maybe rackmount which we can keep restricted to infra.
+  // Actually, let's just make it return isInfraCategory. If it's not in the infrastructure price list, it's out.
+  return isInfraCategory;
 };
 
 const getPhysicalZone = (sku: string, name: string, desc: string): 'roof' | 'plinth' | 'vertical' | 'hardware' => {
@@ -312,6 +250,16 @@ const buildCatalogAccessories = (
       if (!existing.image && ((pp.images && pp.images[0]) || pp.imageURL)) {
         existing.image = (pp.images && pp.images[0]) || pp.imageURL;
       }
+      if (pp.price && (!existing.price || existing.price === 0)) {
+        existing.price = parseFloat(String(pp.price).replace(/,/g, '')) || 0;
+      }
+      const newBrand = deriveBrand(pp);
+      if (newBrand !== 'כללי' && existing.brand === 'כללי') {
+        existing.brand = newBrand;
+      }
+      if (!existing.brandLogo && typeof pp.brand === 'string' && pp.brand.startsWith('http')) {
+        existing.brandLogo = pp.brand;
+      }
       return;
     }
 
@@ -411,6 +359,13 @@ const buildCatalogAccessories = (
       if (!existing.price && pp.price) {
         existing.price = parseFloat(String(pp.price).replace(/,/g, '')) || 0;
       }
+      const newBrand = deriveBrand(pp);
+      if (newBrand !== 'כללי' && existing.brand === 'כללי') {
+        existing.brand = newBrand;
+      }
+      if (!existing.brandLogo && typeof pp.brand === 'string' && pp.brand.startsWith('http')) {
+        existing.brandLogo = pp.brand;
+      }
       return;
     }
 
@@ -478,6 +433,7 @@ const ILLUSTRATION_ACCESSORIES: any[] = [
 ];
 
 export interface EnrichedPreviewItem {
+  instanceId?: string;
   name: string;
   sku?: string;
   description?: string;
@@ -524,8 +480,8 @@ const RenderSchematicFallback: React.FC<{ item: EnrichedPreviewItem; isLarge?: b
     return (
       <div className="flex flex-col items-center justify-center p-3 w-full h-full text-center">
         <div className="flex items-center gap-4 text-cyan-400">
-          <span className="text-4xl animate-spin" style={{ animationDuration: '3s' }}>🌀</span>
-          <span className="text-4xl animate-spin" style={{ animationDuration: '3s' }}>🌀</span>
+          <span className="text-4xl animate-spin" style={{ animationDuration: '3s' }}>��</span>
+          <span className="text-4xl animate-spin" style={{ animationDuration: '3s' }}>��</span>
         </div>
         <span className="text-[11px] text-cyan-300 mt-3 font-mono">Roof Ventilation & Cooling Fan Unit</span>
       </div>
@@ -565,7 +521,7 @@ const RenderSchematicFallback: React.FC<{ item: EnrichedPreviewItem; isLarge?: b
   if (isWheel) {
     return (
       <div className="flex flex-col items-center justify-center p-3 w-full h-full text-center">
-        <div className="text-4xl text-emerald-400">🛞</div>
+        <div className="text-4xl text-emerald-400">��</div>
         <span className="text-[11px] text-emerald-300 mt-2 font-mono">Heavy Duty Castor Wheels / Feet</span>
       </div>
     );
@@ -601,7 +557,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   
   const [includedItems, setIncludedItems] = useState<string[]>([]);
   const [compatibleAccessories, setCompatibleAccessories] = useState<Accessory[]>([]);
-  const [selectedOptionals, setSelectedOptionals] = useState<(Accessory & { quantity: number; id: string })[]>(() => (CABINET_CFG_STORE[product?.sku] as any) ?? []);
+  const [selectedOptionals, setSelectedOptionals] = useState<(Accessory & { quantity: number; id: string; targetU?: number; instanceId?: string })[]>(() => (CABINET_CFG_STORE[product?.sku] as any) ?? []);
 
   const allMatrixShelvesRef = React.useRef<Set<string>>(new Set<string>(KNOWN_MATRIX_SHELF_SKUS));
   const inMatrixShelvesRef = React.useRef<Set<string>>(new Set<string>());
@@ -671,14 +627,20 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     const unallocatedItems: any[] = [];
     
     // 1. Included Shelves
-    let shelvesQty = parseAccessoryCount(cabinetData?.shelvesQty);
-    if (shelvesQty === 0 && Array.isArray(includedItems)) {
-      const shelfItem = includedItems.find(it => it.includes('מדפ') || it.includes('מדפים'));
-      if (shelfItem) shelvesQty = parseAccessoryCount(shelfItem);
-    }
-    if (shelvesQty === 0 && product?.description) {
-      const m = String(product.description).match(/(\d+)\s*מדפ/i);
-      if (m) shelvesQty = parseInt(m[1], 10);
+    let shelvesQty = 0;
+    const rawShelvesQty = cabinetData?.shelvesQty?.trim();
+    if (rawShelvesQty && rawShelvesQty !== 'X') {
+      shelvesQty = parseAccessoryCount(rawShelvesQty);
+    } else if (!rawShelvesQty || rawShelvesQty === '') {
+      // Missing data -> try to extract from included items or description
+      if (Array.isArray(includedItems)) {
+        const shelfItem = includedItems.find(it => it.includes('מדפ') || it.includes('מדפים'));
+        if (shelfItem) shelvesQty = parseAccessoryCount(shelfItem);
+      }
+      if (shelvesQty === 0 && product?.description) {
+        const m = String(product.description).match(/(\d+)\s*מדפ/i);
+        if (m) shelvesQty = parseInt(m[1], 10);
+      }
     }
     if (shelvesQty > 0) {
       for (let s = 1; s <= shelvesQty; s++) {
@@ -744,7 +706,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               foundStart = prefStart;
             }
           }
-        } else if (!opt.targetU) {
+        } else {
           // 2. Default (non-targeted items): Search from top down to find a contiguous block of 'size'
           for (let i = totalSlotsU - size; i >= 0; i--) {
             let fits = true;
@@ -796,7 +758,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         builtSlots.push({
           uIndex: u,
           type: 'preset-shelf',
-          name: 'מדף מובנה קבוע (כלול בארון) 📦',
+          name: 'מדף מובנה קבוע (כלול בארון) ��',
           description: 'מדף מתכת קבוע הכלול בארון כחלק מתצורת היצרן. המיקום להמחשה.',
           spanU: 1,
           isAnchor: true,
@@ -883,17 +845,33 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [customAccU, setCustomAccU] = useState<number>(1);
 
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
+  const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : false);
+  useEffect(() => {
+    const check = () => setIsDesktop(window.innerWidth >= 1024);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
   const [isAddSlotModalOpen, setIsAddSlotModalOpen] = useState(false);
   const [addSlotTargetU, setAddSlotTargetU] = useState<number | null>(null);
+  const [previewAddSlotSpanU, setPreviewAddSlotSpanU] = useState<number>(1);
   const [isAuxiliaryModalOpen, setIsAuxiliaryModalOpen] = useState(false);
 
   // Rearrangement engine proposals and undo snapshot
-  const [pendingRearrangementPlan, setPendingRearrangementPlan] = useState<{ plan: RearrangementPlan; item: any } | null>(null);
+  const [pendingRearrangementPlan, setPendingRearrangementPlan] = useState<{ plan: RearrangementPlan; item: any; stateSignature?: string } | null>(null);
   const [undoState, setUndoState] = useState<{ selectedOptionals: (Accessory & { quantity: number; id: string })[]; message: string } | null>(null);
 
   const handleConfirmRearrangement = () => {
     if (!pendingRearrangementPlan) return;
-    const { plan, item } = pendingRearrangementPlan;
+    const { plan, item, stateSignature } = pendingRearrangementPlan;
+    
+    // Validate state hasn't changed since proposal
+    const currentSignature = JSON.stringify(selectedOptionals.map(o => o.id));
+    if (stateSignature && stateSignature !== currentSignature) {
+      alert("מצב הארון השתנה מאז חישוב ההצעה. אנא נסה שוב.");
+      setPendingRearrangementPlan(null);
+      return;
+    }
 
     // Save previous state for undo
     setUndoState({
@@ -904,11 +882,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     setSelectedOptionals(prev => {
       // Apply moved positions
       const updated = prev.map(opt => {
-        const move = plan.moves.find(m => {
-          const normSku = normalizeSku(m.sku);
-          const optSku = normalizeSku(opt.sku || opt.pn);
-          return normSku === optSku || (opt.id && opt.id.includes(m.instanceId));
-        });
+        const move = plan.moves.find(m => (opt.instanceId && opt.instanceId === m.instanceId) || (opt.id && opt.id === m.instanceId));
         if (move) {
           return {
             ...opt,
@@ -935,7 +909,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
   const handleUndoLastAction = () => {
     if (!undoState) return;
-    setSelectedOptionals(undoState.selectedOptionals);
+    setSelectedOptionals(current => {
+       // Restore the old state exactly, but preserve any newly added instances
+       const restoredIds = new Set(undoState.selectedOptionals.map((o: any) => o.instanceId || o.id));
+       const newerItems = current.filter(curr => !restoredIds.has(curr.instanceId || curr.id));
+       return [...undoState.selectedOptionals, ...newerItems];
+    });
     setUndoState(null);
     setChassisPulse(true);
     setTimeout(() => setChassisPulse(false), 1400);
@@ -968,6 +947,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     });
 
     setLastAddedInstanceId(newInstId);
+    setUndoState(null);
     setChassisPulse(true);
 
     setTimeout(() => {
@@ -997,6 +977,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const handleIncrementQuantity = (index: number) => {
     const item = selectedOptionals[index];
     if (!item) return;
+    setUndoState(null);
     
     const fitsRemaining = item.uSize === 0 || item.uSize <= availableU;
     if (!fitsRemaining) {
@@ -1005,17 +986,32 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       return;
     }
 
-    const nextUnitIdx = item.quantity;
-    const newInstId = `${item.sku || item.pn}-unit-${nextUnitIdx}`;
-    setLastAddedInstanceId(newInstId);
+
+    // Validate space BEFORE adding!
+    const analysis = analyzeCabinetSpace(totalU, slots);
+    const placement = classifyItemPlacement(item, analysis, null, slots);
+    
+    if (placement.category === 'infeasible') {
+      setPendingAccessory(item);
+      setWarningModalOpen(true);
+      return;
+    }
+
+    if (placement.category === 'rearrange' && placement.rearrangementPlan) {
+      // Must rearrange to fit. Show the proposal instead of adding directly.
+      const currentSignature = JSON.stringify(selectedOptionals.map(o => o.id));
+      setPendingRearrangementPlan({ plan: placement.rearrangementPlan, item, stateSignature: currentSignature });
+      return;
+    }
+
+    const newInstId2 = `${item.sku || item.pn}-unit-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    setLastAddedInstanceId(newInstId2);
+    setUndoState(null);
     setHighlightedOptIdx(index);
     setChassisPulse(true);
 
-    setSelectedOptionals(prev => {
-      const newArr = [...prev];
-      newArr[index] = { ...newArr[index], quantity: newArr[index].quantity + 1 };
-      return newArr;
-    });
+    setSelectedOptionals(prev => [...prev, { ...item, quantity: 1, id: newInstId2, instanceId: newInstId2, targetU: undefined }]);
+
 
     setTimeout(() => {
       setLastAddedInstanceId(null);
@@ -1147,6 +1143,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
            CABINET_CFG_INIT.add(product.sku);
            setBuiltInUsedU(0);
            setIncludedItems([]);
+           const desc = product.description || '';
            const fallbackCabinet: CabinetMatrixData = {
              sku: productSkuNorm,
              u: parsedTotalU,
@@ -1155,10 +1152,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
              frontDoor: '',
              rearDoor: '',
              color: '',
-             fans: '',
-             wheels: '',
-             levelingFeet: '',
-             shelvesQty: '',
+             fans: desc.match(/(\d+)\s*(?:מאוורר|מאווררים|fan|fans)/i)?.[1] || '',
+             wheels: desc.match(/(\d+)\s*(?:גלגל|גלגלים|wheel|wheels)/i)?.[1] || '',
+             levelingFeet: desc.match(/(\d+)\s*(?:רגל|רגליות|רגליים|feet)/i)?.[1] || '',
+             shelvesQty: desc.match(/(\d+)\s*(?:מדף|מדפים|shelf)/i)?.[1] || '',
              suitableStandard: [],
              suitableHanging: [],
              suitableSliding: []
@@ -1171,6 +1168,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
         const widthVal = parseInt(String(cabRow[3] ?? ''), 10);
         const depthVal = parseInt(String(cabRow[4] ?? ''), 10);
+        const desc = product.description || '';
         const data: CabinetMatrixData = {
            sku: cabRow[0]?.toString() || '',
            u: parseInt(cabRow[2]?.toString() || '0', 10),
@@ -1179,10 +1177,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
            frontDoor: String(cabRow[5] ?? '').trim(),
            rearDoor: String(cabRow[6] ?? '').trim(),
            color: String(cabRow[7] ?? '').trim(),
-           fans: cabRow[8]?.toString() || 'X',
-           wheels: cabRow[9]?.toString() || 'X',
-           levelingFeet: cabRow[10]?.toString() || 'X',
-           shelvesQty: cabRow[11]?.toString() || 'X',
+           fans: (cabRow[8]?.toString() && cabRow[8].toString().toUpperCase() !== 'X' && cabRow[8].toString().trim() !== '') ? cabRow[8].toString() : (desc.match(/(\d+)\s*(?:מאוורר|מאווררים|fan|fans)/i)?.[1] || 'X'),
+           wheels: (cabRow[9]?.toString() && cabRow[9].toString().toUpperCase() !== 'X' && cabRow[9].toString().trim() !== '') ? cabRow[9].toString() : (desc.match(/(\d+)\s*(?:גלגל|גלגלים|wheel|wheels)/i)?.[1] || 'X'),
+           levelingFeet: (cabRow[10]?.toString() && cabRow[10].toString().toUpperCase() !== 'X' && cabRow[10].toString().trim() !== '') ? cabRow[10].toString() : (desc.match(/(\d+)\s*(?:רגל|רגליות|רגליים|feet)/i)?.[1] || 'X'),
+           shelvesQty: (cabRow[11]?.toString() && cabRow[11].toString().toUpperCase() !== 'X' && cabRow[11].toString().trim() !== '') ? cabRow[11].toString() : (desc.match(/(\d+)\s*(?:מדף|מדפים|shelf)/i)?.[1] || 'X'),
            suitableStandard: parseCompatibleSkus(cabRow[12]?.toString()),
            suitableHanging: parseCompatibleSkus(cabRow[13]?.toString()),
            suitableSliding: parseCompatibleSkus(cabRow[14]?.toString())
@@ -1314,7 +1312,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       const flattened: Accessory[] = [];
       selectedOptionals.forEach(item => {
         if ((item as any)._illustration) return; // visual-only, never added to the order
-        const qty = item.quantity || 1;
+        const qty = 1 || 1;
         for (let i = 0; i < qty; i++) {
           flattened.push(item);
         }
@@ -1345,10 +1343,18 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       const analysis = analyzeCabinetSpace(totalSlotsU, slots, null);
       const placementRes = classifyItemPlacement(acc, analysis, null, slots);
 
+      if (placementRes.category === 'infeasible') {
+        setPendingAccessory(acc);
+        setWarningModalOpen(true);
+        return;
+      }
+
       if (placementRes.category === 'rearrange' && placementRes.rearrangementPlan) {
+        const currentSignature = JSON.stringify(selectedOptionals.map(o => o.id));
         setPendingRearrangementPlan({
           plan: placementRes.rearrangementPlan,
           item: acc,
+          stateSignature: currentSignature
         });
         return;
       }
@@ -1356,18 +1362,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
     const existingItem = selectedOptionals.find(item => item.pn === acc.pn && !item.targetU);
     const nextUnitIdx = existingItem ? existingItem.quantity : 0;
-    const newInstId = `${acc.sku || acc.pn}-unit-${nextUnitIdx}`;
+    
+const newInstId = `${acc.sku || acc.pn}-unit-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+setSelectedOptionals(prev => [...prev, { ...acc, quantity: 1, id: newInstId, instanceId: newInstId, targetU: undefined }]);
+setLastAddedInstanceId(newInstId);
+    setUndoState(null);
 
-    setSelectedOptionals(prev => {
-      const existingIdx = prev.findIndex(item => item.pn === acc.pn && !item.targetU);
-      if (existingIdx >= 0) {
-        const newArr = [...prev];
-        newArr[existingIdx] = { ...newArr[existingIdx], quantity: newArr[existingIdx].quantity + 1 };
-        return newArr;
-      }
-      return [...prev, { ...acc, quantity: 1, id: acc.sku || acc.pn || Math.random().toString() }];
-    });
-    setLastAddedInstanceId(newInstId);
     setAddedIdx(idx);
     setHighlightedOptIdx(idx);
     setChassisPulse(true);
@@ -1385,30 +1385,19 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const handleRemoveOptional = (index: number, fullyRemove = false) => {
     const item = selectedOptionals[index];
     if (!item) return;
+    setUndoState(null);
 
-    if (fullyRemove || item.quantity === 1) {
-      setSelectedOptionals(prev => prev.filter((_, i) => i !== index));
-    } else {
-      setSelectedOptionals(prev => {
-         const newArr = [...prev];
-         newArr[index] = { ...newArr[index], quantity: newArr[index].quantity - 1 };
-         return newArr;
-      });
-    }
+
+    setSelectedOptionals(prev => {
+      if (fullyRemove) {
+        return prev.filter(p => (p.sku || p.pn) !== (item.sku || item.pn));
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+
   };
 
   const forceAddPending = () => {
-    if (pendingAccessory) {
-      setSelectedOptionals(prev => {
-        const existingIdx = prev.findIndex(item => item.pn === pendingAccessory.pn);
-        if (existingIdx >= 0) {
-          const newArr = [...prev];
-          newArr[existingIdx] = { ...newArr[existingIdx], quantity: newArr[existingIdx].quantity + 1 };
-          return newArr;
-        }
-        return [...prev, { ...pendingAccessory, quantity: 1, id: Math.random().toString() }];
-      });
-    }
     setWarningModalOpen(false);
     setPendingAccessory(null);
   };
@@ -1455,6 +1444,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     const zone = `מסילות U חזיתיות (U${slot.uIndex}${spanU > 1 ? ` - U${slot.uIndex - spanU + 1}` : ''})`;
 
     return {
+      instanceId: (slot as any).instanceId || slot.id || '',
       name,
       sku,
       description,
@@ -1477,7 +1467,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     const description = item.description || acc.description || '';
     const image = getAccessoryImage(acc) || getAccessoryImage(item);
     const price = acc.price || item.price || 0;
-    const quantity = item.quantity || 1;
+    const quantity = 1 || 1;
     const zoneMap: Record<string, string> = {
       roof: 'תקרת הארון (Roof) · איוורור ותאורה',
       vertical: 'דופן ורטיקלית וצדית (Vertical Rails)',
@@ -1486,6 +1476,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     };
 
     return {
+      instanceId: item.instanceId || item.id || `0U-${sku}`,
       name,
       sku,
       description,
@@ -1668,13 +1659,13 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       </div>
 
       
-      <div className="p-6 grid grid-cols-1 @4xl:grid-cols-3 gap-8">
+      <div className="p-4 sm:p-6 flex flex-col lg:flex-row gap-6 lg:gap-8 items-start">
         
         {/* Column 1: Interactive Server Rack Simulator (Right side) */}
-        <div className="@4xl:col-span-1 space-y-3 lg:sticky lg:top-4 self-start max-h-[calc(100vh-2rem)] flex flex-col">
+        <div className={`w-full ${(isAddSlotModalOpen || isAuxiliaryModalOpen) && isDesktop ? 'lg:w-[35%] xl:w-[40%]' : 'lg:w-[35%] xl:w-[33%]'} shrink-0 space-y-3 lg:sticky lg:top-4 self-start max-h-[calc(100dvh-2rem)] flex flex-col transition-all duration-300`}>
           <div className="text-sm font-bold text-gray-800 flex items-center gap-2 mb-1 justify-between flex-wrap">
             <span className="flex items-center gap-1.5">
-              <span>🖥️ הדמיית ארון תקשורת פיזי</span>
+              <span>��️ הדמיית ארון תקשורת פיזי</span>
               <span className="text-xs font-normal text-slate-500">({totalSlotsU}U)</span>
             </span>
             <div className="flex items-center gap-2 flex-wrap">
@@ -1714,7 +1705,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                   className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition-colors cursor-pointer"
                   title={zoomMode ? 'חזור לתצוגת ארון מלאה' : 'עבור לתצוגת תקריב מפורטת'}
                 >
-                  {zoomMode ? '🔍 תצוגה מלאה' : '🔍 תקריב מפורט'}
+                  {zoomMode ? '�� תצוגה מלאה' : '�� תקריב מפורט'}
                 </button>
               )}
               <span className="text-xs text-gray-400 font-mono hidden sm:inline">1U = 44.45mm</span>
@@ -1742,10 +1733,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                   highlightedOptIdx={highlightedOptIdx}
                   lastAddedInstanceId={lastAddedInstanceId}
                   selectedSlotU={addSlotTargetU}
-                  previewSpanU={1}
+                  previewSpanU={previewAddSlotSpanU}
                   hoveredProduct={hoveredProduct}
                   inspectedProduct={inspectedProduct}
-                  selectedInstanceId={inspectedProduct ? (inspectedProduct.sku || (inspectedProduct as any).instanceId) : undefined}
+                  selectedInstanceId={inspectedProduct ? (inspectedProduct.instanceId || inspectedProduct.sku) : undefined}
                   onProductHover={(slot) => setHoveredProduct(slot ? buildPreviewFromSlot(slot) : null)}
                   onProductInspect={(slot) => setInspectedProduct(buildPreviewFromSlot(slot))}
                   onSlotClickToAdd={(uIndex) => {
@@ -1831,7 +1822,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                       </div>
                     )}
                     <div className="text-[9px] text-amber-300/90 font-medium pt-1 border-t border-slate-800 flex items-center justify-center gap-1">
-                      <span>👆 לחץ/גע להגדלה מלאה ופרטים</span>
+                      <span>�� לחץ/גע להגדלה מלאה ופרטים</span>
                     </div>
                   </div>
                 </motion.div>
@@ -1870,7 +1861,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                       title="לחץ להגדלת תמונה ופרטים"
                     >
                       <span className="flex items-center gap-1.5 truncate">
-                        <span className="inline-block animate-spin text-cyan-300" style={{ animationDuration: '4s' }}>🌀</span>
+                        <span className="inline-block animate-spin text-cyan-300" style={{ animationDuration: '4s' }}>��</span>
                         <span className="truncate">{r.description || r.name}</span>
                       </span>
                       <div className="flex items-center gap-1.5">
@@ -2148,7 +2139,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                             <span className="text-indigo-400 group-hover:text-amber-300 transition-colors p-0.5"><ZoomIn size={11} /></span>
                             <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded" onClick={(e) => e.stopPropagation()}>
                               <button type="button" onClick={() => handleIncrementQuantity(item.optionalIdx)} className="text-amber-300 hover:bg-slate-800 p-0.5 cursor-pointer"><Plus size={9} /></button>
-                              <span className="font-mono text-amber-400 font-bold text-[9px]">{item.quantity}x</span>
+                              <span className="font-mono text-amber-400 font-bold text-[9px]">{1}x</span>
                               <button type="button" onClick={() => handleRemoveOptional(item.optionalIdx)} className="text-red-400 hover:bg-slate-800 p-0.5 cursor-pointer"><Minus size={9} /></button>
                             </div>
                           </div>
@@ -2177,12 +2168,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                           onClick={() => setInspectedProduct(preview)}
                           title="לחץ להגדלת תמונה ופרטים"
                         >
-                          <span className="truncate pr-1">🛞 {item.name || item.description}</span>
+                          <span className="truncate pr-1">�� {item.name || item.description}</span>
                           <div className="flex items-center gap-1.5 shrink-0">
                             <span className="text-emerald-400 group-hover:text-amber-300 transition-colors p-0.5"><ZoomIn size={11} /></span>
                             <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded" onClick={(e) => e.stopPropagation()}>
                               <button type="button" onClick={() => handleIncrementQuantity(item.optionalIdx)} className="text-amber-300 hover:bg-slate-800 p-0.5 cursor-pointer"><Plus size={9} /></button>
-                              <span className="font-mono text-amber-400 font-bold text-[9px]">{item.quantity}x</span>
+                              <span className="font-mono text-amber-400 font-bold text-[9px]">{1}x</span>
                               <button type="button" onClick={() => handleRemoveOptional(item.optionalIdx)} className="text-red-400 hover:bg-slate-800 p-0.5 cursor-pointer"><Minus size={9} /></button>
                             </div>
                           </div>
@@ -2211,12 +2202,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                           onClick={() => setInspectedProduct(preview)}
                           title="לחץ להגדלת תמונה ופרטים"
                         >
-                          <span className="truncate pr-1">🔩 {item.name || item.description}</span>
+                          <span className="truncate pr-1">�� {item.name || item.description}</span>
                           <div className="flex items-center gap-1.5 shrink-0">
                             <span className="text-amber-400 group-hover:text-amber-200 transition-colors p-0.5"><ZoomIn size={11} /></span>
                             <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded" onClick={(e) => e.stopPropagation()}>
                               <button type="button" onClick={() => handleIncrementQuantity(item.optionalIdx)} className="text-amber-300 hover:bg-slate-800 p-0.5 cursor-pointer"><Plus size={9} /></button>
-                              <span className="font-mono text-amber-400 font-bold text-[9px]">{item.quantity}x</span>
+                              <span className="font-mono text-amber-400 font-bold text-[9px]">{1}x</span>
                               <button type="button" onClick={() => handleRemoveOptional(item.optionalIdx)} className="text-red-400 hover:bg-slate-800 p-0.5 cursor-pointer"><Minus size={9} /></button>
                             </div>
                           </div>
@@ -2242,15 +2233,83 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           </>
         )}
         </div>
+        {/* Add Slot Sidebar (Desktop only) */}
+        {isDesktop && (isAddSlotModalOpen || isAuxiliaryModalOpen) && (
+          <div className="hidden lg:flex w-[350px] xl:w-[400px] shrink-0 space-y-3 lg:sticky lg:top-4 self-start h-[calc(100dvh-2rem)] flex-col bg-white border border-slate-200 shadow-2xl rounded-xl overflow-hidden z-40">
+             <AddSlotModal
+               isOpen={true}
+               onClose={() => {
+                 setIsAddSlotModalOpen(false);
+                 setIsAuxiliaryModalOpen(false);
+                 setAddSlotTargetU(null);
+                 setPreviewAddSlotSpanU(1);
+               }}
+               targetU={addSlotTargetU}
+               totalU={totalSlotsU}
+               slots={slots}
+               availableU={availableU}
+               compatibleAccessories={compatibleAccessories}
+               onAddAccessoryAtSlot={handleAddOptionalAtSlot}
+               onRequestRearrangement={(plan, item) => {
+                 setIsAddSlotModalOpen(false);
+                 setIsAuxiliaryModalOpen(false);
+                 setAddSlotTargetU(null);
+                 setPendingRearrangementPlan({ plan, item });
+               }}
+               isAuxiliaryMode={isAuxiliaryModalOpen}
+               mode="desktop-sidebar"
+               onHoverProductItem={(uSize) => setPreviewAddSlotSpanU(uSize || 1)}
+             />
+          </div>
+        )}
+
         {/* Column 2 & 3: Selected Optionals & Catalog (Left side) */}
-        <div className="@4xl:col-span-2 flex flex-col gap-6">
+        <div className="w-full flex-1 flex flex-col gap-6 min-w-0">
+          
+          {/* Desktop Inspected Product Panel */}
+          {isDesktop && inspectedProduct && (
+            <div className="bg-white border-2 border-indigo-200 rounded-lg shadow-sm overflow-hidden animate-in slide-in-from-top-2">
+              <div className="bg-indigo-50 border-b border-indigo-100 p-3 flex justify-between items-start">
+                <div>
+                  <h3 className="font-bold text-indigo-900">{inspectedProduct.name}</h3>
+                  <div className="flex gap-3 text-xs text-indigo-700/80 mt-1 font-mono">
+                    <span>מק"ט: <span dir="ltr" className="inline-block">{inspectedProduct.sku || inspectedProduct.pn}</span></span>
+                    <span>{inspectedProduct.uSize > 0 ? `${inspectedProduct.uSize}U` : '0U'}</span>
+                    <span>מיקום: {inspectedProduct.zone || (inspectedProduct.uSize === 0 ? 'אביזר נלווה' : `U${inspectedProduct.minU}-U${inspectedProduct.maxU}`)}</span>
+                  </div>
+                </div>
+                <button onClick={() => setInspectedProduct(null)} className="p-1 hover:bg-indigo-200 rounded text-indigo-600 transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex p-4 gap-4 bg-white">
+                <div className="w-1/3 shrink-0 flex items-center justify-center border border-slate-100 bg-slate-50 p-2 rounded">
+                  {inspectedProduct.image ? (
+                    <img src={inspectedProduct.image} alt="" className="max-w-full max-h-40 object-contain" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="font-mono text-slate-400 text-sm">{inspectedProduct.uSize}U</div>
+                  )}
+                </div>
+                <div className="flex-1 flex flex-col justify-between">
+                  <div className="text-sm text-slate-600 leading-relaxed">
+                    {inspectedProduct.description || 'ללא תיאור'}
+                  </div>
+                  {inspectedProduct.price > 0 && (
+                    <div className="mt-4 font-bold text-lg text-emerald-700">
+                      ₪{inspectedProduct.price.toLocaleString('he-IL')}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         {/* Column 2: Selected Optionals & Included Items (Middle side) */}
         <div className="space-y-6">
           
           {/* Included Items */}
           <div className="bg-gray-50 p-5 border border-gray-200">
             <h3 className="text-lg font-bold text-[#0c2d57] mb-4 border-b border-gray-200 pb-2 flex items-center justify-between">
-              <span>📦 פריטי אבזור כלולים (חלק מהמארז)</span>
+              <span>�� פריטי אבזור כלולים (חלק מהמארז)</span>
               <span className="text-xs font-semibold px-2 py-0.5 bg-slate-200 rounded-none text-slate-700">ללא עלות נוספת</span>
             </h3>
             {includedItems.length > 0 ? (
@@ -2272,7 +2331,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           {/* Selected Optionals Review Area */}
           <div className="bg-[#e6f0fa]/30 border border-[#b3d4f5] p-5 shadow-sm">
             <h3 className="text-[15px] font-bold text-[#004387] mb-4 uppercase tracking-wider flex items-center justify-between border-b border-[#b3d4f5] pb-2">
-              <span>🛠️ אביזרים ששדרגתם לארון</span>
+              <span>��️ אביזרים ששדרגתם לארון</span>
               <span className="bg-[#004387] text-white text-xs px-2.5 py-0.5 rounded-none font-mono">
                 {selectedOptionals.reduce((acc, curr) => acc + curr.quantity, 0)} EXTRA
               </span>
@@ -2289,8 +2348,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                      image: item.image || getAccessoryImage(item),
                      uSize: item.uSize || 0,
                      price: item.price || 0,
-                     quantity: item.quantity || 1,
-                     zone: item.uSize > 0 ? `תופס ${item.uSize * item.quantity}U בארון` : 'אביזר נלווה (0U)',
+                     quantity: 1 || 1,
+                     zone: item.uSize > 0 ? `תופס ${item.uSize * 1}U בארון` : 'אביזר נלווה (0U)',
                      type: 'optional-accessory',
                      optionalIdx: idx,
                      isPreset: false,
@@ -2358,7 +2417,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                            <ZoomIn size={14} />
                          </button>
                          <span className="text-xs text-[#004387] font-bold bg-[#e6f0fa] px-2 py-0.5 rounded-none font-mono whitespace-nowrap">
-                           ₪{((item.price || 0) * item.quantity).toLocaleString('he-IL', { minimumFractionDigits: 2 })}
+                           ₪{((item.price || 0) * 1).toLocaleString('he-IL', { minimumFractionDigits: 2 })}
                          </span>
                        </div>
                      </div>
@@ -2372,7 +2431,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
                      <div className="flex items-center justify-between border-t border-gray-100 mt-2.5 pt-2">
                        <span className="text-[11px] font-mono font-medium text-slate-400 flex items-center gap-1">
-                         <span>{item.uSize > 0 ? `תופס: ${item.uSize * item.quantity}U מתוך הארון` : 'ללא נפח בארון'}</span>
+                         <span>{item.uSize > 0 ? `תופס: ${item.uSize * 1}U מתוך הארון` : 'ללא נפח בארון'}</span>
                          <span className="text-amber-600 text-[10px] font-bold">• לחץ להגדלה</span>
                        </span>
                        
@@ -2386,7 +2445,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                            <Plus size={12} />
                          </button>
                          <span className="w-8 flex items-center justify-center border-x border-slate-200 text-xs font-bold bg-white text-slate-800 font-mono">
-                           {item.quantity}
+                           {1}
                          </span>
                          <button 
                            type="button"
@@ -2446,7 +2505,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               {groupedRubrics.map((rubric: GroupedRubric) =>
                 AccordionSection(rubric.id, rubric.title, rubric.items, rubric.tone, false, rubric.brandLogo)
               )}
-              {_illusPairs.length > 0 && AccordionSection('illus', '🧩 תצוגת הדמיה (ללא מחיר)', _illusPairs, 'bg-indigo-50 text-indigo-800', false)}
+              {_illusPairs.length > 0 && AccordionSection('illus', '�� תצוגת הדמיה (ללא מחיר)', _illusPairs, 'bg-indigo-50 text-indigo-800', false)}
               {groupedRubrics.length === 0 && _illusPairs.length === 0 && (
                 <div className="text-center py-8 text-gray-500 bg-gray-50 border border-gray-200 rounded-none text-sm">
                   {accSearch ? 'לא נמצאו פריטים התואמים לחיפוש שלך.' : 'אין אביזרים תואמים לארון זה.'}
@@ -2639,247 +2698,76 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       </div>
       )}
 
-      {/* Product Image Inspection Modal */}
+      {/* Mobile Inspected Product Overlay */}
       <AnimatePresence>
-        {inspectedProduct && (
+        {!isDesktop && inspectedProduct && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3 sm:p-6 overflow-y-auto"
-            onClick={() => setInspectedProduct(null)}
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 50, opacity: 0 }}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden"
             dir="rtl"
           >
-            <motion.div
-              initial={{ scale: 0.92, opacity: 0, y: 16 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.94, opacity: 0, y: 16 }}
-              transition={{ type: 'spring', damping: 26, stiffness: 320 }}
-              onClick={(e) => e.stopPropagation()}
-              className="relative w-full max-w-2xl bg-white border-2 border-[#004387] shadow-2xl overflow-hidden flex flex-col my-auto"
-            >
-              {/* Modal Header */}
-              <div className="bg-[#004387] text-white px-4 py-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="p-1.5 bg-white/10 rounded">
-                    <Maximize2 size={18} className="text-amber-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold leading-tight truncate">
-                      תקריב מוצר: {inspectedProduct.name}
-                    </h3>
-                    <p className="text-[11px] text-white/80 font-mono">
-                      {inspectedProduct.zone} {inspectedProduct.sku ? `· מק"ט: ${inspectedProduct.sku}` : ''}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {/* Zoom controls */}
-                  <div className="flex items-center bg-white/10 rounded border border-white/20 p-0.5" dir="ltr">
-                    <button
-                      type="button"
-                      onClick={() => setModalZoomLevel((z) => Math.max(0.75, +(z - 0.25).toFixed(2)))}
-                      className="px-2 py-0.5 text-xs hover:bg-white/20 rounded font-mono font-bold transition-colors cursor-pointer"
-                      title="הקטן תקריב"
-                    >
-                      -
-                    </button>
-                    <span className="px-1.5 text-[11px] font-mono font-semibold min-w-[42px] text-center">
-                      {Math.round(modalZoomLevel * 100)}%
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setModalZoomLevel((z) => Math.min(2.5, +(z + 0.25).toFixed(2)))}
-                      className="px-2 py-0.5 text-xs hover:bg-white/20 rounded font-mono font-bold transition-colors cursor-pointer"
-                      title="הגדל תקריב"
-                    >
-                      +
-                    </button>
-                    {modalZoomLevel !== 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setModalZoomLevel(1)}
-                        className="px-1.5 text-[10px] text-amber-300 hover:text-white underline cursor-pointer"
-                      >
-                        איפוס
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Close button */}
-                  <button
-                    type="button"
-                    onClick={() => setInspectedProduct(null)}
-                    className="p-1.5 rounded bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
-                    title="סגור (Esc)"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
+            {/* Minimal Mobile View */}
+            <div className="flex flex-col">
+              <div className="bg-slate-900 text-white p-3 flex justify-between items-start gap-2">
+                 <div>
+                   <h4 className="font-bold text-sm leading-tight">{inspectedProduct.name}</h4>
+                   <div className="flex gap-2 text-[10px] text-slate-300 mt-1">
+                     <span>מק"ט: <span dir="ltr" className="inline-block">{inspectedProduct.sku || inspectedProduct.pn}</span></span>
+                     <span>{inspectedProduct.uSize > 0 ? `${inspectedProduct.uSize}U` : '0U'}</span>
+                   </div>
+                 </div>
+                 <button onClick={() => setInspectedProduct(null)} className="p-1 rounded-full bg-white/10 text-white">
+                   <X size={16} />
+                 </button>
               </div>
-
-              {/* Main Image Stage */}
-              <div className="relative w-full h-72 sm:h-96 bg-gradient-to-b from-slate-100 to-slate-200 border-b border-slate-200 overflow-hidden flex items-center justify-center p-4 select-none">
-                {/* Subtle checkered pattern to emphasize transparency */}
-                <div 
-                  className="absolute inset-0 opacity-15 pointer-events-none"
-                  style={{
-                    backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)',
-                    backgroundSize: '16px 16px',
-                  }}
-                />
-
-                <motion.div
-                  animate={{ scale: modalZoomLevel }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-                  className="w-full h-full flex items-center justify-center relative z-10"
-                >
-                  {inspectedProduct.image ? (
-                    <img
-                      referrerPolicy="no-referrer"
-                      src={inspectedProduct.image}
-                      alt={inspectedProduct.name}
-                      className="max-w-full max-h-full object-contain filter drop-shadow-xl transition-all"
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center p-6">
-                      <RenderSchematicFallback item={inspectedProduct} />
-                    </div>
-                  )}
-                </motion.div>
-
-                {/* Badge on bottom right of image */}
-                <div className="absolute bottom-3 right-3 z-20 bg-slate-900/85 backdrop-blur-sm text-white px-2.5 py-1 rounded text-xs font-mono font-medium flex items-center gap-2 border border-slate-700">
-                  <Eye size={13} className="text-amber-400" />
-                  <span>{inspectedProduct.uSize > 0 ? `${inspectedProduct.uSize}U חזיתי` : 'אביזר נלווה (0U)'}</span>
-                  {inspectedProduct.isPreset && (
-                    <span className="text-emerald-400 font-bold border-r border-slate-700 pr-2">ציוד מובנה</span>
-                  )}
-                </div>
+              <div className="flex gap-3 p-3 bg-slate-50 items-center">
+                 {inspectedProduct.image ? (
+                   <img src={inspectedProduct.image} alt="" className="w-20 h-20 object-contain bg-white rounded border border-slate-200" referrerPolicy="no-referrer" />
+                 ) : (
+                   <div className="w-20 h-20 bg-slate-200 flex items-center justify-center rounded border border-slate-300 font-mono text-slate-500">
+                     {inspectedProduct.uSize}U
+                   </div>
+                 )}
+                 <div className="flex-1 text-xs text-slate-600">
+                   {inspectedProduct.description ? <p className="line-clamp-3">{inspectedProduct.description}</p> : <p>אין תיאור נוסף.</p>}
+                   <div className="mt-2 font-bold text-slate-800">מיקום: {inspectedProduct.zone || (inspectedProduct.uSize === 0 ? 'אביזר נלווה' : `U${inspectedProduct.minU}-U${inspectedProduct.maxU}`)}</div>
+                 </div>
               </div>
-
-              {/* Product Specifications & Details */}
-              <div className="p-4 sm:p-5 bg-white space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-slate-100">
-                  <div>
-                    <h4 className="text-lg font-bold text-slate-900 leading-tight">
-                      {inspectedProduct.name}
-                    </h4>
-                    {inspectedProduct.sku && (
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-slate-500 font-mono bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                          מק"ט: {inspectedProduct.sku}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          מיקום: <strong className="text-slate-700">{inspectedProduct.zone}</strong>
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {inspectedProduct.price ? (
-                    <div className="text-left shrink-0">
-                      <div className="text-xs text-slate-400 font-medium">מחיר יחידה (לפני מע"מ)</div>
-                      <div className="text-lg font-bold text-[#004387] font-mono">
-                        ₪{inspectedProduct.price.toLocaleString('he-IL', { minimumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-
-                {inspectedProduct.description && (
-                  <p className="text-sm text-slate-600 leading-relaxed bg-slate-50 p-3 rounded border border-slate-100">
-                    {inspectedProduct.description}
-                  </p>
-                )}
-
-                {/* Interactive Configurator Actions */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                  {typeof inspectedProduct.optionalIdx === 'number' ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-700">כמות מוגדרת בארון:</span>
-                      <div className="flex items-center border border-slate-300 rounded bg-slate-50">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (typeof inspectedProduct.optionalIdx === 'number') {
-                              handleIncrementQuantity(inspectedProduct.optionalIdx);
-                              setInspectedProduct((prev) => prev ? { ...prev, quantity: prev.quantity + 1 } : null);
-                            }
-                          }}
-                          className="px-2.5 py-1 text-slate-700 hover:bg-slate-200 transition-colors font-bold text-sm"
-                          title="הוסף יחידה"
-                        >
-                          +
-                        </button>
-                        <span className="px-3 py-1 font-mono font-bold text-xs bg-white border-x border-slate-200">
-                          {inspectedProduct.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (typeof inspectedProduct.optionalIdx === 'number') {
-                              handleRemoveOptional(inspectedProduct.optionalIdx);
-                              if (inspectedProduct.quantity <= 1) {
-                                setInspectedProduct(null);
-                              } else {
-                                setInspectedProduct((prev) => prev ? { ...prev, quantity: prev.quantity - 1 } : null);
-                              }
-                            }
-                          }}
-                          className="px-2.5 py-1 text-rose-600 hover:bg-rose-50 transition-colors font-bold text-sm"
-                          title="הפחת יחידה"
-                        >
-                          -
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-slate-500">
-                      {inspectedProduct.isPreset ? '✓ פריט זה מותקן בארון כחלק מהתצורה הסטנדרטית' : 'פריט בהמחשה חזותית'}
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setInspectedProduct(null)}
-                      className="px-4 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition-colors cursor-pointer"
-                    >
-                      סגור תצוגה
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* 3D & 2D Interactive Add Slot / Auxiliary Modal */}
-      <AddSlotModal
-        isOpen={isAddSlotModalOpen || isAuxiliaryModalOpen}
-        onClose={() => {
-          setIsAddSlotModalOpen(false);
-          setIsAuxiliaryModalOpen(false);
-          setAddSlotTargetU(null);
-        }}
-        targetU={addSlotTargetU}
-        totalU={totalSlotsU}
-        slots={slots}
-        availableU={availableU}
-        compatibleAccessories={compatibleAccessories}
-        onAddAccessoryAtSlot={handleAddOptionalAtSlot}
-        onRequestRearrangement={(plan, item) => {
-          setIsAddSlotModalOpen(false);
-          setIsAuxiliaryModalOpen(false);
-          setAddSlotTargetU(null);
-          setPendingRearrangementPlan({ plan, item });
-        }}
-        isAuxiliaryMode={isAuxiliaryModalOpen}
-      />
+      {/* Mobile Drawer (Add Slot / Auxiliary) */}
+      {!isDesktop && (
+        <AddSlotModal
+          isOpen={isAddSlotModalOpen || isAuxiliaryModalOpen}
+          onClose={() => {
+            setIsAddSlotModalOpen(false);
+            setIsAuxiliaryModalOpen(false);
+            setAddSlotTargetU(null);
+            setPreviewAddSlotSpanU(1);
+          }}
+          targetU={addSlotTargetU}
+          totalU={totalSlotsU}
+          slots={slots}
+          availableU={availableU}
+          compatibleAccessories={compatibleAccessories}
+          onAddAccessoryAtSlot={handleAddOptionalAtSlot}
+          onRequestRearrangement={(plan, item) => {
+            setIsAddSlotModalOpen(false);
+            setIsAuxiliaryModalOpen(false);
+            setAddSlotTargetU(null);
+            setPreviewAddSlotSpanU(1);
+            setPendingRearrangementPlan({ plan, item });
+          }}
+          isAuxiliaryMode={isAuxiliaryModalOpen}
+          mode="mobile-drawer"
+          onHoverProductItem={(uSize) => setPreviewAddSlotSpanU(uSize || 1)}
+        />
+      )}
 
       {/* Rearrangement Approval Modal */}
       {pendingRearrangementPlan && (
