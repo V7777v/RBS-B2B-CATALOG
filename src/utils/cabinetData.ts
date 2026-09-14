@@ -2,6 +2,7 @@ import Papa from 'papaparse';
 
 export interface CabinetMatrixData {
   sku: string;
+  model?: string;
   u: number;
   width: number | null;
   depth: number | null;

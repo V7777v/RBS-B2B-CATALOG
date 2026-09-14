@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CabinetDimensions3D } from './Cabinet3DTypes';
-import { CabinetMatrixData, parseAccessoryCount } from '../../utils/cabinetData';
+import { CabinetMatrixData, parseAccessoryCount, normalizeSku } from '../../utils/cabinetData';
+import { build447510TCabinetGroup } from './CabinetModel447510T';
 
 export const SCALE_MM_TO_UNITS = 0.01; // 1 unit = 100mm (0.1 meter)
 export const U_HEIGHT_UNITS = 0.4445; // 44.45mm in 3D units
@@ -11,6 +12,32 @@ export interface BuildCabinetFrameOptions {
   additionalFansCount?: number;
   hasSelectedWheels?: boolean;
   hasSelectedFeet?: boolean;
+  doorState?: 'open' | 'closed' | 'transparent';
+}
+
+/**
+ * Checks specifically for SKU 447510T (Boost 44U 75x100 Floor Standing Rack)
+ */
+export function isCabinet447510T(product: any, cabinetData?: CabinetMatrixData | null): boolean {
+  const normProductSku = normalizeSku(product?.sku);
+  const normProductPn = normalizeSku(product?.pn);
+  const normCabinetSku = normalizeSku(cabinetData?.sku);
+  const normCabinetModel = normalizeSku(cabinetData?.model);
+  const nameUpper = String(product?.name || '').toUpperCase();
+  const descUpper = String(product?.description || '').toUpperCase();
+
+  if (
+    normProductSku === '447510T' ||
+    normProductPn === '447510T' ||
+    normCabinetSku === '447510T' ||
+    normCabinetModel === '447510T'
+  ) {
+    return true;
+  }
+  if (nameUpper.includes('447510T') || descUpper.includes('447510T')) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -21,6 +48,19 @@ export function resolveCabinetDimensions(
   cabinetData: CabinetMatrixData | null,
   totalU: number
 ): CabinetDimensions3D {
+  // Check specifically for SKU 447510T (from manufacturer technical drawing)
+  if (isCabinet447510T(product, cabinetData)) {
+    return {
+      totalU: 44,
+      widthMm: 750,
+      depthMm: 1000,
+      heightMm: 2061, // 2060.7mm frame height, 2148.3mm with casters & feet
+      isSchematicDimensions: false,
+      isSchematicCapacity: false,
+      isSpecific447510T: true,
+    };
+  }
+
   let widthMm = cabinetData?.width || null;
   let depthMm = cabinetData?.depth || null;
   let isSchematic = false;
@@ -77,6 +117,8 @@ export function buildCabinetFrameGroup(
     metalMat: THREE.Material;
     accentMat: THREE.Material;
     rubberMat: THREE.Material;
+    shelfMat?: THREE.Material;
+    includedShelfMat?: THREE.Material;
   },
   options?: BuildCabinetFrameOptions
 ): {
@@ -86,7 +128,19 @@ export function buildCabinetFrameGroup(
   stagingTrayGroup?: THREE.Group;
   stagingAccessoriesGroup?: THREE.Group;
   hasStagingContent?: boolean;
+  doorsGroup?: THREE.Group;
+  setDoorMode?: (mode: 'open' | 'closed' | 'transparent') => void;
 } {
+  // If this is specifically SKU 447510T, route to dedicated manufacturer schematic simulation!
+  if (dims.isSpecific447510T || isCabinet447510T(null, cabinetData)) {
+    return build447510TCabinetGroup(
+      dims,
+      cabinetData,
+      materials as any,
+      options
+    );
+  }
+
   const group = new THREE.Group();
   group.name = 'cabinet-frame-root';
 

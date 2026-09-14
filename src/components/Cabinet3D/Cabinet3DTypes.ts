@@ -8,6 +8,7 @@ export interface CabinetDimensions3D {
   heightMm: number;
   isSchematicDimensions: boolean;
   isSchematicCapacity: boolean;
+  isSpecific447510T?: boolean;
 }
 
 export interface Product3DInstance {

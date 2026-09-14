@@ -686,6 +686,32 @@ const parseProductRow = (row: any) => {
     ),
   };
 };
+
+export const PRODUCT_447510T = {
+  id: "447510T",
+  sku: "447510T",
+  pn: "447510T",
+  name: "ארון תקשורת עומד 44U 75x100 דגם 447510T Boost-RackMount",
+  description: "ארון שרתים ותקשורת מסיבי 44U ברוחב 750 מ״מ ועומק 1000 מ״מ מבית Boost-RackMount (מק״ט 447510T). מפרט יצרן מלא: דלתות קדמיות ואחוריות כפולות מחוררות עם מנעול קפיצי (Spring Lock), 4 מאווררי גג מובנים בפלטה אחת עם כבל, 4 גלגלים כבדים ו-4 רגליות פילוס, 2 מדפים קבועים 470*650*48 (מק״ט 117914) עם פתחי איוורור אלכסוניים, 2 תעלות כבילה אנכיות 400 מ״מ, מוט הארקה ראשי מנחושת עם כבלים, דלתות צד פריקות עם מנעול עגול, וקופסת חיבור לפס 12 שקעים PDU.",
+  price: 2890,
+  category: "ארונות תקשורת ואביזרים",
+  catalog: "ארונות תקשורת ואביזרים",
+  subcategory: "ארונות עומדים",
+  brand: "BOOST",
+  active: true,
+  isNew: false,
+  isHotSale: false,
+  isClearance: false,
+  u: 44,
+  width: 750,
+  depth: 1000,
+  height: 2061,
+  images: [
+    "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80",
+  ],
+  inStock: true,
+};
+
 // --- VIEWPORT INTERSECTION OBSERVER HOOK ---
 interface UseIntersectionObserverProps {
   threshold?: number;
@@ -3566,7 +3592,7 @@ export default function App() {
   const [subcategoriesGlobalData, setSubcategoriesGlobalData] = useState<any[]>(
     [],
   );
-  const [catalogData, setCatalogData] = useState<any[]>([]);
+  const [catalogData, setCatalogData] = useState<any[]>([PRODUCT_447510T]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProductsLoading, setIsProductsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -5470,7 +5496,11 @@ export default function App() {
             ids.add(p.id);
             return true;
           });
-          return [...prev, ...uniqueNew];
+          const combined = [...prev, ...uniqueNew];
+          if (!ids.has(PRODUCT_447510T.id)) {
+            combined.push(PRODUCT_447510T);
+          }
+          return combined;
         });
         setProductsOffset((prev) => prev + 50);
       } else {
@@ -5659,11 +5689,15 @@ export default function App() {
         const parsedProducts = productsCsv.map(parseProductRow);
         const deduplicate = (arr: any[]) => {
           const seen = new Set();
-          return arr.filter((p) => {
-            if (seen.has(p.id)) return false;
+          const res = arr.filter((p) => {
+            if (!p || seen.has(p.id)) return false;
             seen.add(p.id);
             return true;
           });
+          if (!seen.has(PRODUCT_447510T.id)) {
+            res.push(PRODUCT_447510T);
+          }
+          return res;
         };
         setCatalogData(deduplicate(parsedProducts));
         setProductsOffset(50);

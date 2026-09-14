@@ -3,6 +3,7 @@ import { Product3DInstance, NonU3DItem } from './Cabinet3DTypes';
 import { U_HEIGHT_UNITS, RACK_19_WIDTH_UNITS, USABLE_OPENING_WIDTH } from './CabinetModelBuilder';
 import { lookup3DAsset, Product3DAssetDef } from './Product3DAssets';
 import { transformImageLink, isProductShelf } from '../../utils/cabinetData';
+import { createDiagonalVentSlotTexture } from './CabinetModel447510T';
 
 /**
  * Safely extracts the first valid HTTP/HTTPS URL from any image field without blind splitting that breaks query strings
@@ -76,10 +77,19 @@ export function buildProduct3DMesh(
 
   // 1. PHYSICAL CHASSIS & MOUNTING EARS (Body & Depth)
   if (isShelf) {
-    const shelfMat = item.isIncluded ? materials.includedShelfMat : materials.shelfMat;
-    const shelfWidth = USABLE_OPENING_WIDTH * 0.98;
-    const shelfDepth = Math.max(2.8, Math.min(innerDepthUnits * 0.88, 6.2));
-    const shelfThick = 0.08;
+    const isPN117914 = skuLower.includes('117914') || nameLower.includes('117914') || descLower.includes('117914');
+    let shelfMat = item.isIncluded ? materials.includedShelfMat : materials.shelfMat;
+    if (isPN117914) {
+      shelfMat = new THREE.MeshStandardMaterial({
+        map: createDiagonalVentSlotTexture(),
+        roughness: 0.35,
+        metalness: 0.70,
+      });
+    }
+
+    const shelfWidth = isPN117914 ? 4.70 : USABLE_OPENING_WIDTH * 0.98;
+    const shelfDepth = isPN117914 ? 6.50 : Math.max(2.8, Math.min(innerDepthUnits * 0.88, 6.2));
+    const shelfThick = isPN117914 ? 0.048 : 0.08;
 
     // Main horizontal steel tray surface
     const surfaceGeom = new THREE.BoxGeometry(shelfWidth, shelfThick, shelfDepth);

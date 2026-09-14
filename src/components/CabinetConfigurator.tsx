@@ -19,7 +19,8 @@ import {
   SlidersHorizontal,
   ArrowLeftRight,
   RotateCcw,
-  Info
+  Info,
+  Award
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { CabinetMatrixData, GroupedRubric, KNOWN_MATRIX_SHELF_SKUS, checkAccessoryFitsCabinet, deriveBrand, extractAllMatrixShelfSkus, fetchCabinetMatrix, fetchCompatMap, groupAccessoriesForDisplay, isAccessoryAShelf, isCabinetProduct, isProductShelf, normalizeSku, parseAccessoryCount, parseCabinetDepthFromName, parseCompatRange, parseCompatibleSkus, parseDepthMmLocal } from '../utils/cabinetData';
@@ -1101,6 +1102,47 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         }
         allMatrixShelvesRef.current = allMatrixShelves;
 
+        // Dedicated handling for SKU 447510T based on manufacturer technical drawing
+        if (productSkuNorm === '447510T') {
+          const spec447510T: CabinetMatrixData = {
+            sku: '447510T',
+            model: '44U 75 X 100-Floor Standing Rack Boost',
+            u: 44,
+            width: 750,
+            depth: 1000,
+            frontDoor: 'דלת כפולה מחוררת עם מנעול קפיצי (Spring Lock)',
+            rearDoor: 'דלת כפולה מחוררת עם מנעול קפיצי (Spring Lock)',
+            color: 'RAL9005 Black',
+            fans: '4',
+            wheels: '4',
+            levelingFeet: '4',
+            shelvesQty: '2',
+            suitableStandard: ['117914'],
+            suitableHanging: [],
+            suitableSliding: []
+          };
+          setCabinetData(spec447510T);
+          setTotalU(44);
+          let initialAvailableU = 44;
+          const inMatrixShelves = new Set<string>(['117914']);
+          inMatrixShelvesRef.current = inMatrixShelves;
+          setIncludedItems([
+            'דלת קדמית כפולה מחוררת עם מנעול קפיצי',
+            'דלת אחורית כפולה מחוררת עם מנעול קפיצי',
+            'יחידת 4 מאווררי גג בפלטה אחת עם כבל',
+            '4 גלגלים כבדים + 4 רגליות פילוס',
+            '2 מדפים קבועים 470*650*48 (מק״ט 117914)',
+            '2 תעלות כבילה אנכיות 400 מ״מ',
+            'פס הארקה ראשי מנחושת וכבלים',
+            'דלתות צד פריקות עם מנעול עגול',
+            '50 סטים ברגים ודיסקיות Cage Nuts',
+            'קופסת חיבור ייעודית לפס 12 שקעים PDU'
+          ]);
+          setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, spec447510T, compatMap, allMatrixShelves));
+          setLoading(false);
+          return;
+        }
+
         let cabRow: any[] | null = null;
         for (let i = 2; i < cabRows.length; i++) {
            if (cabRows[i] && cabRows[i][0] !== undefined && cabRows[i][0] !== null) {
@@ -1660,6 +1702,20 @@ setLastAddedInstanceId(newInstId);
           מקום פנוי (המחשה): {availableU}U / {totalSlotsU}U
         </div>
       </div>
+
+      {normalizeSku(product?.sku) === '447510T' && (
+        <div className="bg-amber-500/10 border-b border-amber-500/40 p-3 px-4 flex items-center justify-between gap-3 text-amber-950 flex-wrap">
+          <div className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold">
+            <Award size={18} className="text-amber-600 shrink-0" />
+            <span>
+              <strong>הדמיית תלת-ממד ייעודית לפי מפרט יצרן רשמי (מק״ט 447510T Boost):</strong> שוחזרו דלתות כפולות מחוררות (Spring Lock), 4 מאווררי גג, תעלות כבילה אנכיות 400 מ״מ, גלגלים, רגליות ומדפי PN 117914.
+            </span>
+          </div>
+          <span className="text-[11px] bg-amber-600 text-white font-bold px-2 py-0.5 shadow-xs">
+            מפרט רשמי 44U 75x100
+          </span>
+        </div>
+      )}
 
       
       <div className="p-4 sm:p-6 flex flex-col lg:flex-row gap-6 lg:gap-8 items-start">

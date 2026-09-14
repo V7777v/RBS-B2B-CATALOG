@@ -26,6 +26,9 @@ import {
   Sun,
   Moon,
   Sparkles,
+  DoorClosed,
+  DoorOpen,
+  Award,
 } from 'lucide-react';
 
 interface MeshCacheEntry {
@@ -95,6 +98,18 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   const previousFramingRef = useRef<{ position: THREE.Vector3; target: THREE.Vector3 } | null>(null);
   const [isFocusedOnProduct, setIsFocusedOnProduct] = useState(false);
   const [backdropTheme, setBackdropTheme] = useState<'studio-light' | 'datacenter' | 'pure-white'>('studio-light');
+  const [doorMode, setDoorMode] = useState<'transparent' | 'open' | 'closed'>('transparent');
+  const setDoorModeRef = useRef<((mode: 'open' | 'closed' | 'transparent') => void) | null>(null);
+
+  const handleToggleDoors = useCallback(() => {
+    const nextMode: 'transparent' | 'open' | 'closed' =
+      doorMode === 'transparent' ? 'open' : doorMode === 'open' ? 'closed' : 'transparent';
+    setDoorMode(nextMode);
+    if (setDoorModeRef.current) {
+      setDoorModeRef.current(nextMode);
+    }
+    needsRenderRef.current = true;
+  }, [doorMode]);
 
   // Stable callback & dynamic state refs so event listeners never need rebinding
   const onProductHoverRef = useRef(onProductHover);
@@ -946,7 +961,15 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     floorGroupRef.current.add(floorMesh);
 
     // 2. Build Cabinet Frame
-    const { group: newFrameGroup, uCenters, innerDepthUnits, stagingTrayGroup, stagingAccessoriesGroup, hasStagingContent } = buildCabinetFrameGroup(
+    const {
+      group: newFrameGroup,
+      uCenters,
+      innerDepthUnits,
+      stagingTrayGroup,
+      stagingAccessoriesGroup,
+      hasStagingContent,
+      setDoorMode: frameSetDoorMode,
+    } = buildCabinetFrameGroup(
       dims,
       cabinetData,
       materialsRef.current,
@@ -954,8 +977,11 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         additionalFansCount: optionalFansCount,
         hasSelectedWheels: isWheelsSelected,
         hasSelectedFeet: isFeetSelected,
+        doorState: doorMode,
       }
     );
+
+    setDoorModeRef.current = frameSetDoorMode || null;
 
     uCentersRef.current = uCenters;
     innerDepthUnitsRef.current = innerDepthUnits;
@@ -1224,6 +1250,13 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
             </span>
           </div>
 
+          {dims.isSpecific447510T && (
+            <div className="bg-amber-500/20 border border-amber-400 text-amber-300 text-[10.5px] px-2.5 py-1 flex items-center gap-1.5 font-bold shadow-md">
+              <Award size={13} className="text-amber-400" />
+              <span>מפרט יצרן מדויק Boost 447510T (44U 75x100)</span>
+            </div>
+          )}
+
           {dims.isSchematicDimensions && (
             <div className="bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[10px] px-2 py-1 flex items-center gap-1 font-semibold">
               <Info size={12} />
@@ -1240,6 +1273,26 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
         {/* Right Side: Camera Control Buttons, Lighting Environment & Mobile Touch Mode */}
         <div className="flex items-center gap-1 bg-slate-900/90 backdrop-blur-md border border-slate-700 p-1 pointer-events-auto shadow-md">
+          {dims.isSpecific447510T && (
+            <button
+              type="button"
+              onClick={handleToggleDoors}
+              className={`px-2.5 py-1 text-[10.5px] font-bold border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                doorMode === 'open'
+                  ? 'bg-amber-600 text-white border-amber-400'
+                  : doorMode === 'closed'
+                  ? 'bg-slate-800 text-amber-300 border-amber-500/60 hover:bg-slate-700'
+                  : 'bg-blue-900/80 text-blue-200 border-blue-400/60 hover:bg-blue-800'
+              }`}
+              title="שליטה בדלתות כפולות (רשת שקופה / פתוחות 105° / סגורות)"
+            >
+              {doorMode === 'closed' ? <DoorClosed size={13} /> : <DoorOpen size={13} />}
+              <span>
+                דלתות: {doorMode === 'transparent' ? 'רשת שקופה' : doorMode === 'open' ? 'פתוחות 105°' : 'סגורות'}
+              </span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setMobileTouchMode(m => m === 'orbit' ? 'scroll' : 'orbit')}
