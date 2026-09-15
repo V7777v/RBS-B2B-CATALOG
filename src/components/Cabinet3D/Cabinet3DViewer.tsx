@@ -34,6 +34,7 @@ import {
   ChevronUp,
   X,
   Eye,
+  Zap,
 } from 'lucide-react';
 
 interface MeshCacheEntry {
@@ -68,6 +69,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   onProductInspect,
   onSlotClickToAdd,
   onOpenAuxiliaryModal,
+  onOpenPduModal,
   onIncrementQuantity,
   onRemoveOptional,
   onFallbackTo2D,
@@ -1943,18 +1945,33 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           )}
         </div>
 
-        {/* 0U Auxiliary Equipment Button */}
-        {onOpenAuxiliaryModal && (
-          <button
-            type="button"
-            onClick={onOpenAuxiliaryModal}
-            className="bg-indigo-900/90 hover:bg-indigo-800 backdrop-blur-md border border-indigo-400 text-indigo-100 text-[11px] font-bold px-3 py-1.5 flex items-center gap-1.5 pointer-events-auto transition-colors shadow-lg cursor-pointer shrink-0 rounded-md"
-            title="הוסף אביזרי גג, בסיס, דפנות או ציוד חומרה ללא תפיסת יחידות U"
-          >
-            <Layers size={13} className="text-indigo-300" />
-            <span>הוסף ציוד נלווה (0U)</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2 pointer-events-auto shrink-0">
+          {/* 0U PDU Button */}
+          {onOpenPduModal && (
+            <button
+              type="button"
+              onClick={onOpenPduModal}
+              className="bg-amber-600/90 hover:bg-amber-500 backdrop-blur-md border border-amber-300 text-slate-950 text-[11px] font-black px-3 py-1.5 flex items-center gap-1.5 transition-colors shadow-lg cursor-pointer shrink-0 rounded-md"
+              title="הוסף פסי שקעים PDU מותקנים ברלס אחורי עליון ללא תפיסת מקום חזיתי (0U)"
+            >
+              <Zap size={13} className="fill-slate-950" />
+              <span>פס שקעים PDU (0U)</span>
+            </button>
+          )}
+
+          {/* 0U Auxiliary Equipment Button */}
+          {onOpenAuxiliaryModal && (
+            <button
+              type="button"
+              onClick={onOpenAuxiliaryModal}
+              className="bg-indigo-900/90 hover:bg-indigo-800 backdrop-blur-md border border-indigo-400 text-indigo-100 text-[11px] font-bold px-3 py-1.5 flex items-center gap-1.5 transition-colors shadow-lg cursor-pointer shrink-0 rounded-md"
+              title="הוסף אביזרי גג, בסיס, דפנות או ציוד חומרה ללא תפיסת יחידות U"
+            >
+              <Layers size={13} className="text-indigo-300" />
+              <span>הוסף ציוד נלווה (0U)</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Accessibility Keyboard Slot Picker Bar */}

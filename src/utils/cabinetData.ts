@@ -442,7 +442,10 @@ export function groupAccessoriesForDisplay(
     if (norm === '821410' || itemText.includes('שערות') || (itemText.includes('פנל') && itemText.includes('מברשת'))) {
       acc.uSize = 1;
     }
-    if (acc._pdu) {
+    const isPduItem = acc._pdu || /פס שקע|שקעים|pdu/i.test(itemText) || String(acc.category || '').includes('פסי שקעים') || String(acc.nestedSubcategory || '').includes('פסי שקעים');
+    if (isPduItem) {
+      acc._pdu = true;
+      acc.uSize = 0;
       pdus.push(acc);
       return;
     }

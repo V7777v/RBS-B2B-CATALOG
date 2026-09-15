@@ -790,6 +790,11 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
                   if (isMedium) setActiveMediumTab('catalog');
                   if (isMobile) setMobileDrawer('catalog');
                 }}
+                onOpenPduModal={() => {
+                  setAddSlotTargetU(null);
+                  if (isMedium) setActiveMediumTab('catalog');
+                  if (isMobile) setMobileDrawer('catalog');
+                }}
                 onIncrementQuantity={onIncrementQuantity}
                 onRemoveOptional={onRemoveOptional}
                 onFallbackTo2D={() => setViewMode('2d')}

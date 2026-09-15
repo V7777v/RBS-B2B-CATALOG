@@ -951,6 +951,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [addSlotTargetU, setAddSlotTargetU] = useState<number | null>(null);
   const [previewAddSlotSpanU, setPreviewAddSlotSpanU] = useState<number>(1);
   const [isAuxiliaryModalOpen, setIsAuxiliaryModalOpen] = useState(false);
+  const [isPduModalOpen, setIsPduModalOpen] = useState(false);
 
   // Drag and Drop & Floating Hover Cursor Tracker
   const [draggedSlot, setDraggedSlot] = useState<VisualSlot | null>(null);
@@ -2298,6 +2299,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     setAddSlotTargetU(null);
                     setIsAuxiliaryModalOpen(true);
                   }}
+                  onOpenPduModal={() => {
+                    setAddSlotTargetU(null);
+                    setIsPduModalOpen(true);
+                  }}
                   onIncrementQuantity={handleIncrementQuantity}
                   onRemoveOptional={handleRemoveOptional}
                   onFallbackTo2D={() => setViewMode('2d')}
@@ -3520,40 +3525,41 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         )}
       </AnimatePresence>
 
-      {/* Mobile Drawer (Add Slot / Auxiliary) */}
-      {!isDesktop && (
-        <AddSlotModal
-          isOpen={isAddSlotModalOpen || isAuxiliaryModalOpen}
-          onClose={() => {
-            setIsAddSlotModalOpen(false);
-            setIsAuxiliaryModalOpen(false);
-            setAddSlotTargetU(null);
-            setPreviewAddSlotSpanU(1);
-          }}
-          targetU={addSlotTargetU}
-          totalU={totalSlotsU}
-          slots={slots}
-          availableU={availableU}
-          compatibleAccessories={compatibleAccessories}
-          onAddAccessoryAtSlot={handleAddOptionalAtSlot}
-          onRequestRearrangement={(plan, item) => {
-            setIsAddSlotModalOpen(false);
-            setIsAuxiliaryModalOpen(false);
-            setAddSlotTargetU(null);
-            setPreviewAddSlotSpanU(1);
-            const currentSignature = computeStateSignature(
-              product?.sku || '',
-              totalSlotsU,
-              selectedOptionals,
-              presetOverrides
-            );
-            setPendingRearrangementPlan({ plan, item, stateSignature: currentSignature });
-          }}
-          isAuxiliaryMode={isAuxiliaryModalOpen}
-          mode="mobile-drawer"
-          onHoverProductItem={(uSize) => setPreviewAddSlotSpanU(uSize || 1)}
-        />
-      )}
+      {/* Modal / Drawer (Add Slot / Auxiliary / PDU) */}
+      <AddSlotModal
+        isOpen={isAddSlotModalOpen || isAuxiliaryModalOpen || isPduModalOpen}
+        onClose={() => {
+          setIsAddSlotModalOpen(false);
+          setIsAuxiliaryModalOpen(false);
+          setIsPduModalOpen(false);
+          setAddSlotTargetU(null);
+          setPreviewAddSlotSpanU(1);
+        }}
+        targetU={addSlotTargetU}
+        totalU={totalSlotsU}
+        slots={slots}
+        availableU={availableU}
+        compatibleAccessories={compatibleAccessories}
+        onAddAccessoryAtSlot={handleAddOptionalAtSlot}
+        onRequestRearrangement={(plan, item) => {
+          setIsAddSlotModalOpen(false);
+          setIsAuxiliaryModalOpen(false);
+          setIsPduModalOpen(false);
+          setAddSlotTargetU(null);
+          setPreviewAddSlotSpanU(1);
+          const currentSignature = computeStateSignature(
+            product?.sku || '',
+            totalSlotsU,
+            selectedOptionals,
+            presetOverrides
+          );
+          setPendingRearrangementPlan({ plan, item, stateSignature: currentSignature });
+        }}
+        isAuxiliaryMode={isAuxiliaryModalOpen}
+        initialSubView={isPduModalOpen ? 'pdu' : isAuxiliaryModalOpen ? 'aux' : 'slots'}
+        mode="mobile-drawer"
+        onHoverProductItem={(uSize) => setPreviewAddSlotSpanU(uSize || 1)}
+      />
 
       {/* Rearrangement Approval Modal */}
       {pendingRearrangementPlan && (

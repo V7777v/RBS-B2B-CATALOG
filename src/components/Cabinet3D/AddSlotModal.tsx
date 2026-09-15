@@ -18,6 +18,7 @@ import {
   Layers,
   ArrowRight,
   Sparkles,
+  Zap,
 } from 'lucide-react';
 import { VisualSlot } from '../CabinetConfigurator';
 import { analyzeCabinetSpace, classifyItemPlacement, RearrangementPlan } from '../../utils/cabinetPlacementEngine';
@@ -36,6 +37,7 @@ export interface AddSlotModalProps {
   isAuxiliaryMode?: boolean;
   mode?: 'desktop-sidebar' | 'mobile-drawer';
   onHoverProductItem?: (uSize: number | null) => void;
+  initialSubView?: 'slots' | 'pdu' | 'aux';
 }
 
 export const AddSlotModal: React.FC<AddSlotModalProps> = ({
@@ -51,24 +53,39 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
   isAuxiliaryMode = false,
   mode = 'mobile-drawer',
   onHoverProductItem,
+  initialSubView,
 }) => {
+  const [subView, setSubView] = useState<'slots' | 'pdu' | 'aux'>(
+    initialSubView || (isAuxiliaryMode ? 'aux' : 'slots')
+  );
   const [searchFilter, setSearchFilter] = useState('');
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Reset search filter and expansion whenever modal opens or target changes
+  // Sync subView and reset open sections to closed by default
   useEffect(() => {
     if (isOpen) {
       setSearchFilter('');
-      // Focus search input after a brief delay for mount
+      if (initialSubView) {
+        setSubView(initialSubView);
+        setOpenSections({});
+      } else if (isAuxiliaryMode) {
+        setSubView('aux');
+        setOpenSections({});
+      } else {
+        setSubView('slots');
+        setOpenSections({});
+      }
       setTimeout(() => {
         if (searchInputRef.current) {
           searchInputRef.current.focus();
         }
       }, 100);
+    } else {
+      setOpenSections({});
     }
-  }, [isOpen, targetU, isAuxiliaryMode]);
+  }, [isOpen, targetU, isAuxiliaryMode, initialSubView]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -87,12 +104,43 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
     return analyzeCabinetSpace(totalU, slots, targetU);
   }, [totalU, slots, targetU]);
 
+  // All PDU accessories guaranteed with uSize = 0, _pdu = true
+  const allPduItems = useMemo(() => {
+    return compatibleAccessories
+      .filter(acc => {
+        const itemText = `${acc.name || ''} ${acc.description || ''}`.toLowerCase();
+        return (
+          acc._pdu ||
+          /פס שקע|שקעים|pdu/i.test(itemText) ||
+          String(acc.category || '').includes('פסי שקעים') ||
+          String(acc.nestedSubcategory || '').includes('פסי שקעים')
+        );
+      })
+      .map(acc => ({
+        ...acc,
+        uSize: 0,
+        _pdu: true,
+      }));
+  }, [compatibleAccessories]);
+
   // Filter candidates strictly based on capacity and mode
   const { directItems, alternativeItems, rearrangementItems, zeroUItems } = useMemo(() => {
-    // 1. In 0U auxiliary mode: ONLY return 0U accessories
-    if (isAuxiliaryMode) {
+    // 1. In PDU subView: only return PDUs
+    if (subView === 'pdu') {
+      return {
+        directItems: [],
+        alternativeItems: [],
+        rearrangementItems: [],
+        zeroUItems: allPduItems,
+      };
+    }
+
+    // 2. In 0U auxiliary mode: return 0U accessories (including PDUs and roof/hardware)
+    if (subView === 'aux' || isAuxiliaryMode) {
       const zItems = compatibleAccessories.filter(acc => {
-        const uSize = acc.uSize ?? 0;
+        const itemText = `${acc.name || ''} ${acc.description || ''}`.toLowerCase();
+        const isPdu = acc._pdu || /פס שקע|שקעים|pdu/i.test(itemText);
+        const uSize = isPdu ? 0 : (acc.uSize ?? 0);
         return uSize === 0;
       });
       return {
@@ -103,15 +151,16 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
       };
     }
 
-    // 2. In U slot mode: filter out items that physically exceed total available U
+    // 3. In U slot mode: filter out items that physically exceed total available U
     const candidates = compatibleAccessories.filter(acc => {
-      const uSize = acc.uSize ?? 1;
-      if (uSize === 0) return false; // 0U items are in auxiliary mode
+      const itemText = `${acc.name || ''} ${acc.description || ''}`.toLowerCase();
+      const isPdu = acc._pdu || /פס שקע|שקעים|pdu/i.test(itemText);
+      const uSize = isPdu ? 0 : (acc.uSize ?? 1);
+      if (uSize === 0) return false; // 0U items and PDUs are handled in dedicated tabs
       return uSize <= availableU; // strictly hide items larger than total available space
     });
 
     if (!targetU) {
-      // If no targetU specified, all candidates are direct candidates
       return {
         directItems: candidates,
         alternativeItems: [],
@@ -141,17 +190,17 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
       rearrangementItems: rearr,
       zeroUItems: [],
     };
-  }, [compatibleAccessories, isAuxiliaryMode, targetU, availableU, spaceAnalysis, slots]);
+  }, [compatibleAccessories, subView, isAuxiliaryMode, targetU, availableU, spaceAnalysis, slots, allPduItems]);
 
-  // Group direct items for display (Matrix Shelves, Brand groups, Takes U)
+  // Group items for display (Matrix Shelves, Brand groups, Takes U, PDUs)
   const groupedDirectRubrics = useMemo(() => {
-    const itemsToGroup = isAuxiliaryMode ? zeroUItems : directItems;
+    const itemsToGroup = (subView === 'pdu' || subView === 'aux' || isAuxiliaryMode) ? zeroUItems : directItems;
     return groupAccessoriesForDisplay(
       itemsToGroup,
       searchFilter,
-      isAuxiliaryMode ? undefined : availableU
+      (subView === 'pdu' || subView === 'aux' || isAuxiliaryMode) ? undefined : availableU
     );
-  }, [isAuxiliaryMode, zeroUItems, directItems, searchFilter, availableU]);
+  }, [subView, isAuxiliaryMode, zeroUItems, directItems, searchFilter, availableU]);
 
   // Filter alternative items by search
   const filteredAlternativeItems = useMemo(() => {
@@ -175,22 +224,22 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
     });
   }, [rearrangementItems, searchFilter]);
 
-  // Auto-expand sections when user types a search filter
+  // Auto-expand single matching section when user types a search filter
   useEffect(() => {
-    if (searchFilter.length > 1) {
-      const allOpen: Record<string, boolean> = {
-        'section-alternative': true,
-        'section-rearrange': true,
-      };
-      groupedDirectRubrics.forEach(g => {
-        allOpen[g.id] = true;
-      });
-      setOpenSections(allOpen);
+    if (searchFilter.trim().length > 1) {
+      const firstMatch = groupedDirectRubrics.find(g => g.items.length > 0);
+      if (firstMatch) {
+        setOpenSections({ [firstMatch.id]: true });
+      }
     }
   }, [searchFilter, groupedDirectRubrics]);
 
+  // Exclusive toggle: opening one closes all other sections
   const toggleSection = (id: string) => {
-    setOpenSections(prev => ({ ...prev, [id]: !prev[id] }));
+    setOpenSections(prev => {
+      const isCurrentlyOpen = Boolean(prev[id]);
+      return isCurrentlyOpen ? {} : { [id]: true };
+    });
   };
 
   const handleProductHover = (acc: any | null) => {
@@ -202,11 +251,15 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
   const contiguousFreeCount = spaceAnalysis.contiguousFreeAtTarget;
 
   const renderProductCard = (item: any, options?: { isAux?: boolean; customAction?: React.ReactNode; badge?: React.ReactNode }) => {
-    const uSize = item.uSize ?? (options?.isAux ? 0 : 1);
+    const itemText = `${item.name || ''} ${item.description || ''}`.toLowerCase();
+    const isItemPdu = item._pdu || /פס שקע|שקעים|pdu/i.test(itemText) || String(item.category || '').includes('פסי שקעים');
+    const uSize = isItemPdu ? 0 : (item.uSize ?? (options?.isAux ? 0 : 1));
     return (
       <div
         key={item.sku || item.pn || item.id}
-        className="bg-white border border-slate-200 hover:border-[#004387] p-3 rounded-lg flex flex-col gap-2 transition-all shadow-2xs hover:shadow-xs group"
+        className={`bg-white border p-3 rounded-lg flex flex-col gap-2 transition-all shadow-2xs hover:shadow-xs group ${
+          isItemPdu ? 'border-amber-300 hover:border-amber-500 bg-amber-50/10' : 'border-slate-200 hover:border-[#004387]'
+        }`}
         onMouseEnter={() => handleProductHover(item)}
         onMouseLeave={() => handleProductHover(null)}
         onTouchStart={() => handleProductHover(item)}
@@ -221,8 +274,10 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="w-12 h-12 bg-slate-100 border border-slate-200 rounded-md flex items-center justify-center text-slate-500 text-xs font-mono font-bold shrink-0">
-                {uSize}U
+              <div className={`w-12 h-12 rounded-md flex items-center justify-center text-xs font-mono font-bold shrink-0 ${
+                isItemPdu ? 'bg-amber-100 border border-amber-300 text-amber-900' : 'bg-slate-100 border border-slate-200 text-slate-500'
+              }`}>
+                {isItemPdu ? '0U' : `${uSize}U`}
               </div>
             )}
             <div className="min-w-0 flex-1">
@@ -232,10 +287,14 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
                 </span>
                 <span
                   className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold shrink-0 ${
-                    uSize === 0 ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-800'
+                    isItemPdu
+                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                      : uSize === 0
+                      ? 'bg-indigo-100 text-indigo-800'
+                      : 'bg-slate-100 text-slate-800'
                   }`}
                 >
-                  {uSize}U
+                  {isItemPdu ? '0U רלס אחורי' : `${uSize}U`}
                 </span>
               </div>
               <div className="text-[11px] font-mono text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
@@ -257,14 +316,19 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
             <button
               type="button"
               onClick={() => {
-                onAddAccessoryAtSlot(item, options?.isAux ? null : targetU);
+                const finalItem = isItemPdu ? { ...item, uSize: 0, _pdu: true, zone: 'rear' } : item;
+                onAddAccessoryAtSlot(finalItem, (options?.isAux || isItemPdu) ? null : targetU);
                 onClose();
                 handleProductHover(null);
               }}
-              className="px-3 py-2 bg-[#004387] hover:bg-[#003166] text-white rounded-md text-xs font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer shadow-xs"
+              className={`px-3 py-2 rounded-md text-xs font-bold flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer shadow-xs ${
+                isItemPdu
+                  ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 font-black'
+                  : 'bg-[#004387] hover:bg-[#003166] text-white'
+              }`}
             >
-              <Plus size={15} />
-              <span>הוסף</span>
+              {isItemPdu ? <Zap size={14} className="fill-slate-950" /> : <Plus size={15} />}
+              <span>{isItemPdu ? 'הוסף לרלס אחורי (PDU)' : 'הוסף'}</span>
             </button>
           )}
         </div>
@@ -274,7 +338,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
     );
   };
 
-  const totalResultsCount = isAuxiliaryMode
+  const totalResultsCount = (subView === 'pdu' || subView === 'aux' || isAuxiliaryMode)
     ? zeroUItems.length
     : groupedDirectRubrics.reduce((acc, r) => acc + r.items.length, 0) +
       filteredAlternativeItems.length +
@@ -286,13 +350,13 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
       <div className="p-3.5 sm:p-4 bg-slate-900 text-white flex items-center justify-between shrink-0 shadow-md z-10">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-blue-600/30 border border-blue-400/30 flex items-center justify-center text-blue-300">
-            {isAuxiliaryMode ? <Layers size={19} /> : <Plus size={19} />}
+            {subView === 'pdu' ? <Zap size={19} className="text-amber-400 fill-amber-400" /> : (subView === 'aux' || isAuxiliaryMode) ? <Layers size={19} /> : <Plus size={19} />}
           </div>
           <div>
             <h3 className="font-bold text-[15px] sm:text-base leading-none">
-              {isAuxiliaryMode ? 'הוספת ציוד נלווה (0U)' : 'הוספת ציוד ומדפים'}
+              {subView === 'pdu' ? 'הוספת פסי שקעים (PDU)' : (subView === 'aux' || isAuxiliaryMode) ? 'הוספת ציוד נלווה (0U)' : 'הוספת ציוד ומדפים'}
             </h3>
-            {targetU && !isAuxiliaryMode ? (
+            {targetU && subView === 'slots' ? (
               <div className="text-[11px] sm:text-xs text-blue-200 mt-1 flex items-center gap-1.5 flex-wrap">
                 <span className="bg-blue-800/80 px-1.5 py-0.5 rounded font-mono font-bold text-white">
                   מיקום: U{targetU}
@@ -302,7 +366,11 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
                 <span className="text-white/40">|</span>
                 <span>סך הכל פנוי: <strong>{availableU}U</strong></span>
               </div>
-            ) : isAuxiliaryMode ? (
+            ) : subView === 'pdu' ? (
+              <p className="text-[11px] sm:text-xs text-amber-300 mt-1 font-medium">
+                מותקן ברלס האחורי העליון של הארון — אינו תופס מקום חזיתי (0U)
+              </p>
+            ) : (subView === 'aux' || isAuxiliaryMode) ? (
               <p className="text-[11px] sm:text-xs text-indigo-200 mt-1">
                 אביזרי גג, דפנות, בסיס וחומרה (ללא תפיסת גובה U)
               </p>
@@ -339,12 +407,79 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
         </div>
       </div>
 
-      {/* Auxiliary 0U Informative Banner */}
-      {isAuxiliaryMode && (
+      {/* Mode Navigation Tabs */}
+      <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-200/80 border-b border-slate-300 text-xs shrink-0 overflow-x-auto select-none">
+        <button
+          type="button"
+          onClick={() => {
+            setSubView('slots');
+            setOpenSections({});
+          }}
+          className={`px-3 py-1.5 rounded font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+            subView === 'slots'
+              ? 'bg-[#004387] text-white shadow-xs'
+              : 'bg-white/90 text-slate-700 hover:bg-white hover:text-slate-900 border border-slate-300/60'
+          }`}
+        >
+          <Box size={13} />
+          <span>ציוד לפי מקום פנוי {targetU ? `(U${targetU})` : ''}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setSubView('pdu');
+            setOpenSections({ pdus: true });
+          }}
+          className={`px-3 py-1.5 rounded font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+            subView === 'pdu'
+              ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+              : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300/80'
+          }`}
+        >
+          <Zap size={13} className={subView === 'pdu' ? 'fill-slate-950' : 'fill-amber-600 text-amber-600'} />
+          <span>פסי שקעים PDU (0U רלס אחורי)</span>
+          {allPduItems.length > 0 && (
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+              subView === 'pdu' ? 'bg-slate-950 text-amber-300' : 'bg-amber-200 text-amber-900'
+            }`}>
+              {allPduItems.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setSubView('aux');
+            setOpenSections({});
+          }}
+          className={`px-3 py-1.5 rounded font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+            subView === 'aux'
+              ? 'bg-indigo-700 text-white shadow-xs'
+              : 'bg-white/90 text-slate-700 hover:bg-white hover:text-slate-900 border border-slate-300/60'
+          }`}
+        >
+          <Layers size={13} />
+          <span>ציוד נלווה נוסף (0U)</span>
+        </button>
+      </div>
+
+      {/* Auxiliary / PDU Informative Banner */}
+      {subView === 'pdu' && (
+        <div className="bg-amber-50 border-b border-amber-200 px-3.5 py-2 flex items-center gap-2 text-amber-900 text-xs shrink-0 font-medium">
+          <Zap size={14} className="text-amber-600 fill-amber-600 shrink-0" />
+          <span>
+            פסי שקעים מותקנים ברלס האחורי העליון ואינם תופסים מקום חזיתי (0U).
+          </span>
+        </div>
+      )}
+
+      {subView === 'aux' && (
         <div className="bg-indigo-50 border-b border-indigo-200 px-3.5 py-2 flex items-center gap-2 text-indigo-900 text-xs shrink-0">
           <Info size={14} className="text-indigo-600 shrink-0" />
           <span>
-            מוצגים אביזרי 0U בלבד. <strong>לציוד שתופס U — לחץ על מקום פנוי בארון</strong>.
+            מוצגים אביזרי 0U בלבד. <strong>לציוד שתופס U — בחר בלשונית "ציוד לפי מקום פנוי"</strong>.
           </span>
         </div>
       )}
@@ -382,7 +517,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
             <span className="font-bold text-sm text-slate-700">לא נמצא ציוד מתאים</span>
             {searchFilter ? (
               <span className="text-xs text-slate-500 mt-1">נסה לשנות את מילות החיפוש</span>
-            ) : availableU < 1 && !isAuxiliaryMode ? (
+            ) : availableU < 1 && subView === 'slots' ? (
               <span className="text-xs text-rose-600 mt-1 font-semibold">הארון מלא. אין מספיק יחידות U פנויות.</span>
             ) : null}
           </div>
@@ -390,7 +525,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
           <>
             {/* 1. Direct Compatible Groups (Fit starting from targetU) */}
             {groupedDirectRubrics.map((rubric) => {
-              const isOpenSection = openSections[rubric.id] ?? true;
+              const isOpenSection = Boolean(openSections[rubric.id]);
               return (
                 <div
                   key={rubric.id}
@@ -424,8 +559,8 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
                     <div className="p-2.5 space-y-2 bg-slate-50/50 border-t border-slate-100">
                       {rubric.items.map((item: any) =>
                         renderProductCard(item, {
-                          isAux: isAuxiliaryMode || item.uSize === 0,
-                          badge: targetU && !isAuxiliaryMode ? (
+                          isAux: subView === 'pdu' || subView === 'aux' || isAuxiliaryMode || item.uSize === 0,
+                          badge: targetU && subView === 'slots' ? (
                             <div className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold flex items-center gap-1 w-fit">
                               <CheckCircle2 size={12} className="text-emerald-600" />
                               <span>מתאים ישירות ב-U{targetU}</span>
@@ -454,13 +589,13 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
                       {filteredAlternativeItems.length}
                     </span>
                   </div>
-                  {openSections['section-alternative'] ?? true ? (
+                  {Boolean(openSections['section-alternative']) ? (
                     <ChevronUp size={16} />
                   ) : (
                     <ChevronDown size={16} />
                   )}
                 </button>
-                {(openSections['section-alternative'] ?? true) && (
+                {Boolean(openSections['section-alternative']) && (
                   <div className="p-2.5 space-y-2.5 bg-blue-50/30 border-t border-blue-100">
                     <p className="text-[11px] text-blue-800 px-1">
                       הפריטים הבאים דורשים רצף רחב יותר מ-U{targetU}, אך יש עבורם מקום פנוי קיים ללא הזזות:
@@ -509,13 +644,13 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
                       {filteredRearrangementItems.length}
                     </span>
                   </div>
-                  {openSections['section-rearrange'] ?? true ? (
+                  {Boolean(openSections['section-rearrange']) ? (
                     <ChevronUp size={16} />
                   ) : (
                     <ChevronDown size={16} />
                   )}
                 </button>
-                {(openSections['section-rearrange'] ?? true) && (
+                {Boolean(openSections['section-rearrange']) && (
                   <div className="p-2.5 space-y-2.5 bg-amber-50/30 border-t border-amber-100">
                     <p className="text-[11px] text-amber-900 px-1">
                       הפריטים הבאים יותקנו ב-U{targetU} על ידי הזזת פריטים קיימים למיקומים פנויים:
