@@ -1199,9 +1199,10 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       ? uCentersRef.current
       : Array.from({ length: dims.totalU }, (_, i) => u1BottomY + (i + 0.5) * U_HEIGHT_UNITS);
 
+    const isModel447510T = Boolean(dims.isSpecific447510T);
     const halfD = (dims.depthMm * SCALE_MM_TO_UNITS) / 2;
-    const frontRailZ = halfD - 0.55;
-    const rearRailZ = -halfD + 0.65;
+    const frontRailZ = halfD - (isModel447510T ? 0.75 : 0.55);
+    const rearRailZ = -halfD + (isModel447510T ? 0.85 : 0.65);
     const innerDepthUnits = innerDepthUnitsRef.current || Math.abs(frontRailZ - rearRailZ);
     const materials = materialsRef.current;
 
@@ -1248,13 +1249,15 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       const safeEnd = Math.max(1, Math.min(item.uStart + item.uSpan - 1, dims.totalU));
       const bottomCenterY = uCenters[safeStart - 1];
       const topCenterY = uCenters[safeEnd - 1] ?? bottomCenterY;
-      const targetCenterY = (bottomCenterY + topCenterY) / 2;
 
-      // PDU placement rule: rear rail if cabinet > 4U, otherwise front rail
+      // PDU placement rule: stabilized at top of rear rail if cabinet > 4U, otherwise front rail
       const isPdu = item.type === 'pdu' || /שקע|pdu/i.test(item.name);
       const isRearRail = isPdu && dims.totalU > 4;
       const targetZ = isRearRail ? rearRailZ : frontRailZ;
       const targetRotY = isRearRail ? Math.PI : 0;
+      const targetCenterY = (isPdu && dims.totalU > 4)
+        ? (uCenters[dims.totalU - 1] ?? (bottomCenterY + topCenterY) / 2)
+        : (bottomCenterY + topCenterY) / 2;
 
       const existing = cachedMeshMap.get(item.instanceId);
 
@@ -1387,6 +1390,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     const widthUnits = dims.widthMm * SCALE_MM_TO_UNITS;
     const depthUnits = dims.depthMm * SCALE_MM_TO_UNITS;
 
+    let pduCounter = 0;
     (nonUAccessories || []).forEach((acc, idx) => {
       const zone = acc.zone || 'hardware';
       const itemData = {
@@ -1400,7 +1404,47 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         accessoryRef: acc,
       };
 
-      if (zone === 'roof') {
+      const isPdu = zone === 'rear' || /פס שקע|שקעים|pdu/i.test(acc.name || '') || /שקע|pdu/i.test(acc.description || '');
+
+      if (isPdu) {
+        // Mount 19" horizontal PDU strictly at top of rear rail
+        const targetPduU = Math.max(1, dims.totalU - pduCounter);
+        pduCounter++;
+        const pduInst: Product3DInstance = {
+          instanceId: `pdu-nonu-${idx}`,
+          sku: acc.sku || acc.pn || 'PDU-19',
+          name: acc.name,
+          description: acc.description || '',
+          price: acc.price || 0,
+          uStart: dims.totalU > 4 ? targetPduU : 1,
+          uSpan: 1,
+          isIncluded: Boolean(acc.isIncluded || acc.isPreset),
+          type: 'pdu',
+          image: acc.image || (acc.accessoryRef ? acc.accessoryRef.image : undefined),
+          optionalIdx: acc.optionalIdx,
+          accessoryRef: acc,
+        };
+        const pduMesh = buildProduct3DMesh(pduInst, innerDepthUnits, materials, () => {
+          needsRenderRef.current = true;
+        });
+        const pduY = uCenters[targetPduU - 1] ?? 0;
+        const pduZ = dims.totalU <= 4 ? frontRailZ : rearRailZ;
+        if (dims.totalU > 4) {
+          pduMesh.rotation.y = Math.PI; // Face sockets forward into cabinet
+
+          // Stabilizing rail clamps anchored to rear vertical rail
+          const clampGeom = new THREE.BoxGeometry(0.14, 0.38, 0.08);
+          const clampMat = materials.metalMat || materials.earMat;
+          const leftClamp = new THREE.Mesh(clampGeom, clampMat);
+          leftClamp.position.set(-RACK_19_WIDTH_UNITS / 2 + 0.06, 0, 0.03);
+          pduMesh.add(leftClamp);
+          const rightClamp = new THREE.Mesh(clampGeom, clampMat);
+          rightClamp.position.set(RACK_19_WIDTH_UNITS / 2 - 0.06, 0, 0.03);
+          pduMesh.add(rightClamp);
+        }
+        pduMesh.position.set(0, pduY, pduZ);
+        nonUGroupRef.current.add(pduMesh);
+      } else if (zone === 'roof') {
         const isFan = /מאוורר|fan|מפוח|איוורור/i.test(acc.name || '');
         if (!isFan) {
           const roofMesh = buildRoofAccessoryMesh(itemData, widthUnits, depthUnits, materials);
@@ -1408,39 +1452,10 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           nonUGroupRef.current.add(roofMesh);
         }
       } else if (zone === 'vertical') {
-        const isPdu = /שקע|pdu/i.test(acc.name || '');
-        if (isPdu) {
-          // Mount 19" horizontal PDU on rear rail (or front if 4U)
-          const pduInst: Product3DInstance = {
-            instanceId: `pdu-nonu-${idx}`,
-            sku: acc.sku || acc.pn || 'PDU-19',
-            name: acc.name,
-            description: acc.description || '',
-            price: acc.price || 0,
-            uStart: dims.totalU > 4 ? dims.totalU : 1,
-            uSpan: 1,
-            isIncluded: Boolean(acc.isIncluded || acc.isPreset),
-            type: 'pdu',
-            image: acc.image || (acc.accessoryRef ? acc.accessoryRef.image : undefined),
-            optionalIdx: acc.optionalIdx,
-            accessoryRef: acc,
-          };
-          const pduMesh = buildProduct3DMesh(pduInst, innerDepthUnits, materials, () => {
-            needsRenderRef.current = true;
-          });
-          const pduY = uCenters[dims.totalU - 1] ?? 0;
-          const pduZ = dims.totalU <= 4 ? frontRailZ : rearRailZ;
-          if (dims.totalU > 4) {
-            pduMesh.rotation.y = Math.PI; // Face sockets forward into cabinet
-          }
-          pduMesh.position.set(0, pduY, pduZ);
-          nonUGroupRef.current.add(pduMesh);
-        } else {
-          const vertMesh = buildVerticalAccessoryMesh(itemData, dims.totalU * U_HEIGHT_UNITS, materials);
-          const zPos = dims.totalU <= 4 ? -depthUnits / 4 : -depthUnits * 0.9;
-          vertMesh.position.set(widthUnits / 2 - 0.35, 0, zPos);
-          nonUGroupRef.current.add(vertMesh);
-        }
+        const vertMesh = buildVerticalAccessoryMesh(itemData, dims.totalU * U_HEIGHT_UNITS, materials);
+        const zPos = dims.totalU <= 4 ? -depthUnits / 4 : -depthUnits * 0.9;
+        vertMesh.position.set(widthUnits / 2 - 0.35, 0, zPos);
+        nonUGroupRef.current.add(vertMesh);
       }
     });
 

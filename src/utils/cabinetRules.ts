@@ -255,6 +255,12 @@ export const resolveUConsumption = (
     return { u: 1, source: 'rack_pattern_default' };
   }
 
+  // Explicit user directive: All PDUs (פסי שקעים) are mounted on the rear rail and do NOT consume frontal U space (0U)
+  const isPduItem = nameDesc.includes('פס שקע') || nameDesc.includes('שקעים') || nameDesc.includes('pdu') || String(pp?.nestedSubcategory || '').includes('פסי שקעים') || String(pp?.category || '').includes('פסי שקעים');
+  if (isPduItem) {
+    return { u: 0, source: 'zero_u_rule' };
+  }
+
   // Priority 1: Explicit valid volume
   const volResult = parseNormalizedVolume(pp);
   if (volResult.hasExplicitValue && volResult.volume !== null) {

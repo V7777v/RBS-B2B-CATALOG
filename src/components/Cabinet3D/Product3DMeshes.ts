@@ -171,6 +171,69 @@ export function buildProduct3DMesh(
     rightEar.position.set(RACK_19_WIDTH_UNITS / 2 - 0.09, 0, 0.02);
     group.add(rightEar);
 
+    // Chrome mounting screws on ears
+    const screwGeom = new THREE.CylinderGeometry(0.022, 0.022, 0.03, 8);
+    screwGeom.rotateX(Math.PI / 2);
+    const screwMat = materials.metalMat || materials.earMat;
+    [-RACK_19_WIDTH_UNITS / 2 + 0.09, RACK_19_WIDTH_UNITS / 2 - 0.09].forEach(sx => {
+      const sMesh = new THREE.Mesh(screwGeom, screwMat);
+      sMesh.position.set(sx, 0, 0.045);
+      group.add(sMesh);
+    });
+
+    // Sockets along front face
+    const socketCount = 8;
+    const socketGeom = new THREE.CylinderGeometry(0.12, 0.12, 0.02, 16);
+    socketGeom.rotateX(Math.PI / 2);
+    const socketMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.8 });
+    const pinHoleGeom = new THREE.BoxGeometry(0.03, 0.03, 0.03);
+    const pinHoleMat = new THREE.MeshBasicMaterial({ color: 0x09090b });
+
+    const socketStartX = -RACK_19_WIDTH_UNITS / 2 + 0.65;
+    const socketSpacing = (RACK_19_WIDTH_UNITS - 1.6) / (socketCount - 1);
+    for (let si = 0; si < socketCount; si++) {
+      const sMesh = new THREE.Mesh(socketGeom, socketMat);
+      sMesh.position.set(socketStartX + si * socketSpacing, 0, 0.01);
+      group.add(sMesh);
+
+      // Pin holes
+      const pinL = new THREE.Mesh(pinHoleGeom, pinHoleMat);
+      pinL.position.set(socketStartX + si * socketSpacing - 0.04, 0, 0.02);
+      group.add(pinL);
+      const pinR = new THREE.Mesh(pinHoleGeom, pinHoleMat);
+      pinR.position.set(socketStartX + si * socketSpacing + 0.04, 0, 0.02);
+      group.add(pinR);
+    }
+
+    // Red illuminated rocker switch
+    const switchBaseGeom = new THREE.BoxGeometry(0.16, 0.22, 0.04);
+    const switchBaseMat = new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.6 });
+    const switchBase = new THREE.Mesh(switchBaseGeom, switchBaseMat);
+    switchBase.position.set(RACK_19_WIDTH_UNITS / 2 - 0.45, 0, 0.02);
+    group.add(switchBase);
+
+    const switchRockerGeom = new THREE.BoxGeometry(0.10, 0.14, 0.03);
+    const switchRockerMat = new THREE.MeshStandardMaterial({
+      color: 0xef4444,
+      emissive: 0xdc2626,
+      emissiveIntensity: 0.6,
+      roughness: 0.3
+    });
+    const switchRocker = new THREE.Mesh(switchRockerGeom, switchRockerMat);
+    switchRocker.position.set(RACK_19_WIDTH_UNITS / 2 - 0.45, 0, 0.035);
+    group.add(switchRocker);
+
+    // Green surge protection LED
+    const ledGeom = new THREE.SphereGeometry(0.025, 8, 8);
+    const ledMat = new THREE.MeshStandardMaterial({
+      color: 0x22c55e,
+      emissive: 0x16a34a,
+      emissiveIntensity: 0.8
+    });
+    const ledMesh = new THREE.Mesh(ledGeom, ledMat);
+    ledMesh.position.set(RACK_19_WIDTH_UNITS / 2 - 0.28, 0, 0.025);
+    group.add(ledMesh);
+
   } else if (isPanel) {
     const panelDepth = 0.20;
     const panelGeom = new THREE.BoxGeometry(RACK_19_WIDTH_UNITS, spanHeight, panelDepth);

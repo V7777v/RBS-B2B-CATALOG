@@ -143,14 +143,19 @@ const isInfrastructureItem = (pp: any): boolean => {
   return isInfraCategory || isInfraSub || isRackmount;
 };
 
-const getPhysicalZone = (sku: string, name: string, desc: string): 'roof' | 'plinth' | 'vertical' | 'hardware' => {
+export type PhysicalZone = 'roof' | 'rear' | 'plinth' | 'vertical' | 'hardware';
+
+const getPhysicalZone = (sku: string, name: string, desc: string): PhysicalZone => {
   const norm = normalizeSku(sku);
-  if (norm && VERIFIED_ZERO_U_EXCEPTIONS[norm]) {
-    return VERIFIED_ZERO_U_EXCEPTIONS[norm].zone;
-  }
   const s = `${name || ''} ${desc || ''}`.toLowerCase();
+  if (/פס שקע|שקעים|pdu/.test(s)) return 'rear';
+  if (norm && VERIFIED_ZERO_U_EXCEPTIONS[norm]) {
+    const z = VERIFIED_ZERO_U_EXCEPTIONS[norm].zone;
+    if (z === 'vertical' && /שקע|pdu/.test(s)) return 'rear';
+    return z as PhysicalZone;
+  }
   if (/מאוורר|fan|מפוח|איוורור|נורת|נורה|led|לד|תאורה|light|כניסה עליונה/.test(s)) return 'roof';
-  if (/פס שקע|שקעים|pdu|פס 12|ורטיקל|vertical|תעלה|מסתיר/.test(s)) return 'vertical';
+  if (/תעלה|מסתיר|ורטיקל|vertical/.test(s)) return 'vertical';
   if (/גלגל|wheel|רגלי|feet|בסיס|plinth/.test(s)) return 'plinth';
   if (/בורג|ברגים|screw|cage|nut|אום|רלס|rail|hardware/.test(s)) return 'hardware';
   return 'hardware';
@@ -285,6 +290,7 @@ const buildCatalogAccessories = (
     let uSize = resolveUConsumption(pp).u;
     if (normSku === '821410') uSize = 1;
     const isPdu = nested.includes('פסי שקעים') || /פס שקע|שקעים|pdu/i.test(`${pp.name || ''} ${pp.description || ''}`);
+    if (isPdu) uSize = 0;
     const price = pp.price ? parseFloat(String(pp.price).replace(/,/g, '')) : 0;
 
     itemsMap.set(normSku, {
@@ -390,8 +396,9 @@ const buildCatalogAccessories = (
       return;
     }
 
-    const uSize = resolveUConsumption(pp, true).u;
+    let uSize = resolveUConsumption(pp, true).u;
     const isPdu = String(pp.nestedSubcategory || '').includes('פסי שקעים') || /פס שקע|שקעים|pdu/i.test(nameDesc);
+    if (isPdu) uSize = 0;
     const price = pp.price ? parseFloat(String(pp.price).replace(/,/g, '')) : 0;
 
     itemsMap.set(normSku, {
@@ -712,7 +719,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
     // 2. Optional accessories added by user (Contiguous allocation)
     const optionalItemsAssignment: { uIndex: number; name: string; description: string; accessoryRef: any; optionalIdx: number; isAnchor: boolean; spanU: number; error?: string; instanceId?: string }[] = [];
-    const nonUAccessories: { name: string; sku: string; quantity: number; description: string; accessoryRef: any; optionalIdx: number; zone: 'roof' | 'plinth' | 'vertical' | 'hardware' }[] = [];
+    const nonUAccessories: { name: string; sku: string; quantity: number; description: string; accessoryRef: any; optionalIdx: number; zone: PhysicalZone }[] = [];
     
     // Pass 1: only items with opt.targetU (pinned)
     selectedOptionals.forEach((opt: any, optIdx: number) => {
@@ -1870,7 +1877,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     };
   };
 
-  const buildPreviewFromNonU = (item: any, zoneType: 'roof' | 'vertical' | 'plinth' | 'hardware'): EnrichedPreviewItem => {
+  const buildPreviewFromNonU = (item: any, zoneType: PhysicalZone): EnrichedPreviewItem => {
     const acc = item.accessoryRef || item;
     const sku = acc.sku || acc.pn || item.sku || '';
     const name = item.name || acc.name || item.description || '';
@@ -1878,8 +1885,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     const image = getAccessoryImage(acc) || getAccessoryImage(item);
     const price = acc.price || item.price || 0;
     const quantity = Math.max(1, Number(item.quantity) || Number(acc.quantity) || 1);
-    const zoneMap: Record<string, string> = {
+    const zoneMap: Record<PhysicalZone, string> = {
       roof: 'תקרת הארון (Roof) · איוורור ותאורה',
+      rear: 'רלס אחורי עליון (Rear Rail) · פס שקעים (0U)',
       vertical: 'דופן ורטיקלית וצדית (Vertical Rails)',
       plinth: 'בסיס ותחתית הארון (Plinth / Base)',
       hardware: 'חומרת הרכבה וציוד נלווה (Hardware)',
@@ -1905,6 +1913,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
 
   const roofItems = nonUAccessories.filter(a => a.zone === 'roof');
+  const rearPduItems = nonUAccessories.filter(a => a.zone === 'rear');
   const verticalItems = nonUAccessories.filter(a => a.zone === 'vertical');
   const plinthItems = nonUAccessories.filter(a => a.zone === 'plinth');
   const hardwareItems = nonUAccessories.filter(a => a.zone === 'hardware');
@@ -2359,6 +2368,113 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* TOP REAR RAIL ZONE — 0U PDU (פס שקעים מותקן ברלס אחורי עליון) */}
+            {rearPduItems.length > 0 ? (
+              <div className="mx-3 mb-1.5 rounded border border-amber-500/80 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 px-2.5 py-1.5 flex-shrink-0 shadow-md">
+                <div className="flex items-center justify-between text-[9px] font-black tracking-wider text-amber-300 uppercase mb-1 border-b border-slate-800 pb-0.5 select-none">
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    <span>רלס אחורי עליון (Rear Rails - Top) · פס שקעים PDU</span>
+                  </span>
+                  <span className="bg-amber-400/20 text-amber-300 font-mono text-[9px] px-1.5 py-0.5 rounded border border-amber-500/30">
+                    אינו תופס מקום חזיתי (0U)
+                  </span>
+                </div>
+                {rearPduItems.map((item, i) => {
+                  const preview = buildPreviewFromNonU(item, 'rear');
+                  const itemPrice = preview.price ? preview.price * preview.quantity : 0;
+                  return (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between text-slate-100 text-[11px] py-1 hover:bg-slate-800/80 px-1.5 rounded cursor-pointer transition-colors group bg-slate-900/60 border border-slate-800"
+                      onMouseEnter={(e) => {
+                        setMousePos({ x: e.clientX, y: e.clientY });
+                        setHoveredProduct(preview);
+                      }}
+                      onMouseMove={(e) => {
+                        setMousePos({ x: e.clientX, y: e.clientY });
+                      }}
+                      onMouseLeave={() => setHoveredProduct(null)}
+                      onClick={() => setInspectedProduct(preview)}
+                      title="לחץ להגדלת תמונה ופרטים"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {/* Authentic PDU graphical sockets bar */}
+                        <div className="hidden sm:flex items-center gap-0.5 bg-black/60 px-1.5 py-1 rounded border border-slate-700 shrink-0">
+                          {/* Rocker switch */}
+                          <div className="w-2.5 h-3.5 bg-red-600 rounded-[1px] border border-red-400 flex items-center justify-center text-[5px] text-white font-bold leading-none select-none">
+                            I
+                          </div>
+                          {/* Green protected LED */}
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_4px_#34d399] mx-0.5"></div>
+                          {/* Sockets */}
+                          <div className="flex items-center gap-1 px-1">
+                            {Array.from({ length: 5 }).map((_, si) => (
+                              <div key={si} className="w-2 h-2 rounded-full border border-slate-600 bg-slate-800 flex items-center justify-center">
+                                <div className="w-0.5 h-0.5 rounded-full bg-black"></div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <span className="font-bold text-amber-200 truncate">{preview.name || preview.description}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {itemPrice > 0 && (
+                          <span className="font-mono text-amber-400 font-bold text-xs">
+                            ₪{itemPrice.toLocaleString('he-IL')}
+                          </span>
+                        )}
+                        <span className="text-amber-400 group-hover:text-amber-200 transition-colors p-0.5">
+                          <ZoomIn size={13} />
+                        </span>
+                        <div className="flex items-center gap-1 bg-slate-950 px-1 py-0.5 border border-slate-700 rounded" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => handleIncrementQuantity(item.optionalIdx)}
+                            className="text-amber-300 hover:bg-slate-800 p-0.5 rounded cursor-pointer"
+                            title="הוסף 1"
+                          >
+                            <Plus size={10} />
+                          </button>
+                          <span className="font-mono text-amber-400 font-bold text-[10px] px-0.5">{preview.quantity}x</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveOptional(item.optionalIdx)}
+                            className="text-red-400 hover:bg-slate-800 p-0.5 rounded cursor-pointer"
+                            title="הפחת / הסר"
+                          >
+                            <Minus size={10} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div 
+                onClick={() => {
+                  setActiveMediumTab('catalog');
+                  setMobileDrawerOpen('catalog');
+                }}
+                className="mx-3 mb-1.5 rounded border border-dashed border-slate-700 bg-slate-950/40 hover:bg-slate-900/60 px-2.5 py-1 flex items-center justify-between text-slate-400 text-[10px] cursor-pointer transition-colors group flex-shrink-0"
+                title="לחץ לבחירת פס שקעים מהקטלוג"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-600 group-hover:bg-amber-400 transition-colors"></span>
+                  <span className="font-medium text-slate-400 group-hover:text-amber-200 transition-colors">
+                    רלס אחורי עליון (Rear Rails - Top) — פנוי להתקנת פס שקעים PDU (0U)
+                  </span>
+                </div>
+                <span className="text-amber-400/80 group-hover:text-amber-300 font-bold text-[9px] flex items-center gap-0.5">
+                  <Plus size={10} />
+                  <span>הוסף פס שקעים</span>
+                </span>
               </div>
             )}
 

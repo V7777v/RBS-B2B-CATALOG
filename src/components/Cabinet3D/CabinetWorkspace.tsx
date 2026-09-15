@@ -136,9 +136,11 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
   const isMedium = windowWidth >= 768 && windowWidth < 1280;
   const isMobile = windowWidth < 768;
 
-  const roofItems = nonUAccessories.filter(a => a.zone === 'roof');
-  const verticalItems = nonUAccessories.filter(a => a.zone === 'vertical');
-  const plinthItems = nonUAccessories.filter(a => a.zone === 'plinth');
+  const roofItems = (nonUAccessories || []).filter(a => a.zone === 'roof');
+  const rearPduItems = (nonUAccessories || []).filter(a => a.zone === 'rear' || /פס שקע|שקעים|pdu/i.test(`${a.name || ''} ${a.description || ''}`));
+  const verticalItems = (nonUAccessories || []).filter(a => a.zone === 'vertical' && !/פס שקע|שקעים|pdu/i.test(`${a.name || ''} ${a.description || ''}`));
+  const plinthItems = (nonUAccessories || []).filter(a => a.zone === 'plinth');
+  const hardwareItems = (nonUAccessories || []).filter(a => a.zone === 'hardware');
 
   // Render individual accessory card in catalog
   const renderAccessoryCard = (acc: any, idx: number) => {
@@ -797,11 +799,32 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
         ) : (
           <div className="w-full h-full flex flex-col p-3 bg-slate-100 overflow-hidden">
             <div className="relative border-4 bg-slate-900 p-2 shadow-xl flex flex-col flex-1 h-full overflow-hidden border-slate-700 rounded-sm">
+              {/* Roof */}
               {roofItems.length > 0 && (
-                <div className="mx-2 mb-1 rounded border border-cyan-500/70 bg-cyan-950/80 px-2 py-0.5 text-center text-cyan-200 text-xs shrink-0">
-                  ◄ תקרת הארון: {roofItems.map((r: any) => `${r.description || r.name} x${r.quantity}`).join(' · ')} ►
+                <div className="mx-2 mb-1 rounded border border-cyan-500/70 bg-cyan-950/80 px-2 py-0.5 text-center text-cyan-200 text-xs shrink-0 font-bold">
+                  ◄ תקרת הארון (Roof): {roofItems.map((r: any) => `${r.description || r.name} x${r.quantity}`).join(' · ')} ►
                 </div>
               )}
+
+              {/* Top Rear Rail — 0U PDU */}
+              {rearPduItems.length > 0 ? (
+                <div className="mx-2 mb-1 rounded border border-amber-500/80 bg-slate-950 px-2 py-1 flex items-center justify-between text-amber-200 text-xs shrink-0">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
+                    <span className="font-bold text-[10px] text-amber-300">רלס אחורי עליון (0U):</span>
+                    <span className="truncate text-[11px]">{rearPduItems.map((p: any) => `${p.description || p.name} x${p.quantity}`).join(' · ')}</span>
+                  </div>
+                  <span className="bg-amber-500/20 text-amber-300 font-mono text-[9px] px-1.5 py-0.5 rounded border border-amber-500/40 shrink-0 mr-1">
+                    0U Rear
+                  </span>
+                </div>
+              ) : (
+                <div className="mx-2 mb-1 rounded border border-dashed border-slate-700 bg-slate-950/40 px-2 py-0.5 text-center text-slate-400 text-[10px] shrink-0">
+                  רלס אחורי עליון · פנוי לפס שקעים PDU (אינו תופס מקום חזיתי - 0U)
+                </div>
+              )}
+
+              {/* Frontal 19" Slots */}
               <div className="flex-1 flex flex-col justify-between w-full h-full min-h-0 px-2 py-1 space-y-0.5 overflow-hidden select-none">
                 {slots.map((slot) => {
                   const isEmpty = slot.type === 'empty';
@@ -836,6 +859,25 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
                   );
                 })}
               </div>
+
+              {/* Base & Plinth (Wheels / Leveling Feet) */}
+              {plinthItems.length > 0 && (
+                <div className="mx-2 mt-1 rounded border border-emerald-500/50 bg-emerald-950/60 px-2 py-0.5 text-center text-emerald-200 text-[10px] shrink-0">
+                  ◄ בסיס ותחתית: {plinthItems.map((p: any) => `${p.description || p.name} x${p.quantity}`).join(' · ')} ►
+                </div>
+              )}
+
+              {/* Vertical Channels & Hardware */}
+              {(verticalItems.length > 0 || hardwareItems.length > 0) && (
+                <div className="mx-2 mt-0.5 text-[9px] text-slate-400 flex items-center justify-between px-1 shrink-0">
+                  {verticalItems.length > 0 && (
+                    <span className="truncate">תעלות אנכיות: {verticalItems.map(v => v.name).join(', ')}</span>
+                  )}
+                  {hardwareItems.length > 0 && (
+                    <span className="truncate mr-auto">פרזול ונלווים: {hardwareItems.length} פריטים</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
