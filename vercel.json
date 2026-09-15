@@ -1,4 +1,7 @@
 {
+  "buildCommand": "npm run build:vercel",
+  "outputDirectory": "dist",
+  "framework": "vite",
   "headers": [{
     "source": "/(.*)",
     "headers": [
