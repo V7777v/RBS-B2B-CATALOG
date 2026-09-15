@@ -4,6 +4,7 @@ import { U_HEIGHT_UNITS, RACK_19_WIDTH_UNITS, USABLE_OPENING_WIDTH } from './Cab
 import { lookup3DAsset, Product3DAssetDef } from './Product3DAssets';
 import { transformImageLink, isProductShelf } from '../../utils/cabinetData';
 import { createDiagonalVentSlotTexture } from './CabinetModel447510T';
+import { createPolmanFaceTexture, createHikvisionFaceTexture } from './BrandTextures';
 
 /**
  * Safely extracts the first valid HTTP/HTTPS URL from any image field without blind splitting that breaks query strings
@@ -50,7 +51,7 @@ export function buildProduct3DMesh(
   group.name = `product-mesh-${item.instanceId}`;
   (group as any).userData = { item, isProductMesh: true };
 
-  const assetDef = lookup3DAsset(item.sku);
+  const assetDef = lookup3DAsset(item.sku, item.name);
   const spanHeight = item.uSpan * U_HEIGHT_UNITS - 0.03; // small gap for realism
   const nameLower = (item.name || '').toLowerCase();
   const descLower = (item.description || '').toLowerCase();
@@ -299,42 +300,45 @@ export function buildProduct3DMesh(
         });
       }
 
-    } else if (isAudioAmp || assetDef?.categoryProfile === 'audio-amplifier') {
-      const knobGeom = new THREE.CylinderGeometry(0.10, 0.10, 0.06, 16);
-      knobGeom.rotateX(Math.PI / 2);
-      const knobMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, metalness: 0.9, roughness: 0.2 });
-
-      [-0.8, 0.8].forEach(kx => {
-        const knob = new THREE.Mesh(knobGeom, knobMat);
-        knob.position.set(kx, 0, 0.06);
-        frontFaceGroup.add(knob);
+    } else if (isAudioAmp || assetDef?.categoryProfile === 'audio-amplifier' || /polman|xl600/i.test(nameLower) || /xl600/i.test(skuLower)) {
+      // Photorealistic Polman Professional Audio 2U amplifier faceplate
+      const polmanTex = createPolmanFaceTexture(item, spanHeight);
+      const faceplateW = USABLE_OPENING_WIDTH * 0.995;
+      const faceplateH = spanHeight * 0.98;
+      const frontGeom = new THREE.PlaneGeometry(faceplateW, faceplateH);
+      const frontMat = new THREE.MeshStandardMaterial({
+        map: polmanTex,
+        roughness: 0.35,
+        metalness: 0.7,
+        side: THREE.FrontSide,
       });
+      const frontMesh = new THREE.Mesh(frontGeom, frontMat);
+      frontMesh.position.set(0, 0, 0.042);
+      frontMesh.userData = { item, isProductMesh: true };
+      frontFaceGroup.add(frontMesh);
 
-      const vuGeom = new THREE.BoxGeometry(0.4, 0.08, 0.02);
-      const blueLedMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
-      const vuMesh = new THREE.Mesh(vuGeom, blueLedMat);
-      vuMesh.position.set(0, 0.08, 0.04);
-      frontFaceGroup.add(vuMesh);
-
-      const ventGeom = new THREE.BoxGeometry(0.5, 0.03, 0.01);
-      const ventMat = new THREE.MeshBasicMaterial({ color: 0x18181b });
-      [-0.2, 0, 0.2].forEach(vy => {
-        const vent = new THREE.Mesh(ventGeom, ventMat);
-        vent.position.set(0, -0.15 + vy, 0.035);
-        frontFaceGroup.add(vent);
+    } else if (
+      isUps ||
+      isSwitchOrRouter ||
+      assetDef?.details?.brandText?.includes('HIKVISION') ||
+      /hikvision|היקויזן|הייקויזן|ds-3/i.test(nameLower) ||
+      /ds-3|hik/i.test(skuLower)
+    ) {
+      // Photorealistic Hikvision Switch or Online UPS faceplate
+      const hikTex = createHikvisionFaceTexture(item, spanHeight, assetDef);
+      const faceplateW = USABLE_OPENING_WIDTH * 0.995;
+      const faceplateH = spanHeight * 0.98;
+      const frontGeom = new THREE.PlaneGeometry(faceplateW, faceplateH);
+      const frontMat = new THREE.MeshStandardMaterial({
+        map: hikTex,
+        roughness: 0.35,
+        metalness: 0.5,
+        side: THREE.FrontSide,
       });
-
-    } else if (isUps || assetDef?.categoryProfile === 'ups-online') {
-      const screenGeom = new THREE.BoxGeometry(0.8, spanHeight * 0.5, 0.02);
-      const screenMat = new THREE.MeshBasicMaterial({ color: assetDef?.details?.lcdColor || 0x10b981 });
-      const screenMesh = new THREE.Mesh(screenGeom, screenMat);
-      screenMesh.position.set(-0.9, 0, 0.04);
-      frontFaceGroup.add(screenMesh);
-
-      const ventGeom = new THREE.BoxGeometry(1.4, spanHeight * 0.5, 0.02);
-      const ventMesh = new THREE.Mesh(ventGeom, materials.accentMat);
-      ventMesh.position.set(0.6, 0, 0.04);
-      frontFaceGroup.add(ventMesh);
+      const frontMesh = new THREE.Mesh(frontGeom, frontMat);
+      frontMesh.position.set(0, 0, 0.042);
+      frontMesh.userData = { item, isProductMesh: true };
+      frontFaceGroup.add(frontMesh);
 
     } else {
       const portBlocks = assetDef?.details?.portBlocks || 2;
@@ -358,6 +362,9 @@ export function buildProduct3DMesh(
       }
     }
   };
+
+  // Pre-render realistic fallback immediately so user never sees a blank box
+  renderProceduralFallback();
 
   // 3. IMAGE LOADING & PRESENTATION PIPELINE
   // For shelves, the physical 3D horizontal tray with venting and mounting ears is rendered directly.
@@ -387,25 +394,160 @@ export function buildProduct3DMesh(
           // Clear any fallback procedural elements completely so NO fake buttons/ports overlay the image
           clearFrontFaceGroup();
 
-          // Full-width 19" rack opening faceplate presentation
-          const planeW = USABLE_OPENING_WIDTH * 0.995;
-          const planeH = spanHeight * 0.98;
+          const img = texture.image;
+          const imgW = (img && img.width) ? img.width : 1;
+          const imgH = (img && img.height) ? img.height : 1;
+          const naturalAspect = imgW / imgH;
 
-          const frontGeom = new THREE.PlaneGeometry(planeW, planeH);
-          const frontMat = new THREE.MeshStandardMaterial({
-            map: texture,
-            roughness: 0.35,
-            metalness: 0.2,
-            toneMapped: true,
-          });
-          const frontMesh = new THREE.Mesh(frontGeom, frontMat);
-          if (isShelf) {
-            frontMesh.rotation.x = -Math.PI / 2;
-            frontMesh.position.set(0, -spanHeight / 2 + 0.082, -0.2); // Lay flat on shelf
+          // Check if image is an ultra-wide panoramic faceplate texture (e.g. aspect ratio >= 4.5:1)
+          // or a standard catalog product photo
+          const isDedicatedFrontPlate = Boolean(assetDef?.frontTextureUrl) || naturalAspect >= 4.5;
+
+          if (isDedicatedFrontPlate) {
+            // Full-width 19" rack opening faceplate presentation
+            const planeW = USABLE_OPENING_WIDTH * 0.995;
+            const planeH = spanHeight * 0.98;
+
+            const frontGeom = new THREE.PlaneGeometry(planeW, planeH);
+            const frontMat = new THREE.MeshStandardMaterial({
+              map: texture,
+              roughness: 0.35,
+              metalness: 0.2,
+              toneMapped: true,
+              side: THREE.FrontSide,
+            });
+            const frontMesh = new THREE.Mesh(frontGeom, frontMat);
+            if (isShelf) {
+              frontMesh.rotation.x = -Math.PI / 2;
+              frontMesh.position.set(0, -spanHeight / 2 + 0.082, -0.2); // Lay flat on shelf
+            } else {
+              frontMesh.position.set(0, 0, 0.042);
+            }
+            frontMesh.userData = { item, isProductMesh: true };
+            frontFaceGroup.add(frontMesh);
           } else {
-            frontMesh.position.set(0, 0, 0.042);
+            // Catalog photo with square or rectangular aspect ratio:
+            // 1. Maintain exact aspect ratio without vertical squash or horizontal stretch
+            // 2. Display the photo neatly framed on the faceplate
+            // 3. Render a clean, crisp product identification panel with SKU, name, and specs in the remaining faceplate space
+            const faceplateW = USABLE_OPENING_WIDTH * 0.995;
+            const faceplateH = spanHeight * 0.98;
+
+            // Base mounting plate
+            const basePlateGeom = new THREE.PlaneGeometry(faceplateW, faceplateH);
+            const basePlateMat = new THREE.MeshStandardMaterial({
+              color: 0x181a1f,
+              roughness: 0.45,
+              metalness: 0.7,
+              side: THREE.FrontSide,
+            });
+            const basePlate = new THREE.Mesh(basePlateGeom, basePlateMat);
+            basePlate.position.set(0, 0, 0.038);
+            basePlate.userData = { item, isProductMesh: true };
+            frontFaceGroup.add(basePlate);
+
+            // Compute undistorted photo dimensions preserving aspect ratio
+            const maxPhotoH = faceplateH * 0.88;
+            const maxPhotoW = Math.min(faceplateW * 0.42, 2.2);
+            let photoW = maxPhotoH * naturalAspect;
+            let photoH = maxPhotoH;
+            if (photoW > maxPhotoW) {
+              photoW = maxPhotoW;
+              photoH = photoW / naturalAspect;
+            }
+
+            const photoX = -faceplateW / 2 + photoW / 2 + 0.12;
+            const photoGeom = new THREE.PlaneGeometry(photoW, photoH);
+            const photoMat = new THREE.MeshStandardMaterial({
+              map: texture,
+              roughness: 0.3,
+              metalness: 0.1,
+              side: THREE.FrontSide,
+            });
+            const photoMesh = new THREE.Mesh(photoGeom, photoMat);
+            photoMesh.position.set(photoX, 0, 0.042);
+            photoMesh.userData = { item, isProductMesh: true };
+
+            // Subtle border outline around photo
+            const photoBorderGeom = new THREE.EdgesGeometry(photoGeom);
+            const photoBorderMat = new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.65 });
+            const photoBorder = new THREE.LineSegments(photoBorderGeom, photoBorderMat);
+            photoMesh.add(photoBorder);
+            frontFaceGroup.add(photoMesh);
+
+            // Product identification label canvas
+            const infoLeft = photoX + photoW / 2 + 0.10;
+            const infoW = Math.max(0.6, faceplateW / 2 - infoLeft - 0.10);
+            const infoH = faceplateH * 0.88;
+
+            const labelCanvas = document.createElement('canvas');
+            labelCanvas.width = 1024;
+            labelCanvas.height = Math.max(256, Math.min(1024, Math.round(1024 * (infoH / Math.max(0.5, infoW)))));
+            const ctx = labelCanvas.getContext('2d');
+            if (ctx) {
+              const cw = labelCanvas.width;
+              const ch = labelCanvas.height;
+              ctx.clearRect(0, 0, cw, ch);
+
+              // Background plate
+              ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+              if (typeof ctx.roundRect === 'function') {
+                ctx.roundRect(8, 8, cw - 16, ch - 16, 16);
+              } else {
+                ctx.rect(8, 8, cw - 16, ch - 16);
+              }
+              ctx.fill();
+              ctx.strokeStyle = 'rgba(51, 65, 85, 0.8)';
+              ctx.lineWidth = 4;
+              ctx.stroke();
+
+              // Status indicator dot (green active)
+              ctx.fillStyle = '#22c55e';
+              ctx.beginPath();
+              ctx.arc(36, 42, 10, 0, Math.PI * 2);
+              ctx.fill();
+
+              // SKU / Part Number (bold high-contrast white)
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 36px sans-serif';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              const skuText = (item.sku || 'ITEM').substring(0, 24);
+              ctx.fillText(skuText, 58, 42);
+
+              // Hebrew Name / Model Description
+              ctx.fillStyle = '#94a3b8';
+              ctx.font = '28px sans-serif';
+              const nameText = (item.name || item.description || '').substring(0, 36);
+              ctx.fillText(nameText, 36, 96);
+
+              // Height and type badge
+              ctx.fillStyle = '#38bdf8';
+              ctx.font = 'bold 24px sans-serif';
+              const badgeText = `${item.uSpan}U Rackmount • ${item.type === 'shelf' ? 'מדף' : 'פעיל'}`;
+              ctx.fillText(badgeText, 36, 146);
+            }
+
+            const labelTexture = new THREE.CanvasTexture(labelCanvas);
+            labelTexture.colorSpace = THREE.SRGBColorSpace;
+            const labelGeom = new THREE.PlaneGeometry(infoW, infoH);
+            const labelMat = new THREE.MeshStandardMaterial({
+              map: labelTexture,
+              roughness: 0.35,
+              metalness: 0.2,
+              transparent: true,
+              side: THREE.FrontSide,
+            });
+            const labelMesh = new THREE.Mesh(labelGeom, labelMat);
+            labelMesh.position.set(infoLeft + infoW / 2, 0, 0.041);
+            labelMesh.userData = { item, isProductMesh: true };
+            frontFaceGroup.add(labelMesh);
           }
-          frontFaceGroup.add(frontMesh);
+
+          // Traverse frontFaceGroup so all new meshes have raycast metadata
+          frontFaceGroup.traverse((child) => {
+            (child as any).userData = { item, isProductMesh: true };
+          });
 
           if (onTextureLoaded) onTextureLoaded();
         },
@@ -423,6 +565,11 @@ export function buildProduct3DMesh(
   } else {
     renderProceduralFallback();
   }
+
+  // Ensure all descendants carry isProductMesh for immediate raycasting hit
+  group.traverse((child) => {
+    (child as any).userData = { item, isProductMesh: true };
+  });
 
   return group;
 }
@@ -540,6 +687,10 @@ export function buildVerticalAccessoryMesh(
     }
   }
 
+  group.traverse((child) => {
+    (child as any).userData = { item, isProductMesh: true };
+  });
+
   return group;
 }
 
@@ -584,6 +735,10 @@ export function buildHardwareBoxMesh(
     const bolt = new THREE.Mesh(boltGeom, materials.metalMat);
     bolt.position.set(bx, 0.28, 0.10);
     group.add(bolt);
+  });
+
+  group.traverse((child) => {
+    (child as any).userData = { item, isProductMesh: true };
   });
 
   return group;
@@ -634,6 +789,10 @@ export function buildRoofAccessoryMesh(
     bristleMesh.position.set(0, 0.04, 0);
     group.add(bristleMesh);
   }
+
+  group.traverse((child) => {
+    (child as any).userData = { item, isProductMesh: true };
+  });
 
   return group;
 }

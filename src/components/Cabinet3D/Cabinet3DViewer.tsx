@@ -1,9 +1,9 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { Cabinet3DViewerProps, Product3DInstance } from './Cabinet3DTypes';
-import { resolveCabinetDimensions, buildCabinetFrameGroup, SCALE_MM_TO_UNITS, U_HEIGHT_UNITS } from './CabinetModelBuilder';
-import { parseAccessoryCount } from '../../utils/cabinetData';
+import { Cabinet3DViewerProps, Product3DInstance, DoorLeafState, DoorState } from './Cabinet3DTypes';
+import { resolveCabinetDimensions, buildCabinetFrameGroup, resolveCabinetDoorsInfo, SCALE_MM_TO_UNITS, U_HEIGHT_UNITS, RACK_19_WIDTH_UNITS } from './CabinetModelBuilder';
+import { parseAccessoryCount, isProductShelf } from '../../utils/cabinetData';
 import {
   buildProduct3DMesh,
   buildEmptySlotHitbox,
@@ -29,6 +29,11 @@ import {
   DoorClosed,
   DoorOpen,
   Award,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp,
+  X,
+  Eye,
 } from 'lucide-react';
 
 interface MeshCacheEntry {
@@ -36,6 +41,7 @@ interface MeshCacheEntry {
   uStart: number;
   uSpan: number;
   lastY: number;
+  depthUnits?: number;
   cancelTexture?: () => void;
   item: Product3DInstance;
 }
@@ -47,6 +53,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   slots,
   selectedOptionals,
   nonUAccessories,
+  unallocatedItems = [],
   includedItems,
   availableU,
   usedU,
@@ -64,6 +71,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   onIncrementQuantity,
   onRemoveOptional,
   onFallbackTo2D,
+  catalogData = [],
   className = '',
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -82,6 +90,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   const productsGroupRef = useRef<THREE.Group>(new THREE.Group());
   const hitboxesGroupRef = useRef<THREE.Group>(new THREE.Group());
   const nonUGroupRef = useRef<THREE.Group>(new THREE.Group());
+  const highlightGroupRef = useRef<THREE.Group>(new THREE.Group());
   const stagingTrayGroupRef = useRef<THREE.Group | null>(null);
   const stagingAccessoriesGroupRef = useRef<THREE.Group | null>(null);
   const hasStagingContentRef = useRef<boolean>(false);
@@ -91,25 +100,31 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
   // Mesh cache by instanceId for smooth incremental updates and lifecycle management
   const meshMapRef = useRef<Map<string, MeshCacheEntry>>(new Map());
-  const previousCabinetSkuRef = useRef<string | undefined>(undefined);
+  const lastFramingKeyRef = useRef<string>('');
   const activeAnimationsRef = useRef<Map<string, number>>(new Map());
+  const isUserInteractedRef = useRef<boolean>(false);
 
   // Camera framing history for focus & return
   const previousFramingRef = useRef<{ position: THREE.Vector3; target: THREE.Vector3 } | null>(null);
   const [isFocusedOnProduct, setIsFocusedOnProduct] = useState(false);
   const [backdropTheme, setBackdropTheme] = useState<'studio-light' | 'datacenter' | 'pure-white'>('studio-light');
-  const [doorMode, setDoorMode] = useState<'transparent' | 'open' | 'closed'>('transparent');
-  const setDoorModeRef = useRef<((mode: 'open' | 'closed' | 'transparent') => void) | null>(null);
+  const [doorState, setDoorState] = useState<DoorState>({ front: 'transparent', rear: 'transparent' });
+  const doorStateRef = useRef<DoorState>({ front: 'transparent', rear: 'transparent' });
+  doorStateRef.current = doorState;
 
-  const handleToggleDoors = useCallback(() => {
-    const nextMode: 'transparent' | 'open' | 'closed' =
-      doorMode === 'transparent' ? 'open' : doorMode === 'open' ? 'closed' : 'transparent';
-    setDoorMode(nextMode);
+  const [isDisplayMenuOpen, setIsDisplayMenuOpen] = useState(false);
+  const [dismissedAddedBannerId, setDismissedAddedBannerId] = useState<string | null>(null);
+
+  const setDoorModeRef = useRef<((side: 'front' | 'rear', state: DoorLeafState) => void) | null>(null);
+  const setRearCutawayRef = useRef<((active: boolean) => void) | null>(null);
+
+  const handleSetDoorState = useCallback((side: 'front' | 'rear', state: DoorLeafState) => {
+    setDoorState(prev => ({ ...prev, [side]: state }));
     if (setDoorModeRef.current) {
-      setDoorModeRef.current(nextMode);
+      setDoorModeRef.current(side, state);
     }
     needsRenderRef.current = true;
-  }, [doorMode]);
+  }, []);
 
   // Stable callback & dynamic state refs so event listeners never need rebinding
   const onProductHoverRef = useRef(onProductHover);
@@ -135,6 +150,11 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   const dims = useMemo(() => {
     return resolveCabinetDimensions(product, cabinetData, totalU);
   }, [product, cabinetData, totalU]);
+
+  // Derive verified doors specifications
+  const doorsInfo = useMemo(() => {
+    return resolveCabinetDoorsInfo(dims, cabinetData, product);
+  }, [dims, cabinetData, product]);
 
   // Extract included items count for 3D overlay summary
   const includedSummary = useMemo(() => {
@@ -180,9 +200,15 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   // Build product 3D instance list from slots
   const productInstances = useMemo(() => {
     const instances: Product3DInstance[] = [];
-    const occupiedU = new Set<number>();
 
-    // We iterate through slots to find anchors
+    const findCatalogImage = (sku?: string) => {
+      if (!sku || !catalogData || !Array.isArray(catalogData)) return undefined;
+      const clean = sku.trim().toUpperCase();
+      const p = catalogData.find((x: any) => x && (x.sku?.trim().toUpperCase() === clean || x.pn?.trim().toUpperCase() === clean));
+      if (!p) return undefined;
+      return (Array.isArray(p.images) && p.images[0]) || p.imageURL || p.image;
+    };
+
     slots.forEach(slot => {
       if (slot.type === 'empty') return;
       if (slot.type === 'optional-accessory' && slot.isAnchor === false) return; // continuation row
@@ -191,90 +217,262 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       const uStart = slot.uIndex - spanU + 1; // 1-based bottom of the span
       const isIncluded = slot.type === 'preset-shelf' || slot.type === 'preset-fan' || Boolean((slot as any).isIncluded);
       const instId = slot.instanceId || `item-${slot.uIndex}-${slot.name}`;
+      const itemSku = slot.accessoryRef?.sku || slot.accessoryRef?.pn || (isIncluded ? 'BUILTIN-SHELF' : '');
 
-      for (let u = uStart; u < uStart + spanU; u++) {
-        occupiedU.add(u);
-      }
+      const resolvedImage = slot.accessoryRef?.image 
+        || slot.accessoryRef?.imageURL 
+        || (Array.isArray(slot.accessoryRef?.images) ? slot.accessoryRef?.images[0] : undefined)
+        || findCatalogImage(itemSku);
 
       instances.push({
         instanceId: instId,
-        sku: slot.accessoryRef?.sku || slot.accessoryRef?.pn || (isIncluded ? 'BUILTIN-SHELF' : ''),
+        sku: itemSku,
         name: slot.name,
         description: slot.description || '',
         price: slot.accessoryRef?.price || 0,
         uStart,
         uSpan: spanU,
         isIncluded,
-        type: (slot.type === 'preset-shelf' || slot.name.includes('מדף') || /מדף|shelf/i.test(slot.name)) ? 'shelf' : (slot.name.includes('שקע') || slot.name.includes('PDU')) ? 'pdu' : (slot.name.includes('פנל') || slot.name.includes('עיוור') || slot.name.includes('מברשת')) ? 'panel' : 'active',
-        image: slot.accessoryRef?.image || slot.accessoryRef?.imageURL || (Array.isArray(slot.accessoryRef?.images) ? slot.accessoryRef?.images[0] : undefined),
+        type: (slot.type === 'preset-shelf' || slot.name.includes('מדף') || /מדף|shelf/i.test(slot.name))
+          ? 'shelf'
+          : (slot.name.includes('שקע') || slot.name.includes('PDU'))
+          ? 'pdu'
+          : (slot.name.includes('פנל') || slot.name.includes('עיוור') || slot.name.includes('מברשת'))
+          ? 'panel'
+          : 'active',
+        image: resolvedImage,
         optionalIdx: slot.optionalIdx,
         accessoryRef: slot.accessoryRef,
       });
     });
 
     return instances;
-  }, [slots, cabinetData, includedItems, product, dims.totalU]);
+  }, [slots, cabinetData, includedItems, product, dims.totalU, catalogData]);
+
+  // Find newly added item instance details
+  const newlyAddedInstance = useMemo(() => {
+    if (!lastAddedInstanceId) return null;
+    return productInstances.find(p => p.instanceId === lastAddedInstanceId) || null;
+  }, [lastAddedInstanceId, productInstances]);
 
   // Empty slots for keyboard/HTML accessible selector
   const emptySlots = useMemo(() => {
     return slots.filter(s => s.type === 'empty');
   }, [slots]);
 
-  // Camera fit helper with responsive bounds for all aspect ratios & cabinet sizes
+  // Helper to get real physical bounds of the cabinet (excluding decorative floor disc and hitboxes)
+  const getCabinetBounds = useCallback(() => {
+    const box = new THREE.Box3();
+    if (frameGroupRef.current && frameGroupRef.current.children.length > 0) {
+      box.expandByObject(frameGroupRef.current);
+    }
+    if (productsGroupRef.current && productsGroupRef.current.children.length > 0) {
+      box.expandByObject(productsGroupRef.current);
+    }
+    if (nonUGroupRef.current && nonUGroupRef.current.children.length > 0) {
+      box.expandByObject(nonUGroupRef.current);
+    }
+
+    if (box.isEmpty() || !isFinite(box.min.x)) {
+      const w = dims.widthMm * SCALE_MM_TO_UNITS;
+      const h = dims.totalU * U_HEIGHT_UNITS + 0.9;
+      const d = dims.depthMm * SCALE_MM_TO_UNITS;
+      box.min.set(-w / 2, -h / 2 - 0.5, -d / 2);
+      box.max.set(w / 2, h / 2 + 0.4, d / 2);
+    }
+
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    return { box, size, center };
+  }, [dims]);
+
+  // Compute camera framing parameters ensuring full cabinet visibility (from roof to feet)
+  const computeFramingParams = useCallback((aspect: number) => {
+    const camera = cameraRef.current;
+    const fov = camera ? camera.fov : 38;
+    const fovVRad = (fov * Math.PI) / 180;
+    const fovHRad = 2 * Math.atan(Math.tan(fovVRad / 2) * Math.max(aspect, 0.35));
+
+    const { size, center } = getCabinetBounds();
+
+    // 14% breathing room padding so the cabinet is comfortably framed without being cut off
+    const margin = 1.14;
+    const distForHeight = ((size.y * margin) / 2) / Math.tan(fovVRad / 2);
+    const distForWidth = ((size.x * margin) / 2) / Math.tan(fovHRad / 2);
+    const fitDist = Math.max(distForHeight, distForWidth);
+
+    const halfDepth = Math.max(size.z / 2, (dims.depthMm * SCALE_MM_TO_UNITS) / 2);
+    const centerY = center.y;
+
+    return {
+      size,
+      center,
+      centerY,
+      halfDepth,
+      fitDist,
+      fov,
+    };
+  }, [getCabinetBounds, dims]);
+
+  // Smooth camera animation helper for camera presets
+  const animateCameraTo = useCallback((endPos: THREE.Vector3, endTarget?: THREE.Vector3) => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+
+    const startPos = camera.position.clone();
+    const startTarget = controls.target.clone();
+    const finalTarget = endTarget ? endTarget.clone() : startTarget.clone();
+
+    const prefersReducedMotion = typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (prefersReducedMotion) {
+      camera.position.copy(endPos);
+      controls.target.copy(finalTarget);
+      controls.update();
+      needsRenderRef.current = true;
+      return;
+    }
+
+    let progress = 0;
+    isAnimatingRef.current = true;
+
+    const animate = () => {
+      progress += 0.055;
+      if (progress < 1) {
+        const ease = Math.sin((progress * Math.PI) / 2);
+        camera.position.lerpVectors(startPos, endPos, ease);
+        controls.target.lerpVectors(startTarget, finalTarget, ease);
+        controls.update();
+        needsRenderRef.current = true;
+        requestAnimationFrame(animate);
+      } else {
+        camera.position.copy(endPos);
+        controls.target.copy(finalTarget);
+        controls.update();
+        isAnimatingRef.current = false;
+        needsRenderRef.current = true;
+      }
+    };
+    requestAnimationFrame(animate);
+  }, []);
+
+  // Default & Initial View: Crystal clear, straight frontal view showing the entire cabinet from roof to wheels/feet
+  const fitFrontalView = useCallback((instant: boolean = true) => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    const container = containerRef.current;
+    if (!camera || !controls) return;
+
+    const aspect = container && container.clientWidth > 0 && container.clientHeight > 0
+      ? (container.clientWidth / container.clientHeight)
+      : (camera.aspect || 1);
+
+    const { centerY, halfDepth, fitDist } = computeFramingParams(aspect);
+    const targetZ = 0;
+    const cameraZ = targetZ + halfDepth + fitDist;
+
+    const targetPos = new THREE.Vector3(0, centerY, cameraZ);
+    const targetLookAt = new THREE.Vector3(0, centerY, targetZ);
+
+    camera.near = 0.1;
+    camera.far = Math.max(100, cameraZ * 4);
+    camera.up.set(0, 1, 0);
+
+    if (instant) {
+      camera.position.copy(targetPos);
+      controls.target.copy(targetLookAt);
+      controls.update();
+      camera.updateProjectionMatrix();
+    } else {
+      animateCameraTo(targetPos, targetLookAt);
+    }
+
+    setIsFocusedOnProduct(false);
+    needsRenderRef.current = true;
+  }, [computeFramingParams, animateCameraTo]);
+
+  // "כל הארון" (Fit All Cabinet): Fits entire cabinet into view in the CURRENT camera direction, or straight front if initial
   const fitCameraToCabinet = useCallback((instant: boolean = false) => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     const container = containerRef.current;
     if (!camera || !controls) return;
 
-    const widthUnits = dims.widthMm * SCALE_MM_TO_UNITS + 2.8; // include staging tray
-    const heightUnits = dims.totalU * U_HEIGHT_UNITS + 1.2; // include roof and base margins
+    const aspect = container && container.clientWidth > 0 && container.clientHeight > 0
+      ? (container.clientWidth / container.clientHeight)
+      : (camera.aspect || 1);
 
-    const aspect = container ? (container.clientWidth / (container.clientHeight || 1)) : (camera.aspect || 1);
-    const fovRad = (camera.fov * Math.PI) / 180;
-    
-    // Vertical distance needed to fit full cabinet height without clipping
-    const distH = (heightUnits / 2) / Math.tan(fovRad / 2);
-    // Horizontal distance needed to fit cabinet width + accessories tray on any aspect ratio
-    const distW = (widthUnits / 2) / (Math.tan(fovRad / 2) * Math.max(aspect, 0.45));
-    const targetDist = (Math.max(distH, distW) * 1.34) + ((dims.depthMm * SCALE_MM_TO_UNITS) / 2);
+    const { size, centerY, halfDepth, fitDist } = computeFramingParams(aspect);
+    const targetCenter = new THREE.Vector3(0, centerY, 0);
 
-    controls.target.set(0, 0, 0);
+    const dir = camera.position.clone().sub(controls.target);
+    if (dir.lengthSq() < 0.001 || !isUserInteractedRef.current) {
+      fitFrontalView(instant);
+      return;
+    }
 
-    // Default angle: slight isometric frontal view (25 deg azimuth, 15 deg elevation)
-    const targetPos = new THREE.Vector3(
-      Math.sin(0.35) * targetDist,
-      targetDist * 0.22,
-      Math.cos(0.35) * targetDist
-    );
+    dir.normalize();
+    const totalDist = fitDist + halfDepth;
+    const targetPos = targetCenter.clone().add(dir.multiplyScalar(totalDist));
 
-    camera.position.copy(targetPos);
-    controls.update();
+    if (instant) {
+      camera.position.copy(targetPos);
+      controls.target.copy(targetCenter);
+      controls.update();
+      camera.updateProjectionMatrix();
+    } else {
+      animateCameraTo(targetPos, targetCenter);
+    }
+
     setIsFocusedOnProduct(false);
     needsRenderRef.current = true;
-  }, [dims]);
+  }, [computeFramingParams, fitFrontalView, animateCameraTo]);
 
-  // Set camera to flat front view
-  const setFrontView = useCallback(() => {
+  // Camera preset selector: front, rear, right, left, iso
+  const setCameraPreset = useCallback((preset: 'front' | 'rear' | 'right' | 'left' | 'iso') => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     const container = containerRef.current;
     if (!camera || !controls) return;
 
-    const widthUnits = dims.widthMm * SCALE_MM_TO_UNITS + 2.8;
-    const heightUnits = dims.totalU * U_HEIGHT_UNITS + 1.2;
-    const aspect = container ? (container.clientWidth / (container.clientHeight || 1)) : (camera.aspect || 1);
-    const fovRad = (camera.fov * Math.PI) / 180;
-    const distH = (heightUnits / 2) / Math.tan(fovRad / 2);
-    const distW = (widthUnits / 2) / (Math.tan(fovRad / 2) * Math.max(aspect, 0.45));
-    const targetDist = (Math.max(distH, distW) * 1.30) + ((dims.depthMm * SCALE_MM_TO_UNITS) / 2);
+    const aspect = container && container.clientWidth > 0 && container.clientHeight > 0
+      ? (container.clientWidth / container.clientHeight)
+      : (camera.aspect || 1);
 
-    controls.target.set(0, 0, 0);
-    camera.position.set(0, 0, targetDist);
-    controls.update();
+    const { size, centerY, halfDepth, fitDist } = computeFramingParams(aspect);
+    const target = new THREE.Vector3(0, centerY, 0);
+    const halfWidth = size.x / 2;
+
+    let endPos: THREE.Vector3;
+
+    switch (preset) {
+      case 'front':
+        endPos = new THREE.Vector3(0, centerY, halfDepth + fitDist);
+        break;
+      case 'rear':
+        endPos = new THREE.Vector3(0, centerY, -(halfDepth + fitDist));
+        break;
+      case 'right':
+        endPos = new THREE.Vector3(halfWidth + fitDist, centerY, 0);
+        break;
+      case 'left':
+        endPos = new THREE.Vector3(-(halfWidth + fitDist), centerY, 0);
+        break;
+      case 'iso':
+        const isoDist = halfDepth + fitDist;
+        endPos = new THREE.Vector3(
+          Math.sin(0.40) * isoDist,
+          centerY + (fitDist * 0.22),
+          Math.cos(0.40) * isoDist
+        );
+        break;
+    }
+
     setIsFocusedOnProduct(false);
-    needsRenderRef.current = true;
-  }, [dims]);
+    animateCameraTo(endPos, target);
+  }, [animateCameraTo, computeFramingParams]);
 
   // Focus directly on the selected product or slot with smooth animation and restore capability
   const focusOnSelectedProduct = useCallback((targetInstId?: string) => {
@@ -291,7 +489,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     }
 
     let targetY = 0;
-    const targetId = targetInstId || inspectedProduct?.instanceId || selectedInstanceId || activeInstanceId;
+    const targetId = targetInstId || inspectedProduct?.instanceId || selectedInstanceId || activeInstanceId || lastAddedInstanceId;
 
     if (targetId) {
       const match = productInstances.find(p => p.instanceId === targetId);
@@ -313,7 +511,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
     const startPos = camera.position.clone();
     const startTarget = controls.target.clone();
-    const endPos = new THREE.Vector3(0.3, targetY + 0.15, ((dims.depthMm * SCALE_MM_TO_UNITS) / 2) + 2.0);
+    const endPos = new THREE.Vector3(0.2, targetY + 0.12, ((dims.depthMm * SCALE_MM_TO_UNITS) / 2) + 1.9);
     const endTarget = new THREE.Vector3(0, targetY, 0);
 
     const prefersReducedMotion = typeof window !== 'undefined' &&
@@ -350,7 +548,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       }
     };
     requestAnimationFrame(animateFocus);
-  }, [inspectedProduct, selectedInstanceId, activeInstanceId, selectedSlotU, productInstances, isFocusedOnProduct]);
+  }, [inspectedProduct, selectedInstanceId, activeInstanceId, lastAddedInstanceId, selectedSlotU, productInstances, isFocusedOnProduct, dims.depthMm]);
 
   // Restore previous camera framing smoothly
   const restorePreviousFraming = useCallback(() => {
@@ -525,34 +723,61 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     const controls = new OrbitControls(camera, canvas);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.minDistance = 1.5;
-    controls.maxDistance = 45.0;
-    controls.maxPolarAngle = Math.PI * 0.54; // Keep above ground
-    controls.minPolarAngle = Math.PI * 0.12; // Avoid overhead singularity
-    // Restrict azimuth to front-facing arc so interior is always visible
-    controls.minAzimuthAngle = -Math.PI * 0.44;
-    controls.maxAzimuthAngle = Math.PI * 0.44;
+    controls.minDistance = 2.0;
+    controls.maxDistance = 35.0;
+    controls.maxPolarAngle = Math.PI * 0.90;
     controlsRef.current = controls;
 
-    // 5. Lighting (Bright, multi-point studio lighting with high edge contrast for black cabinets)
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x94a3b8, 1.4);
-    scene.add(hemiLight);
+    const onControlsChange = () => {
+      needsRenderRef.current = true;
+    };
+    const onControlsStart = () => {
+      isUserInteractedRef.current = true;
+    };
+    controls.addEventListener('change', onControlsChange);
+    controls.addEventListener('start', onControlsStart);
 
-    const mainDirLight = new THREE.DirectionalLight(0xffffff, 1.6);
-    mainDirLight.position.set(6, 14, 9);
-    mainDirLight.castShadow = true;
-    mainDirLight.shadow.mapSize.width = 1024;
-    mainDirLight.shadow.mapSize.height = 1024;
-    mainDirLight.shadow.camera.near = 0.5;
-    mainDirLight.shadow.camera.far = 40;
-    mainDirLight.shadow.bias = -0.0005;
-    scene.add(mainDirLight);
+    // 5. Render Loop (On-Demand + Smooth Animation Active Handling)
+    let isRunning = true;
+    const renderLoop = () => {
+      if (!isRunning) return;
+      if (needsRenderRef.current || isAnimatingRef.current) {
+        controls.update();
+        renderer.render(scene, camera);
+        if (!isAnimatingRef.current) {
+          needsRenderRef.current = false;
+        }
+      }
+      animFrameIdRef.current = requestAnimationFrame(renderLoop);
+    };
+    animFrameIdRef.current = requestAnimationFrame(renderLoop);
 
-    const fillLight = new THREE.DirectionalLight(0xe2e8f0, 1.1);
-    fillLight.position.set(-7, 6, 7);
+    // 6. Lighting Configuration
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
+    scene.add(ambientLight);
+
+    const mainKeyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    mainKeyLight.position.set(6, 12, 10);
+    mainKeyLight.castShadow = true;
+    mainKeyLight.shadow.mapSize.width = 2048;
+    mainKeyLight.shadow.mapSize.height = 2048;
+    mainKeyLight.shadow.camera.near = 0.5;
+    mainKeyLight.shadow.camera.far = 40;
+    mainKeyLight.shadow.camera.left = -10;
+    mainKeyLight.shadow.camera.right = 10;
+    mainKeyLight.shadow.camera.top = 15;
+    mainKeyLight.shadow.camera.bottom = -15;
+    mainKeyLight.shadow.bias = -0.0004;
+    scene.add(mainKeyLight);
+
+    const fillLight = new THREE.DirectionalLight(0xecf0f8, 1.3);
+    fillLight.position.set(-8, 6, 8);
     scene.add(fillLight);
 
-    // Dual Rim / Edge Lights: Illuminate black cabinet silhouette & contours against any background
+    const rearFaceLight = new THREE.DirectionalLight(0xffffff, 1.3);
+    rearFaceLight.position.set(0, 2, -10);
+    scene.add(rearFaceLight);
+
     const leftRimLight = new THREE.DirectionalLight(0x93c5fd, 1.5);
     leftRimLight.position.set(-9, 8, -9);
     scene.add(leftRimLight);
@@ -561,7 +786,6 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     rightRimLight.position.set(9, 8, -9);
     scene.add(rightRimLight);
 
-    // Direct front and interior lights illuminating the rack cavity, ceiling fans, and shelves
     const interiorTopLight = new THREE.PointLight(0xffffff, 1.8, 25);
     interiorTopLight.position.set(0, 8, 1);
     scene.add(interiorTopLight);
@@ -584,8 +808,9 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     scene.add(productsGroupRef.current);
     scene.add(hitboxesGroupRef.current);
     scene.add(nonUGroupRef.current);
+    scene.add(highlightGroupRef.current);
 
-    // 9. Resize Handling via ResizeObserver
+    // 7. Resize Handling via ResizeObserver
     const handleResize = () => {
       if (!container || !renderer || !camera) return;
       const w = container.clientWidth;
@@ -594,6 +819,9 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h, false);
+      if (!isUserInteractedRef.current) {
+        fitFrontalView(true);
+      }
       needsRenderRef.current = true;
     };
 
@@ -601,16 +829,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     resizeObserver.observe(container);
     handleResize();
 
-    // Configure touch actions based on mobile mode
-    if (mobileTouchMode === 'scroll') {
-      controls.enabled = false;
-      canvas.style.touchAction = 'pan-y';
-    } else {
-      controls.enabled = true;
-      canvas.style.touchAction = 'none';
-    }
-
-    // 10. Raycasting Interaction & Drag-vs-Click Threshold Detection
+    // 8. Raycasting Interaction & Drag-vs-Click Threshold Detection
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     let hoverClearTimer: any = null;
@@ -652,6 +871,17 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
       for (const hit of intersects) {
         let obj: THREE.Object3D | null = hit.object;
+        let hitIsDoor = false;
+        let tmp: THREE.Object3D | null = obj;
+        while (tmp && tmp !== scene) {
+          if ((tmp as any).userData?.isDoor) {
+            hitIsDoor = true;
+            break;
+          }
+          tmp = tmp.parent;
+        }
+        if (hitIsDoor) continue;
+
         while (obj && obj !== scene) {
           if ((obj as any).userData?.isEmptySlot) {
             foundEmpty = (obj as any).userData.uIndex;
@@ -663,94 +893,58 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           }
           obj = obj.parent;
         }
-        if (foundEmpty || foundProduct) break;
+        if (foundEmpty !== null || foundProduct) break;
       }
 
       setHoveredSlotU(foundEmpty);
-
       if (foundProduct) {
-        if (hoverClearTimer) {
-          clearTimeout(hoverClearTimer);
-          hoverClearTimer = null;
-        }
+        if (hoverClearTimer) clearTimeout(hoverClearTimer);
         setActiveInstanceId(foundProduct.instanceId);
-        const currentSlots = slotsRef.current || [];
-        const matchedSlot = currentSlots.find((s: any) => s.instanceId === foundProduct.instanceId || s.uIndex === foundProduct.uStart);
-        if (matchedSlot) {
-          onProductHoverRef.current(matchedSlot);
-        } else {
-          onProductHoverRef.current({
-            uIndex: foundProduct.uStart || 0,
-            type: foundProduct.isIncluded ? 'preset-shelf' : 'optional',
-            name: foundProduct.name,
-            description: foundProduct.description,
-            spanU: foundProduct.uSpan || 0,
-            instanceId: foundProduct.instanceId,
-            accessoryRef: {
-              ...foundProduct,
-              isPreset: foundProduct.isIncluded,
-              sku: foundProduct.sku,
-              price: foundProduct.price || 0,
-            }
-          } as any);
+        if (onProductHoverRef.current) {
+          onProductHoverRef.current(foundProduct);
         }
-        canvas.style.cursor = 'pointer';
       } else {
-        setActiveInstanceId(null);
-        if (foundEmpty) {
-          canvas.style.cursor = 'crosshair';
-        } else {
-          canvas.style.cursor = 'grab';
-        }
-        // Grace period before clearing hover to prevent HUD flickering
-        if (!hoverClearTimer) {
-          hoverClearTimer = setTimeout(() => {
+        if (hoverClearTimer) clearTimeout(hoverClearTimer);
+        hoverClearTimer = setTimeout(() => {
+          setActiveInstanceId(null);
+          if (onProductHoverRef.current) {
             onProductHoverRef.current(null);
-            hoverClearTimer = null;
-          }, 280);
-        }
+          }
+        }, 120);
       }
     };
 
-    // Rotation is NOT mistakenly counted as a click:
     const handleClick = (e: MouseEvent) => {
       const dist = Math.hypot(e.clientX - pointerDownX, e.clientY - pointerDownY);
-      const elapsed = Date.now() - pointerDownTime;
-      // If moved > 7px or held > 450ms, it was an orbit rotation or drag gesture, not a click!
-      if (dist > 7 || elapsed > 450) {
-        return;
-      }
+      const timeDiff = Date.now() - pointerDownTime;
+      if (dist > 6 || timeDiff > 350) return;
 
       const intersects = getRaycastTargets(e.clientX, e.clientY);
       for (const hit of intersects) {
         let obj: THREE.Object3D | null = hit.object;
+        let hitIsDoor = false;
+        let tmp: THREE.Object3D | null = obj;
+        while (tmp && tmp !== scene) {
+          if ((tmp as any).userData?.isDoor) {
+            hitIsDoor = true;
+            break;
+          }
+          tmp = tmp.parent;
+        }
+        if (hitIsDoor) continue;
+
         while (obj && obj !== scene) {
           if ((obj as any).userData?.isEmptySlot) {
             const uIdx = (obj as any).userData.uIndex;
-            onSlotClickToAddRef.current(uIdx);
+            if (onSlotClickToAddRef.current) {
+              onSlotClickToAddRef.current(uIdx);
+            }
             return;
           }
           if ((obj as any).userData?.isProductMesh) {
             const item = (obj as any).userData.item;
-            const currentSlots = slotsRef.current || [];
-            const matchedSlot = currentSlots.find((s: any) => s.instanceId === item.instanceId || s.uIndex === item.uStart);
-            if (matchedSlot) {
-              onProductInspectRef.current(matchedSlot);
-            } else {
-              onProductInspectRef.current({
-                uIndex: item.uStart || 0,
-                type: item.isIncluded ? 'preset-shelf' : 'optional',
-                name: item.name,
-                description: item.description,
-                spanU: item.uSpan || 0,
-                instanceId: item.instanceId,
-                accessoryRef: {
-                  ...item,
-                  isPreset: item.isIncluded,
-                  sku: item.sku,
-                  price: item.price || 0,
-                }
-              } as any);
+            if (onProductInspectRef.current) {
+              onProductInspectRef.current(item);
             }
             return;
           }
@@ -763,42 +957,35 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       if (e.changedTouches.length === 0) return;
       const touch = e.changedTouches[0];
       const dist = Math.hypot(touch.clientX - touchStartX, touch.clientY - touchStartY);
-      const elapsed = Date.now() - touchStartTime;
-      // If moved > 9px or held > 450ms, it was a touch gesture/drag, not a tap
-      if (dist > 9 || elapsed > 450) {
-        return;
-      }
+      const timeDiff = Date.now() - touchStartTime;
+      if (dist > 10 || timeDiff > 450) return;
 
       const intersects = getRaycastTargets(touch.clientX, touch.clientY);
       for (const hit of intersects) {
         let obj: THREE.Object3D | null = hit.object;
+        let hitIsDoor = false;
+        let tmp: THREE.Object3D | null = obj;
+        while (tmp && tmp !== scene) {
+          if ((tmp as any).userData?.isDoor) {
+            hitIsDoor = true;
+            break;
+          }
+          tmp = tmp.parent;
+        }
+        if (hitIsDoor) continue;
+
         while (obj && obj !== scene) {
           if ((obj as any).userData?.isEmptySlot) {
             const uIdx = (obj as any).userData.uIndex;
-            onSlotClickToAddRef.current(uIdx);
+            if (onSlotClickToAddRef.current) {
+              onSlotClickToAddRef.current(uIdx);
+            }
             return;
           }
           if ((obj as any).userData?.isProductMesh) {
             const item = (obj as any).userData.item;
-            const currentSlots = slotsRef.current || [];
-            const matchedSlot = currentSlots.find((s: any) => s.instanceId === item.instanceId || s.uIndex === item.uStart);
-            if (matchedSlot) {
-              onProductInspectRef.current(matchedSlot);
-            } else {
-              onProductInspectRef.current({
-                uIndex: item.uStart || 0,
-                type: item.isIncluded ? 'preset-shelf' : 'optional',
-                name: item.name,
-                description: item.description,
-                spanU: item.uSpan || 0,
-                instanceId: item.instanceId,
-                accessoryRef: {
-                  ...item,
-                  isPreset: item.isIncluded,
-                  sku: item.sku,
-                  price: item.price || 0,
-                }
-              } as any);
+            if (onProductInspectRef.current) {
+              onProductInspectRef.current(item);
             }
             return;
           }
@@ -807,40 +994,22 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       }
     };
 
-    // WebGL Context Loss Handler: Revert cleanly to 2D view without losing data
-    const handleContextLost = (e: Event) => {
-      e.preventDefault();
-      console.warn('[Cabinet3DViewer] WebGL context lost. Gracefully falling back to 2D view.');
-      if (onFallbackTo2DRef.current) {
-        onFallbackTo2DRef.current();
-      }
-    };
-
     canvas.addEventListener('mousedown', handlePointerDown);
     canvas.addEventListener('touchstart', handleTouchStart, { passive: true });
     canvas.addEventListener('mousemove', handlePointerMove);
     canvas.addEventListener('click', handleClick);
     canvas.addEventListener('touchend', handleTouchEnd);
+
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+      if (onFallbackTo2DRef.current) {
+        onFallbackTo2DRef.current();
+      }
+    };
     canvas.addEventListener('webglcontextlost', handleContextLost, false);
 
-    // 11. Render Loop: Demand-based rendering stops continuous cycles when idle
-    const onControlsChange = () => {
-      needsRenderRef.current = true;
-    };
-    controls.addEventListener('change', onControlsChange);
-
-    const render = () => {
-      const controlsDampingActive = controls.update();
-      if (controlsDampingActive || needsRenderRef.current || isAnimatingRef.current) {
-        renderer.render(scene, camera);
-        needsRenderRef.current = false;
-      }
-      animFrameIdRef.current = requestAnimationFrame(render);
-    };
-    render();
-
-    // 12. Cleanup: Full GPU and memory resource disposal on unmount
     return () => {
+      isRunning = false;
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
       if (hoverClearTimer) clearTimeout(hoverClearTimer);
       activeAnimationsRef.current.forEach(id => cancelAnimationFrame(id));
@@ -855,13 +1024,21 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       canvas.removeEventListener('webglcontextlost', handleContextLost);
 
       controls.removeEventListener('change', onControlsChange);
+      controls.removeEventListener('start', onControlsStart);
       controls.dispose();
+
+      meshMapRef.current.forEach(entry => {
+        if (entry.cancelTexture) entry.cancelTexture();
+        disposeHierarchy(entry.mesh);
+      });
+      meshMapRef.current.clear();
 
       disposeHierarchy(floorGroupRef.current);
       disposeHierarchy(frameGroupRef.current);
       disposeHierarchy(productsGroupRef.current);
       disposeHierarchy(hitboxesGroupRef.current);
       disposeHierarchy(nonUGroupRef.current);
+      disposeHierarchy(highlightGroupRef.current);
       if (stagingTrayGroupRef.current) {
         disposeHierarchy(stagingTrayGroupRef.current);
       }
@@ -875,9 +1052,9 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       renderer.dispose();
       scene.clear();
     };
-  }, []); // Engine mounts ONCE
+  }, []);
 
-  // Compute optional counts for frame integrated accessories (fans, wheels, feet)
+  // Compute optional counts for frame integrated accessories
   const optionalFansCount = useMemo(() => {
     let count = 0;
     (selectedOptionals || []).forEach((opt: any) => {
@@ -905,10 +1082,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     });
   }, [selectedOptionals]);
 
-  // ==========================================
-  // EFFECT 2: Frame Geometry & Cabinet Framing & Floor Pedestal
-  // Runs ONLY when cabinet physical model or dimensions change
-  // ==========================================
+  // Frame Geometry & Cabinet Framing: Runs when cabinet dimensions change
   useEffect(() => {
     if (!sceneRef.current) return;
 
@@ -921,7 +1095,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     const totalFrameHeight = dims.totalU * U_HEIGHT_UNITS + 0.75;
     const halfH = totalFrameHeight / 2;
 
-    // 1. Build Studio Floor Disc / Ambient Shadow Platform
+    // Floor Platform
     const floorRadius = Math.max(dims.widthMm * SCALE_MM_TO_UNITS * 2.2, 14);
     const floorGeom = new THREE.CylinderGeometry(floorRadius, floorRadius, 0.04, 48);
     const floorCanvas = document.createElement('canvas');
@@ -929,7 +1103,6 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     floorCanvas.height = 512;
     const floorCtx = floorCanvas.getContext('2d');
     if (floorCtx) {
-      // Soft radial shadow under cabinet
       const radGrad = floorCtx.createRadialGradient(256, 256, 30, 256, 256, 240);
       radGrad.addColorStop(0, 'rgba(15, 23, 42, 0.35)');
       radGrad.addColorStop(0.35, 'rgba(30, 41, 59, 0.18)');
@@ -938,7 +1111,6 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       floorCtx.fillStyle = radGrad;
       floorCtx.fillRect(0, 0, 512, 512);
 
-      // Subtle technical concentric rings
       floorCtx.strokeStyle = 'rgba(56, 189, 248, 0.16)';
       floorCtx.lineWidth = 1.5;
       [80, 150, 210].forEach(r => {
@@ -960,7 +1132,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     floorMesh.receiveShadow = true;
     floorGroupRef.current.add(floorMesh);
 
-    // 2. Build Cabinet Frame
+    // Frame Group
     const {
       group: newFrameGroup,
       uCenters,
@@ -969,6 +1141,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       stagingAccessoriesGroup,
       hasStagingContent,
       setDoorMode: frameSetDoorMode,
+      setRearCutaway: frameSetRearCutaway,
     } = buildCabinetFrameGroup(
       dims,
       cabinetData,
@@ -977,11 +1150,16 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         additionalFansCount: optionalFansCount,
         hasSelectedWheels: isWheelsSelected,
         hasSelectedFeet: isFeetSelected,
-        doorState: doorMode,
+        doorState: doorStateRef.current,
       }
     );
 
     setDoorModeRef.current = frameSetDoorMode || null;
+    setRearCutawayRef.current = frameSetRearCutaway || null;
+    if (frameSetDoorMode) {
+      frameSetDoorMode('front', doorStateRef.current.front);
+      frameSetDoorMode('rear', doorStateRef.current.rear);
+    }
 
     uCentersRef.current = uCenters;
     innerDepthUnitsRef.current = innerDepthUnits;
@@ -990,31 +1168,44 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     hasStagingContentRef.current = Boolean(hasStagingContent);
 
     frameGroupRef.current.add(newFrameGroup);
-    fitCameraToCabinet(true);
-    needsRenderRef.current = true;
-  }, [dims.totalU, dims.widthMm, dims.depthMm, cabinetData?.sku, fitCameraToCabinet, dims, optionalFansCount, isWheelsSelected, isFeetSelected]);
 
-  // ==========================================
-  // EFFECT 3: Equipment & Slot Synchronization (Instance-Based Lifecycle)
-  // Runs when slots, optionals, or non-U accessories change.
-  // CAMERA POSITION, ANGLE AND ZOOM REMAIN COMPLETELY UNTOUCHED!
-  // ==========================================
+    // Only set camera on initial mount or when cabinet physical dimensions change
+    const framingKey = `${cabinetData?.sku || product?.sku}|${dims.totalU}|${dims.widthMm}|${dims.depthMm}`;
+    if (lastFramingKeyRef.current !== framingKey) {
+      lastFramingKeyRef.current = framingKey;
+      isUserInteractedRef.current = false;
+      fitFrontalView(true);
+    }
+    needsRenderRef.current = true;
+  }, [dims.totalU, dims.widthMm, dims.depthMm, cabinetData?.sku, fitFrontalView, optionalFansCount, isWheelsSelected, isFeetSelected]);
+
+  // Equipment & Slot Synchronization (Does NOT reset camera angle or zoom)
   useEffect(() => {
     if (!sceneRef.current) return;
 
     disposeHierarchy(hitboxesGroupRef.current);
     disposeHierarchy(nonUGroupRef.current);
+    disposeHierarchy(highlightGroupRef.current);
 
-    // Clean ONLY staging accessories, keeping the staging tray platform, plaque and wheels/feet intact!
     if (stagingAccessoriesGroupRef.current) {
       disposeHierarchy(stagingAccessoriesGroupRef.current);
     }
 
-    const uCenters = uCentersRef.current;
-    const innerDepthUnits = innerDepthUnitsRef.current;
+    // Always ensure valid uCenters array even before initial frame calculation
+    const frameHeightUnits = dims.totalU * U_HEIGHT_UNITS + 0.35 + 0.40;
+    const halfHCalc = frameHeightUnits / 2;
+    const u1BottomY = -halfHCalc + 0.40;
+    const uCenters: number[] = (uCentersRef.current && uCentersRef.current.length === dims.totalU)
+      ? uCentersRef.current
+      : Array.from({ length: dims.totalU }, (_, i) => u1BottomY + (i + 0.5) * U_HEIGHT_UNITS);
+
+    const halfD = (dims.depthMm * SCALE_MM_TO_UNITS) / 2;
+    const frontRailZ = halfD - 0.55;
+    const rearRailZ = -halfD + 0.65;
+    const innerDepthUnits = innerDepthUnitsRef.current || Math.abs(frontRailZ - rearRailZ);
     const materials = materialsRef.current;
 
-    // 1. Rebuild Hitboxes for Empty Slots with Upward Preview Span Highlight
+    // 1. Rebuild Hitboxes for Empty Slots
     slots.forEach(slot => {
       if (slot.type === 'empty') {
         const uIdx = slot.uIndex;
@@ -1033,12 +1224,11 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     // 2. Incremental Instance-Based Equipment Management & Animations
     const prefersReducedMotion = typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const frontRailZ = (dims.depthMm * SCALE_MM_TO_UNITS) / 2 - 0.55;
 
     const currentInstanceIds = new Set(productInstances.map(p => p.instanceId));
     const cachedMeshMap = meshMapRef.current;
 
-    // A. Remove meshes that are no longer in the cabinet
+    // Remove meshes no longer present
     cachedMeshMap.forEach((entry, id) => {
       if (!currentInstanceIds.has(id)) {
         if (activeAnimationsRef.current.has(id)) {
@@ -1052,19 +1242,25 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       }
     });
 
-    // B. Add or update active product meshes
+    // Add or update active product meshes
     productInstances.forEach(item => {
-      const bottomCenterY = uCenters[item.uStart - 1];
-      const topCenterY = uCenters[item.uStart + item.uSpan - 2] || bottomCenterY;
-      const targetCenterY = (bottomCenterY !== undefined && topCenterY !== undefined)
-        ? (bottomCenterY + topCenterY) / 2
-        : 0;
+      const safeStart = Math.max(1, Math.min(item.uStart, dims.totalU));
+      const safeEnd = Math.max(1, Math.min(item.uStart + item.uSpan - 1, dims.totalU));
+      const bottomCenterY = uCenters[safeStart - 1];
+      const topCenterY = uCenters[safeEnd - 1] ?? bottomCenterY;
+      const targetCenterY = (bottomCenterY + topCenterY) / 2;
+
+      // PDU placement rule: rear rail if cabinet > 4U, otherwise front rail
+      const isPdu = item.type === 'pdu' || /שקע|pdu/i.test(item.name);
+      const isRearRail = isPdu && dims.totalU > 4;
+      const targetZ = isRearRail ? rearRailZ : frontRailZ;
+      const targetRotY = isRearRail ? Math.PI : 0;
 
       const existing = cachedMeshMap.get(item.instanceId);
 
-      if (existing) {
-        // Instance already existed: check if position changed (Move Animation)
-        if (existing.uStart !== item.uStart || existing.uSpan !== item.uSpan) {
+      if (existing && existing.depthUnits === innerDepthUnits) {
+        existing.mesh.rotation.y = targetRotY;
+        if (existing.uStart !== item.uStart || existing.uSpan !== item.uSpan || Math.abs(existing.lastY - targetCenterY) > 0.001) {
           const fromY = existing.lastY;
           const toY = targetCenterY;
           existing.uStart = item.uStart;
@@ -1083,11 +1279,13 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
               if (progress < 1) {
                 const ease = Math.sin((progress * Math.PI) / 2);
                 existing.mesh.position.y = THREE.MathUtils.lerp(fromY, toY, ease);
+                existing.mesh.position.z = targetZ;
                 needsRenderRef.current = true;
                 const reqId = requestAnimationFrame(animateMove);
                 activeAnimationsRef.current.set(item.instanceId, reqId);
               } else {
                 existing.mesh.position.y = toY;
+                existing.mesh.position.z = targetZ;
                 isAnimatingRef.current = false;
                 activeAnimationsRef.current.delete(item.instanceId);
                 needsRenderRef.current = true;
@@ -1096,14 +1294,26 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
             const reqId = requestAnimationFrame(animateMove);
             activeAnimationsRef.current.set(item.instanceId, reqId);
           } else {
-            existing.mesh.position.set(0, targetCenterY, frontRailZ);
+            existing.mesh.position.set(0, targetCenterY, targetZ);
           }
+        } else {
+          existing.mesh.position.set(0, targetCenterY, targetZ);
         }
       } else {
-        // New Instance: build product mesh
+        if (existing) {
+          if (activeAnimationsRef.current.has(item.instanceId)) {
+            cancelAnimationFrame(activeAnimationsRef.current.get(item.instanceId)!);
+            activeAnimationsRef.current.delete(item.instanceId);
+          }
+          if (existing.cancelTexture) existing.cancelTexture();
+          disposeHierarchy(existing.mesh);
+          productsGroupRef.current.remove(existing.mesh);
+        }
+
         const productMesh = buildProduct3DMesh(item, innerDepthUnits, materials, () => {
           needsRenderRef.current = true;
         });
+        productMesh.rotation.y = targetRotY;
 
         const cancelFn = (productMesh as any)._cancelTexture;
         cachedMeshMap.set(item.instanceId, {
@@ -1111,19 +1321,20 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           uStart: item.uStart,
           uSpan: item.uSpan,
           lastY: targetCenterY,
+          depthUnits: innerDepthUnits,
           cancelTexture: cancelFn,
           item,
         });
 
-        // Play entrance animation ONLY for newly added item
         const isNew = item.instanceId === lastAddedInstanceId && !animatedInstanceIdsRef.current.has(item.instanceId);
 
         if (isNew && !prefersReducedMotion) {
           animatedInstanceIdsRef.current.add(item.instanceId);
-          productMesh.position.set(0, targetCenterY, frontRailZ + 0.9);
+          // Enter smoothly inside cabinet without clipping through front glass door
+          const startZ = isRearRail ? targetZ - 0.30 : targetZ + 0.30;
+          const endZ = targetZ;
+          productMesh.position.set(0, targetCenterY, startZ);
           let progress = 0;
-          const startZ = frontRailZ + 0.9;
-          const endZ = frontRailZ;
           isAnimatingRef.current = true;
 
           const animateIn = () => {
@@ -1143,14 +1354,35 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           const reqId = requestAnimationFrame(animateIn);
           activeAnimationsRef.current.set(item.instanceId, reqId);
         } else {
-          productMesh.position.set(0, targetCenterY, frontRailZ);
+          productMesh.position.set(0, targetCenterY, targetZ);
         }
 
         productsGroupRef.current.add(productMesh);
       }
+
+      // Add gentle highlight outline if this is the newly added item
+      if (item.instanceId === lastAddedInstanceId) {
+        const spanH = item.uSpan * U_HEIGHT_UNITS;
+        const outlineGeom = new THREE.BoxGeometry(
+          RACK_19_WIDTH_UNITS + 0.08,
+          spanH + 0.04,
+          innerDepthUnits * 0.90
+        );
+        const edgesGeom = new THREE.EdgesGeometry(outlineGeom);
+        const outlineMat = new THREE.LineBasicMaterial({
+          color: 0x38bdf8,
+          linewidth: 2,
+          transparent: true,
+          opacity: 0.85,
+        });
+        const outlineMesh = new THREE.LineSegments(edgesGeom, outlineMat);
+        outlineMesh.position.set(0, targetCenterY, targetZ - (innerDepthUnits * 0.45));
+        outlineMesh.raycast = () => {}; // Never block raycasting or clicks
+        highlightGroupRef.current.add(outlineMesh);
+      }
     });
 
-    // 3. Rebuild 0U / Non-U Accessories
+    // 3. 0U / Non-U Accessories
     const halfH = (dims.totalU * U_HEIGHT_UNITS) / 2;
     const widthUnits = dims.widthMm * SCALE_MM_TO_UNITS;
     const depthUnits = dims.depthMm * SCALE_MM_TO_UNITS;
@@ -1171,29 +1403,135 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       if (zone === 'roof') {
         const isFan = /מאוורר|fan|מפוח|איוורור/i.test(acc.name || '');
         if (!isFan) {
-          // Roof brush entry / auxiliary plate
           const roofMesh = buildRoofAccessoryMesh(itemData, widthUnits, depthUnits, materials);
           roofMesh.position.set(0, halfH + 0.04, 0);
           nonUGroupRef.current.add(roofMesh);
         }
       } else if (zone === 'vertical') {
-        const vertMesh = buildVerticalAccessoryMesh(itemData, dims.totalU * U_HEIGHT_UNITS, materials);
-        vertMesh.position.set(widthUnits / 2 - 0.35, 0, -depthUnits / 4);
-        nonUGroupRef.current.add(vertMesh);
-      } else if (zone === 'plinth' || zone === 'hardware') {
-        // Hardware and plinth elements (like feet, wheels, screws) are drawn implicitly by the cabinet frame if included,
-        // but if they are added as accessories we don't draw extra 3D instances for them to avoid clutter.
-        // We ensure they are NOT dropped from the details array by maintaining them in nonUAccessories,
-        // but we simply skip rendering independent 3D meshes for them here.
+        const isPdu = /שקע|pdu/i.test(acc.name || '');
+        if (isPdu) {
+          // Mount 19" horizontal PDU on rear rail (or front if 4U)
+          const pduInst: Product3DInstance = {
+            instanceId: `pdu-nonu-${idx}`,
+            sku: acc.sku || acc.pn || 'PDU-19',
+            name: acc.name,
+            description: acc.description || '',
+            price: acc.price || 0,
+            uStart: dims.totalU > 4 ? dims.totalU : 1,
+            uSpan: 1,
+            isIncluded: Boolean(acc.isIncluded || acc.isPreset),
+            type: 'pdu',
+            image: acc.image || (acc.accessoryRef ? acc.accessoryRef.image : undefined),
+            optionalIdx: acc.optionalIdx,
+            accessoryRef: acc,
+          };
+          const pduMesh = buildProduct3DMesh(pduInst, innerDepthUnits, materials, () => {
+            needsRenderRef.current = true;
+          });
+          const pduY = uCenters[dims.totalU - 1] ?? 0;
+          const pduZ = dims.totalU <= 4 ? frontRailZ : rearRailZ;
+          if (dims.totalU > 4) {
+            pduMesh.rotation.y = Math.PI; // Face sockets forward into cabinet
+          }
+          pduMesh.position.set(0, pduY, pduZ);
+          nonUGroupRef.current.add(pduMesh);
+        } else {
+          const vertMesh = buildVerticalAccessoryMesh(itemData, dims.totalU * U_HEIGHT_UNITS, materials);
+          const zPos = dims.totalU <= 4 ? -depthUnits / 4 : -depthUnits * 0.9;
+          vertMesh.position.set(widthUnits / 2 - 0.35, 0, zPos);
+          nonUGroupRef.current.add(vertMesh);
+        }
       }
     });
 
-    needsRenderRef.current = true;
-  }, [productInstances, slots, nonUAccessories, selectedSlotU, previewSpanU, lastAddedInstanceId, dims.depthMm, dims.totalU, dims.widthMm]);
+    // 4. Staging Tray for Unallocated Items
+    const stagingItems = unallocatedItems || [];
+    if (stagingItems.length > 0) {
+      const stagingX = widthUnits / 2 + 1.6;
+      let currentStackY = -halfH + 0.10;
 
-  // ==========================================
-  // EFFECT 4: Mobile Touch Mode
-  // ==========================================
+      const trayWidth = RACK_19_WIDTH_UNITS + 0.6;
+      const trayDepth = Math.max(2.8, Math.min(depthUnits * 0.85, 4.8));
+      const trayGeom = new THREE.BoxGeometry(trayWidth, 0.10, trayDepth);
+      const trayMat = materials.shelfMat || new THREE.MeshStandardMaterial({
+        color: 0x27272a,
+        roughness: 0.6,
+        metalness: 0.4,
+      });
+      const trayMesh = new THREE.Mesh(trayGeom, trayMat);
+      trayMesh.position.set(stagingX, -halfH + 0.05, -trayDepth / 2 + 0.2);
+      trayMesh.receiveShadow = true;
+      nonUGroupRef.current.add(trayMesh);
+
+      const trayPlacardGeom = new THREE.BoxGeometry(trayWidth * 0.65, 0.06, 0.02);
+      const placardMat = new THREE.MeshBasicMaterial({ color: 0xd97706 });
+      const placard = new THREE.Mesh(trayPlacardGeom, placardMat);
+      placard.position.set(stagingX, -halfH + 0.05, 0.21);
+      nonUGroupRef.current.add(placard);
+
+      stagingItems.forEach((item, sIdx) => {
+        const uSize = Math.max(1, Number(item.uSize || item.spanU || 1));
+        const itemHeight = uSize * U_HEIGHT_UNITS;
+        const targetCenterY = currentStackY + itemHeight / 2;
+
+        const itemInstance: Product3DInstance = {
+          instanceId: `unallocated-${sIdx}-${item.sku || item.pn}`,
+          sku: item.sku || item.pn || '',
+          name: item.name || item.description || 'פריט ללא מקום פנוי',
+          description: item.description || '',
+          price: item.price || 0,
+          uStart: 0,
+          uSpan: uSize,
+          isIncluded: false,
+          type: item.isShelf ? 'shelf' : 'active',
+          image: item.image,
+          optionalIdx: item.optionalIdx,
+          accessoryRef: item,
+        };
+
+        const mesh = buildProduct3DMesh(itemInstance, innerDepthUnits, materials, () => {
+          needsRenderRef.current = true;
+        });
+        mesh.position.set(stagingX, targetCenterY, -innerDepthUnits * 0.4);
+        nonUGroupRef.current.add(mesh);
+
+        const overlayDepth = Math.max(1.8, Math.min(innerDepthUnits * 0.85, 4.6));
+        const overlayGeom = new THREE.BoxGeometry(
+          RACK_19_WIDTH_UNITS + 0.12,
+          itemHeight + 0.04,
+          overlayDepth + 0.08
+        );
+        const overlayMat = new THREE.MeshStandardMaterial({
+          color: 0xef4444,
+          transparent: true,
+          opacity: 0.32,
+          roughness: 0.25,
+          metalness: 0.1,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        const overlayBox = new THREE.Mesh(overlayGeom, overlayMat);
+        overlayBox.position.set(stagingX, targetCenterY, -overlayDepth / 2);
+        (overlayBox as any).userData = { isProductMesh: true, item: itemInstance, isUnallocated: true };
+
+        const edgesGeom = new THREE.EdgesGeometry(overlayGeom);
+        const edgesMat = new THREE.LineBasicMaterial({
+          color: 0xf87171,
+          transparent: true,
+          opacity: 0.85,
+        });
+        const overlayEdges = new THREE.LineSegments(edgesGeom, edgesMat);
+        overlayBox.add(overlayEdges);
+        nonUGroupRef.current.add(overlayBox);
+
+        currentStackY += itemHeight + 0.1;
+      });
+    }
+
+    needsRenderRef.current = true;
+  }, [productInstances, slots, nonUAccessories, unallocatedItems, selectedSlotU, previewSpanU, lastAddedInstanceId, dims.depthMm, dims.totalU, dims.widthMm]);
+
+  // Mobile Touch Mode Effect
   useEffect(() => {
     const controls = controlsRef.current;
     const canvas = canvasRef.current;
@@ -1222,11 +1560,16 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     }
   };
 
+  const unallocatedCount = unallocatedItems?.length || 0;
+  const showAddedBanner = newlyAddedInstance && dismissedAddedBannerId !== lastAddedInstanceId;
+
   return (
     <div
       ref={containerRef}
-      className={`relative border-4 flex flex-col overflow-hidden transition-all duration-300 select-none ${getBackdropClass()} ${
-        isWidescreen ? 'h-[650px] sm:h-[720px]' : 'h-[500px] sm:h-[580px]'
+      className={`relative border-2 border-slate-300 flex flex-col overflow-hidden transition-all duration-300 select-none rounded-xl ${getBackdropClass()} ${
+        isWidescreen
+          ? 'h-[72vh] sm:h-[78vh] lg:h-[min(900px,calc(100dvh-5rem))]'
+          : 'h-[60vh] sm:h-[65vh] lg:h-[min(760px,calc(100dvh-8rem))]'
       } ${className}`}
       dir="rtl"
     >
@@ -1238,12 +1581,44 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         aria-label="הדמיית ארון תקשורת תלת-ממדית אינטראקטיבית"
       />
 
-      {/* Top HUD Toolbar: Dimensions, Schematic Indicator, Quick Controls */}
+      {/* Top Floating Notification Banner for Newly Added Product */}
+      {showAddedBanner && newlyAddedInstance && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 pointer-events-auto animate-in fade-in slide-in-from-top-3 duration-300 max-w-[92%] sm:max-w-md">
+          <div className="bg-slate-900/95 text-white border border-emerald-400/80 px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2.5 backdrop-blur-md text-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="truncate">
+              נוסף: <strong>{newlyAddedInstance.name}</strong>{' '}
+              <span className="text-emerald-300 font-mono">
+                (U{newlyAddedInstance.uStart}
+                {newlyAddedInstance.uSpan > 1 ? `-U${newlyAddedInstance.uStart + newlyAddedInstance.uSpan - 1}` : ''})
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => focusOnSelectedProduct(newlyAddedInstance.instanceId)}
+              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-full text-[11px] shrink-0 cursor-pointer transition-colors flex items-center gap-1 shadow-xs"
+            >
+              <Eye size={12} />
+              <span>הצג את הפריט</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDismissedAddedBannerId(lastAddedInstanceId || null)}
+              className="p-1 text-slate-400 hover:text-white rounded-full transition-colors cursor-pointer"
+              title="סגור התראה"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Top HUD Toolbar */}
       <div className="absolute top-2.5 right-2.5 left-2.5 flex items-center justify-between gap-2 pointer-events-none z-20">
-        {/* Left Side: Status Badge */}
+        {/* Left Side: Status Badges */}
         <div className="flex items-center gap-1.5 flex-wrap pointer-events-auto">
-          <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 text-white text-[11px] px-2.5 py-1 flex items-center gap-2 shadow-md">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 text-white text-[11px] px-2.5 py-1 flex items-center gap-2 shadow-md rounded-md">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="font-bold">{dims.totalU}U</span>
             <span className="text-slate-400 text-[10px] font-mono">
               {dims.widthMm}x{dims.depthMm}mm
@@ -1251,150 +1626,299 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           </div>
 
           {dims.isSpecific447510T && (
-            <div className="bg-amber-500/20 border border-amber-400 text-amber-300 text-[10.5px] px-2.5 py-1 flex items-center gap-1.5 font-bold shadow-md">
+            <div className="bg-amber-500/20 border border-amber-400 text-amber-300 text-[10.5px] px-2.5 py-1 flex items-center gap-1.5 font-bold shadow-md rounded-md">
               <Award size={13} className="text-amber-400" />
-              <span>מפרט יצרן מדויק Boost 447510T (44U 75x100)</span>
+              <span className="hidden sm:inline">מפרט Boost 447510T</span>
             </div>
           )}
 
-          {dims.isSchematicDimensions && (
-            <div className="bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[10px] px-2 py-1 flex items-center gap-1 font-semibold">
-              <Info size={12} />
-              <span>המחשה סכמטית</span>
+          {dims.isSpecificBoost42U && (
+            <div className="bg-emerald-500/20 border border-emerald-400 text-emerald-300 text-[10.5px] px-2.5 py-1 flex items-center gap-1.5 font-bold shadow-md rounded-md">
+              <Award size={13} className="text-emerald-400" />
+              <span className="hidden sm:inline">מפרט Boost Rack 42U</span>
+            </div>
+          )}
+
+          {unallocatedCount > 0 && (
+            <div
+              id="hud-unallocated-badge"
+              className="bg-rose-600/95 border border-rose-400 text-white text-[11px] px-2.5 py-1 flex items-center gap-1.5 font-bold shadow-md animate-pulse rounded-md"
+              title={`${unallocatedCount} פריטים ללא מקום פנוי`}
+            >
+              <span>⚠ {unallocatedCount} ללא מקום</span>
             </div>
           )}
 
           {hoveredSlotU !== null && (
-            <div className="bg-[#004387] border border-blue-400 text-white text-[11px] font-bold px-2.5 py-1 flex items-center gap-1 shadow-lg animate-in fade-in">
-              <span>➕ לחץ להוספה ב-U{hoveredSlotU}</span>
+            <div className="bg-[#004387] border border-blue-400 text-white text-[11px] font-bold px-2.5 py-1 flex items-center gap-1 shadow-lg animate-in fade-in rounded-md">
+              <span>➕ הוספה ב-U{hoveredSlotU}</span>
             </div>
           )}
         </div>
 
-        {/* Right Side: Camera Control Buttons, Lighting Environment & Mobile Touch Mode */}
-        <div className="flex items-center gap-1 bg-slate-900/90 backdrop-blur-md border border-slate-700 p-1 pointer-events-auto shadow-md">
-          {dims.isSpecific447510T && (
-            <button
-              type="button"
-              onClick={handleToggleDoors}
-              className={`px-2.5 py-1 text-[10.5px] font-bold border transition-colors cursor-pointer flex items-center gap-1.5 ${
-                doorMode === 'open'
-                  ? 'bg-amber-600 text-white border-amber-400'
-                  : doorMode === 'closed'
-                  ? 'bg-slate-800 text-amber-300 border-amber-500/60 hover:bg-slate-700'
-                  : 'bg-blue-900/80 text-blue-200 border-blue-400/60 hover:bg-blue-800'
-              }`}
-              title="שליטה בדלתות כפולות (רשת שקופה / פתוחות 105° / סגורות)"
-            >
-              {doorMode === 'closed' ? <DoorClosed size={13} /> : <DoorOpen size={13} />}
-              <span>
-                דלתות: {doorMode === 'transparent' ? 'רשת שקופה' : doorMode === 'open' ? 'פתוחות 105°' : 'סגורות'}
-              </span>
-            </button>
-          )}
-
+        {/* Right Side: Primary Essential Actions + Collapsible "תצוגה" Group */}
+        <div className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md border border-slate-700 p-1 pointer-events-auto shadow-md rounded-md relative">
+          {/* Reset / All Cabinet View */}
           <button
             type="button"
-            onClick={() => setMobileTouchMode(m => m === 'orbit' ? 'scroll' : 'orbit')}
-            className={`sm:hidden px-2 py-1 text-[10px] font-bold border transition-colors cursor-pointer ${
-              mobileTouchMode === 'orbit'
-                ? 'bg-blue-600/90 text-white border-blue-400'
-                : 'bg-slate-800 text-slate-300 border-slate-600'
-            }`}
-            title="החלף בין סיבוב המודל לגלילת העמוד במובייל"
+            onClick={() => fitCameraToCabinet(false)}
+            className="px-2 py-1 text-[11px] font-semibold hover:bg-slate-800 text-slate-200 hover:text-white rounded transition-colors cursor-pointer flex items-center gap-1"
+            title="הצג את כל הארון"
           >
-            {mobileTouchMode === 'orbit' ? 'סיבוב 3D' : 'גלילת עמוד'}
-          </button>
-          
-          {/* Backdrop Environment Switcher */}
-          <button
-            type="button"
-            onClick={() => {
-              setBackdropTheme(curr => {
-                if (curr === 'studio-light') return 'datacenter';
-                if (curr === 'datacenter') return 'pure-white';
-                return 'studio-light';
-              });
-            }}
-            className="px-2 py-1 text-[10.5px] font-semibold hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
-            title="החלף סביבת תאורה ורקע (סטודיו מואר / חדר שרתים / לבן נקי)"
-          >
-            {backdropTheme === 'studio-light' ? (
-              <>
-                <Sun size={13} className="text-amber-400" />
-                <span className="hidden md:inline">סטודיו מואר</span>
-              </>
-            ) : backdropTheme === 'datacenter' ? (
-              <>
-                <Moon size={13} className="text-blue-400" />
-                <span className="hidden md:inline">חדר שרתים</span>
-              </>
-            ) : (
-              <>
-                <Sparkles size={13} className="text-emerald-400" />
-                <span className="hidden md:inline">לבן סטודיו</span>
-              </>
-            )}
+            <RotateCcw size={13} />
+            <span className="hidden sm:inline">כל הארון</span>
           </button>
 
+          {/* Focus on Product / Restore Framing Toggle */}
           {isFocusedOnProduct ? (
             <button
               type="button"
               onClick={restorePreviousFraming}
-              className="px-2 py-1 text-[10.5px] font-semibold bg-blue-900/80 text-blue-200 hover:text-white border border-blue-400 transition-colors cursor-pointer flex items-center gap-1 border-r border-slate-800"
+              className="px-2 py-1 text-[11px] font-semibold bg-blue-800 text-white hover:bg-blue-700 rounded transition-colors cursor-pointer flex items-center gap-1"
               title="חזור למבט הקודם"
             >
               <CornerUpLeft size={13} />
-              <span>חזור למבט קודם</span>
+              <span>חזור למבט</span>
             </button>
           ) : (
             <button
               type="button"
-              onClick={() => fitCameraToCabinet(false)}
-              className="px-2 py-1 text-[10.5px] font-semibold hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1 border-r border-slate-800"
-              title="הצג את כל הארון (איפוס מצלמה)"
+              onClick={() => focusOnSelectedProduct()}
+              className="px-2 py-1 text-[11px] font-semibold hover:bg-slate-800 text-slate-200 hover:text-white rounded transition-colors cursor-pointer flex items-center gap-1"
+              title="התמקדות בציוד הנבחר"
             >
-              <RotateCcw size={13} />
-              <span className="hidden sm:inline">ארון מלא</span>
+              <ZoomIn size={13} />
+              <span className="hidden sm:inline">התמקדות</span>
             </button>
           )}
 
+          {/* Core View Presets: Front, Rear, Iso */}
+          <div className="flex items-center gap-0.5 bg-slate-950/80 px-1 py-0.5 border border-slate-800 rounded">
+            <button
+              type="button"
+              onClick={() => setCameraPreset('front')}
+              className="px-1.5 py-0.5 text-[10.5px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer whitespace-nowrap"
+              title="מבט חזיתי ישר"
+            >
+              חזית
+            </button>
+            <button
+              type="button"
+              onClick={() => setCameraPreset('rear')}
+              className="px-1.5 py-0.5 text-[10.5px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer whitespace-nowrap"
+              title="מבט אחורי ישר"
+            >
+              אחור
+            </button>
+            <button
+              type="button"
+              onClick={() => setCameraPreset('iso')}
+              className="px-1.5 py-0.5 text-[10.5px] font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer whitespace-nowrap"
+              title="מבט איזומטרי"
+            >
+              איזומטרי
+            </button>
+          </div>
+
+          {/* Collapsible "תצוגה" Settings Menu Button */}
           <button
             type="button"
-            onClick={() => focusOnSelectedProduct()}
-            className={`px-2 py-1 text-[10.5px] font-semibold transition-colors cursor-pointer flex items-center gap-1 border-r border-slate-800 ${
-              isFocusedOnProduct ? 'text-amber-400 font-bold' : 'hover:bg-slate-800 text-slate-300 hover:text-white'
+            onClick={() => setIsDisplayMenuOpen(!isDisplayMenuOpen)}
+            className={`px-2 py-1 text-[11px] font-bold rounded transition-colors cursor-pointer flex items-center gap-1 ${
+              isDisplayMenuOpen
+                ? 'bg-blue-600 text-white'
+                : 'hover:bg-slate-800 text-slate-200 hover:text-white'
             }`}
-            title="התמקדות במוצר הנבחר"
+            title="אפשרויות תצוגה, דלתות ותאורה"
           >
-            <ZoomIn size={13} />
-            <span className="hidden sm:inline">התמקדות במוצר</span>
+            <SlidersHorizontal size={13} />
+            <span>תצוגה</span>
+            <ChevronDown size={12} className={`transition-transform duration-200 ${isDisplayMenuOpen ? 'rotate-180' : ''}`} />
           </button>
 
-          <button
-            type="button"
-            onClick={setFrontView}
-            className="px-2 py-1 text-[10.5px] font-semibold hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer border-r border-slate-800"
-            title="מבט חזיתי ישר"
-          >
-            חזית
-          </button>
-
+          {/* Widescreen Toggle */}
           <button
             type="button"
             onClick={() => setIsWidescreen(w => !w)}
-            className="p-1.5 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer border-r border-slate-800"
-            title={isWidescreen ? 'תצוגה רגילה' : 'תצוגה מוגדלת / רחבה'}
+            className="p-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded transition-colors cursor-pointer"
+            title={isWidescreen ? 'תצוגה רגילה' : 'תצוגה מוגדלת'}
           >
             {isWidescreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
+
+          {/* Collapsible "תצוגה" Popover Panel (Cleanly docked to top-right) */}
+          {isDisplayMenuOpen && (
+            <div className="absolute top-full left-0 mt-1.5 w-72 bg-slate-900/95 border border-slate-700 text-white rounded-xl shadow-2xl p-3 space-y-3 z-40 backdrop-blur-md animate-in fade-in-50 slide-in-from-top-2 duration-200">
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800 text-xs font-bold text-slate-300">
+                <span className="flex items-center gap-1.5">
+                  <SlidersHorizontal size={13} className="text-blue-400" />
+                  <span>הגדרות תצוגה</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsDisplayMenuOpen(false)}
+                  className="text-slate-400 hover:text-white p-0.5"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* Front Door */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
+                  <span>דלת קדמית:</span>
+                  <span className="text-[10px] text-slate-400 font-normal">
+                    {doorsInfo.hasFrontDoor
+                      ? `${doorsInfo.frontDoorType === 'perforated' ? 'רשת' : doorsInfo.frontDoorType === 'glass' ? 'זכוכית' : 'פח'}${doorsInfo.isDoubleFront ? ' כפולה' : ''}${doorsInfo.isFrontDoorIllustrative ? ' (המחשה)' : ''}`
+                      : 'ללא דלת'}
+                  </span>
+                </div>
+                {doorsInfo.hasFrontDoor ? (
+                  <div className="grid grid-cols-4 gap-1 bg-slate-950/80 p-1 rounded-lg border border-slate-800">
+                    {(['transparent', 'open', 'closed', 'removed'] as const).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => handleSetDoorState('front', st)}
+                        className={`py-1 text-[10px] rounded font-medium transition-colors cursor-pointer text-center ${
+                          doorState.front === st
+                            ? 'bg-blue-600 text-white font-bold'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                      >
+                        {st === 'transparent' ? 'שקופה' : st === 'open' ? 'פתוחה' : st === 'closed' ? 'סגורה' : 'הסר'}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-slate-400 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/80 text-center">
+                    ארון ללא דלת קדמית
+                  </div>
+                )}
+              </div>
+
+              {/* Rear Door */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
+                  <span>דלת אחורית:</span>
+                  <span className="text-[10px] text-slate-400 font-normal">
+                    {doorsInfo.hasRearDoor
+                      ? `${doorsInfo.rearDoorType === 'perforated' ? 'רשת' : doorsInfo.rearDoorType === 'glass' ? 'זכוכית' : 'פח'}${doorsInfo.isDoubleRear ? ' כפולה' : ''}${doorsInfo.isRearDoorIllustrative ? ' (המחשה)' : ''}`
+                      : 'ללא דלת אחורית'}
+                  </span>
+                </div>
+                {doorsInfo.hasRearDoor ? (
+                  <div className="grid grid-cols-4 gap-1 bg-slate-950/80 p-1 rounded-lg border border-slate-800">
+                    {(['transparent', 'open', 'closed', 'removed'] as const).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => handleSetDoorState('rear', st)}
+                        className={`py-1 text-[10px] rounded font-medium transition-colors cursor-pointer text-center ${
+                          doorState.rear === st
+                            ? 'bg-blue-600 text-white font-bold'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                      >
+                        {st === 'transparent' ? 'שקופה' : st === 'open' ? 'פתוחה' : st === 'closed' ? 'סגורה' : 'הסר'}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-slate-400 bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/80 text-center">
+                    ללא דלת אחורית (מבנה אחורי פתוח)
+                  </div>
+                )}
+              </div>
+
+              {/* Lighting / Backdrop Environment */}
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold text-slate-300">סביבת תאורה:</div>
+                <div className="grid grid-cols-3 gap-1 bg-slate-950/80 p-1 rounded-lg border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setBackdropTheme('studio-light')}
+                    className={`py-1 px-1.5 text-[10px] rounded font-medium transition-colors cursor-pointer flex items-center justify-center gap-1 ${
+                      backdropTheme === 'studio-light'
+                        ? 'bg-amber-600 text-white font-bold'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Sun size={11} />
+                    <span>סטודיו</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBackdropTheme('datacenter')}
+                    className={`py-1 px-1.5 text-[10px] rounded font-medium transition-colors cursor-pointer flex items-center justify-center gap-1 ${
+                      backdropTheme === 'datacenter'
+                        ? 'bg-blue-600 text-white font-bold'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Moon size={11} />
+                    <span>שרתים</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBackdropTheme('pure-white')}
+                    className={`py-1 px-1.5 text-[10px] rounded font-medium transition-colors cursor-pointer flex items-center justify-center gap-1 ${
+                      backdropTheme === 'pure-white'
+                        ? 'bg-slate-200 text-slate-900 font-bold'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Sparkles size={11} />
+                    <span>לבן נקי</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Side Angle Views */}
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold text-slate-300">מבטי צד:</div>
+                <div className="grid grid-cols-2 gap-1 bg-slate-950/80 p-1 rounded-lg border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setCameraPreset('right')}
+                    className="py-1 text-[10px] text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                  >
+                    צד ימין
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCameraPreset('left')}
+                    className="py-1 text-[10px] text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                  >
+                    צד שמאל
+                  </button>
+                </div>
+              </div>
+
+              {/* Mobile Touch Mode Toggle */}
+              <div className="pt-1 border-t border-slate-800 flex items-center justify-between">
+                <span className="text-[10.5px] text-slate-400">שליטת מגע במובייל:</span>
+                <button
+                  type="button"
+                  onClick={() => setMobileTouchMode(m => (m === 'orbit' ? 'scroll' : 'orbit'))}
+                  className={`px-2 py-0.5 text-[10px] font-bold rounded border cursor-pointer ${
+                    mobileTouchMode === 'orbit'
+                      ? 'bg-blue-600 text-white border-blue-500'
+                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                >
+                  {mobileTouchMode === 'orbit' ? 'סיבוב תלת־ממד' : 'גלילת עמוד'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Bottom HUD: Included Items Chips & Auxiliary 0U Quick Add */}
+      {/* Bottom HUD */}
       <div className="absolute bottom-2.5 right-2.5 left-2.5 flex items-center justify-between gap-2 pointer-events-none z-20">
         {/* Included Items Details */}
-        <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 text-slate-200 text-[10.5px] px-2.5 py-1.5 flex items-center gap-2 pointer-events-auto shadow-md max-w-md overflow-x-auto">
+        <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 text-slate-200 text-[10.5px] px-2.5 py-1.5 flex items-center gap-2 pointer-events-auto shadow-md max-w-md overflow-x-auto rounded-md">
           <ShieldCheck size={14} className="text-emerald-400 shrink-0" />
           <span className="font-semibold text-slate-300 shrink-0">כלול בארון:</span>
           {includedSummary.length > 0 ? (
@@ -1409,7 +1933,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           <button
             type="button"
             onClick={onOpenAuxiliaryModal}
-            className="bg-indigo-900/90 hover:bg-indigo-800 backdrop-blur-md border border-indigo-400 text-indigo-100 text-[11px] font-bold px-3 py-1.5 flex items-center gap-1.5 pointer-events-auto transition-colors shadow-lg cursor-pointer shrink-0"
+            className="bg-indigo-900/90 hover:bg-indigo-800 backdrop-blur-md border border-indigo-400 text-indigo-100 text-[11px] font-bold px-3 py-1.5 flex items-center gap-1.5 pointer-events-auto transition-colors shadow-lg cursor-pointer shrink-0 rounded-md"
             title="הוסף אביזרי גג, בסיס, דפנות או ציוד חומרה ללא תפיסת יחידות U"
           >
             <Layers size={13} className="text-indigo-300" />
@@ -1418,12 +1942,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         )}
       </div>
 
-      {/* Floating Instructions Hint */}
-      <div className="absolute bottom-11 right-3 text-[10px] text-slate-400 pointer-events-none z-10 hidden sm:flex items-center gap-1 opacity-70">
-        <span>🖱️ גרור לסיבוב | גלגלת לזום | לחץ על מקום פנוי להתקנה</span>
-      </div>
-
-      {/* HTML & Keyboard Accessible Slot Selector Bar */}
+      {/* Accessibility Keyboard Slot Picker Bar */}
       {emptySlots.length > 0 && (
         <div
           className="bg-slate-900 border-t border-slate-800 px-3 py-1.5 flex items-center justify-between gap-2 flex-wrap text-xs z-30"

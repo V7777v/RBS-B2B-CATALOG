@@ -300,13 +300,99 @@ export const SKU_3D_ASSET_REGISTRY: Record<string, Product3DAssetDef> = {
 };
 
 /**
- * Normalizes SKU string for lookup
+ * Normalizes SKU or product text for 3D asset lookup
  */
-export function lookup3DAsset(sku: string | undefined): Product3DAssetDef | null {
-  if (!sku) return null;
-  const clean = sku.trim();
-  if (SKU_3D_ASSET_REGISTRY[clean]) return SKU_3D_ASSET_REGISTRY[clean];
-  const upper = clean.toUpperCase();
-  if (SKU_3D_ASSET_REGISTRY[upper]) return SKU_3D_ASSET_REGISTRY[upper];
+export function lookup3DAsset(sku: string | undefined, name?: string): Product3DAssetDef | null {
+  const cleanSku = (sku || '').trim();
+  const cleanName = (name || '').trim();
+  const upperSku = cleanSku.toUpperCase();
+  const upperName = cleanName.toUpperCase();
+
+  // 1. Direct SKU match
+  if (cleanSku && SKU_3D_ASSET_REGISTRY[cleanSku]) return SKU_3D_ASSET_REGISTRY[cleanSku];
+  if (upperSku && SKU_3D_ASSET_REGISTRY[upperSku]) return SKU_3D_ASSET_REGISTRY[upperSku];
+
+  // 2. Polman brand matching
+  if (upperSku.includes('XL600') || upperSku.includes('POLMAN') || upperName.includes('POLMAN') || upperName.includes('מגבר') || upperName.includes('AMPLIFIER')) {
+    return {
+      sku: cleanSku || 'POLMAN-XL600',
+      categoryProfile: 'audio-amplifier',
+      chassisColor: 0x09090b,
+      roughness: 0.25,
+      metalness: 0.85,
+      details: {
+        hasDials: true,
+        dialCount: 2,
+        brandText: 'POLMAN PROFESSIONAL XL600',
+        ventGrille: true,
+      },
+    };
+  }
+
+  // 3. Hikvision brand matching
+  if (upperSku.includes('HIK') || upperSku.includes('DS-3') || upperName.includes('HIKVISION') || upperName.includes('היקויזן') || upperName.includes('הייקויזן')) {
+    // Check if UPS
+    if (upperSku.includes('UPS') || upperName.includes('אל-פסק') || upperName.includes('UPS')) {
+      return {
+        sku: cleanSku || 'HIKVISION-UPS',
+        categoryProfile: 'ups-online',
+        chassisColor: 0x111827,
+        roughness: 0.4,
+        metalness: 0.6,
+        details: {
+          hasLcdDisplay: true,
+          lcdColor: 0x10b981,
+          ventGrille: true,
+          brandText: cleanSku.includes('02K') ? 'HIKVISION UPS 2kVA' : cleanSku.includes('03K') ? 'HIKVISION UPS 3kVA' : 'HIKVISION UPS ONLINE',
+        },
+      };
+    }
+    // Check port counts
+    if (upperSku.includes('52') || upperSku.includes('48') || upperName.includes('48')) {
+      return {
+        sku: cleanSku || 'HIKVISION-48P',
+        categoryProfile: 'switch-48',
+        chassisColor: 0x0f172a,
+        roughness: 0.3,
+        metalness: 0.7,
+        details: {
+          portBlocks: 4,
+          portsPerBlock: 12,
+          ledCount: 48,
+          brandText: 'HIKVISION 48P GIGA',
+        },
+      };
+    }
+    if (upperSku.includes('26') || upperSku.includes('24') || upperSku.includes('28') || upperName.includes('24')) {
+      return {
+        sku: cleanSku || 'HIKVISION-24P',
+        categoryProfile: 'switch-24',
+        chassisColor: 0x1e293b,
+        roughness: 0.35,
+        metalness: 0.65,
+        details: {
+          portBlocks: 3,
+          portsPerBlock: 8,
+          ledCount: 24,
+          brandText: 'HIKVISION SMART PoE',
+        },
+      };
+    }
+    // Default 16-port Hikvision switch
+    return {
+      sku: cleanSku || 'HIKVISION-16P',
+      categoryProfile: 'switch-16',
+      chassisColor: 0x1e293b,
+      roughness: 0.35,
+      metalness: 0.65,
+      details: {
+        portBlocks: 2,
+        portsPerBlock: 8,
+        ledCount: 16,
+        brandText: 'HIKVISION 16P',
+      },
+    };
+  }
+
   return null;
 }

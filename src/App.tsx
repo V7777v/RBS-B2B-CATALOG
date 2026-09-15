@@ -712,6 +712,31 @@ export const PRODUCT_447510T = {
   inStock: true,
 };
 
+export const PRODUCT_BOOST_42U = {
+  id: "BOOST-42U",
+  sku: "BOOST-42U",
+  pn: "BOOST-42U",
+  name: "ארון תקשורת עומד 42U דגם Boost RackMount",
+  description: "ארון שרתים ותקשורת מסיבי 42U מבית Boost RackMount לפי מפרט יצרן רשמי (SPCC Cold Rolled Steel). כולל: דלת קדמית מזכוכית מחוסמת 5.0 מ״מ עם מסגרת פלדה ומנעול ידית מגולוון עם 2 מפתחות, דלת אחורית פלדה SPCC 1.2 מ״מ עם מנעול עגול, 2 דלתות צד פריקות עם בריחים מהירים, יחידת גג 4 מאווררים תעשייתיים (120 מ״מ), 4 גלגלים כבדים (Castors), 4 רגליות פילוס מתכווננות M10 לעומס 800 ק״ג, 6 קורות עומק Mounting Angles, 4 פרופילי עמודים 19 אינץ' 2.0 מ״מ עם סימוני U, מכסי כבילה עליונים ותחתונים ו-20 סטים של ברגי כלוב M6.",
+  price: 2650,
+  category: "ארונות תקשורת ואביזרים",
+  catalog: "ארונות תקשורת ואביזרים",
+  subcategory: "ארונות עומדים",
+  brand: "BOOST",
+  active: true,
+  isNew: false,
+  isHotSale: false,
+  isClearance: false,
+  u: 42,
+  width: 600,
+  depth: 1000,
+  height: 2055,
+  images: [
+    "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80",
+  ],
+  inStock: true,
+};
+
 // --- VIEWPORT INTERSECTION OBSERVER HOOK ---
 interface UseIntersectionObserverProps {
   threshold?: number;
@@ -2382,26 +2407,6 @@ const ProductDetailsView = (props: any) => {
                   )}
               </div>
             )}
-            {/* SPECIFIC CONFIGURATORS (Only for Cabinets, not accessories) */}
-            {selectedProduct.subcategory === "ארונות תקשורת ואביזרים" &&
-              !selectedProduct["Nested subcategory"]?.includes("אביזרים") &&
-              /ארון|מסד|מארז/i.test(selectedProduct.name) && (
-                <div className="mb-6">
-                  <React.Suspense
-                    fallback={
-                      <div className="animate-pulse h-32 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center text-sm text-gray-500">
-                        טוען קונפיגורטור...
-                      </div>
-                    }
-                  >
-                    <CabinetConfigurator
-                      product={selectedProduct}
-                      catalogData={catalogData}
-                      onOptionalsChange={handleOptionalsChange}
-                    />
-                  </React.Suspense>
-                </div>
-              )}
             {/* COMPATIBLE CABINETS (If this is an accessory) */}
             {(((selectedProduct["Nested subcategory"]?.includes("אביזר") ||
               selectedProduct.nestedSubcategory?.includes("אביזר")) &&
@@ -2681,6 +2686,27 @@ const ProductDetailsView = (props: any) => {
             </div>
           </div>
         </div>
+
+        {/* FULL-WIDTH CABINET CONFIGURATOR (Spans 100% of the product content wrapper) */}
+        {selectedProduct.subcategory === "ארונות תקשורת ואביזרים" &&
+          !selectedProduct["Nested subcategory"]?.includes("אביזרים") &&
+          /ארון|מסד|מארז/i.test(selectedProduct.name) && (
+            <div className="border-t-2 border-[#004387]/20 bg-slate-50/50 p-3 sm:p-5 lg:p-6">
+              <React.Suspense
+                fallback={
+                  <div className="animate-pulse h-48 bg-white border border-gray-200 rounded flex items-center justify-center text-sm text-gray-500 font-semibold">
+                    טוען קונפיגורטור ארון...
+                  </div>
+                }
+              >
+                <CabinetConfigurator
+                  product={selectedProduct}
+                  catalogData={catalogData}
+                  onOptionalsChange={handleOptionalsChange}
+                />
+              </React.Suspense>
+            </div>
+          )}
       </div>
       {/* MOBILE FULL SCREEN IMAGE MODAL */}
       {isMobileModalOpen && (
@@ -3592,7 +3618,7 @@ export default function App() {
   const [subcategoriesGlobalData, setSubcategoriesGlobalData] = useState<any[]>(
     [],
   );
-  const [catalogData, setCatalogData] = useState<any[]>([PRODUCT_447510T]);
+  const [catalogData, setCatalogData] = useState<any[]>([PRODUCT_447510T, PRODUCT_BOOST_42U]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProductsLoading, setIsProductsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -5500,6 +5526,9 @@ export default function App() {
           if (!ids.has(PRODUCT_447510T.id)) {
             combined.push(PRODUCT_447510T);
           }
+          if (!ids.has(PRODUCT_BOOST_42U.id)) {
+            combined.push(PRODUCT_BOOST_42U);
+          }
           return combined;
         });
         setProductsOffset((prev) => prev + 50);
@@ -5696,6 +5725,9 @@ export default function App() {
           });
           if (!seen.has(PRODUCT_447510T.id)) {
             res.push(PRODUCT_447510T);
+          }
+          if (!seen.has(PRODUCT_BOOST_42U.id)) {
+            res.push(PRODUCT_BOOST_42U);
           }
           return res;
         };

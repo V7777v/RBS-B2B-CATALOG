@@ -1,29 +1,43 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from "motion/react";
 import { 
-  AlertCircle, 
-  CheckCircle, 
+  AlertCircle,
+  CheckCircle,
   CheckCircle2,
-  Plus, 
-  Minus, 
-  X, 
-  Server, 
-  Download, 
-  Box, 
-  AlertTriangle, 
-  ChevronDown, 
-  Search, 
-  ZoomIn, 
-  Eye, 
+  Plus,
+  Minus,
+  X,
+  Server,
+  Download,
+  Box,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  ZoomIn,
+  Eye,
   Maximize2,
+  Minimize2,
   SlidersHorizontal,
   ArrowLeftRight,
+  ArrowRight,
+  ArrowLeft,
   RotateCcw,
   Info,
-  Award
+  Award,
+  Layers,
+  ShieldCheck,
+  Sparkles,
+  PanelRightClose,
+  PanelRightOpen,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Check,
+  Undo2,
+  GripVertical
 } from 'lucide-react';
 import Papa from 'papaparse';
-import { CabinetMatrixData, GroupedRubric, KNOWN_MATRIX_SHELF_SKUS, checkAccessoryFitsCabinet, deriveBrand, extractAllMatrixShelfSkus, fetchCabinetMatrix, fetchCompatMap, groupAccessoriesForDisplay, isAccessoryAShelf, isCabinetProduct, isProductShelf, normalizeSku, parseAccessoryCount, parseCabinetDepthFromName, parseCompatRange, parseCompatibleSkus, parseDepthMmLocal } from '../utils/cabinetData';
+import { CabinetMatrixData, GroupedRubric, KNOWN_MATRIX_SHELF_SKUS, GENERIC_SHELF_IMAGE, checkAccessoryFitsCabinet, deriveBrand, extractAllMatrixShelfSkus, fetchCabinetMatrix, fetchCompatMap, groupAccessoriesForDisplay, isAccessoryAShelf, isCabinetProduct, isProductShelf, normalizeSku, parseAccessoryCount, parseCabinetDepthFromName, parseCompatRange, parseCompatibleSkus, parseDepthMmLocal } from '../utils/cabinetData';
 import { 
   analyzeCabinetSpace,
   classifyItemPlacement,
@@ -41,6 +55,8 @@ import { getToken as getAppCheckToken } from 'firebase/app-check';
 import { appCheck } from '../firebase';
 import { Cabinet3DErrorBoundary } from './Cabinet3D/Cabinet3DErrorBoundary';
 import { AddSlotModal } from './Cabinet3D/AddSlotModal';
+import { isCabinetBoost42U } from './Cabinet3D/CabinetModelBuilder';
+import { CabinetWorkspace } from './Cabinet3D/CabinetWorkspace';
 
 const Cabinet3DViewer = React.lazy(() =>
   import('./Cabinet3D/Cabinet3DViewer').then(m => ({ default: m.Cabinet3DViewer }))
@@ -85,6 +101,11 @@ interface Accessory {
 // Only items belonging to Infrastructure pricelist / categories should appear as cabinet accessories (Track 2)
 const isInfrastructureItem = (pp: any): boolean => {
   if (!pp) return false;
+  const rawSku = String(pp.sku || pp.pn || '');
+  const normSku = normalizeSku(rawSku);
+  // Explicitly disallow hand tools / non-accessory products
+  if (normSku === '111014') return false;
+
   const cat = String(pp.category || '').toLowerCase();
   const sub = String(pp.subcategory || '').toLowerCase();
   const nested = String(pp['Nested subcategory'] || pp.nestedSubcategory || '').toLowerCase();
@@ -119,10 +140,7 @@ const isInfrastructureItem = (pp: any): boolean => {
     name.includes('rackmount') || desc.includes('rackmount') || cat.includes('rackmount') || sub.includes('rackmount') || nested.includes('rackmount') ||
     name.includes('rackmout') || desc.includes('rackmout') || cat.includes('rackmout') || sub.includes('rackmout') || nested.includes('rackmout'); // Handling user typo RACKMOUT
 
-  // The user explicitly requested ONLY products related to the cabinet AND ONLY from the "מחירון תשתיות" catalog.
-  // We should strictly require it to be from the infrastructure catalog, except maybe rackmount which we can keep restricted to infra.
-  // Actually, let's just make it return isInfraCategory. If it's not in the infrastructure price list, it's out.
-  return isInfraCategory;
+  return isInfraCategory || isInfraSub || isRackmount;
 };
 
 const getPhysicalZone = (sku: string, name: string, desc: string): 'roof' | 'plinth' | 'vertical' | 'hardware' => {
@@ -132,7 +150,7 @@ const getPhysicalZone = (sku: string, name: string, desc: string): 'roof' | 'pli
   }
   const s = `${name || ''} ${desc || ''}`.toLowerCase();
   if (/מאוורר|fan|מפוח|איוורור|נורת|נורה|led|לד|תאורה|light|כניסה עליונה/.test(s)) return 'roof';
-  if (/פס 12|ורטיקל|vertical|תעלה|מסתיר/.test(s)) return 'vertical';
+  if (/פס שקע|שקעים|pdu|פס 12|ורטיקל|vertical|תעלה|מסתיר/.test(s)) return 'vertical';
   if (/גלגל|wheel|רגלי|feet|בסיס|plinth/.test(s)) return 'plinth';
   if (/בורג|ברגים|screw|cage|nut|אום|רלס|rail|hardware/.test(s)) return 'hardware';
   return 'hardware';
@@ -219,7 +237,7 @@ const buildCatalogAccessories = (
   (catalogData || []).forEach((pp: any) => {
     if (!pp || !pp.sku) return;
     const normSku = normalizeSku(pp.sku);
-    if (!normSku || normSku === productSkuNorm) return;
+    if (!normSku || normSku === productSkuNorm || normSku === '111014') return;
 
     // Check if this item belongs to Infrastructure pricelist
     if (!isInfrastructureItem(pp)) return;
@@ -264,7 +282,8 @@ const buildCatalogAccessories = (
       return;
     }
 
-    const uSize = resolveUConsumption(pp).u;
+    let uSize = resolveUConsumption(pp).u;
+    if (normSku === '821410') uSize = 1;
     const isPdu = nested.includes('פסי שקעים') || /פס שקע|שקעים|pdu/i.test(`${pp.name || ''} ${pp.description || ''}`);
     const price = pp.price ? parseFloat(String(pp.price).replace(/,/g, '')) : 0;
 
@@ -290,18 +309,19 @@ const buildCatalogAccessories = (
 
   // Also ensure any non-shelf items in compatMap that weren't in catalogData are included
   Object.keys(compatMap || {}).forEach(compSku => {
-    if (compSku === productSkuNorm || itemsMap.has(compSku)) return;
+    if (compSku === productSkuNorm || compSku === '111014' || itemsMap.has(compSku)) return;
 
     // Any item identified as a shelf in compatMap is excluded here!
     if (isProductShelf(compSku, catalogMap, allMatrixShelves)) return;
 
     const catProd = catalogMap.get(compSku);
-    if (catProd && !isInfrastructureItem(catProd)) return;
+    if (catProd && (isCabinetProduct(catProd) || (!isInfrastructureItem(catProd) && !isFlaggedForCabinetSuitability(catProd)))) return;
 
     const compatResult = checkTrackBAccessoryCompatibility({ sku: compSku }, cabinet, compatMap);
     if (!compatResult.fits) return;
 
-    const uSize = resolveUConsumption({ sku: compSku }).u;
+    let uSize = resolveUConsumption({ sku: compSku }).u;
+    if (compSku === '821410') uSize = 1;
     itemsMap.set(compSku, {
       pn: compSku,
       sku: compSku,
@@ -395,9 +415,11 @@ const buildCatalogAccessories = (
   });
 
   // Final unified safeguard filtering:
-  // Shelves can ONLY exist if they are listed in inMatrixShelves for this cabinet!
+  // 1. Cabinets must NEVER be in accessories list!
+  // 2. Shelves can ONLY exist if they are listed in inMatrixShelves for this cabinet!
   const finalUnified: Accessory[] = [];
   for (const item of itemsMap.values()) {
+    if (isCabinetProduct(item)) continue;
     const isShelf = isProductShelf(item, catalogMap, allMatrixShelves);
     const normSku = normalizeSku(item.sku || item.pn);
     if (isShelf) {
@@ -484,8 +506,8 @@ const RenderSchematicFallback: React.FC<{ item: EnrichedPreviewItem; isLarge?: b
     return (
       <div className="flex flex-col items-center justify-center p-3 w-full h-full text-center">
         <div className="flex items-center gap-4 text-cyan-400">
-          <span className="text-4xl animate-spin" style={{ animationDuration: '3s' }}>��</span>
-          <span className="text-4xl animate-spin" style={{ animationDuration: '3s' }}>��</span>
+          <RotateCcw className="animate-spin text-cyan-400" size={32} style={{ animationDuration: "3s" }} />
+          <RotateCcw className="animate-spin text-cyan-400" size={32} style={{ animationDuration: "3s" }} />
         </div>
         <span className="text-[11px] text-cyan-300 mt-3 font-mono">Roof Ventilation & Cooling Fan Unit</span>
       </div>
@@ -525,7 +547,7 @@ const RenderSchematicFallback: React.FC<{ item: EnrichedPreviewItem; isLarge?: b
   if (isWheel) {
     return (
       <div className="flex flex-col items-center justify-center p-3 w-full h-full text-center">
-        <div className="text-4xl text-emerald-400">��</div>
+        <div className="text-emerald-400 flex items-center justify-center"><CheckCircle2 size={36} className="text-emerald-400" /></div>
         <span className="text-[11px] text-emerald-300 mt-2 font-mono">Heavy Duty Castor Wheels / Feet</span>
       </div>
     );
@@ -621,13 +643,22 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     });
   }, [cabinetData, compatibleAccessories, totalU, product?.sku]);
 
+  // Overrides for movable preset shelves (e.g. from rearrangement)
+  const [presetOverrides, setPresetOverrides] = useState<Record<string, number>>({});
+
+  // Reset preset overrides and accordion rubrics when switching cabinet
+  useEffect(() => {
+    setPresetOverrides({});
+    setOpenSections({});
+  }, [product?.sku]);
+
   // ACCURACY: availableU is DERIVED (never mutated incrementally) so the counter
   // can never drift — always = total − built-in − sum(selected U × qty).
   
   const { usedU, slots, nonUAccessories, unallocatedItems } = React.useMemo(() => {
     const totalSlotsU = totalU || 0;
     const visualSlotsAlloc = new Array(totalSlotsU).fill(null);
-    const shelfPositions: number[] = [];
+    const shelfPositions: { u: number; instanceId: string }[] = [];
     const unallocatedItems: any[] = [];
     
     // 1. Included Shelves
@@ -648,27 +679,33 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     }
     if (shelvesQty > 0) {
       for (let s = 1; s <= shelvesQty; s++) {
-        const pos = Math.round((s * totalSlotsU) / (shelvesQty + 1));
+        const shelfKey = `builtin-shelf-${s}`;
+        const overridePos = presetOverrides[shelfKey];
+        const defaultPos = Math.round((s * totalSlotsU) / (shelvesQty + 1));
+        const pos = (overridePos !== undefined && overridePos >= 1 && overridePos <= totalSlotsU)
+          ? overridePos
+          : defaultPos;
+
         if (pos >= 1 && pos <= totalSlotsU && visualSlotsAlloc[pos - 1] === null) {
           visualSlotsAlloc[pos - 1] = 'shelf';
-          shelfPositions.push(pos);
+          shelfPositions.push({ u: pos, instanceId: shelfKey });
         } else {
           let placed = false;
           for (let offset = 1; offset < totalSlotsU; offset++) {
             if (pos + offset <= totalSlotsU && visualSlotsAlloc[pos + offset - 1] === null) {
               visualSlotsAlloc[pos + offset - 1] = 'shelf';
-              shelfPositions.push(pos + offset);
+              shelfPositions.push({ u: pos + offset, instanceId: shelfKey });
               placed = true;
               break;
             }
             if (pos - offset >= 1 && visualSlotsAlloc[pos - offset - 1] === null) {
               visualSlotsAlloc[pos - offset - 1] = 'shelf';
-              shelfPositions.push(pos - offset);
+              shelfPositions.push({ u: pos - offset, instanceId: shelfKey });
               placed = true;
               break;
             }
           }
-          if (!placed) shelfPositions.push(pos);
+          if (!placed) shelfPositions.push({ u: pos, instanceId: shelfKey });
         }
       }
     }
@@ -677,12 +714,54 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     const optionalItemsAssignment: { uIndex: number; name: string; description: string; accessoryRef: any; optionalIdx: number; isAnchor: boolean; spanU: number; error?: string; instanceId?: string }[] = [];
     const nonUAccessories: { name: string; sku: string; quantity: number; description: string; accessoryRef: any; optionalIdx: number; zone: 'roof' | 'plinth' | 'vertical' | 'hardware' }[] = [];
     
+    // Pass 1: only items with opt.targetU (pinned)
+    selectedOptionals.forEach((opt: any, optIdx: number) => {
+      if (!opt.targetU || opt.uSize === 0) return;
+      const size = Math.max(1, Math.ceil(Number(opt.uSize) || 1));
+      let foundStart = -1;
+      const prefStart = opt.targetU - 1; // 0-based
+      if (prefStart >= 0 && prefStart + size <= totalSlotsU) {
+        let fits = true;
+        for (let j = 0; j < size; j++) {
+          if (visualSlotsAlloc[prefStart + j] !== null) {
+            fits = false;
+            break;
+          }
+        }
+        if (fits) {
+          foundStart = prefStart;
+        }
+      }
+
+      if (foundStart !== -1) {
+        const instId = opt.instanceId || opt.id || `${opt.sku || opt.pn}-unit-0`;
+        for (let j = 0; j < size; j++) {
+          visualSlotsAlloc[foundStart + j] = 'opt';
+          const currentU = foundStart + j + 1;
+          optionalItemsAssignment.push({
+            uIndex: currentU,
+            name: opt.name || opt.pn,
+            description: opt.description || '',
+            accessoryRef: opt,
+            optionalIdx: optIdx,
+            isAnchor: j === size - 1,
+            spanU: size,
+            instanceId: instId
+          });
+        }
+      } else {
+        unallocatedItems.push(opt);
+        console.warn('Could not find contiguous space for accessory at target position:', opt.pn);
+      }
+    });
+
+    // Pass 2: items without targetU (and units q >= 1 of pinned items)
     selectedOptionals.forEach((opt: any, optIdx: number) => {
       if (opt.uSize === 0) {
         nonUAccessories.push({
           name: opt.name || opt.pn,
           sku: opt.sku || opt.pn,
-          quantity: opt.quantity || 1,
+          quantity: Math.max(1, Number(opt.quantity) || 1),
           description: opt.description || opt.name || '',
           accessoryRef: opt,
           optionalIdx: optIdx,
@@ -690,46 +769,29 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         });
         return;
       }
-      const qty = opt.quantity || 1;
-      const size = opt.uSize;
-      
-      for (let q = 0; q < qty; q++) {
+      const qty = Math.max(1, Number(opt.quantity) || 1);
+      const size = Math.max(1, Math.ceil(Number(opt.uSize) || 1));
+      const startQ = opt.targetU ? 1 : 0;
+
+      for (let q = startQ; q < qty; q++) {
         let foundStart = -1;
-        // 1. If item has a specific targetU, ONLY allocate at targetU (do not move without user action)
-        if (opt.targetU && q === 0) {
-          const prefStart = opt.targetU - 1; // 0-based
-          if (prefStart >= 0 && prefStart + size <= totalSlotsU) {
-            let fits = true;
-            for (let j = 0; j < size; j++) {
-              if (visualSlotsAlloc[prefStart + j] !== null) {
-                fits = false;
-                break;
-              }
-            }
-            if (fits) {
-              foundStart = prefStart;
-            }
-          }
-        } else {
-          // 2. Default (non-targeted items): Search from top down to find a contiguous block of 'size'
-          for (let i = totalSlotsU - size; i >= 0; i--) {
-            let fits = true;
-            for (let j = 0; j < size; j++) {
-              if (visualSlotsAlloc[i + j] !== null) {
-                fits = false;
-                break;
-              }
-            }
-            if (fits) {
-              foundStart = i;
+        // Search from top down to find a contiguous block of 'size'
+        for (let i = totalSlotsU - size; i >= 0; i--) {
+          let fits = true;
+          for (let j = 0; j < size; j++) {
+            if (visualSlotsAlloc[i + j] !== null) {
+              fits = false;
               break;
             }
           }
+          if (fits) {
+            foundStart = i;
+            break;
+          }
         }
-        
+
         if (foundStart !== -1) {
-          // Mark allocated
-          const instId = opt.id ? `${opt.id}-${q}` : `${opt.sku || opt.pn}-unit-${q}`;
+          const instId = opt.instanceId || opt.id || `${opt.sku || opt.pn}-unit-${q}`;
           for (let j = 0; j < size; j++) {
             visualSlotsAlloc[foundStart + j] = 'opt';
             const currentU = foundStart + j + 1;
@@ -739,14 +801,14 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
               description: opt.description || '',
               accessoryRef: opt,
               optionalIdx: optIdx,
-              isAnchor: j === size - 1, // anchor at the TOP of the span
+              isAnchor: j === size - 1,
               spanU: size,
               instanceId: instId
             });
           }
         } else {
           unallocatedItems.push(opt);
-          console.warn('Could not find contiguous space for accessory at target position:', opt.pn);
+          console.warn('Could not find contiguous space for accessory:', opt.pn);
         }
       }
     });
@@ -758,22 +820,24 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
     const builtSlots: VisualSlot[] = [];
     for (let u = totalSlotsU; u >= 1; u--) {
-      if (shelfPositions.includes(u)) {
+      const shelfEntry = shelfPositions.find(s => s.u === u);
+      if (shelfEntry) {
         builtSlots.push({
           uIndex: u,
           type: 'preset-shelf',
-          name: 'מדף מובנה קבוע (כלול בארון) ��',
-          description: 'מדף מתכת קבוע הכלול בארון כחלק מתצורת היצרן. המיקום להמחשה.',
+          name: 'מדף מובנה (כלול בארון)',
+          description: 'מדף מתכת הכלול בארון כחלק מתצורת היצרן. ניתן לשינוי מיקום לפי צורך.',
           spanU: 1,
           isAnchor: true,
-          instanceId: `builtin-shelf-${u}`,
+          instanceId: shelfEntry.instanceId,
           accessoryRef: {
-            name: 'מדף מובנה קבוע (כלול בארון)',
+            name: 'מדף מובנה (כלול בארון)',
             sku: 'BUILTIN-SHELF',
             isPreset: true,
+            isLocked: false,
             price: 0,
             uSize: 1,
-            description: 'מדף מתכת קבוע הכלול בארון כחלק מהתצורה הסטנדרטית.'
+            description: 'מדף מתכת הכלול בארון כחלק מהתצורה הסטנדרטית.'
           }
         });
       } else {
@@ -802,17 +866,18 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     }
     
     return { usedU: calcUsedU, slots: builtSlots, nonUAccessories, unallocatedItems };
-  }, [totalU, includedItems, selectedOptionals, cabinetData]);
+  }, [totalU, includedItems, selectedOptionals, cabinetData, presetOverrides]);
 
   const totalSlotsU = totalU || 0;
   const availableU = totalU - usedU;
 
   const [warningModalOpen, setWarningModalOpen] = useState(false);
+  const [warningModalMessage, setWarningModalMessage] = useState<string>('');
   const [pendingAccessory, setPendingAccessory] = useState<Accessory | null>(null);
   const [addedIdx, setAddedIdx] = useState<number | null>(null);
   const [highlightedOptIdx, setHighlightedOptIdx] = useState<number | null>(null);
   const [lastAddedInstanceId, setLastAddedInstanceId] = useState<string | null>(null);
-  const [zoomMode, setZoomMode] = useState(false);
+  const [zoomMode, setZoomMode] = useState(true);
   const [hoveredProduct, setHoveredProduct] = useState<EnrichedPreviewItem | null>(null);
   const [inspectedProduct, setInspectedProduct] = useState<EnrichedPreviewItem | null>(null);
   const [modalZoomLevel, setModalZoomLevel] = useState<number>(1);
@@ -832,6 +897,17 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     setModalZoomLevel(1);
   }, [inspectedProduct]);
 
+  // Global escape key handler to dismiss popup modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (inspectedProduct) setInspectedProduct(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [inspectedProduct]);
+
   const [a11yMessage, setA11yMessage] = useState<string>('');
   const [highlightedSku, setHighlightedSku] = useState<string | null>(null);
   const [chassisPulse, setChassisPulse] = useState(false);
@@ -840,124 +916,371 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [accSearch, setAccSearch] = useState('');
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
-  // Reset all accordion rubrics to closed when switching to another cabinet
-  useEffect(() => {
-    setOpenSections({});
-  }, [product?.sku]);
-
   const [customAccName, setCustomAccName] = useState('');
   const [customAccU, setCustomAccU] = useState<number>(1);
 
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
-  const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' ? window.innerWidth >= 1024 : false);
+  const [isWideLayout, setIsWideLayout] = useState<boolean>(true);
+  const [isStudioMode, setIsStudioMode] = useState<boolean>(false);
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState<boolean>(false);
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState<boolean>(false);
+  const [activeMediumTab, setActiveMediumTab] = useState<'catalog' | 'contents' | 'inspected'>('catalog');
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState<'none' | 'catalog' | 'contents' | 'inspected'>('none');
+
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280);
   useEffect(() => {
-    const check = () => setIsDesktop(window.innerWidth >= 1024);
+    const check = () => setWindowWidth(window.innerWidth);
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
+
+  const isWideDesktop = windowWidth >= 1280;
+  const isMedium = windowWidth >= 768 && windowWidth < 1280;
+  const isMobile = windowWidth < 768;
+  const isDesktop = windowWidth >= 1024;
+
   const [isAddSlotModalOpen, setIsAddSlotModalOpen] = useState(false);
   const [addSlotTargetU, setAddSlotTargetU] = useState<number | null>(null);
   const [previewAddSlotSpanU, setPreviewAddSlotSpanU] = useState<number>(1);
   const [isAuxiliaryModalOpen, setIsAuxiliaryModalOpen] = useState(false);
 
+  // Drag and Drop & Floating Hover Cursor Tracker
+  const [draggedSlot, setDraggedSlot] = useState<VisualSlot | null>(null);
+  const [dragOverU, setDragOverU] = useState<number | null>(null);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Track mouse coordinates for the floating hover window
+  useEffect(() => {
+    if (!hoveredProduct) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePos({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [hoveredProduct]);
+
+  const handleMoveSlotToU = (draggedItem: VisualSlot, targetU: number) => {
+    if (!draggedItem || !targetU || draggedItem.uIndex === targetU) return;
+
+    if (draggedItem.type === 'preset-shelf') {
+      const shelfKey = draggedItem.instanceId || 'builtin-shelf-1';
+      setPresetOverrides(prev => ({ ...prev, [shelfKey]: targetU }));
+      setA11yMessage(`המדף המובנה הועבר בהצלחה ל-U${targetU}`);
+      setChassisPulse(true);
+      setTimeout(() => setChassisPulse(false), 1000);
+      return;
+    }
+
+    if (draggedItem.type === 'optional-accessory') {
+      let optIdx = draggedItem.optionalIdx;
+      if (optIdx === undefined || optIdx < 0 || optIdx >= selectedOptionals.length) {
+        // Fallback: match by instanceId or id
+        const found = selectedOptionals.findIndex(
+          o => (draggedItem.instanceId && (o.instanceId === draggedItem.instanceId || o.id === draggedItem.instanceId)) ||
+               ((o.sku || o.pn) === (draggedItem.accessoryRef?.sku || draggedItem.accessoryRef?.pn))
+        );
+        if (found !== -1) optIdx = found;
+      }
+      if (optIdx === undefined || optIdx < 0 || optIdx >= selectedOptionals.length) return;
+
+      const currentOpt = selectedOptionals[optIdx];
+      const spanU = draggedItem.spanU || currentOpt.uSize || 1;
+      const clampedBaseU = Math.min(totalSlotsU - spanU + 1, Math.max(1, targetU));
+
+      if ((currentOpt.quantity || 1) > 1) {
+        setSelectedOptionals(prev => {
+          const next = [...prev];
+          next[optIdx] = { ...currentOpt, quantity: currentOpt.quantity - 1 };
+          next.push({
+            ...currentOpt,
+            quantity: 1,
+            targetU: clampedBaseU,
+            id: `moved-${currentOpt.sku || currentOpt.pn}-${Date.now()}`
+          });
+          return next;
+        });
+      } else {
+        setSelectedOptionals(prev => {
+          return prev.map((item, i) => {
+            if (i === optIdx) {
+              return { ...item, targetU: clampedBaseU };
+            }
+            if (item.targetU === clampedBaseU) {
+              return { ...item, targetU: draggedItem.uIndex };
+            }
+            return item;
+          });
+        });
+      }
+
+      setA11yMessage(`האביזר ${draggedItem.name} הועבר בהצלחה ל-U${clampedBaseU}`);
+      setHighlightedSku(currentOpt.sku || currentOpt.pn || null);
+      setChassisPulse(true);
+      setTimeout(() => {
+        setHighlightedSku(null);
+        setChassisPulse(false);
+      }, 1400);
+    }
+  };
+
+  // State signature helper
+  const computeStateSignature = (
+    cabSku: string,
+    totU: number,
+    opts: any[],
+    presets: Record<string, number>
+  ): string => {
+    return JSON.stringify({
+      cabSku,
+      totU,
+      opts: opts.map(o => ({
+        id: o.instanceId || o.id,
+        sku: o.sku || o.pn,
+        targetU: o.targetU,
+        quantity: Math.max(1, Number(o.quantity) || 1)
+      })),
+      presets
+    });
+  };
+
   // Rearrangement engine proposals and undo snapshot
   const [pendingRearrangementPlan, setPendingRearrangementPlan] = useState<{ plan: RearrangementPlan; item: any; stateSignature?: string } | null>(null);
-  const [undoState, setUndoState] = useState<{ selectedOptionals: (Accessory & { quantity: number; id: string })[]; message: string } | null>(null);
+  const [undoState, setUndoState] = useState<{
+    previousOptionals: (Accessory & { quantity: number; id: string; instanceId?: string })[];
+    previousPresetOverrides: Record<string, number>;
+    actionAddedInstanceId: string;
+    stateSignatureAfter?: string;
+    message: string;
+  } | null>(null);
 
   const handleConfirmRearrangement = () => {
     if (!pendingRearrangementPlan) return;
     const { plan, item, stateSignature } = pendingRearrangementPlan;
     
     // Validate state hasn't changed since proposal
-    const currentSignature = JSON.stringify(selectedOptionals.map(o => o.id));
+    const currentSignature = computeStateSignature(
+      product?.sku || '',
+      totalSlotsU,
+      selectedOptionals,
+      presetOverrides
+    );
     if (stateSignature && stateSignature !== currentSignature) {
       alert("מצב הארון השתנה מאז חישוב ההצעה. אנא נסה שוב.");
       setPendingRearrangementPlan(null);
       return;
     }
 
+    // Re-verify that the plan is still valid
+    const freshAnalysis = analyzeCabinetSpace(totalSlotsU, slots, plan.targetU);
+    const recheckPlan = findRearrangementPlan(item, plan.targetU, freshAnalysis, slots);
+    if (!recheckPlan) {
+      alert("לא ניתן לבצע את הסידור במצב הנוכחי של הארון.");
+      setPendingRearrangementPlan(null);
+      return;
+    }
+
+    // Prepare updated states
+    const targetNewInstId = `${item.sku || item.pn}-U${plan.targetU}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    
+    const updatedOptionals = selectedOptionals.map(opt => {
+      const optId = opt.instanceId || opt.id;
+      const move = plan.moves.find(m => m.instanceId === optId || (opt.id && opt.id === m.instanceId));
+      if (move) {
+        return {
+          ...opt,
+          targetU: move.toU,
+        };
+      }
+      return opt;
+    });
+
+    const updatedPresets = { ...presetOverrides };
+    plan.moves.forEach(m => {
+      if (m.instanceId.startsWith('builtin-shelf-')) {
+        updatedPresets[m.instanceId] = m.toU;
+      }
+    });
+
+    const newEntry = {
+      ...item,
+      quantity: 1,
+      targetU: plan.targetU,
+      id: targetNewInstId,
+      instanceId: targetNewInstId,
+    };
+
+    const finalOptionals = [...updatedOptionals, newEntry];
+    const signatureAfter = computeStateSignature(
+      product?.sku || '',
+      totalSlotsU,
+      finalOptionals,
+      updatedPresets
+    );
+
     // Save previous state for undo
     setUndoState({
-      selectedOptionals: JSON.parse(JSON.stringify(selectedOptionals)),
+      previousOptionals: JSON.parse(JSON.stringify(selectedOptionals)),
+      previousPresetOverrides: { ...presetOverrides },
+      actionAddedInstanceId: targetNewInstId,
+      stateSignatureAfter: signatureAfter,
       message: `בוצע סידור מחדש של ${plan.moves.length} פריטים והותקן ${item.name || item.description || item.pn} ב-U${plan.targetU}`,
     });
 
-    setSelectedOptionals(prev => {
-      // Apply moved positions
-      const updated = prev.map(opt => {
-        const move = plan.moves.find(m => (opt.instanceId && opt.instanceId === m.instanceId) || (opt.id && opt.id === m.instanceId));
-        if (move) {
-          return {
-            ...opt,
-            targetU: move.toU,
-          };
-        }
-        return opt;
-      });
-
-      // Add target item
-      const newEntry = {
-        ...item,
-        quantity: 1,
-        targetU: plan.targetU,
-        id: `${item.sku || item.pn}-U${plan.targetU}-${Date.now()}`,
-      };
-      return [...updated, newEntry];
-    });
-
+    setSelectedOptionals(finalOptionals);
+    setPresetOverrides(updatedPresets);
     setPendingRearrangementPlan(null);
-    setChassisPulse(true);
-    setTimeout(() => setChassisPulse(false), 1400);
-  };
-
-  const handleUndoLastAction = () => {
-    if (!undoState) return;
-    setSelectedOptionals(current => {
-       // Restore the old state exactly, but preserve any newly added instances
-       const restoredIds = new Set(undoState.selectedOptionals.map((o: any) => o.instanceId || o.id));
-       const newerItems = current.filter(curr => !restoredIds.has(curr.instanceId || curr.id));
-       return [...undoState.selectedOptionals, ...newerItems];
-    });
-    setUndoState(null);
-    setChassisPulse(true);
-    setTimeout(() => setChassisPulse(false), 1400);
-  };
-
-  const handleAddOptionalAtSlot = (acc: Accessory, targetU: number | null) => {
-    const normSku = normalizeSku(acc.sku || acc.pn);
-    const isShelf = isProductShelf(acc, catalogMapRef.current, allMatrixShelvesRef.current);
-    if (isShelf) {
-      if (!inMatrixShelvesRef.current.has(normSku)) {
-        console.warn(`[CabinetConfigurator] Shelf ${normSku} is not permitted for cabinet ${cabinetData?.sku}. Blocked.`);
-        return;
-      }
-    }
-
-    const uSize = acc.uSize ?? 1;
-    const newInstId = `${acc.sku || acc.pn}-unit-${Date.now()}`;
-
-    setSelectedOptionals(prev => {
-      if (targetU && uSize > 0) {
-        return [...prev, { ...acc, quantity: 1, targetU, id: `${acc.sku || acc.pn}-U${targetU}-${Date.now()}` }];
-      }
-      const existingIdx = prev.findIndex(item => item.pn === acc.pn && !item.targetU);
-      if (existingIdx >= 0) {
-        const newArr = [...prev];
-        newArr[existingIdx] = { ...newArr[existingIdx], quantity: newArr[existingIdx].quantity + 1 };
-        return newArr;
-      }
-      return [...prev, { ...acc, quantity: 1, id: acc.sku || acc.pn || Math.random().toString() }];
-    });
-
-    setLastAddedInstanceId(newInstId);
-    setUndoState(null);
+    setLastAddedInstanceId(targetNewInstId);
     setChassisPulse(true);
 
     setTimeout(() => {
       setLastAddedInstanceId(null);
       setChassisPulse(false);
     }, 1400);
+  };
+
+  const handleUndoLastAction = () => {
+    if (!undoState) return;
+    const currentSig = computeStateSignature(
+      product?.sku || '',
+      totalSlotsU,
+      selectedOptionals,
+      presetOverrides
+    );
+
+    if (!undoState.stateSignatureAfter || currentSig === undoState.stateSignatureAfter) {
+      setSelectedOptionals(undoState.previousOptionals);
+      setPresetOverrides(undoState.previousPresetOverrides);
+    } else {
+      // Revert moves and remove added instance while retaining independent additions
+      setSelectedOptionals(current => {
+        const filtered = current.filter(c => (c.instanceId || c.id) !== undoState.actionAddedInstanceId);
+        return filtered.map(item => {
+          const orig = undoState.previousOptionals.find((p: any) => (p.instanceId || p.id) === (item.instanceId || item.id));
+          if (orig) {
+            return { ...item, targetU: orig.targetU, quantity: orig.quantity };
+          }
+          return item;
+        });
+      });
+      setPresetOverrides(undoState.previousPresetOverrides);
+    }
+
+    setUndoState(null);
+    setChassisPulse(true);
+    setTimeout(() => setChassisPulse(false), 1400);
+  };
+
+  // Unified validation and addition processor
+  const validateAndProcessAdd = (
+    acc: Accessory,
+    requestedTargetU: number | null = null,
+    sourceIdx: number = -1
+  ) => {
+    const normSku = normalizeSku(acc.sku || acc.pn);
+    const isShelf = isProductShelf(acc, catalogMapRef.current, allMatrixShelvesRef.current);
+    if (isShelf && !inMatrixShelvesRef.current.has(normSku)) {
+      console.warn(`[CabinetConfigurator] Shelf ${normSku} is not permitted for cabinet ${cabinetData?.sku}. Blocked.`);
+      alert(`מדף ${normSku} אינו נתמך עבור ארון ${cabinetData?.sku || product?.sku} לפי המטריצה.`);
+      return;
+    }
+
+    const uSize = acc.uSize ?? 1;
+
+    // 0U items (accessories that don't occupy U space)
+    if (uSize === 0) {
+      const newInstId = `${acc.sku || acc.pn}-0U-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+      setSelectedOptionals(prev => [
+        ...prev,
+        { ...acc, quantity: 1, id: newInstId, instanceId: newInstId, targetU: undefined }
+      ]);
+      setUndoState(null);
+      setChassisPulse(true);
+      if (sourceIdx >= 0) {
+        setAddedIdx(sourceIdx);
+        setHighlightedOptIdx(sourceIdx);
+        setTimeout(() => {
+          setAddedIdx(null);
+          setHighlightedOptIdx(null);
+        }, 2200);
+      }
+      setTimeout(() => setChassisPulse(false), 1400);
+      return;
+    }
+
+    // Capacity check
+    if (uSize > availableU) {
+      setWarningModalMessage(`אין מספיק מקום פנוי כולל בארון עבור פריט זה (${uSize}U נדרשים, ${availableU}U פנויים).`);
+      setPendingAccessory(acc);
+      setWarningModalOpen(true);
+      return;
+    }
+
+    // Placement engine analysis
+    const analysis = analyzeCabinetSpace(totalSlotsU, slots, requestedTargetU);
+    const placementRes = classifyItemPlacement(acc, analysis, requestedTargetU, slots);
+
+    if (placementRes.category === 'infeasible') {
+      setWarningModalMessage(
+        requestedTargetU !== null
+          ? `המיקום שנבחר ב-U${requestedTargetU} תפוס ולא נמצאה תוכנית סידור אפשרית לפינויו.`
+          : `לא נמצאה הצעת סידור: לא ניתן ליצור רצף פנוי של ${uSize}U עבור פריט זה.`
+      );
+      setPendingAccessory(acc);
+      setWarningModalOpen(true);
+      return;
+    }
+
+    if (placementRes.category === 'rearrange' && placementRes.rearrangementPlan) {
+      const currentSignature = computeStateSignature(
+        product?.sku || '',
+        totalSlotsU,
+        selectedOptionals,
+        presetOverrides
+      );
+      setPendingRearrangementPlan({
+        plan: placementRes.rearrangementPlan,
+        item: acc,
+        stateSignature: currentSignature
+      });
+      return;
+    }
+
+    // Direct placement (or alternative target if general add)
+    const targetU = requestedTargetU !== null ? requestedTargetU : placementRes.alternateTargetU;
+    const newInstId = `${acc.sku || acc.pn}-${targetU ? `U${targetU}` : 'unit'}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+    setSelectedOptionals(prev => [
+      ...prev,
+      {
+        ...acc,
+        quantity: 1,
+        id: newInstId,
+        instanceId: newInstId,
+        targetU: targetU || undefined
+      }
+    ]);
+
+    setLastAddedInstanceId(newInstId);
+    setUndoState(null);
+    setChassisPulse(true);
+    if (sourceIdx >= 0) {
+      setAddedIdx(sourceIdx);
+      setHighlightedOptIdx(sourceIdx);
+      setTimeout(() => {
+        setAddedIdx(null);
+        setHighlightedOptIdx(null);
+      }, 2200);
+    }
+
+    setTimeout(() => {
+      setLastAddedInstanceId(null);
+      setChassisPulse(false);
+    }, 1400);
+  };
+
+  const handleAddOptionalAtSlot = (acc: Accessory, targetU: number | null) => {
+    validateAndProcessAdd(acc, targetU);
   };
 
   const handleAddCustomIllustration = () => {
@@ -973,7 +1296,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       _curated: false,
     } as Accessory;
     
-    handleAddOptional(newAcc, -1);
+    validateAndProcessAdd(newAcc, null, -1);
     setCustomAccName('');
     setCustomAccU(1);
   };
@@ -981,49 +1304,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const handleIncrementQuantity = (index: number) => {
     const item = selectedOptionals[index];
     if (!item) return;
-    setUndoState(null);
-    
-    const fitsRemaining = item.uSize === 0 || item.uSize <= availableU;
-    if (!fitsRemaining) {
-      setPendingAccessory(item);
-      setWarningModalOpen(true);
-      return;
-    }
-
-
-    // Validate space BEFORE adding!
-    const analysis = analyzeCabinetSpace(totalU, slots);
-    const placement = classifyItemPlacement(item, analysis, null, slots);
-    
-    if (placement.category === 'infeasible') {
-      setPendingAccessory(item);
-      setWarningModalOpen(true);
-      return;
-    }
-
-    if (placement.category === 'rearrange' && placement.rearrangementPlan) {
-      // Must rearrange to fit. Show the proposal instead of adding directly.
-      const currentSignature = JSON.stringify(selectedOptionals.map(o => o.id));
-      setPendingRearrangementPlan({ plan: placement.rearrangementPlan, item, stateSignature: currentSignature });
-      return;
-    }
-
-    const newInstId2 = `${item.sku || item.pn}-unit-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-    setLastAddedInstanceId(newInstId2);
-    setUndoState(null);
-    setHighlightedOptIdx(index);
-    setChassisPulse(true);
-
-    setSelectedOptionals(prev => [...prev, { ...item, quantity: 1, id: newInstId2, instanceId: newInstId2, targetU: undefined }]);
-
-
-    setTimeout(() => {
-      setLastAddedInstanceId(null);
-      setChassisPulse(false);
-    }, 1400);
-    setTimeout(() => {
-      setHighlightedOptIdx(null);
-    }, 2200);
+    validateAndProcessAdd(item, null, -1);
   };
 
   useEffect(() => {
@@ -1139,6 +1420,47 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             'קופסת חיבור ייעודית לפס 12 שקעים PDU'
           ]);
           setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, spec447510T, compatMap, allMatrixShelves));
+          setLoading(false);
+          return;
+        }
+
+        // Dedicated handling for Boost RackMount 42U based on manufacturer specification
+        if (productSkuNorm === 'BOOST-42U' || productSkuNorm === '42U-BOOST' || productSkuNorm === '42U' || isCabinetBoost42U(product, null)) {
+          const specBoost42U: CabinetMatrixData = {
+            sku: productSkuNorm || 'BOOST-42U',
+            model: '42U Floor Standing Cabinet Boost RackMount',
+            u: 42,
+            width: product?.width || 600,
+            depth: product?.depth || 1000,
+            frontDoor: 'דלת קדמית זכוכית מחוסמת 5 מ״מ עם מסגרת פלדה SPCC ומנעול ידית',
+            rearDoor: 'דלת אחורית פלדה SPCC עם מנעול עגול',
+            color: 'RAL9005 Black SPCC Cold Rolled Steel',
+            fans: '4',
+            wheels: '4',
+            levelingFeet: '4',
+            shelvesQty: '1',
+            suitableStandard: ['117914'],
+            suitableHanging: [],
+            suitableSliding: []
+          };
+          setCabinetData(specBoost42U);
+          setTotalU(42);
+          const inMatrixShelves = new Set<string>(['117914']);
+          inMatrixShelvesRef.current = inMatrixShelves;
+          setIncludedItems([
+            'דלת קדמית זכוכית מחוסמת 5.0 מ״מ עם מסגרת פלדה SPCC ומנעול ידית (2 מפתחות)',
+            'דלת אחורית פלדה SPCC 1.2 מ״מ עם מנעול עגול (2 מפתחות)',
+            '2 דלתות צד פריקות SPCC 1.0 מ״מ עם בריחי נעילה מהירים',
+            'יחידת גג 4 מאווררים תעשייתיים 120*120*38 מ״מ (Fan Unit SPCC 1.2mm)',
+            '4 גלגלי נסיעה כבדים (Castors)',
+            '4 רגליות פילוס מתכווננות M10 (Adjustable Feet)',
+            '6 קורות עומק Mounting Angles בעובי 1.2 מ״מ עם חריצי כיוונון (3 מכל צד)',
+            '4 פרופילי עמודים 19" בעובי 2.0 מ״מ SPCC עם סימוני U וחורי כלוב',
+            'מכסי פתחי כבילה עליונים ותחתונים (Top & Bottom Cover Boards)',
+            '20 סטים של ברגי M6 ואומי כלוב (M6 Cage Nuts & Screws Zinc Coated)',
+            'כבלים ומחברי הארקה (Grounding Kit)'
+          ]);
+          setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, specBoost42U, compatMap, allMatrixShelves));
           setLoading(false);
           return;
         }
@@ -1357,7 +1679,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       const flattened: Accessory[] = [];
       selectedOptionals.forEach(item => {
         if ((item as any)._illustration) return; // visual-only, never added to the order
-        const qty = 1 || 1;
+        const qty = Math.max(1, Number(item.quantity) || 1);
         for (let i = 0; i < qty; i++) {
           flattened.push(item);
         }
@@ -1367,64 +1689,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   }, [selectedOptionals]);
 
   const handleAddOptional = (acc: Accessory, idx: number) => {
-    const normSku = normalizeSku(acc.sku || acc.pn);
-    const isShelf = isProductShelf(acc, catalogMapRef.current, allMatrixShelvesRef.current);
-    if (isShelf) {
-      if (!inMatrixShelvesRef.current.has(normSku)) {
-        console.warn(`[CabinetConfigurator] Shelf ${normSku} is not permitted for cabinet ${cabinetData?.sku}. Blocked.`);
-        return;
-      }
-    }
-
-    const uSize = acc.uSize ?? 1;
-    if (uSize > 0) {
-      if (uSize > availableU) {
-        setPendingAccessory(acc);
-        setWarningModalOpen(true);
-        return;
-      }
-
-      // Check placement using placement engine
-      const analysis = analyzeCabinetSpace(totalSlotsU, slots, null);
-      const placementRes = classifyItemPlacement(acc, analysis, null, slots);
-
-      if (placementRes.category === 'infeasible') {
-        setPendingAccessory(acc);
-        setWarningModalOpen(true);
-        return;
-      }
-
-      if (placementRes.category === 'rearrange' && placementRes.rearrangementPlan) {
-        const currentSignature = JSON.stringify(selectedOptionals.map(o => o.id));
-        setPendingRearrangementPlan({
-          plan: placementRes.rearrangementPlan,
-          item: acc,
-          stateSignature: currentSignature
-        });
-        return;
-      }
-    }
-
-    const existingItem = selectedOptionals.find(item => item.pn === acc.pn && !item.targetU);
-    const nextUnitIdx = existingItem ? existingItem.quantity : 0;
-    
-const newInstId = `${acc.sku || acc.pn}-unit-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-setSelectedOptionals(prev => [...prev, { ...acc, quantity: 1, id: newInstId, instanceId: newInstId, targetU: undefined }]);
-setLastAddedInstanceId(newInstId);
-    setUndoState(null);
-
-    setAddedIdx(idx);
-    setHighlightedOptIdx(idx);
-    setChassisPulse(true);
-
-    setTimeout(() => {
-      setLastAddedInstanceId(null);
-      setChassisPulse(false);
-    }, 1400);
-    setTimeout(() => {
-      setAddedIdx(null);
-      setHighlightedOptIdx(null);
-    }, 2200);
+    validateAndProcessAdd(acc, null, idx);
   };
 
   const handleRemoveOptional = (index: number, fullyRemove = false) => {
@@ -1432,14 +1697,12 @@ setLastAddedInstanceId(newInstId);
     if (!item) return;
     setUndoState(null);
 
-
     setSelectedOptionals(prev => {
       if (fullyRemove) {
         return prev.filter(p => (p.sku || p.pn) !== (item.sku || item.pn));
       }
       return prev.filter((_, i) => i !== index);
     });
-
   };
 
   const forceAddPending = () => {
@@ -1450,6 +1713,10 @@ setLastAddedInstanceId(newInstId);
   // --- DYNAMIC SLOT CALCULATION FOR VISUAL CHASSIS ---
   const getAccessoryImage = (acc: any): string => {
     if (!acc) return '';
+    const isShelf = acc.type === 'preset-shelf' || acc.isShelf || /מדף|shelf/i.test(acc.name || acc.description || '');
+    if (isShelf) {
+      return GENERIC_SHELF_IMAGE;
+    }
     if (acc.image && typeof acc.image === 'string' && acc.image.trim() !== '') {
       return acc.image;
     }
@@ -1466,27 +1733,66 @@ setLastAddedInstanceId(newInstId);
         if (found.imageURL) return found.imageURL;
       }
     }
-    if ((acc.type === 'preset-shelf' || acc.isShelf) && cabinetData?.suitableStandard?.length) {
-      const stdSku = normalizeSku(cabinetData.suitableStandard[0]);
-      const foundShelf = catalogData?.find((p: any) => normalizeSku(p.sku) === stdSku);
-      if (foundShelf?.images?.[0]) return foundShelf.images[0];
-      if (foundShelf?.imageURL) return foundShelf.imageURL;
+    return '';
+  };
+
+  const getRealProductImage = (acc: any): string => {
+    if (!acc) return '';
+    const targetSku = normalizeSku(acc.sku || acc.pn || acc.accessoryRef?.sku || acc.accessoryRef?.pn || '');
+    if (targetSku && catalogData && Array.isArray(catalogData)) {
+      const found = catalogData.find((p: any) => normalizeSku(p.sku) === targetSku);
+      if (found) {
+        if (found.images && Array.isArray(found.images) && found.images[0]) return found.images[0];
+        if (found.imageURL) return found.imageURL;
+        if (found.image) return found.image;
+      }
+    }
+    const isShelf = acc.type === 'preset-shelf' || acc.isShelf || /מדף|shelf/i.test(acc.name || acc.description || '');
+    if (isShelf && catalogData && Array.isArray(catalogData)) {
+      if (cabinetData?.suitableStandard?.length) {
+        for (const stdSku of cabinetData.suitableStandard) {
+          const foundStd = catalogData.find((p: any) => normalizeSku(p.sku) === normalizeSku(stdSku));
+          if (foundStd?.images?.[0]) return foundStd.images[0];
+          if (foundStd?.imageURL) return foundStd.imageURL;
+        }
+      }
+      const anyRealShelf = catalogData.find((p: any) => 
+        /מדף|shelf/i.test(p.name || p.description || p.sku || '') && 
+        ((p.images && p.images[0]) || p.imageURL)
+      );
+      if (anyRealShelf?.images?.[0]) return anyRealShelf.images[0];
+      if (anyRealShelf?.imageURL) return anyRealShelf.imageURL;
+    }
+    if (acc.image && typeof acc.image === 'string' && acc.image.trim() !== '') return acc.image;
+    if (acc.accessoryRef?.image && typeof acc.accessoryRef.image === 'string' && acc.accessoryRef.image.trim() !== '') {
+      return acc.accessoryRef.image;
     }
     return '';
   };
 
   const buildPreviewFromSlot = (slot: VisualSlot): EnrichedPreviewItem => {
-    const isPreset = slot.type.startsWith('preset-');
+    const isPreset = slot.type.startsWith('preset-') || (slot as any).accessoryRef?.isPreset || (slot as any).accessoryRef?.isIncluded;
     const acc = slot.accessoryRef || {};
-    const sku = acc.sku || acc.pn || (isPreset ? 'כלול בארון' : '');
+    const sku = acc.sku || acc.pn || (isPreset ? (acc.sku || 'כלול בארון') : '');
     const name = slot.name || acc.name || (isPreset ? 'ציוד מובנה' : 'ציוד בארון');
     const description = slot.description || acc.description || '';
     const spanU = slot.spanU || acc.uSize || 1;
     const uSize = slot.type === 'empty' ? 0 : spanU;
-    const image = getAccessoryImage(acc) || (isPreset ? getAccessoryImage({ isShelf: slot.type === 'preset-shelf' }) : '');
+    const image = getRealProductImage(acc) || getAccessoryImage(acc);
     const price = acc.price || 0;
     const quantity = acc.quantity || 1;
-    const zone = `מסילות U חזיתיות (U${slot.uIndex}${spanU > 1 ? ` - U${slot.uIndex - spanU + 1}` : ''})`;
+    
+    let zone = `מסילות U חזיתיות (U${slot.uIndex}${spanU > 1 ? ` - U${slot.uIndex - spanU + 1}` : ''})`;
+    if (slot.uIndex === 0 || !slot.uIndex) {
+      if (acc.type === 'fan' || /מאוורר|fan/i.test(name)) zone = 'תקרת הארון (יחידת 4 מאווררים מובנית)';
+      else if (acc.type === 'door' || /דלת|רשת/i.test(name)) zone = 'דלתות קדמיות / אחוריות מחוררות';
+      else if (acc.type === 'tray' || /כבילה|tray/i.test(name)) zone = 'תעלות כבילה ורטיקליות 400 מ״מ';
+      else if (acc.type === 'ground' || /הארקה/i.test(name)) zone = 'פס הארקה נחושת אנכי מובנה';
+      else if (acc.type === 'caster' || /גלגל/i.test(name)) zone = 'בסיס הארון (4 גלגלים מחוזקים)';
+      else if (acc.type === 'feet' || /פילוס/i.test(name)) zone = 'בסיס הארון (4 רגלי פילוס מתכווננות)';
+      else if (acc.type === 'hardware' || /כלוב|בורג|אומי/i.test(name)) zone = 'ערכת חומרה (50 אומי כלוב + ברגים)';
+      else zone = 'אביזר נלווה / שלד הארון';
+    }
 
     return {
       instanceId: (slot as any).instanceId || (slot as any).id || '',
@@ -1505,6 +1811,65 @@ setLastAddedInstanceId(newInstId);
     };
   };
 
+  const getIncludedPreviewItem = (itemText: string, idx: number): EnrichedPreviewItem => {
+    const isShelf = /מדף|shelf|117914/i.test(itemText);
+    const isFan = /מאוורר|fan|איוורור/i.test(itemText);
+    const isWheels = /גלגל|casters/i.test(itemText);
+    const isFeet = /פילוס|feet/i.test(itemText);
+    const isNuts = /אומי|כלוב|ברגים|nuts/i.test(itemText);
+    const isGround = /הארקה|ground/i.test(itemText);
+    const isDoors = /דלת|רשת/i.test(itemText);
+    const isTrays = /תעלות|כבילה|400/i.test(itemText);
+
+    let sku = 'כלול בארון';
+    let image = '';
+    let description = itemText;
+    let zone = 'ציוד מובנה בארון';
+
+    if (isShelf) {
+      sku = '117914';
+      zone = 'מסילות U חזיתיות (U19-U20)';
+      description = 'מדף קבוע בעומס כבד מאוורר 19 אינץ׳ (דגם 117914) כולל פתחי איוורור מקבילים וחיזוקי פלדה כפולים.';
+      const shelfProd = catalogData?.find((p: any) => normalizeSku(p.sku) === '117914');
+      image = shelfProd?.images?.[0] || shelfProd?.imageURL || '';
+    } else if (isFan) {
+      zone = 'תקרת הארון (Roof Unit)';
+      description = 'יחידת 4 מאווררי יניקה שקטים מובנים בגג הארון לסירקולציית אוויר וקירור מיטבי.';
+    } else if (isDoors) {
+      zone = 'חזית וגב הארון';
+      description = 'דלת קדמית ואחורית עם רשת מחוררת 71% אוורור וידיות נעילה בריח.';
+    } else if (isTrays) {
+      zone = 'דפנות צדדיות';
+      description = 'זוג תעלות כבילה ורטיקליות ברוחב 400 מ״מ לניהול כבלי תקשורת ונתיבי סיבים אופטיים.';
+    } else if (isGround) {
+      zone = 'דופן ורטיקלית';
+      description = 'פס הארקה נחושת אנכי מובנה עם נקודות חיבור מוארקות לכל רכיבי המסד.';
+    } else if (isWheels) {
+      zone = 'בסיס הארון';
+      description = 'סט 4 גלגלים כבדים (2 עם מעצור) לשינוע קל ובטוח של הארון.';
+    } else if (isFeet) {
+      zone = 'בסיס הארון';
+      description = 'סט 4 רגלי פילוס מתכווננות בגובה לקיבוע יציב ומפולס.';
+    } else if (isNuts) {
+      zone = 'ערכת התקנה נלווית';
+      description = 'שקית התקנה עם 50 אומי כלוב M6, ברגים וטבעות פלסטיק להרכבת ציוד במסילות.';
+    }
+
+    return {
+      instanceId: `included-item-${idx}`,
+      name: itemText,
+      sku,
+      description,
+      image,
+      uSize: isShelf ? 1 : 0,
+      price: 0,
+      quantity: 1,
+      zone,
+      type: 'preset-included',
+      isPreset: true,
+    };
+  };
+
   const buildPreviewFromNonU = (item: any, zoneType: 'roof' | 'vertical' | 'plinth' | 'hardware'): EnrichedPreviewItem => {
     const acc = item.accessoryRef || item;
     const sku = acc.sku || acc.pn || item.sku || '';
@@ -1512,7 +1877,7 @@ setLastAddedInstanceId(newInstId);
     const description = item.description || acc.description || '';
     const image = getAccessoryImage(acc) || getAccessoryImage(item);
     const price = acc.price || item.price || 0;
-    const quantity = 1 || 1;
+    const quantity = Math.max(1, Number(item.quantity) || Number(acc.quantity) || 1);
     const zoneMap: Record<string, string> = {
       roof: 'תקרת הארון (Roof) · איוורור ותאורה',
       vertical: 'דופן ורטיקלית וצדית (Vertical Rails)',
@@ -1564,21 +1929,77 @@ setLastAddedInstanceId(newInstId);
     const catalogMatch = catalogData.find(pp => pp && pp.sku && (pp.sku === acc.pn || pp.sku === acc.sku));
     const showPrice = catalogMatch ? catalogMatch.price : (acc.price || 0);
     const fitsRemaining = acc.uSize === 0 || acc.uSize <= availableU;
-    
-  return (
-      <div id={`acc-${acc.pn}`} key={idx} className={`flex flex-col p-3.5 border group transition-all relative rounded-none hover:shadow-sm ${fitsRemaining ? 'bg-slate-50 border-slate-100 hover:border-[#004387]' : 'bg-rose-50/20 border-rose-200'} ${highlightedSku === acc.pn ? 'ring-2 ring-[#fe8d00] bg-orange-50' : ''}`}>
+    const isShelf = acc.isShelf || acc.type === 'preset-shelf' || /מדף|shelf/i.test(acc.name || acc.description || '');
+    const cardImg = getAccessoryImage(acc);
+    const realImg = getRealProductImage(acc);
+
+    const cardPreview: EnrichedPreviewItem = {
+      name: acc.name || acc.description || acc.pn || 'פריט ללא שם',
+      sku: acc.pn || acc.sku || '',
+      description: acc.description || catalogMatch?.description || '',
+      uSize: acc.uSize ?? (isShelf ? 1 : 0),
+      spanU: acc.uSize || (isShelf ? 1 : 1),
+      price: showPrice,
+      image: realImg || cardImg,
+      zone: acc.zone || (acc.uSize > 0 ? `מסילות U (${acc.uSize}U)` : (isShelf ? 'מסילות קדמיות ואחוריות (מדף)' : 'אביזר נלווה ללא תפיסת U')),
+      quantity: 1,
+      type: isShelf ? 'shelf' : 'optional-accessory',
+      optionalIdx: idx,
+      isPreset: false,
+    };
+
+    return (
+      <div
+        id={`acc-${acc.pn}`}
+        key={idx}
+        onMouseEnter={(e) => {
+          setMousePos({ x: e.clientX, y: e.clientY });
+          setHoveredProduct(cardPreview);
+        }}
+        onMouseMove={(e) => {
+          setMousePos({ x: e.clientX, y: e.clientY });
+        }}
+        onMouseLeave={() => setHoveredProduct(null)}
+        className={`flex flex-col p-3.5 border group transition-all relative rounded-none hover:shadow-md cursor-pointer ${
+          fitsRemaining ? 'bg-slate-50 border-slate-100 hover:border-[#004387]' : 'bg-rose-50/20 border-rose-200'
+        } ${highlightedSku === acc.pn ? 'ring-2 ring-[#fe8d00] bg-orange-50' : ''}`}
+      >
         <div className="flex items-start justify-between gap-3">
-          {acc.image ? (
-            <img referrerPolicy="no-referrer" src={acc.image} alt={acc.name || acc.description || acc.pn}
-              className="w-12 h-12 object-contain bg-white border border-slate-200 rounded p-1 flex-shrink-0"
-              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+          {cardImg ? (
+            <div
+              className="relative shrink-0 cursor-zoom-in"
+              onClick={() => setInspectedProduct(cardPreview)}
+              title="לחץ לצפייה במפרט ותמונה מוגדלת"
+            >
+              <img
+                referrerPolicy="no-referrer"
+                src={cardImg}
+                alt={acc.name || acc.description || acc.pn}
+                className="w-12 h-12 object-contain bg-white border border-slate-200 rounded p-1 group-hover:border-[#004387] transition-colors"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              />
+              {isShelf && (
+                <span className="absolute -bottom-1 -right-1 bg-sky-600 text-white text-[8px] font-bold px-1 rounded shadow">
+                  מדף
+                </span>
+              )}
+            </div>
           ) : (
-             <div className="w-12 h-12 bg-slate-100 border border-slate-200 rounded p-1 flex-shrink-0 flex items-center justify-center text-slate-300">
+             <div
+               className="w-12 h-12 bg-slate-100 border border-slate-200 rounded p-1 flex-shrink-0 flex items-center justify-center text-slate-300 cursor-zoom-in"
+               onClick={() => setInspectedProduct(cardPreview)}
+             >
                <Box size={24} />
              </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-[14px] text-slate-900 group-hover:text-[#004387] transition-colors leading-tight mb-1" title={acc.name || acc.description}>{acc.name || acc.description || 'פריט ללא שם'}</p>
+            <p
+              className="font-bold text-[14px] text-slate-900 group-hover:text-[#004387] transition-colors leading-tight mb-1 cursor-pointer"
+              title={acc.name || acc.description}
+              onClick={() => setInspectedProduct(cardPreview)}
+            >
+              {acc.name || acc.description || 'פריט ללא שם'}
+            </p>
             <p className="text-[12px] text-gray-500 flex justify-start items-center gap-2" title={acc.pn}>
                <span dir="ltr" className="inline-block bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-700">{acc.pn}</span>
                {acc.uSize > 0 && <span className="font-semibold text-slate-600 border-r border-slate-300 pr-2">דורש {acc.uSize}U</span>}
@@ -1681,6 +2102,57 @@ setLastAddedInstanceId(newInstId);
   if (loading) return <div className="p-8 mt-8 bg-gray-50 text-center text-gray-500 border border-gray-200">טוען קונפיגורטור ארון מותאם אישית...</div>;
   if (errorMsg) return <div className="p-8 mt-8 bg-red-50 text-center text-red-700 border border-red-200" dir="rtl">{errorMsg}</div>;
 
+  if (isStudioMode) {
+    return (
+      <CabinetWorkspace
+        product={product}
+        cabinetData={cabinetData}
+        totalSlotsU={totalSlotsU}
+        availableU={availableU}
+        usedU={usedU}
+        slots={slots}
+        selectedOptionals={selectedOptionals}
+        includedItems={includedItems}
+        nonUAccessories={nonUAccessories}
+        unallocatedItems={unallocatedItems}
+        compatibleAccessories={compatibleAccessories}
+        groupedRubrics={groupedRubrics}
+        illustrationAccessories={_illusPairs}
+        catalogData={catalogData}
+        accSearch={accSearch}
+        setAccSearch={setAccSearch}
+        openSections={openSections}
+        setOpenSections={setOpenSections}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        inspectedProduct={inspectedProduct}
+        setInspectedProduct={setInspectedProduct}
+        hoveredProduct={hoveredProduct}
+        setHoveredProduct={setHoveredProduct}
+        addSlotTargetU={addSlotTargetU}
+        setAddSlotTargetU={setAddSlotTargetU}
+        previewAddSlotSpanU={previewAddSlotSpanU}
+        setPreviewAddSlotSpanU={setPreviewAddSlotSpanU}
+        highlightedOptIdx={highlightedOptIdx}
+        setHighlightedOptIdx={setHighlightedOptIdx}
+        lastAddedInstanceId={lastAddedInstanceId}
+        pdfGrandTotal={pdfGrandTotal}
+        onCloseStudio={() => setIsStudioMode(false)}
+        onDownloadPdf={handleDownloadPdf}
+        onAddOptional={handleAddOptional}
+        onAddOptionalAtSlot={handleAddOptionalAtSlot}
+        onIncrementQuantity={handleIncrementQuantity}
+        onRemoveOptional={handleRemoveOptional}
+        addedIdx={addedIdx}
+        highlightedSku={highlightedSku}
+        getIncludedPreviewItem={getIncludedPreviewItem}
+        buildPreviewFromSlot={buildPreviewFromSlot}
+        buildPreviewFromNonU={buildPreviewFromNonU}
+        getAccessoryImage={getAccessoryImage}
+      />
+    );
+  }
+
   return (
     <div className="@container mt-8 bg-white border-2 border-[#004387] shadow-sm relative overflow-hidden" dir="rtl">
       
@@ -1696,10 +2168,12 @@ setLastAddedInstanceId(newInstId);
           </p>
         </div>
         
-        {/* U Capacity Tracker Badge */}
-        <div className={`px-4 py-2 font-bold text-sm tracking-wide shadow-inner flex items-center gap-2 flex-shrink-0 border border-white/20 rounded-none ${availableU > 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white animate-pulse'}`}>
-          <Box size={16} />
-          מקום פנוי (המחשה): {availableU}U / {totalSlotsU}U
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          {/* U Capacity Tracker Badge */}
+          <div className={`px-4 py-2 font-bold text-sm tracking-wide shadow-inner flex items-center gap-2 flex-shrink-0 border border-white/20 rounded-none ${availableU > 0 ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white animate-pulse'}`}>
+            <Box size={16} />
+            מקום פנוי (המחשה): {availableU}U / {totalSlotsU}U
+          </div>
         </div>
       </div>
 
@@ -1717,59 +2191,67 @@ setLastAddedInstanceId(newInstId);
         </div>
       )}
 
+      {(isCabinetBoost42U(product, cabinetData) || normalizeSku(product?.sku) === 'BOOST-42U' || normalizeSku(product?.sku) === '42U-BOOST' || normalizeSku(product?.sku) === '42U') && (
+        <div className="bg-emerald-500/10 border-b border-emerald-500/40 p-3 px-4 flex items-center justify-between gap-3 text-emerald-950 flex-wrap">
+          <div className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold">
+            <Award size={18} className="text-emerald-600 shrink-0" />
+            <span>
+              <strong>הדמיית תלת-ממד ייעודית לפי מפרט יצרן רשמי (Boost RackMount מפרט ארונות 42U):</strong> דלת קדמית זכוכית מחוסמת 5 מ״מ עם מנעול ידית, דלת אחורית פלדה SPCC עם מנעול עגול, 6 קורות עומק Mounting Angles, יחידת גג 4 מאווררים 120 מ״מ, גלגלים, רגליות פילוס M10 ו-20 סטים של ברגי כלוב M6.
+            </span>
+          </div>
+          <span className="text-[11px] bg-emerald-600 text-white font-bold px-2 py-0.5 shadow-xs">
+            מפרט רשמי Boost 42U
+          </span>
+        </div>
+      )}
+
       
       <div className="p-4 sm:p-6 flex flex-col lg:flex-row gap-6 lg:gap-8 items-start">
         
-        {/* Column 1: Interactive Server Rack Simulator (Right side) */}
-        <div className={`w-full ${(isAddSlotModalOpen || isAuxiliaryModalOpen) && isDesktop ? 'lg:w-[35%] xl:w-[40%]' : 'lg:w-[35%] xl:w-[33%]'} shrink-0 space-y-3 lg:sticky lg:top-4 self-start max-h-[calc(100dvh-2rem)] flex flex-col transition-all duration-300`}>
+        {/* Column 1: Server Rack Simulator (Right side) - Strictly 2D and 3D */}
+        <div className="w-full lg:w-[54%] xl:w-[56%] 2xl:w-[58%] shrink-0 space-y-3 lg:sticky lg:top-4 self-start flex flex-col transition-all duration-300 relative">
           <div className="text-sm font-bold text-gray-800 flex items-center gap-2 mb-1 justify-between flex-wrap">
             <span className="flex items-center gap-1.5">
-              <span>��️ הדמיית ארון תקשורת פיזי</span>
+              <span className="flex items-center gap-1.5"><Box size={16} className="text-[#004387]" /><span>הדמיית ארון תקשורת פיזי</span></span>
               <span className="text-xs font-normal text-slate-500">({totalSlotsU}U)</span>
             </span>
             <div className="flex items-center gap-2 flex-wrap">
-              {/* View Switcher: 2D Front / 3D Interactive */}
-              <div className="inline-flex rounded border border-slate-300 bg-slate-100 p-0.5 text-xs font-bold" role="group" aria-label="בורר מבט הדמיה">
+              {/* Only 2 modes: 2D Front View and 3D Interactive */}
+              <div className="inline-flex rounded-sm border border-slate-300 bg-slate-100 p-0.5 text-xs font-bold shadow-xs" role="group" aria-label="בורר מבט הדמיה">
                 <button
                   type="button"
                   onClick={() => setViewMode('2d')}
-                  className={`px-2.5 py-1 transition-colors cursor-pointer rounded-xs ${
+                  className={`px-3 py-1.5 transition-colors cursor-pointer rounded-xs flex items-center gap-1.5 font-bold ${
                     viewMode === '2d'
-                      ? 'bg-[#004387] text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-[#004387] text-white shadow-sm'
+                      : 'text-slate-700 hover:text-slate-950'
                   }`}
                   aria-pressed={viewMode === '2d'}
                 >
-                  מבט חזיתי
+                  <Layers size={13} />
+                  <span>2D מבט חזיתי מפורט</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode('3d')}
-                  className={`px-2.5 py-1 transition-colors cursor-pointer rounded-xs flex items-center gap-1 ${
+                  className={`px-3 py-1.5 transition-colors cursor-pointer rounded-xs flex items-center gap-1.5 font-bold ${
                     viewMode === '3d'
-                      ? 'bg-[#004387] text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-[#004387] text-white shadow-sm'
+                      : 'text-slate-700 hover:text-slate-950'
                   }`}
                   aria-pressed={viewMode === '3d'}
                 >
-                  <span>תלת־ממד</span>
+                  <Box size={13} />
+                  <span>3D תלת־ממד אינטראקטיבי</span>
                   <span className="text-[9px] bg-amber-400 text-slate-950 px-1 py-0.2 rounded font-black">3D</span>
                 </button>
               </div>
 
-              {viewMode === '2d' && (
-                <button
-                  type="button"
-                  onClick={() => setZoomMode(z => !z)}
-                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition-colors cursor-pointer"
-                  title={zoomMode ? 'חזור לתצוגת ארון מלאה' : 'עבור לתצוגת תקריב מפורטת'}
-                >
-                  {zoomMode ? '�� תצוגה מלאה' : '�� תקריב מפורט'}
-                </button>
-              )}
               <span className="text-xs text-gray-400 font-mono hidden sm:inline">1U = 44.45mm</span>
             </div>
           </div>
+
+          {/* View Container: 3D or 2D */}
 
           {viewMode === '3d' ? (
             <Cabinet3DErrorBoundary onFallbackTo2D={() => setViewMode('2d')}>
@@ -1786,6 +2268,7 @@ setLastAddedInstanceId(newInstId);
                   slots={slots}
                   selectedOptionals={selectedOptionals}
                   nonUAccessories={nonUAccessories}
+                  unallocatedItems={unallocatedItems}
                   includedItems={includedItems}
                   availableU={availableU}
                   usedU={usedU}
@@ -1814,79 +2297,19 @@ setLastAddedInstanceId(newInstId);
             </Cabinet3DErrorBoundary>
           ) : (
             <>
-              {/* Quick Tip for Image Magnification */}
+              {/* Quick Tip for Drag & Drop and Floating Popup */}
               <div className="bg-amber-500/10 border border-amber-500/30 text-amber-800 text-[11px] px-2.5 py-1.5 flex items-center justify-between gap-2 rounded-none font-medium">
                 <span className="flex items-center gap-1.5">
                   <ZoomIn size={14} className="text-amber-600 shrink-0" />
-                  <span>הצבע בעכבר או גע במסך על מוצר בארון להגדלת התמונה והפרטים</span>
+                  <span>הצבע על מוצר לפתיחת חלון צף | גרור אביזר מ-U ל-U לשינוי מיקום בארון</span>
                 </span>
                 <span className="text-[10px] bg-amber-200/70 text-amber-900 font-mono px-1.5 py-0.5 rounded shrink-0">
-                  תקריב פעיל
+                  גרירה וחלון צף פעילים
                 </span>
               </div>
 
               {/* Visual Rack Container */}
-              <div className={`relative border-4 bg-slate-950 p-2 sm:p-3 shadow-2xl flex flex-col flex-1 min-h-[440px] max-h-[calc(100vh-6rem)] overflow-hidden transition-all duration-300 ${chassisPulse ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-slate-700'}`}>
-            
-            {/* Floating Magnifier HUD (Desktop Hover) */}
-            <AnimatePresence>
-              {hoveredProduct && !inspectedProduct && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.12 } }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute top-2 left-2 z-40 w-52 sm:w-60 bg-slate-900/95 backdrop-blur-md border-2 border-amber-400 text-white p-2.5 shadow-2xl rounded-none pointer-events-none"
-                >
-                  <div className="flex items-center justify-between gap-1 pb-1 mb-1.5 border-b border-slate-700">
-                    <span className="text-[10px] font-bold tracking-wider text-amber-400 flex items-center gap-1">
-                      <ZoomIn size={12} /> תקריב מוצר
-                    </span>
-                    {hoveredProduct.uSize > 0 ? (
-                      <span className="text-[9px] font-mono font-bold bg-amber-400/20 text-amber-300 px-1.5 py-0.5 rounded">
-                        {hoveredProduct.uSize}U
-                      </span>
-                    ) : (
-                      <span className="text-[9px] font-bold bg-indigo-900/80 text-indigo-200 px-1.5 py-0.5 rounded">
-                        0U
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Enlarged Image Container */}
-                  <div className="w-full h-32 sm:h-36 bg-white rounded-none border border-slate-700/60 overflow-hidden flex items-center justify-center p-1.5 mb-1.5 relative shadow-inner">
-                    {hoveredProduct.image ? (
-                      <img
-                        referrerPolicy="no-referrer"
-                        src={hoveredProduct.image}
-                        alt={hoveredProduct.name}
-                        className="w-full h-full object-contain filter drop-shadow-sm"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                      />
-                    ) : (
-                      <RenderSchematicFallback item={hoveredProduct} />
-                    )}
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <div className="text-[11px] font-bold text-slate-100 line-clamp-2 leading-tight">
-                      {hoveredProduct.name}
-                    </div>
-                    {hoveredProduct.sku && (
-                      <div className="text-[9.5px] font-mono text-slate-400 flex items-center justify-between">
-                        <span>מק"ט: {hoveredProduct.sku}</span>
-                        {hoveredProduct.price ? (
-                          <span className="text-amber-300 font-bold">₪{hoveredProduct.price.toLocaleString('he-IL')}</span>
-                        ) : null}
-                      </div>
-                    )}
-                    <div className="text-[9px] text-amber-300/90 font-medium pt-1 border-t border-slate-800 flex items-center justify-center gap-1">
-                      <span>�� לחץ/גע להגדלה מלאה ופרטים</span>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+              <div className={`relative border-4 bg-slate-950 p-2 sm:p-3 shadow-2xl flex flex-col flex-1 min-h-[580px] max-h-[820px] overflow-hidden transition-all duration-300 ${chassisPulse ? 'border-amber-400 ring-2 ring-amber-400/30' : 'border-slate-700'}`}>
 
             {/* Simulated Glass Door Gloss Effect */}
             <div className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-white/5 to-transparent pointer-events-none z-10 select-none"></div>
@@ -1914,13 +2337,19 @@ setLastAddedInstanceId(newInstId);
                     <div 
                       key={i} 
                       className="flex items-center justify-between text-cyan-100 text-[11px] py-0.5 hover:bg-cyan-900/40 px-1 rounded cursor-pointer transition-colors group"
-                      onMouseEnter={() => setHoveredProduct(preview)}
+                      onMouseEnter={(e) => {
+                        setMousePos({ x: e.clientX, y: e.clientY });
+                        setHoveredProduct(preview);
+                      }}
+                      onMouseMove={(e) => {
+                        setMousePos({ x: e.clientX, y: e.clientY });
+                      }}
                       onMouseLeave={() => setHoveredProduct(null)}
                       onClick={() => setInspectedProduct(preview)}
                       title="לחץ להגדלת תמונה ופרטים"
                     >
                       <span className="flex items-center gap-1.5 truncate">
-                        <span className="inline-block animate-spin text-cyan-300" style={{ animationDuration: '4s' }}>��</span>
+                        <RotateCcw className="inline-block animate-spin text-cyan-300 shrink-0" size={13} style={{ animationDuration: "4s" }} />
                         <span className="truncate">{r.description || r.name}</span>
                       </span>
                       <div className="flex items-center gap-1.5">
@@ -1933,12 +2362,9 @@ setLastAddedInstanceId(newInstId);
               </div>
             )}
 
-            {/* Chassis Interior: Full proportional view or scrollable zoom */}
+            {/* Chassis Interior: Expanded U height with scrollable container */}
             <div 
-              className={zoomMode 
-                ? "flex-1 overflow-y-auto overflow-x-hidden space-y-1 px-2 sm:px-3 py-1 relative z-0 custom-scrollbar pr-1" 
-                : "flex-1 flex flex-col justify-between w-full h-full min-h-0 relative z-0 px-2 sm:px-3 py-1 space-y-0.5 overflow-hidden select-none"
-              }
+              className="flex-1 overflow-y-auto overflow-x-hidden space-y-1.5 px-2 sm:px-3 py-1 relative z-0 custom-scrollbar pr-1"
               style={{ contain: 'layout' }}
             >
               <AnimatePresence mode="popLayout" initial={false}>
@@ -1961,29 +2387,31 @@ setLastAddedInstanceId(newInstId);
                 const isShelfUpgrade = isOptional && (nameLower.includes('מדף') || descLower.includes('מדף') || nameLower.includes('shelf') || descLower.includes('shelf') || nameLower.includes('מגירה') || descLower.includes('sliding'));
 
                 // Choose ClassNames based on type
-                let slotStyles = 'bg-slate-900/30 hover:bg-slate-900/60 border-slate-800/60 text-slate-500 py-1.5 px-2.5 border-dashed hover:text-slate-300 hover:border-[#004387]/70 cursor-pointer';
+                let slotStyles = 'bg-slate-900/40 hover:bg-slate-900/70 border-slate-800/80 text-slate-400 py-1 px-2 border-dashed hover:text-slate-200 hover:border-[#004387] cursor-pointer';
                 if (isFan || isFanUpgrade) {
-                  slotStyles = 'bg-gradient-to-r from-cyan-950/80 via-slate-900 to-cyan-950/80 border-cyan-500/80 text-cyan-200 py-1.5 px-2.5 shadow-md hover:border-cyan-400';
+                  slotStyles = 'bg-gradient-to-r from-cyan-950/90 via-slate-900 to-cyan-950/90 border-cyan-500/80 text-cyan-200 py-1 px-2 shadow-md hover:border-cyan-400';
                 } else if (isShelf || isShelfUpgrade) {
-                  slotStyles = 'bg-gradient-to-r from-emerald-950/80 via-slate-900 to-emerald-950/80 border-emerald-500/80 text-emerald-200 py-1.5 px-2.5 shadow-md hover:border-emerald-400';
+                  slotStyles = 'bg-gradient-to-r from-emerald-950/90 via-slate-900 to-emerald-950/90 border-emerald-500/80 text-emerald-200 py-1 px-2 shadow-md hover:border-emerald-400';
                 } else if (isBlank) {
-                  slotStyles = 'bg-gradient-to-r from-neutral-800 via-neutral-900 to-neutral-800 border-neutral-600/80 text-neutral-300 py-1.5 px-2.5 shadow-sm hover:border-neutral-400';
+                  slotStyles = 'bg-gradient-to-r from-neutral-800 via-neutral-900 to-neutral-800 border-neutral-600/80 text-neutral-300 py-1 px-2 shadow-sm hover:border-neutral-400';
                 } else if (isBrush) {
-                  slotStyles = 'bg-gradient-to-r from-black via-zinc-900 to-black border-amber-600/60 text-amber-200 py-1.5 px-2.5 shadow-sm hover:border-amber-400';
+                  slotStyles = 'bg-gradient-to-r from-black via-zinc-900 to-black border-amber-600/70 text-amber-200 py-1 px-2 shadow-sm hover:border-amber-400';
                 } else if (isPdu) {
-                  slotStyles = 'bg-gradient-to-r from-red-950/90 via-zinc-950 to-red-900 border-red-600/70 text-red-100 py-1.5 px-2.5 shadow-md hover:border-red-400';
+                  slotStyles = 'bg-gradient-to-r from-red-950/90 via-zinc-950 to-red-900 border-red-600/70 text-red-100 py-1 px-2 shadow-md hover:border-red-400';
                 } else if (isOptional) {
-                  slotStyles = 'bg-gradient-to-r from-indigo-950/40 via-slate-900 to-indigo-950/40 border-indigo-600/60 text-indigo-200 py-1.5 px-2.5 shadow-sm hover:border-indigo-400';
+                  slotStyles = 'bg-gradient-to-r from-indigo-950/60 via-slate-900 to-indigo-950/60 border-indigo-600/70 text-indigo-200 py-1 px-2 shadow-sm hover:border-indigo-400';
                 }
 
                 const spanU = slot.spanU || 1;
                 const isMerged = isOptional && spanU > 1;
                 const isNewlyAdded = slot.instanceId === lastAddedInstanceId;
                 const isHighlighted = isNewlyAdded || (typeof slot.optionalIdx === 'number' && highlightedOptIdx === slot.optionalIdx);
+                const isDragTarget = dragOverU === slot.uIndex;
 
                 const slotKey = slot.instanceId || `slot-${slot.type}-${slot.uIndex}`;
                 const isClickableProduct = !isEmpty;
                 const slotPreview = isClickableProduct ? buildPreviewFromSlot(slot) : null;
+                const slotImage = isClickableProduct ? (getAccessoryImage(slot.accessoryRef) || slot.accessoryRef?.image || (slotPreview?.image ?? '')) : '';
 
                 return (
                   <motion.div 
@@ -1997,10 +2425,45 @@ setLastAddedInstanceId(newInstId);
                     }}
                     exit={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.94, transition: { duration: 0.16 } }}
                     transition={{ duration: 0.2, ease: 'easeOut' }}
-                    style={zoomMode ? { minHeight: `${spanU * 48}px` } : { flex: `${spanU} ${spanU} 0px` }}
-                    className={`group text-xs flex items-center justify-between transition-colors duration-150 border relative overflow-hidden ${slotStyles} ${isHighlighted ? 'ring-2 ring-amber-400 border-amber-400 z-30' : ''}`}
-                    onMouseEnter={() => {
+                    style={{ minHeight: `${Math.max(48, spanU * 50)}px` }}
+                    className={`group text-xs flex items-center justify-between transition-all duration-150 border relative overflow-hidden rounded-xs ${slotStyles} ${
+                      isDragTarget ? 'ring-2 ring-emerald-400 bg-emerald-950/95 border-emerald-400 scale-[1.01] z-40 shadow-xl' : ''
+                    } ${isHighlighted ? 'ring-2 ring-amber-400 border-amber-400 z-30' : ''}`}
+                    draggable={!isEmpty}
+                    onDragStart={(e: any) => {
+                      e.dataTransfer?.setData('text/plain', slotKey);
+                      setDraggedSlot(slot);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedSlot(null);
+                      setDragOverU(null);
+                    }}
+                    onDragOver={(e: any) => {
+                      e.preventDefault?.();
+                      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                      if (dragOverU !== slot.uIndex) {
+                        setDragOverU(slot.uIndex);
+                      }
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverU === slot.uIndex) {
+                        setDragOverU(null);
+                      }
+                    }}
+                    onDrop={(e: any) => {
+                      e.preventDefault?.();
+                      if (draggedSlot) {
+                        handleMoveSlotToU(draggedSlot, slot.uIndex);
+                        setDraggedSlot(null);
+                        setDragOverU(null);
+                      }
+                    }}
+                    onMouseEnter={(e) => {
+                      setMousePos({ x: e.clientX, y: e.clientY });
                       if (slotPreview) setHoveredProduct(slotPreview);
+                    }}
+                    onMouseMove={(e) => {
+                      setMousePos({ x: e.clientX, y: e.clientY });
                     }}
                     onMouseLeave={() => {
                       setHoveredProduct(null);
@@ -2017,104 +2480,99 @@ setLastAddedInstanceId(newInstId);
                         }
                       }
                     }}
-                    title={isClickableProduct ? "לחץ או גע להגדלת תמונה ופרטים" : "חריץ פנוי בארון"}
+                    title={isClickableProduct ? "גרור כדי להעביר ל-U אחר | לחץ להגדלת תמונה ופרטים" : "חריץ פנוי בארון — לחץ להוספה או שחרר פריט נגרר"}
                   >
-                    {/* Position indicator */}
-                    <div className={`font-mono font-bold text-[10px] tabular-nums bg-slate-800/90 text-slate-300 flex flex-col items-center justify-center rounded border border-slate-700/50 flex-shrink-0 relative z-20 ${isMerged ? 'w-11 py-0.5' : 'w-8 h-4 sm:h-5'}`}>
-                      {isMerged ? (<><span>{slot.uIndex}-{slot.uIndex - spanU + 1}</span><span className="text-[8px] text-emerald-300">{spanU}U</span></>) : `${slot.uIndex}U`}
+                    {/* Position indicator and Drag Handle */}
+                    <div className="flex items-center gap-1.5 relative z-20 flex-shrink-0">
+                      <div className={`font-mono font-bold text-[10px] tabular-nums bg-slate-800/90 text-slate-300 flex flex-col items-center justify-center rounded border border-slate-700/60 flex-shrink-0 ${isMerged ? 'w-12 py-0.5' : 'w-9 h-6'}`}>
+                        {isMerged ? (<><span>{slot.uIndex}-{slot.uIndex - spanU + 1}</span><span className="text-[8px] text-emerald-300 font-bold">{spanU}U</span></>) : `${slot.uIndex}U`}
+                      </div>
+
+                      {!isEmpty && (
+                        <div 
+                          className="cursor-grab active:cursor-grabbing p-1 text-slate-400 hover:text-amber-300 transition-colors shrink-0" 
+                          title="גרור כדי להעביר ל-U אחר"
+                        >
+                          <GripVertical size={15} />
+                        </div>
+                      )}
                     </div>
 
-                    {/* 1. Full-Width Product Photo (fills the entire slot faceplate, NO text overlay) */}
-                    {(() => {
-                      const slotImage = isClickableProduct ? (getAccessoryImage(slot.accessoryRef) || slot.accessoryRef?.image || (slotPreview?.image ?? '')) : '';
-                      if (slotImage) {
-                        return (
-                          <div className="absolute inset-0 w-full h-full z-0 overflow-hidden bg-slate-900 pointer-events-none flex items-center justify-center">
+                    {/* Drag target indicator banner */}
+                    {isDragTarget ? (
+                      <div className="flex-1 text-center font-bold text-emerald-300 text-xs animate-pulse flex items-center justify-center gap-2 z-20 px-2">
+                        <ArrowLeftRight size={14} className="text-emerald-400 shrink-0" />
+                        <span className="truncate">שחרר כאן להעברת {draggedSlot?.name || 'פריט'} ל-U{slot.uIndex}</span>
+                      </div>
+                    ) : (
+                      /* Slot Content: High-Resolution Thumbnail + Name & Specifications */
+                      <div className="flex-1 flex items-center min-w-0 px-2 z-10">
+                        {slotImage ? (
+                          <div className="w-13 h-10 sm:w-14 sm:h-11 bg-white rounded border border-slate-700/80 p-0.5 shrink-0 flex items-center justify-center overflow-hidden mr-1.5 shadow-sm">
                             <img 
                               referrerPolicy="no-referrer" 
                               src={slotImage} 
                               alt=""
-                              className="w-full h-full object-fill sm:object-cover"
+                              className="max-h-full max-w-full object-contain"
                               onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} 
                             />
                           </div>
-                        );
-                      }
+                        ) : null}
 
-                      // 2. Schematic shelf drawing fallback when no photo
-                      if ((isShelf || isShelfUpgrade) && slot.isAnchor !== false) {
-                        return (
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-1 z-0" aria-hidden="true">
-                            <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="w-full h-full opacity-90">
-                              <defs>
-                                <linearGradient id={`shelfGrad-${slot.uIndex}`} x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0" stopColor="#64748b" />
-                                  <stop offset="0.55" stopColor="#475569" />
-                                  <stop offset="1" stopColor="#334155" />
-                                </linearGradient>
-                              </defs>
-                              <rect x="10" y="8" width="8" height="26" rx="1" fill="#334155" stroke="#1e293b" strokeWidth="0.7" />
-                              <rect x="182" y="8" width="8" height="26" rx="1" fill="#334155" stroke="#1e293b" strokeWidth="0.7" />
-                              <circle cx="14" cy="13" r="1.5" fill="#0f172a" />
-                              <circle cx="14" cy="29" r="1.5" fill="#0f172a" />
-                              <circle cx="186" cy="13" r="1.5" fill="#0f172a" />
-                              <circle cx="186" cy="29" r="1.5" fill="#0f172a" />
-                              <rect x="16" y="11" width="168" height="21" rx="1.5" fill={`url(#shelfGrad-${slot.uIndex})`} stroke="#1e293b" strokeWidth="0.8" />
-                              <rect x="16" y="28" width="168" height="4" fill="#1e293b" opacity="0.45" />
-                              {Array.from({ length: 9 }).map((_, i) => (
-                                <rect key={i} x={26 + i * 18} y="15" width="10" height="11" rx="1" fill="#1e293b" opacity="0.4" />
+                        {/* Product details & tags */}
+                        {isClickableProduct ? (
+                          <div className="flex-1 min-w-0 pr-2 pl-1 text-right">
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold tracking-wide truncate leading-tight text-xs text-slate-100">
+                                {slot.name}
+                              </p>
+                              {slot.accessoryRef?.sku && (
+                                <span className="text-[10px] font-mono text-slate-300 bg-slate-800/90 px-1.5 py-0.5 rounded border border-slate-700 shrink-0">
+                                  {slot.accessoryRef.sku}
+                                </span>
+                              )}
+                            </div>
+                            {slot.description && (
+                              <p className="text-[10px] text-slate-400 truncate mt-0.5 leading-tight">
+                                {slot.description}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          /* Empty slot prompt */
+                          <div className="flex-1 text-center text-slate-500 group-hover:text-slate-300 text-[11px] font-medium transition-colors">
+                            {draggedSlot ? `🎯 שחרר כאן להעברת ${draggedSlot.name} ל-U${slot.uIndex}` : `+ לחץ להוספת ציוד (U${slot.uIndex})`}
+                          </div>
+                        )}
+
+                        {/* Schematic graphics for accessories without a photo */}
+                        {!slotImage && (isShelf || isShelfUpgrade) && slot.isAnchor !== false && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-12 z-0 opacity-40" aria-hidden="true">
+                            <svg viewBox="0 0 200 40" preserveAspectRatio="none" className="w-full h-8">
+                              <rect x="10" y="10" width="180" height="20" rx="2" fill="#334155" stroke="#475569" strokeWidth="1" />
+                              {Array.from({ length: 8 }).map((_, i) => (
+                                <rect key={i} x={25 + i * 20} y="15" width="10" height="10" rx="1" fill="#1e293b" />
                               ))}
                             </svg>
                           </div>
-                        );
-                      }
+                        )}
 
-                      // 3. Schematic graphics for items without photo
-                      if (isBrush) {
-                        return (
-                          <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px] text-amber-500/80 tracking-widest pointer-events-none select-none">
+                        {!slotImage && isBrush && (
+                          <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px] text-amber-500/40 tracking-widest pointer-events-none select-none z-0">
                             ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
                           </div>
-                        );
-                      }
+                        )}
 
-                      if (isPdu) {
-                        return (
-                          <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px] text-red-400/90 tracking-widest pointer-events-none select-none">
+                        {!slotImage && isPdu && (
+                          <div className="absolute inset-0 flex items-center justify-center font-mono text-[9px] text-red-400/40 tracking-widest pointer-events-none select-none z-0">
                             [::] [::] [::] [::] [::] [::] [::] [::]
                           </div>
-                        );
-                      }
-
-                      if (isBlank) {
-                        return (
-                          <div className="absolute inset-0 bg-neutral-900 flex items-center justify-center border-y border-neutral-700/60 pointer-events-none">
-                            <span className="text-[9px] font-mono text-neutral-500">BLANK PANEL 19"</span>
-                          </div>
-                        );
-                      }
-
-                      // 4. Empty slot prompt
-                      if (isEmpty) {
-                        return (
-                          <div className="flex-1 text-center text-slate-500 group-hover:text-slate-300 text-[11px] font-medium transition-colors">
-                            + לחץ להוספת ציוד (U{slot.uIndex})
-                          </div>
-                        );
-                      }
-
-                      // 5. Fallback minimal text for items with no image
-                      return (
-                        <div className="flex-1 min-w-0 pr-2 pl-1 text-right relative z-10">
-                          <p className="font-semibold tracking-wide truncate leading-tight text-[11px] sm:text-xs">
-                            {slot.name}
-                          </p>
-                        </div>
-                      );
-                    })()}
+                        )}
+                      </div>
+                    )}
 
                     {/* Action buttons inside interactive slots */}
-                    <div className="flex items-center gap-1 relative z-20 flex-shrink-0">
+                    <div className="flex items-center gap-1.5 relative z-20 flex-shrink-0 mr-1">
                       {isClickableProduct && (
                         <button
                           type="button"
@@ -2125,7 +2583,7 @@ setLastAddedInstanceId(newInstId);
                           }}
                           className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-amber-300 transition-colors cursor-pointer"
                         >
-                          <ZoomIn size={12} />
+                          <ZoomIn size={14} />
                         </button>
                       )}
 
@@ -2227,7 +2685,7 @@ setLastAddedInstanceId(newInstId);
                           onClick={() => setInspectedProduct(preview)}
                           title="לחץ להגדלת תמונה ופרטים"
                         >
-                          <span className="truncate pr-1">�� {item.name || item.description}</span>
+                          <span className="truncate pr-1 flex items-center gap-1"><Layers size={11} className="text-emerald-400 shrink-0" /><span>{item.name || item.description}</span></span>
                           <div className="flex items-center gap-1.5 shrink-0">
                             <span className="text-emerald-400 group-hover:text-amber-300 transition-colors p-0.5"><ZoomIn size={11} /></span>
                             <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded" onClick={(e) => e.stopPropagation()}>
@@ -2261,7 +2719,7 @@ setLastAddedInstanceId(newInstId);
                           onClick={() => setInspectedProduct(preview)}
                           title="לחץ להגדלת תמונה ופרטים"
                         >
-                          <span className="truncate pr-1">�� {item.name || item.description}</span>
+                          <span className="truncate pr-1 flex items-center gap-1"><Layers size={11} className="text-emerald-400 shrink-0" /><span>{item.name || item.description}</span></span>
                           <div className="flex items-center gap-1.5 shrink-0">
                             <span className="text-amber-400 group-hover:text-amber-200 transition-colors p-0.5"><ZoomIn size={11} /></span>
                             <div className="flex items-center gap-1 bg-slate-900 px-1 py-0.5 border border-slate-700 rounded" onClick={(e) => e.stopPropagation()}>
@@ -2292,114 +2750,138 @@ setLastAddedInstanceId(newInstId);
           </>
         )}
         </div>
-        {/* Add Slot Sidebar (Desktop only) */}
-        {isDesktop && (isAddSlotModalOpen || isAuxiliaryModalOpen) && (
-          <div className="hidden lg:flex w-[350px] xl:w-[400px] shrink-0 space-y-3 lg:sticky lg:top-4 self-start h-[calc(100dvh-2rem)] flex-col bg-white border border-slate-200 shadow-2xl rounded-xl overflow-hidden z-40">
-             <AddSlotModal
-               isOpen={true}
-               onClose={() => {
-                 setIsAddSlotModalOpen(false);
-                 setIsAuxiliaryModalOpen(false);
-                 setAddSlotTargetU(null);
-                 setPreviewAddSlotSpanU(1);
-               }}
-               targetU={addSlotTargetU}
-               totalU={totalSlotsU}
-               slots={slots}
-               availableU={availableU}
-               compatibleAccessories={compatibleAccessories}
-               onAddAccessoryAtSlot={handleAddOptionalAtSlot}
-               onRequestRearrangement={(plan, item) => {
-                 setIsAddSlotModalOpen(false);
-                 setIsAuxiliaryModalOpen(false);
-                 setAddSlotTargetU(null);
-                 setPendingRearrangementPlan({ plan, item });
-               }}
-               isAuxiliaryMode={isAuxiliaryModalOpen}
-               mode="desktop-sidebar"
-               onHoverProductItem={(uSize) => setPreviewAddSlotSpanU(uSize || 1)}
-             />
-          </div>
-        )}
 
         {/* Column 2 & 3: Selected Optionals & Catalog (Left side) */}
         <div className="w-full flex-1 flex flex-col gap-6 min-w-0">
           
-          {/* Desktop Inspected Product Panel */}
-          {isDesktop && inspectedProduct && (
-            <div className="bg-white border-2 border-indigo-200 rounded-lg shadow-sm overflow-hidden animate-in slide-in-from-top-2">
-              <div className="bg-indigo-50 border-b border-indigo-100 p-3 flex justify-between items-start">
-                <div>
-                  <h3 className="font-bold text-indigo-900">{inspectedProduct.name}</h3>
-                  <div className="flex gap-3 text-xs text-indigo-700/80 mt-1 font-mono">
-                    <span>מק"ט: <span dir="ltr" className="inline-block">{inspectedProduct.sku || inspectedProduct.pn}</span></span>
-                    <span>{inspectedProduct.uSize > 0 ? `${inspectedProduct.uSize}U` : '0U'}</span>
-                    <span>מיקום: {inspectedProduct.zone || (inspectedProduct.uSize === 0 ? 'אביזר נלווה' : `U${inspectedProduct.minU}-U${inspectedProduct.maxU}`)}</span>
+          {/* Add Slot Panel (When Active on Desktop - replaces Column 2 content seamlessly) */}
+          {isDesktop && (isAddSlotModalOpen || isAuxiliaryModalOpen) ? (
+            <div className="w-full h-[600px] sm:h-[680px] lg:h-[740px] flex flex-col bg-white border border-slate-200 rounded-xl overflow-hidden shadow-md">
+              <AddSlotModal
+                isOpen={true}
+                onClose={() => {
+                  setIsAddSlotModalOpen(false);
+                  setIsAuxiliaryModalOpen(false);
+                  setAddSlotTargetU(null);
+                  setPreviewAddSlotSpanU(1);
+                }}
+                targetU={addSlotTargetU}
+                totalU={totalSlotsU}
+                slots={slots}
+                availableU={availableU}
+                compatibleAccessories={compatibleAccessories}
+                onAddAccessoryAtSlot={handleAddOptionalAtSlot}
+                onRequestRearrangement={(plan, item) => {
+                  setIsAddSlotModalOpen(false);
+                  setIsAuxiliaryModalOpen(false);
+                  setAddSlotTargetU(null);
+                  setPendingRearrangementPlan({ plan, item });
+                }}
+                isAuxiliaryMode={isAuxiliaryModalOpen}
+                mode="desktop-sidebar"
+                onHoverProductItem={(uSize) => setPreviewAddSlotSpanU(uSize || 1)}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Desktop Inspected Product Panel */}
+              {isDesktop && inspectedProduct && (
+                <div className="bg-white border-2 border-indigo-200 rounded-lg shadow-sm overflow-hidden animate-in slide-in-from-top-2">
+                  <div className="bg-indigo-50 border-b border-indigo-100 p-3 flex justify-between items-start">
+                    <div>
+                      <h3 className="font-bold text-indigo-900">{inspectedProduct.name}</h3>
+                      <div className="flex gap-3 text-xs text-indigo-700/80 mt-1 font-mono">
+                        <span>מק"ט: <span dir="ltr" className="inline-block">{inspectedProduct.sku || inspectedProduct.pn}</span></span>
+                        <span>{inspectedProduct.uSize > 0 ? `${inspectedProduct.uSize}U` : '0U'}</span>
+                        <span>מיקום: {inspectedProduct.zone || (inspectedProduct.uSize === 0 ? 'אביזר נלווה' : `U${inspectedProduct.minU}-U${inspectedProduct.maxU}`)}</span>
+                      </div>
+                    </div>
+                    <button onClick={() => setInspectedProduct(null)} className="p-1 hover:bg-indigo-200 rounded text-indigo-600 transition-colors">
+                      <X size={18} />
+                    </button>
+                  </div>
+                  <div className="flex p-4 gap-4 bg-white">
+                    <div className="w-1/3 shrink-0 flex items-center justify-center border border-slate-100 bg-slate-50 p-2 rounded">
+                      {inspectedProduct.image ? (
+                        <img src={inspectedProduct.image} alt="" className="max-w-full max-h-40 object-contain" referrerPolicy="no-referrer" />
+                      ) : (
+                        <div className="font-mono text-slate-400 text-sm">{inspectedProduct.uSize}U</div>
+                      )}
+                    </div>
+                    <div className="flex-1 flex flex-col justify-between">
+                      <div className="text-sm text-slate-600 leading-relaxed">
+                        {inspectedProduct.description || 'ללא תיאור'}
+                      </div>
+                      {inspectedProduct.price > 0 && (
+                        <div className="mt-4 font-bold text-lg text-emerald-700">
+                          ₪{inspectedProduct.price.toLocaleString('he-IL')}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <button onClick={() => setInspectedProduct(null)} className="p-1 hover:bg-indigo-200 rounded text-indigo-600 transition-colors">
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="flex p-4 gap-4 bg-white">
-                <div className="w-1/3 shrink-0 flex items-center justify-center border border-slate-100 bg-slate-50 p-2 rounded">
-                  {inspectedProduct.image ? (
-                    <img src={inspectedProduct.image} alt="" className="max-w-full max-h-40 object-contain" referrerPolicy="no-referrer" />
+              )}
+              {/* Column 2: Selected Optionals & Included Items (Middle side) */}
+              <div className="flex-1 min-w-0 space-y-6">
+                
+                {/* Included Items */}
+                <div className="bg-gray-50 p-5 border border-gray-200">
+                  <h3 className="text-lg font-bold text-[#0c2d57] mb-4 border-b border-gray-200 pb-2 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck size={18} className="text-emerald-600" />
+                      <span>פריטי אבזור כלולים (חלק מהמארז)</span>
+                    </span>
+                    <span className="text-xs font-semibold px-2 py-0.5 bg-slate-200 rounded-none text-slate-700">ללא עלות נוספת</span>
+                  </h3>
+                  {includedItems.length > 0 ? (
+                    <ul className="space-y-2">
+                      {includedItems.map((item, idx) => {
+                        const incPreview = getIncludedPreviewItem(item, idx);
+                        return (
+                          <li 
+                            key={idx} 
+                            className="flex items-center justify-between border-b border-gray-100/80 pb-2 last:border-none text-gray-800 hover:bg-amber-50/60 p-1.5 rounded transition-colors cursor-pointer group"
+                            onMouseEnter={() => setHoveredProduct(incPreview)}
+                            onMouseLeave={() => setHoveredProduct(null)}
+                            onClick={() => setInspectedProduct(incPreview)}
+                            title="לחץ לצפייה במפרט מלא ותמונה מוגדלת"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <CheckCircle size={17} className="text-green-500 flex-shrink-0" />
+                              <span className="text-sm font-semibold truncate">{item}</span>
+                            </div>
+                            <div className="flex items-center gap-1 text-slate-400 group-hover:text-amber-600 transition-colors shrink-0">
+                              <span className="text-[11px] font-medium hidden sm:inline">מפרט</span>
+                              <Eye size={14} />
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   ) : (
-                    <div className="font-mono text-slate-400 text-sm">{inspectedProduct.uSize}U</div>
-                  )}
-                </div>
-                <div className="flex-1 flex flex-col justify-between">
-                  <div className="text-sm text-slate-600 leading-relaxed">
-                    {inspectedProduct.description || 'ללא תיאור'}
-                  </div>
-                  {inspectedProduct.price > 0 && (
-                    <div className="mt-4 font-bold text-lg text-emerald-700">
-                      ₪{inspectedProduct.price.toLocaleString('he-IL')}
+                    <div className="text-gray-500 italic text-sm py-2 bg-slate-100/60 p-3 border border-slate-200/60">
+                      ארון זה מגיע ללא אביזרים כלולים מראש (ניתן לבחור אביזרים להרכבה מהקטלוג).
                     </div>
                   )}
                 </div>
-              </div>
-            </div>
-          )}
-        {/* Column 2: Selected Optionals & Included Items (Middle side) */}
-        <div className="space-y-6">
-          
-          {/* Included Items */}
-          <div className="bg-gray-50 p-5 border border-gray-200">
-            <h3 className="text-lg font-bold text-[#0c2d57] mb-4 border-b border-gray-200 pb-2 flex items-center justify-between">
-              <span>�� פריטי אבזור כלולים (חלק מהמארז)</span>
-              <span className="text-xs font-semibold px-2 py-0.5 bg-slate-200 rounded-none text-slate-700">ללא עלות נוספת</span>
-            </h3>
-            {includedItems.length > 0 ? (
-              <ul className="space-y-3">
-                {includedItems.map((item, idx) => (
-                  <li key={idx} className="flex items-center gap-3 border-b border-gray-100/60 pb-1.5 last:border-none text-gray-700">
-                    <CheckCircle size={18} className="text-green-500 flex-shrink-0" />
-                    <span className="text-sm font-semibold">{item}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="text-gray-500 italic text-sm py-2 bg-slate-100/60 p-3 border border-slate-200/60">
-                ארון זה מגיע ללא אביזרים כלולים מראש (ניתן לבחור אביזרים להרכבה מהקטלוג).
-              </div>
-            )}
-          </div>
 
-          {/* Selected Optionals Review Area */}
-          <div className="bg-[#e6f0fa]/30 border border-[#b3d4f5] p-5 shadow-sm">
-            <h3 className="text-[15px] font-bold text-[#004387] mb-4 uppercase tracking-wider flex items-center justify-between border-b border-[#b3d4f5] pb-2">
-              <span>��️ אביזרים ששדרגתם לארון</span>
-              <span className="bg-[#004387] text-white text-xs px-2.5 py-0.5 rounded-none font-mono">
-                {selectedOptionals.reduce((acc, curr) => acc + curr.quantity, 0)} EXTRA
-              </span>
-            </h3>
-            
-            {selectedOptionals.length > 0 ? (
+                {/* Selected Optionals Review Area */}
+                <div className="bg-[#e6f0fa]/30 border border-[#b3d4f5] p-5 shadow-sm">
+                  <h3 className="text-[15px] font-bold text-[#004387] mb-4 uppercase tracking-wider flex items-center justify-between border-b border-[#b3d4f5] pb-2">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles size={16} className="text-blue-600" />
+                      <span>אביזרים ששדרגתם לארון</span>
+                    </span>
+                    <span className="bg-[#004387] text-white text-xs px-2.5 py-0.5 rounded-none font-mono">
+                      {selectedOptionals.reduce((acc, curr) => acc + curr.quantity, 0)} EXTRA
+                    </span>
+                  </h3>
+                  
+                  {selectedOptionals.length > 0 ? (
               <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto pr-1">
                  <AnimatePresence initial={false}>
                  {selectedOptionals.map((item, idx) => {
+                   const itemQty = Math.max(1, Number(item.quantity) || 1);
                    const optPreview: EnrichedPreviewItem = {
                      name: item.name || item.description || item.pn,
                      sku: item.pn || item.sku || '',
@@ -2407,8 +2889,8 @@ setLastAddedInstanceId(newInstId);
                      image: item.image || getAccessoryImage(item),
                      uSize: item.uSize || 0,
                      price: item.price || 0,
-                     quantity: 1 || 1,
-                     zone: item.uSize > 0 ? `תופס ${item.uSize * 1}U בארון` : 'אביזר נלווה (0U)',
+                     quantity: itemQty,
+                     zone: item.uSize > 0 ? `תופס ${item.uSize * itemQty}U בארון` : 'אביזר נלווה (0U)',
                      type: 'optional-accessory',
                      optionalIdx: idx,
                      isPreset: false,
@@ -2416,7 +2898,7 @@ setLastAddedInstanceId(newInstId);
 
                    return (
                    <motion.div 
-                    key={item.sku || item.pn || item.id} 
+                    key={item.instanceId || item.id || `${item.sku || item.pn}-${idx}`} 
                     id={`selected-opt-${idx}`}
                     layout={prefersReducedMotion ? false : "position"}
                     initial={prefersReducedMotion ? false : { opacity: 0, y: -6 }}
@@ -2476,7 +2958,7 @@ setLastAddedInstanceId(newInstId);
                            <ZoomIn size={14} />
                          </button>
                          <span className="text-xs text-[#004387] font-bold bg-[#e6f0fa] px-2 py-0.5 rounded-none font-mono whitespace-nowrap">
-                           ₪{((item.price || 0) * 1).toLocaleString('he-IL', { minimumFractionDigits: 2 })}
+                           ₪{((item.price || 0) * itemQty).toLocaleString('he-IL', { minimumFractionDigits: 2 })}
                          </span>
                        </div>
                      </div>
@@ -2490,7 +2972,7 @@ setLastAddedInstanceId(newInstId);
 
                      <div className="flex items-center justify-between border-t border-gray-100 mt-2.5 pt-2">
                        <span className="text-[11px] font-mono font-medium text-slate-400 flex items-center gap-1">
-                         <span>{item.uSize > 0 ? `תופס: ${item.uSize * 1}U מתוך הארון` : 'ללא נפח בארון'}</span>
+                         <span>{item.uSize > 0 ? `תופס: ${item.uSize * itemQty}U מתוך הארון` : 'ללא נפח בארון'}</span>
                          <span className="text-amber-600 text-[10px] font-bold">• לחץ להגדלה</span>
                        </span>
                        
@@ -2504,7 +2986,7 @@ setLastAddedInstanceId(newInstId);
                            <Plus size={12} />
                          </button>
                          <span className="w-8 flex items-center justify-center border-x border-slate-200 text-xs font-bold bg-white text-slate-800 font-mono">
-                           {1}
+                           {itemQty}
                          </span>
                          <button 
                            type="button"
@@ -2558,13 +3040,40 @@ setLastAddedInstanceId(newInstId);
                   placeholder="חיפוש אביזר (שם / מק״ט)"
                   className="w-full pr-9 pl-3 py-2 text-sm border border-slate-200 rounded-none focus:border-[#004387] outline-none" />
               </div>
-              <div className="mb-3 text-[12px] font-bold text-slate-600">
-                נותרו <span className="text-[#004387]">{availableU}U</span> פנויים — מלא עם אביזרים תואמים:
+              <div className="flex items-center justify-between mb-3 text-[12px] font-bold text-slate-600">
+                <span>נותרו <span className="text-[#004387]">{availableU}U</span> פנויים — מלא עם אביזרים תואמים:</span>
+                <div className="flex items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextState: Record<string, boolean> = {};
+                      groupedRubrics.forEach((r: any) => { nextState[r.id] = true; });
+                      nextState["illus"] = true;
+                      setOpenSections(nextState);
+                    }}
+                    className="text-[#004387] hover:underline font-bold cursor-pointer"
+                  >
+                    פתח הכל
+                  </button>
+                  <span className="text-slate-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextState: Record<string, boolean> = {};
+                      groupedRubrics.forEach((r: any) => { nextState[r.id] = false; });
+                      nextState["illus"] = false;
+                      setOpenSections(nextState);
+                    }}
+                    className="text-slate-500 hover:underline font-bold cursor-pointer"
+                  >
+                    סגור הכל
+                  </button>
+                </div>
               </div>
-              {groupedRubrics.map((rubric: GroupedRubric) =>
-                AccordionSection(rubric.id, rubric.title, rubric.items, rubric.tone, false, rubric.brandLogo)
+              {groupedRubrics.map((rubric: GroupedRubric, rIdx: number) =>
+                AccordionSection(rubric.id, rubric.title, rubric.items, rubric.tone, rIdx === 0 || !!accSearch, rubric.brandLogo)
               )}
-              {_illusPairs.length > 0 && AccordionSection('illus', '�� תצוגת הדמיה (ללא מחיר)', _illusPairs, 'bg-indigo-50 text-indigo-800', false)}
+              {_illusPairs.length > 0 && AccordionSection("illus", "תצוגת הדמיה", _illusPairs, "bg-indigo-50 text-indigo-800", !!accSearch)}
               {groupedRubrics.length === 0 && _illusPairs.length === 0 && (
                 <div className="text-center py-8 text-gray-500 bg-gray-50 border border-gray-200 rounded-none text-sm">
                   {accSearch ? 'לא נמצאו פריטים התואמים לחיפוש שלך.' : 'אין אביזרים תואמים לארון זה.'}
@@ -2578,20 +3087,20 @@ setLastAddedInstanceId(newInstId);
             </div>
           )}
         </div>
+        </>
+      )}
       </div>
       </div>
-      {/* WARNING MODAL (Rule 3) */}
+      {/* WARNING MODAL */}
       {warningModalOpen && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/60 p-4 animate-in fade-in duration-200" dir="rtl">
           <div className="bg-white max-w-md w-full p-6 text-center shadow-2xl animate-in zoom-in-95 duration-200 border-t-4 border-amber-500 rounded-none">
             <div className="w-16 h-16 bg-amber-50 text-amber-500 border border-amber-200 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertTriangle size={32} />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">אזהרת קיבולת (U Space Warning)</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">אזהרת קיבולת / התקנה</h3>
             <p className="text-gray-600 mb-6 text-sm leading-relaxed">
-              הגעת לניצול מלא של נפח הארון ({totalSlotsU}U). 
-              <br/><br/>
-              האם ברצונך להתקין את הפריט <strong>{pendingAccessory?.pn}</strong> בכל זאת? שימו לב: יתכן ותצטרכו להוציא אביזרים כלולים אחרים במעמד ההתקנה הפיזית!
+              {warningModalMessage || `הגעת לניצול מלא של נפח הארון (${totalSlotsU}U). לא נותר מספיק מקום פנוי עבור ${pendingAccessory?.name || pendingAccessory?.pn}.`}
             </p>
             <div className="flex gap-3 justify-center">
               <button 
@@ -2599,17 +3108,11 @@ setLastAddedInstanceId(newInstId);
                 onClick={() => {
                   setWarningModalOpen(false);
                   setPendingAccessory(null);
+                  setWarningModalMessage('');
                 }}
-                className="flex-1 px-5 py-2.5 border border-gray-300 text-gray-700 hover:bg-gray-100 font-bold transition-all text-sm rounded-none"
+                className="w-full px-5 py-2.5 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold transition-all text-sm rounded-none shadow-sm"
               >
-                בטל התקנה
-              </button>
-              <button 
-                type="button"
-                onClick={forceAddPending}
-                className="flex-1 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold transition-all text-sm shadow-sm rounded-none"
-              >
-                אלץ התקנה (המשך)
+                הבנתי, סגור
               </button>
             </div>
           </div>
@@ -2757,45 +3260,147 @@ setLastAddedInstanceId(newInstId);
       </div>
       )}
 
-      {/* Mobile Inspected Product Overlay */}
+      {/* Universal Product Inspection Popup Modal (חלון פופאפ מפרט מוצר) */}
       <AnimatePresence>
         {!isDesktop && inspectedProduct && (
-          <motion.div
-            initial={{ y: 50, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 50, opacity: 0 }}
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden"
-            dir="rtl"
+          <div 
+            className="fixed inset-0 z-[100] bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
+            onClick={() => setInspectedProduct(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="inspected-product-title"
           >
-            {/* Minimal Mobile View */}
-            <div className="flex flex-col">
-              <div className="bg-slate-900 text-white p-3 flex justify-between items-start gap-2">
-                 <div>
-                   <h4 className="font-bold text-sm leading-tight">{inspectedProduct.name}</h4>
-                   <div className="flex gap-2 text-[10px] text-slate-300 mt-1">
-                     <span>מק"ט: <span dir="ltr" className="inline-block">{inspectedProduct.sku || inspectedProduct.pn}</span></span>
-                     <span>{inspectedProduct.uSize > 0 ? `${inspectedProduct.uSize}U` : '0U'}</span>
-                   </div>
-                 </div>
-                 <button onClick={() => setInspectedProduct(null)} className="p-1 rounded-full bg-white/10 text-white">
-                   <X size={16} />
-                 </button>
+            <motion.div
+              initial={{ scale: 0.94, opacity: 0, y: 12 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.94, opacity: 0, y: 12 }}
+              transition={{ type: "spring", duration: 0.25, bounce: 0.15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden flex flex-col my-auto"
+              dir="rtl"
+            >
+              {/* Modal Header */}
+              <div className="bg-slate-900 text-white p-4 sm:p-5 flex items-start justify-between gap-3 border-b border-slate-800">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-amber-400 bg-amber-400/20 px-2 py-0.5 rounded font-mono">
+                      {inspectedProduct.uSize > 0 ? `${inspectedProduct.uSize}U` : '0U מובנה'}
+                    </span>
+                    {inspectedProduct.sku && (
+                      <span className="text-xs font-mono text-slate-300 bg-slate-800 px-2 py-0.5 rounded">
+                        מק"ט: {inspectedProduct.sku}
+                      </span>
+                    )}
+                    {inspectedProduct.isPreset && (
+                      <span className="text-xs font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded">
+                        כלול בארון
+                      </span>
+                    )}
+                  </div>
+                  <h3 id="inspected-product-title" className="text-base sm:text-lg font-bold text-white leading-tight">
+                    {inspectedProduct.name}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setInspectedProduct(null)}
+                  className="p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                  aria-label="סגור חלון"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <div className="flex gap-3 p-3 bg-slate-50 items-center">
-                 {inspectedProduct.image ? (
-                   <img src={inspectedProduct.image} alt="" className="w-20 h-20 object-contain bg-white rounded border border-slate-200" referrerPolicy="no-referrer" />
-                 ) : (
-                   <div className="w-20 h-20 bg-slate-200 flex items-center justify-center rounded border border-slate-300 font-mono text-slate-500">
-                     {inspectedProduct.uSize}U
-                   </div>
-                 )}
-                 <div className="flex-1 text-xs text-slate-600">
-                   {inspectedProduct.description ? <p className="line-clamp-3">{inspectedProduct.description}</p> : <p>אין תיאור נוסף.</p>}
-                   <div className="mt-2 font-bold text-slate-800">מיקום: {inspectedProduct.zone || (inspectedProduct.uSize === 0 ? 'אביזר נלווה' : `U${inspectedProduct.minU}-U${inspectedProduct.maxU}`)}</div>
-                 </div>
+
+              {/* Modal Body */}
+              <div className="p-4 sm:p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                <div className="flex flex-col sm:flex-row gap-4 items-center sm:items-start">
+                  {/* Large Product Image Container */}
+                  <div className="w-full sm:w-48 h-48 sm:h-44 bg-slate-50 border border-slate-200 rounded-lg overflow-hidden flex items-center justify-center p-3 shrink-0 shadow-inner">
+                    {inspectedProduct.image ? (
+                      <img
+                        src={inspectedProduct.image}
+                        alt={inspectedProduct.name}
+                        className="w-full h-full object-contain filter drop-shadow-sm"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-500 rounded p-2 text-center">
+                        <Box size={32} className="text-slate-400 mb-1" />
+                        <span className="font-mono text-xs font-bold text-slate-700">{inspectedProduct.sku || 'N/A'}</span>
+                        <span className="text-[10px] text-slate-500">{inspectedProduct.uSize > 0 ? `${inspectedProduct.uSize}U חומרה` : 'ציוד היקפי'}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Product Details */}
+                  <div className="flex-1 space-y-2.5 text-sm text-slate-700 w-full">
+                    {/* Location in Rack */}
+                    <div className="bg-slate-100/80 p-2.5 rounded border border-slate-200/80 flex items-start gap-2">
+                      <span className="text-slate-500 font-semibold text-xs shrink-0">מיקום בארון:</span>
+                      <span className="font-bold text-slate-900 text-xs sm:text-sm">
+                        {inspectedProduct.zone || (inspectedProduct.uSize > 0 ? `מסילות U חזיתיות (${inspectedProduct.uSize}U)` : 'שלד הארון')}
+                      </span>
+                    </div>
+
+                    {/* Price & Quantity */}
+                    <div className="flex items-center justify-between gap-2 p-2 bg-slate-50 rounded border border-slate-200 text-xs">
+                      <div>
+                        <span className="text-slate-500 font-medium">מחיר ליחידה: </span>
+                        {inspectedProduct.price ? (
+                          <span className="font-bold text-emerald-700 text-sm">₪{inspectedProduct.price.toLocaleString('he-IL')}</span>
+                        ) : (
+                          <span className="font-bold text-emerald-600">כלול במפרט הארון (ללא תוספת תשלום)</span>
+                        )}
+                      </div>
+                      {inspectedProduct.quantity && inspectedProduct.quantity > 1 && (
+                        <span className="font-mono font-bold text-slate-600 bg-slate-200 px-2 py-0.5 rounded">
+                          כמות: {inspectedProduct.quantity}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Technical Description */}
+                    <div className="space-y-1">
+                      <span className="text-xs font-bold text-slate-800">תיאור ומפרט טכני:</span>
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-pre-line bg-slate-50/50 p-2.5 rounded border border-slate-100">
+                        {inspectedProduct.description || 'מוצר מקורי תואם מסד תקשורת 19 אינץ׳.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </motion.div>
+
+              {/* Modal Footer */}
+              <div className="bg-slate-50 px-4 sm:px-6 py-3 border-t border-slate-200 flex items-center justify-between gap-3">
+                <div className="text-xs text-slate-500 flex items-center gap-1.5">
+                  <Info size={14} className="text-slate-400" />
+                  <span>לחץ במקום כלשהו או ESC לסגירה</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {inspectedProduct.optionalIdx !== undefined && inspectedProduct.optionalIdx !== null && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleRemoveOptional(inspectedProduct.optionalIdx!);
+                        setInspectedProduct(null);
+                      }}
+                      className="px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition-colors cursor-pointer"
+                    >
+                      הסר מסל הארון
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setInspectedProduct(null)}
+                    className="px-4 py-1.5 text-xs font-bold text-white bg-[#004387] hover:bg-[#003366] rounded transition-colors cursor-pointer shadow-xs"
+                  >
+                    סגור
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -2820,7 +3425,13 @@ setLastAddedInstanceId(newInstId);
             setIsAuxiliaryModalOpen(false);
             setAddSlotTargetU(null);
             setPreviewAddSlotSpanU(1);
-            setPendingRearrangementPlan({ plan, item });
+            const currentSignature = computeStateSignature(
+              product?.sku || '',
+              totalSlotsU,
+              selectedOptionals,
+              presetOverrides
+            );
+            setPendingRearrangementPlan({ plan, item, stateSignature: currentSignature });
           }}
           isAuxiliaryMode={isAuxiliaryModalOpen}
           mode="mobile-drawer"
@@ -2885,6 +3496,91 @@ setLastAddedInstanceId(newInstId);
         </div>
       )}
 
+      {/* FLOATING HOVER POPUP (חלון צף לפרטי מוצר ומפרט מוגדל בעת הצבעה) */}
+      <AnimatePresence>
+        {hoveredProduct && (mousePos.x > 0 || mousePos.y > 0) && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 5 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.12 }}
+            className="fixed z-[99999] pointer-events-none select-none shadow-2xl"
+            style={{
+              left: `${mousePos.x + 24 + 320 > window.innerWidth ? Math.max(12, mousePos.x - 336) : mousePos.x + 24}px`,
+              top: `${Math.max(12, Math.min(window.innerHeight - 380, mousePos.y - 30))}px`,
+              width: '320px',
+            }}
+            dir="rtl"
+          >
+            <div className="bg-slate-900/95 backdrop-blur-md text-white border border-slate-700/90 shadow-2xl rounded-lg p-3.5 space-y-2.5 ring-1 ring-white/10">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-2 border-b border-slate-700/80 pb-2">
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-bold text-sm text-amber-300 leading-tight truncate">
+                    {hoveredProduct.name}
+                  </h4>
+                  <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-300 font-mono">
+                    {hoveredProduct.sku && (
+                      <span className="bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 text-slate-200">
+                        מק"ט: {hoveredProduct.sku}
+                      </span>
+                    )}
+                    <span className="bg-[#004387] text-white px-1.5 py-0.5 rounded font-bold">
+                      {hoveredProduct.uSize > 0 ? `${hoveredProduct.uSize}U` : '0U (ללא תפיסת U)'}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-1.5 bg-amber-400/20 text-amber-300 rounded shrink-0">
+                  <Info size={16} />
+                </div>
+              </div>
+
+              {/* High-Resolution Image */}
+              {hoveredProduct.image ? (
+                <div className="w-full h-36 bg-white rounded flex items-center justify-center p-2 border border-slate-700 overflow-hidden shadow-inner">
+                  <img
+                    src={hoveredProduct.image}
+                    alt={hoveredProduct.name}
+                    className="max-h-full max-w-full object-contain"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                  />
+                </div>
+              ) : (
+                <div className="w-full h-24 bg-slate-800/80 rounded flex flex-col items-center justify-center text-slate-400 p-2 border border-slate-700 font-mono text-xs">
+                  <Box size={28} className="mb-1 text-slate-500" />
+                  <span>הדמיה סכמטית 19 אינץ'</span>
+                </div>
+              )}
+
+              {/* Description */}
+              {hoveredProduct.description && (
+                <p className="text-xs text-slate-300 line-clamp-3 leading-relaxed">
+                  {hoveredProduct.description}
+                </p>
+              )}
+
+              {/* Location / Zone & Price */}
+              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1.5 border-t border-slate-800">
+                <span className="truncate">
+                  📍 {hoveredProduct.zone || 'מסילות ארון 19"'}
+                </span>
+                {hoveredProduct.price > 0 && (
+                  <span className="font-bold text-amber-400 font-mono text-xs shrink-0">
+                    ₪{Number(hoveredProduct.price).toLocaleString()}
+                  </span>
+                )}
+              </div>
+
+              {/* Drag & drop or action hint */}
+              <div className="text-[10px] text-emerald-400 font-medium bg-emerald-950/60 border border-emerald-800/60 rounded px-2 py-1 text-center flex items-center justify-center gap-1.5">
+                <span>💡 ניתן לגרור אביזר זה מ-U ל-U או להקליק להגדלה</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Undo Notification Banner */}
       <AnimatePresence>
         {undoState && (
@@ -2892,7 +3588,7 @@ setLastAddedInstanceId(newInstId);
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] bg-slate-900 text-white px-5 py-3 rounded-lg shadow-2xl flex items-center gap-4 border border-slate-700"
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[260] bg-slate-900 text-white px-5 py-3 rounded-lg shadow-2xl flex items-center gap-4 border border-slate-700"
             dir="rtl"
           >
             <div className="flex items-center gap-2">

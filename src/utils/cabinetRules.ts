@@ -51,12 +51,6 @@ export const VERIFIED_ZERO_U_EXCEPTIONS: Record<string, ZeroUException> = {
     zone: 'roof',
     reason: 'מאוורר בודד המותקן בפתחי האיוורור הייעודיים בגג הארון',
   },
-  '821410': {
-    sku: '821410',
-    name: 'פנל שערות כניסה עליונה לארון תקשורת שחור',
-    zone: 'roof',
-    reason: 'פנל מעבר כבלים בפתח הגג העליון של הארון, אינו מותקן על מסילות ה-19"',
-  },
 
   // Vertical & Side Cable Management
   '105456': {
@@ -238,11 +232,28 @@ export const parseNormalizedVolume = (pp: any): VolumeResult => {
  * 3. For Track C additional equipment flagged "התאמה לארון" with empty volume: defaults to 1U.
  * 4. For other accessories: extracts U from description (e.g. 1U, 2U, 3U) or defaults to 1U.
  */
+/**
+ * List of SKUs strictly prohibited from being added as cabinet accessories (e.g. hand tools).
+ */
+export const DISALLOWED_ACCESSORY_SKUS = new Set<string>(['111014']);
+
+export const isDisallowedAccessorySku = (skuOrPn: any): boolean => {
+  if (!skuOrPn) return false;
+  const norm = normalizeSku(typeof skuOrPn === 'string' ? skuOrPn : (skuOrPn.sku || skuOrPn.pn || ''));
+  return DISALLOWED_ACCESSORY_SKUS.has(norm);
+};
+
 export const resolveUConsumption = (
   pp: any,
   isTrackC: boolean = false
 ): { u: number; source: 'explicit' | 'zero_u_rule' | 'track_c_default' | 'rack_pattern_default' } => {
-  const normSku = normalizeSku(pp?.sku);
+  const normSku = normalizeSku(typeof pp === 'string' ? pp : (pp?.sku || pp?.pn));
+  const nameDesc = typeof pp === 'object' && pp ? `${pp?.name || ''} ${pp?.description || ''}`.toLowerCase() : '';
+
+  // Explicit user directive: SKU 821410 (פנל שערות / מברשת) occupies 1U in standard rack rails
+  if (normSku === '821410' || nameDesc.includes('שערות') || (nameDesc.includes('פנל') && nameDesc.includes('מברשת'))) {
+    return { u: 1, source: 'rack_pattern_default' };
+  }
 
   // Priority 1: Explicit valid volume
   const volResult = parseNormalizedVolume(pp);
@@ -259,16 +270,26 @@ export const resolveUConsumption = (
     return { u: 0, source: 'zero_u_rule' };
   }
 
+  const text = `${pp?.sku || ''} ${pp?.name || ''} ${pp?.description || ''}`.toLowerCase();
+  
+  // Specific catch for brush panel / cable management (פנל שיערות / פנל עיוור) that might default to 0 incorrectly
+  if (text.includes('פנל') || text.includes('פאנל') || text.includes('ניהול כבל') || text.includes('מארגן כבל')) {
+    const uMatch = text.match(/(\d+)\s*u\b/i);
+    if (uMatch) {
+        return { u: parseInt(uMatch[1], 10), source: 'rack_pattern_default' };
+    }
+    return { u: 1, source: 'rack_pattern_default' };
+  }
+
   // Priority 3: Track C flagged equipment with empty volume defaults to 1U
   if (isTrackC || isFlaggedForCabinetSuitability(pp)) {
     return { u: 1, source: 'track_c_default' };
   }
 
   // Priority 4: Rack accessories pattern-matching or 1U default
-  const text = `${pp?.sku || ''} ${pp?.name || ''} ${pp?.description || ''}`.toLowerCase();
-  const uMatch = text.match(/(\d+)\s*u\b/i);
-  if (uMatch) {
-    const parsed = parseInt(uMatch[1], 10);
+  const uMatchFallback = text.match(/(\d+)\s*u\b/i);
+  if (uMatchFallback) {
+    const parsed = parseInt(uMatchFallback[1], 10);
     if (!isNaN(parsed) && parsed >= 0) {
       return { u: parsed, source: 'rack_pattern_default' };
     }

@@ -20,6 +20,49 @@ export interface CabinetMatrixData {
 
 export const normalizeSku = (sku: any): string => String(sku ?? '').trim().toUpperCase();
 
+export const GENERIC_SHELF_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 240" width="100%" height="100%">
+  <defs>
+    <linearGradient id="shelfMetal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#334155" />
+      <stop offset="35%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="earMetal" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#475569" />
+      <stop offset="50%" stop-color="#64748b" />
+      <stop offset="100%" stop-color="#334155" />
+    </linearGradient>
+    <pattern id="ventGrid" width="24" height="14" patternUnits="userSpaceOnUse">
+      <rect x="2" y="2" width="20" height="5" rx="2.5" fill="#090d16" />
+      <rect x="2" y="3" width="20" height="2" rx="1" fill="#1e293b" opacity="0.6" />
+    </pattern>
+  </defs>
+  <!-- Base frame plate -->
+  <rect x="15" y="20" width="470" height="200" rx="8" fill="#090d16" stroke="#334155" stroke-width="2" />
+  <!-- Shelf Surface in 3D perspective -->
+  <polygon points="45,45 455,45 475,185 25,185" fill="url(#shelfMetal)" stroke="#64748b" stroke-width="2" />
+  <!-- Ventilation perforation grid -->
+  <polygon points="70,60 430,60 450,165 50,165" fill="url(#ventGrid)" opacity="0.95" />
+  <!-- Front fold / Lip -->
+  <polygon points="25,185 475,185 475,205 25,205" fill="#1e293b" stroke="#94a3b8" stroke-width="1.5" />
+  <line x1="25" y1="187" x2="475" y2="187" stroke="#94a3b8" stroke-width="2" opacity="0.7" />
+  <!-- Left mounting bracket with standard 19" rack holes -->
+  <rect x="15" y="40" width="28" height="148" rx="4" fill="url(#earMetal)" stroke="#94a3b8" stroke-width="1.5" />
+  <circle cx="29" cy="65" r="5" fill="#090d16" stroke="#cbd5e1" stroke-width="1.5" />
+  <circle cx="29" cy="114" r="5" fill="#090d16" stroke="#cbd5e1" stroke-width="1.5" />
+  <circle cx="29" cy="163" r="5" fill="#090d16" stroke="#cbd5e1" stroke-width="1.5" />
+  <!-- Right mounting bracket with standard 19" rack holes -->
+  <rect x="457" y="40" width="28" height="148" rx="4" fill="url(#earMetal)" stroke="#94a3b8" stroke-width="1.5" />
+  <circle cx="471" cy="65" r="5" fill="#090d16" stroke="#cbd5e1" stroke-width="1.5" />
+  <circle cx="471" cy="114" r="5" fill="#090d16" stroke="#cbd5e1" stroke-width="1.5" />
+  <circle cx="471" cy="163" r="5" fill="#090d16" stroke="#cbd5e1" stroke-width="1.5" />
+  <!-- Center metallic label badge -->
+  <rect x="150" y="190" width="200" height="13" rx="3" fill="#0f172a" stroke="#0284c7" stroke-width="1" />
+  <text x="250" y="200" font-family="system-ui, -apple-system, sans-serif" font-size="8.5" font-weight="bold" fill="#38bdf8" text-anchor="middle" letter-spacing="0.5">19" RACK SHELF • מדף מתכת מאוורר</text>
+</svg>
+`)}`;
+
 export const parseAccessoryCount = (val: any): number => {
   if (!val) return 0;
   const str = String(val).trim().toUpperCase();
@@ -40,30 +83,29 @@ export const parseAccessoryCount = (val: any): number => {
     return 0;
   }
   // Clean out common false-positive numbers like voltage or inches before matching quantity
-  let cleanStr = str.replace(/[0-9]{2,3}\s*V/gi, '');
+  let cleanStr = str.replace(/[0-9]{1,4}\s*[vV]\b|[0-9]{1,4}\s*וולט/gi, '');
   cleanStr = cleanStr.replace(/19\s*["״'']|19\s*inch/gi, '');
   
-  // Look for explicit quantity patterns like "2 מדפים", "כולל 4 מאווררים"
-  const qtyMatch = cleanStr.match(/(?:כולל|עם|מכיל)?\s*(\d+)\s*(?:יח|יחידות|מדפ|מאוורר|גלגל|רגל)/i);
+  // Look for explicit quantity patterns like "2 מדפים", "כולל 4 מאווררים", "2 יחידות", "4 מאווררים"
+  const qtyMatch = cleanStr.match(/(?:כולל|עם|מכיל)?\s*(\d+)\s*(?:יח|יחידות|מדפ|מאוורר|גלגל|רגל|fan|shelf)/i);
   if (qtyMatch) {
     return parseInt(qtyMatch[1], 10);
   }
   
   // If it's literally just a number
-  if (/^\s*\d+\s*$/.test(cleanStr)) {
+  if (/^\s*\d+\s*$/.test(cleanStr.trim())) {
     return parseInt(cleanStr.trim(), 10);
   }
-  // If positive inclusion phrasing is present without an explicit number, default to 1
+
+  // Standalone checkmark or inclusion phrases
   if (
+    /^(?:[Vv✓✔]|YES|TRUE|כלול|כולל)$/.test(str) ||
     str.includes('כלול') ||
     str.includes('כולל') ||
     str.includes('מדף') ||
     str.includes('מאוורר') ||
     str.includes('גלגל') ||
-    str.includes('רגליות') ||
-    str.includes('V') ||
-    str.includes('YES') ||
-    str.includes('TRUE')
+    str.includes('רגליות')
   ) {
     return 1;
   }
@@ -273,7 +315,7 @@ export const transformImageLink = (url: string, size: number = 600): string => {
   }
 };
 
-export const KNOWN_BRANDS = ['HIKVISION', 'EZVIZ', 'POLMAN', 'BOOST', 'INGENIUM', 'UBIQUITI', 'TP-LINK', 'DAHUA', 'D-LINK', 'CISCO'];
+export const KNOWN_BRANDS = ['HIKVISION', 'POLMAN', 'EZVIZ', 'CISCO', 'DAHUA', 'UBIQUITI', 'TP-LINK', 'D-LINK', 'BOOST', 'INGENIUM', 'RACKMOUNT'];
 
 export const deriveBrand = (pp: any): string => {
   if (!pp) return 'כללי';
@@ -282,7 +324,7 @@ export const deriveBrand = (pp: any): string => {
   const explicitBrand = pp.brand || pp['מותג'] || pp.Brand || pp.manufacturer || pp['יצרן'];
   if (explicitBrand && typeof explicitBrand === 'string' && !explicitBrand.startsWith('http')) {
     const trimmed = explicitBrand.trim();
-    if (trimmed && trimmed !== 'כללי' && trimmed !== 'אחר') {
+    if (trimmed && trimmed !== 'כללי' && trimmed !== 'אחר' && trimmed !== 'תשתיות' && trimmed !== 'מחירון תשתיות') {
       const up = trimmed.toUpperCase();
       const matched = KNOWN_BRANDS.find(b => up.includes(b));
       if (matched) return matched;
@@ -296,9 +338,8 @@ export const deriveBrand = (pp: any): string => {
     if (hay.includes(b)) return b;
   }
 
-  // 3. Fallback to clean category
-  const c = String(pp.category || '').replace('מחירון', '').replace(/20\d\d/, '').trim();
-  return c || 'כללי';
+  // 3. Fallback
+  return 'כללי';
 };
 
 export const parseDepthMmLocal = (txt: string): number => {
@@ -356,32 +397,33 @@ export interface GroupedRubric {
 export function groupAccessoriesForDisplay(
   accessories: any[],
   searchQuery: string = '',
-  availableU?: number
+  _availableU?: number
 ): GroupedRubric[] {
   const qTokens = searchQuery.trim().toLowerCase().split(/[\s\-/,]+/).filter(Boolean);
 
-  // 1. Capacity filter: if availableU is provided, hide items where uSize > availableU
-  // (0U items are never filtered out by capacity)
-  const capacityFiltered = accessories.filter(acc => {
-    if (availableU === undefined || availableU === null) return true;
-    const uSize = acc.uSize ?? 1;
-    if (uSize === 0) return true;
-    return uSize <= availableU;
-  });
-
-  // 2. Search filter across SKU, Name, Description, Brand
-  const filtered = capacityFiltered.filter(acc => {
+  // Search filter across SKU, Name, Description, Brand
+  // Note: We do NOT filter out items by availableU capacity here!
+  // All compatible items remain visible in their respective tabs/rubrics.
+  // The UI displays an "insufficient space" indicator and disables the add button
+  // for items that exceed remaining U, ensuring tabs never disappear.
+  const filtered = (accessories || []).filter(acc => {
     if (qTokens.length === 0) return true;
     const hay = `${acc.pn || ''} ${acc.sku || ''} ${acc.name || ''} ${acc.description || ''} ${acc.brand || ''}`.toLowerCase();
     return qTokens.every(tok => hay.includes(tok));
   });
 
-  // Ensure unique SKUs in the result
+  // Ensure unique SKUs in the result and filter disallowed items
   const seenSkus = new Set<string>();
   const uniqueFiltered = filtered.filter(acc => {
-    const sku = (acc.sku || acc.pn || '').toUpperCase();
-    if (seenSkus.has(sku)) return false;
-    seenSkus.add(sku);
+    const rawSku = (acc.sku || acc.pn || '').toUpperCase();
+    const norm = normalizeSku(rawSku);
+    if (!norm || norm === '111014') return false;
+    if (seenSkus.has(norm)) return false;
+    seenSkus.add(norm);
+    const itemText = `${acc.name || ''} ${acc.description || ''}`.toLowerCase();
+    if (norm === '821410' || itemText.includes('שערות') || (itemText.includes('פנל') && itemText.includes('מברשת'))) {
+      acc.uSize = 1;
+    }
     return true;
   });
 
@@ -391,12 +433,23 @@ export function groupAccessoriesForDisplay(
   const brandMap: Record<string, any[]> = {};
   const takesU: any[] = [];
   const freeU: any[] = [];
+  const pdus: any[] = [];
 
   nonShelves.forEach(acc => {
+    const rawSku = (acc.sku || acc.pn || '').toUpperCase();
+    const norm = normalizeSku(rawSku);
+    const itemText = `${acc.name || ''} ${acc.description || ''}`.toLowerCase();
+    if (norm === '821410' || itemText.includes('שערות') || (itemText.includes('פנל') && itemText.includes('מברשת'))) {
+      acc.uSize = 1;
+    }
+    if (acc._pdu) {
+      pdus.push(acc);
+      return;
+    }
     const b = String(acc.brand || '').trim();
     const isDistinctBrand = b && b !== 'כללי' && b !== 'אחר' && !b.startsWith('http');
-    if (isDistinctBrand || acc._promoted) {
-      const brandKey = isDistinctBrand ? b.toUpperCase() : 'מוצרי מותג';
+    if (isDistinctBrand) {
+      const brandKey = b.toUpperCase();
       if (!brandMap[brandKey]) brandMap[brandKey] = [];
       brandMap[brandKey].push(acc);
     } else {
@@ -420,9 +473,19 @@ export function groupAccessoriesForDisplay(
     });
   }
 
+  // Group: PDUs
+  if (pdus.length > 0) {
+    rubrics.push({
+      id: 'pdus',
+      title: 'פסי שקעים (PDU)',
+      items: pdus,
+      tone: 'bg-purple-50 text-purple-900 border-purple-200',
+    });
+  }
+
   // Priority Brand Groups: HIKVISION first, POLMAN second, then others alphabetically
   const brandKeys = Object.keys(brandMap);
-  const prioritizedBrands = ['תשתיות', 'HIKVISION', 'POLMAN'];
+  const prioritizedBrands = ['HIKVISION', 'POLMAN'];
 
   prioritizedBrands.forEach(bName => {
     const key = brandKeys.find(k => k.toUpperCase() === bName);
@@ -555,12 +618,53 @@ export const parseCabinetDepthFromName = (name: string): number => {
 };
 
 export const isCabinetProduct = (pp: any): boolean => {
-  const name = String(pp?.name || '').trim();
-  const sub = String(pp?.subcategory || '').trim();
+  if (!pp) return false;
+  const name = String(pp?.name || pp?.['שם פריט'] || '').trim();
+  const desc = String(pp?.description || pp?.['תיאור'] || '').trim();
+  const sub = String(pp?.subcategory || pp?.['תת קטגוריה'] || pp?.['קטגוריה'] || '').trim();
   const cat = String(pp?.category || '').trim();
-  const isExcluded = /מדף|אביזר|בורג|מאוורר|פאנל|פנל|מגירה|פס|תרמוסטט|ארגונית|סט|cable|management/i.test(name);
-  if (isExcluded) return false;
-  if (/ארון|מסד|Rack|Cabinet/i.test(name)) return true;
-  if (/ארונות תקשורת/i.test(sub) && /ארון|מסד/i.test(name)) return true;
+  const nested = String(pp?.nestedSubcategory || pp?.['Nested subcategory'] || '').trim();
+
+  // 1. Explicit accessories and mounted equipment are NOT cabinet enclosures
+  const isAccessoryOrEquipment = 
+    /מדף|מדפים|shelf|shelves|מגירה|drawer/i.test(name) ||
+    /פאנל|פנל|panel|blank|עיוור|סיבים/i.test(name) ||
+    /מאוורר|מפוח|fan|איוורור/i.test(name) ||
+    /פס שקע|פסי שקעים|שקע|pdu|power strip/i.test(name) ||
+    /ניהול כבל|מארגן כבל|תעלת כבל|ארגונית כבל|מברשת|brush|cable management/i.test(name) ||
+    /בורג|ברגים|אום|אומים|screw|cage nut/i.test(name) ||
+    /גלגל|גלגלים|caster|wheel|רגלי|רגלית|feet/i.test(name) ||
+    /דלת חלופית|דופן צד|side panel|מנעול לארון|ידית לארון|lock|handle/i.test(name) ||
+    /הארקה|grounding|תרמוסטט|thermostat|בסיס לארון|plinth/i.test(name) ||
+    /מסיל|מסילות|rail|פרופיל|תושבת|bracket|מתאם/i.test(name) ||
+    /מתג|switch|נתב|router|מגבר|amplifier|אל פסק|ups|סולל|battery|nvr|dvr|מצלמ|camera|ספק כח|ספק כוח|power supply/i.test(name) ||
+    /ערכת|kit|כלי עבודה|tool|מחלץ|extractor/i.test(name);
+
+  if (isAccessoryOrEquipment) return false;
+
+  // 2. Explicit cabinet enclosures by subcategory or nested subcategory
+  const isCabinetSub = 
+    /ארונות עומדים|ארונות תלויים|ארונות שרתים|ארונות פתוחים|ארונות תקשורת עומדים|ארונות תקשורת תלויים|מסדים עומדים|מסדים תלויים|מסדים פתוחים|ארונות ומסדים|מסדים/i.test(nested) ||
+    /ארונות עומדים|ארונות תלויים|ארונות שרתים|ארונות פתוחים|ארונות תקשורת עומדים|ארונות תקשורת תלויים/i.test(sub);
+
+  if (isCabinetSub) return true;
+
+  // 3. Explicit cabinet name matches (e.g. "ארון תקשורת עומד 42U", "ארון שרתים 19 אינץ'", "מסד תקשורת 15U", "מארז ארון...")
+  if (/(?:ארון תקשורת|ארון שרתים|ארון עומד|ארון תלוי|ארון פתוח|מסד תקשורת|מסד שרתים|מסד עומד|מסד תלוי|מסד פתוח|מארז תקשורת|server\s+cabinet|network\s+cabinet|wallmount\s+cabinet|floor\s+cabinet|rack\s+cabinet)/i.test(name)) {
+    return true;
+  }
+
+  // 4. Cabinet starting with ארון / מסד / מארז with a U-size declaration (e.g. "ארון 19 12U", "מסד 42U 800x1000")
+  if (/^(?:ארון|מסד|מארז|Cabinet|Rack)\b/i.test(name) && /\b\d{1,2}\s*[uU]\b/i.test(`${name} ${desc}`)) {
+    return true;
+  }
+
+  // 5. If subcategory/category is "ארונות תקשורת" and product is named like a cabinet
+  if (/ארונות תקשורת|מסדים/i.test(sub) || /ארונות תקשורת|מסדים/i.test(cat)) {
+    if (/\b\d{1,2}\s*[uU]\b/i.test(name) && /ארון|מסד|Cabinet|Rack/i.test(name)) {
+      return true;
+    }
+  }
+
   return false;
 };

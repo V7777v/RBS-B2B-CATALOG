@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CabinetDimensions3D } from './Cabinet3DTypes';
+import { CabinetDimensions3D, DoorLeafState, DoorState } from './Cabinet3DTypes';
 import { CabinetMatrixData } from '../../utils/cabinetData';
 import {
   SCALE_MM_TO_UNITS,
@@ -7,6 +7,8 @@ import {
   RACK_19_WIDTH_UNITS,
   USABLE_OPENING_WIDTH,
   BuildCabinetFrameOptions,
+  CabinetDoorsInfo,
+  resolveCabinetDoorsInfo,
 } from './CabinetModelBuilder';
 
 /**
@@ -30,7 +32,8 @@ import {
  */
 
 // Procedural texture generators for authentic physical appearance
-function createPerforatedMeshTexture(): THREE.CanvasTexture {
+function createPerforatedMeshTexture(): THREE.CanvasTexture | THREE.Texture {
+  if (typeof document === 'undefined') return new THREE.Texture();
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 256;
@@ -80,7 +83,8 @@ function createPerforatedMeshTexture(): THREE.CanvasTexture {
 }
 
 // Page 8: Diagonal ventilation slots texture for Fixed Shelf PN 117914
-export function createDiagonalVentSlotTexture(): THREE.CanvasTexture {
+export function createDiagonalVentSlotTexture(): THREE.CanvasTexture | THREE.Texture {
+  if (typeof document === 'undefined') return new THREE.Texture();
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 512;
@@ -129,7 +133,8 @@ export function createDiagonalVentSlotTexture(): THREE.CanvasTexture {
 }
 
 // Page 4: 400mm width cable tray pattern texture
-function createCableTrayTexture(): THREE.CanvasTexture {
+function createCableTrayTexture(): THREE.CanvasTexture | THREE.Texture {
+  if (typeof document === 'undefined') return new THREE.Texture();
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 1024;
@@ -179,13 +184,15 @@ export function build447510TCabinetGroup(
     shelfMat: THREE.Material;
     includedShelfMat: THREE.Material;
   },
-  options?: BuildCabinetFrameOptions & { doorState?: 'open' | 'closed' | 'transparent' }
+  options?: BuildCabinetFrameOptions & { doorState?: DoorState }
 ): {
   group: THREE.Group;
   uCenters: number[];
   innerDepthUnits: number;
   doorsGroup?: THREE.Group;
-  setDoorMode?: (mode: 'open' | 'closed' | 'transparent') => void;
+  setDoorMode?: (side: 'front' | 'rear', state: DoorLeafState) => void;
+  setRearCutaway?: (active: boolean) => void;
+  doorsInfo?: CabinetDoorsInfo;
 } {
   const group = new THREE.Group();
   group.name = 'cabinet-447510T-root';
@@ -246,14 +253,31 @@ export function build447510TCabinetGroup(
   });
 
   const perfTexture = createPerforatedMeshTexture();
-  const perfDoorMat = new THREE.MeshStandardMaterial({
+  const frontPerfDoorMat = new THREE.MeshStandardMaterial({
     map: perfTexture,
     color: 0x181a1e,
     roughness: 0.35,
     metalness: 0.75,
     transparent: true,
-    opacity: 0.40, // Semi-transparent by default so user sees internal 44U equipment clearly!
+    opacity: 0.38,
   });
+
+  const rearPerfDoorMat = new THREE.MeshStandardMaterial({
+    map: perfTexture,
+    color: 0x181a1e,
+    roughness: 0.35,
+    metalness: 0.75,
+    transparent: true,
+    opacity: 0.38,
+  });
+
+  const frontDoorFrameMat = (ral9005Mat as THREE.MeshStandardMaterial).clone();
+  frontDoorFrameMat.transparent = true;
+  frontDoorFrameMat.opacity = 0.42;
+
+  const rearDoorFrameMat = (ral9005Mat as THREE.MeshStandardMaterial).clone();
+  rearDoorFrameMat.transparent = true;
+  rearDoorFrameMat.opacity = 0.42;
 
   // =========================================================================
   // 1. BASE PLINTH & CASTERS + LEVELING FEET (Page 3 Bottom View & Page 1)
@@ -285,16 +309,28 @@ export function build447510TCabinetGroup(
     casterGroup.name = `caster-wheel-${idx + 1}`;
     casterGroup.position.set(cx, -halfH - 0.35, cz);
 
+    const castersItem = {
+      instanceId: `casters-feet-set-447510T`,
+      sku: 'CASTERS-FEET-SET',
+      name: '4 גלגלים כבדים + 4 רגליות פילוס (כלול בארון)',
+      description: 'מערכת שינוע וייצוב הכוללת 4 גלגלי נשיאה כבדים כפולים עם מעצור ו-4 רגליות פילוס M12 מתכווננות להעמסה סטטית עד 1000 ק״ג.',
+      price: 0,
+      isIncluded: true,
+      type: 'hardware',
+    };
+
     // Swivel base mounting flange (bolted to cabinet plinth)
     const flangeGeom = new THREE.BoxGeometry(0.36, 0.05, 0.36);
     const flangeMesh = new THREE.Mesh(flangeGeom, chromeMat);
     flangeMesh.position.set(0, 0.28, 0);
+    (flangeMesh as any).userData = { isProductMesh: true, item: castersItem };
     casterGroup.add(flangeMesh);
 
     // Swivel fork
     const forkGeom = new THREE.BoxGeometry(0.24, 0.26, 0.24);
     const forkMesh = new THREE.Mesh(forkGeom, chromeMat);
     forkMesh.position.set(0, 0.14, 0);
+    (forkMesh as any).userData = { isProductMesh: true, item: castersItem };
     casterGroup.add(forkMesh);
 
     // Dual black rubber wheels
@@ -304,8 +340,10 @@ export function build447510TCabinetGroup(
       const wheelMesh = new THREE.Mesh(wheelGeom, materials.rubberMat);
       wheelMesh.position.set(wheelX, 0, 0);
       wheelMesh.castShadow = true;
+      (wheelMesh as any).userData = { isProductMesh: true, item: castersItem };
       casterGroup.add(wheelMesh);
     });
+    (casterGroup as any).userData = { isProductMesh: true, item: castersItem };
     group.add(casterGroup);
 
     // B. Threaded Leveling Foot (Page 3 bottom view, mounted adjacent to caster)
@@ -320,13 +358,16 @@ export function build447510TCabinetGroup(
     const stemGeom = new THREE.CylinderGeometry(0.06, 0.06, 0.32, 12);
     const stemMesh = new THREE.Mesh(stemGeom, chromeMat);
     stemMesh.position.set(0, 0.12, 0);
+    (stemMesh as any).userData = { isProductMesh: true, item: castersItem };
     footGroup.add(stemMesh);
 
     // Heavy rubber base pad
     const padGeom = new THREE.CylinderGeometry(0.26, 0.30, 0.12, 20);
     const padMesh = new THREE.Mesh(padGeom, materials.rubberMat);
     padMesh.position.set(0, -0.04, 0);
+    (padMesh as any).userData = { isProductMesh: true, item: castersItem };
     footGroup.add(padMesh);
+    (footGroup as any).userData = { isProductMesh: true, item: castersItem };
 
     group.add(footGroup);
   });
@@ -471,8 +512,11 @@ export function build447510TCabinetGroup(
   });
 
   // U-NUMBER LABELS (1..44U) on front rails
-  const uTextureCache = new Map<number, THREE.CanvasTexture>();
+  const uTextureCache = new Map<number, THREE.CanvasTexture | THREE.Texture>();
   const getUTexture = (uNum: number) => {
+    if (typeof document === 'undefined') {
+      return new THREE.Texture();
+    }
     let tex = uTextureCache.get(uNum);
     if (!tex) {
       const c = document.createElement('canvas');
@@ -528,7 +572,32 @@ export function build447510TCabinetGroup(
   const fanHoodMesh = new THREE.Mesh(fanHoodGeom, ral9005Mat);
   fanHoodMesh.position.set(0, halfH + 0.03, 0);
   fanHoodMesh.castShadow = true;
+  const fanUnitItem = {
+    instanceId: 'roof-fan-bay-447510T',
+    sku: 'ROOF-FAN-4',
+    name: 'יחידת 4 מאווררי גג בפלטה אחת עם כבל (כלול בארון)',
+    description: 'יחידת איוורור גג הכוללת 4 מאווררים מובנים בפלטה אינטגרלית אחת עם כבל הזנה ותקע ישראלי תקני (ללא תפיסת מקום ב-U).',
+    price: 0,
+    isIncluded: true,
+    type: 'fan',
+  };
+  (fanHoodMesh as any).userData = { isProductMesh: true, item: fanUnitItem };
   group.add(fanHoodMesh);
+
+  // Power cable running from roof fan unit with standard Israeli 3-pin plug (Page 1 point 3)
+  const cableMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.8 });
+  const cableGeom = new THREE.CylinderGeometry(0.03, 0.03, 5.2, 8);
+  const powerCable = new THREE.Mesh(cableGeom, cableMat);
+  powerCable.position.set(1.4, halfH - 2.6, -halfD + 0.6);
+  (powerCable as any).userData = { isProductMesh: true, item: fanUnitItem };
+  group.add(powerCable);
+
+  // Israeli standard 3-pin electrical plug
+  const plugGeom = new THREE.BoxGeometry(0.18, 0.32, 0.12);
+  const plugMesh = new THREE.Mesh(plugGeom, materials.metalMat);
+  plugMesh.position.set(1.4, halfH - 5.2, -halfD + 0.6);
+  (plugMesh as any).userData = { isProductMesh: true, item: fanUnitItem };
+  group.add(plugMesh);
 
   // Horizontal cooling louvers/slots on fan hood
   const louverGeom = new THREE.BoxGeometry(fanHoodWidth * 0.75, 0.015, 0.08);
@@ -619,27 +688,30 @@ export function build447510TCabinetGroup(
   group.add(rearCutout);
 
   // Upper Header Brand Plate (Boost RackMount PN 447510T)
-  const badgeCanvas = document.createElement('canvas');
-  badgeCanvas.width = 1024;
-  badgeCanvas.height = 256;
-  const bCtx = badgeCanvas.getContext('2d');
-  if (bCtx) {
-    bCtx.fillStyle = '#0a0f1d';
-    bCtx.fillRect(0, 0, 1024, 256);
-    bCtx.strokeStyle = '#0284c7';
-    bCtx.lineWidth = 6;
-    bCtx.strokeRect(6, 6, 1012, 244);
-    bCtx.fillStyle = '#ffffff';
-    bCtx.font = '900 76px sans-serif';
-    bCtx.fillText('BOOST RACKMOUNT', 40, 95);
-    bCtx.fillStyle = '#38bdf8';
-    bCtx.font = '700 52px monospace';
-    bCtx.fillText('PN 447510T • 44U 75x100', 40, 165);
-    bCtx.fillStyle = '#94a3b8';
-    bCtx.font = '600 28px sans-serif';
-    bCtx.fillText('ANSI/EIA RS-310-D • DIN 41494 • COLD ROLLED STEEL', 40, 220);
+  let badgeTex: THREE.Texture | null = null;
+  if (typeof document !== 'undefined') {
+    const badgeCanvas = document.createElement('canvas');
+    badgeCanvas.width = 1024;
+    badgeCanvas.height = 256;
+    const bCtx = badgeCanvas.getContext('2d');
+    if (bCtx) {
+      bCtx.fillStyle = '#0a0f1d';
+      bCtx.fillRect(0, 0, 1024, 256);
+      bCtx.strokeStyle = '#0284c7';
+      bCtx.lineWidth = 6;
+      bCtx.strokeRect(6, 6, 1012, 244);
+      bCtx.fillStyle = '#ffffff';
+      bCtx.font = '900 76px sans-serif';
+      bCtx.fillText('BOOST RACKMOUNT', 40, 95);
+      bCtx.fillStyle = '#38bdf8';
+      bCtx.font = '700 52px monospace';
+      bCtx.fillText('PN 447510T • 44U 75x100', 40, 165);
+      bCtx.fillStyle = '#94a3b8';
+      bCtx.font = '600 28px sans-serif';
+      bCtx.fillText('ANSI/EIA RS-310-D • DIN 41494 • COLD ROLLED STEEL', 40, 220);
+    }
+    badgeTex = new THREE.CanvasTexture(badgeCanvas);
   }
-  const badgeTex = new THREE.CanvasTexture(badgeCanvas);
   const badgeMesh = new THREE.Mesh(
     new THREE.BoxGeometry(4.8, roofHeight * 0.85, 0.02),
     new THREE.MeshStandardMaterial({ map: badgeTex, roughness: 0.3, metalness: 0.8 })
@@ -658,7 +730,20 @@ export function build447510TCabinetGroup(
   const doorLeafHeight = postHeight * 0.99;
   const doorThick = 0.06;
 
-  // Door leaf geometry helper
+  // Raycast toggler helper for removed/active doors
+  const setHierarchyRaycast = (obj: THREE.Object3D, enabled: boolean) => {
+    obj.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        if (!enabled) {
+          child.raycast = () => {};
+        } else {
+          child.raycast = THREE.Mesh.prototype.raycast;
+        }
+      }
+    });
+  };
+
+  // Front door leaf geometry helper
   const createDoorLeaf = (isLeft: boolean) => {
     const leafGroup = new THREE.Group();
     leafGroup.name = isLeft ? 'front-left-door-leaf' : 'front-right-door-leaf';
@@ -671,17 +756,54 @@ export function build447510TCabinetGroup(
     const centerOffset = isLeft ? doorLeafWidth / 2 : -doorLeafWidth / 2;
 
     // Outer steel border frame (1.5mm cold rolled steel)
-    const frameMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(doorLeafWidth, doorLeafHeight, doorThick),
-      ral9005Mat
-    );
-    frameMesh.position.set(centerOffset, 0, 0);
-    leafGroup.add(frameMesh);
+    const frontDoorItem = {
+      instanceId: isLeft ? 'front-door-left-447510T' : 'front-door-right-447510T',
+      sku: 'DOOR-FRONT-PERF-SPRING',
+      name: 'דלת קדמית כפולה מחוררת עם מנעול קפיצי (כלול בארון)',
+      description: 'דלת קדמית כפולה מחוררת (Spring Lock) נשלפת עם מעל 75% מעבר אוויר לתקני קירור שרתים מתקדמים.',
+      price: 0,
+      isIncluded: true,
+      type: 'door',
+    };
 
-    // Inset perforated mesh window (hexagonal high-airflow ventilation)
-    const meshWindowGeom = new THREE.BoxGeometry(doorLeafWidth - 0.50, doorLeafHeight - 0.80, doorThick + 0.01);
-    const meshWindow = new THREE.Mesh(meshWindowGeom, perfDoorMat);
+    // Hollow 4-piece perimeter frame with genuine open center aperture
+    const frameBorderSide = 0.18;
+    const frameBorderTop = 0.22;
+    const frameBorderBtm = 0.22;
+    const openingW = Math.max(0.2, doorLeafWidth - 2 * frameBorderSide);
+    const openingH = Math.max(0.2, doorLeafHeight - frameBorderTop - frameBorderBtm);
+
+    // Top beam
+    const topBeam = new THREE.Mesh(new THREE.BoxGeometry(doorLeafWidth, frameBorderTop, doorThick), frontDoorFrameMat);
+    topBeam.position.set(centerOffset, doorLeafHeight / 2 - frameBorderTop / 2, 0);
+    (topBeam as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
+    leafGroup.add(topBeam);
+
+    // Bottom beam
+    const btmBeam = new THREE.Mesh(new THREE.BoxGeometry(doorLeafWidth, frameBorderBtm, doorThick), frontDoorFrameMat);
+    btmBeam.position.set(centerOffset, -doorLeafHeight / 2 + frameBorderBtm / 2, 0);
+    (btmBeam as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
+    leafGroup.add(btmBeam);
+
+    // Hinge-side stile
+    const hingeStileX = isLeft ? frameBorderSide / 2 : -frameBorderSide / 2;
+    const hingeStile = new THREE.Mesh(new THREE.BoxGeometry(frameBorderSide, openingH, doorThick), frontDoorFrameMat);
+    hingeStile.position.set(hingeStileX, 0, 0);
+    (hingeStile as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
+    leafGroup.add(hingeStile);
+
+    // Meeting-side stile
+    const meetingStileX = isLeft ? doorLeafWidth - frameBorderSide / 2 : -doorLeafWidth + frameBorderSide / 2;
+    const meetingStile = new THREE.Mesh(new THREE.BoxGeometry(frameBorderSide, openingH, doorThick), frontDoorFrameMat);
+    meetingStile.position.set(meetingStileX, 0, 0);
+    (meetingStile as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
+    leafGroup.add(meetingStile);
+
+    // Inset perforated mesh window (hexagonal high-airflow ventilation) situated inside opening
+    const meshWindowGeom = new THREE.BoxGeometry(openingW + 0.02, openingH + 0.02, doorThick * 0.4);
+    const meshWindow = new THREE.Mesh(meshWindowGeom, frontPerfDoorMat);
     meshWindow.position.set(centerOffset, 0, 0.005);
+    (meshWindow as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
     leafGroup.add(meshWindow);
 
     // Spring Lock Handle on meeting stile (Page 1 point 1 & Page 3)
@@ -690,24 +812,28 @@ export function build447510TCabinetGroup(
       const handleBaseGeom = new THREE.BoxGeometry(0.16, 1.40, 0.08);
       const handleBase = new THREE.Mesh(handleBaseGeom, chromeMat);
       handleBase.position.set(doorLeafWidth - 0.16, 0, 0.04);
+      (handleBase as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
       leafGroup.add(handleBase);
 
       // Swing lever
       const leverGeom = new THREE.BoxGeometry(0.10, 0.85, 0.06);
       const lever = new THREE.Mesh(leverGeom, materials.accentMat);
       lever.position.set(doorLeafWidth - 0.16, -0.15, 0.08);
+      (lever as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
       leafGroup.add(lever);
 
       // Keyhole cylinder
       const keyhole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 12), chromeMat);
       keyhole.position.set(doorLeafWidth - 0.16, 0.40, 0.085);
       keyhole.rotateX(Math.PI / 2);
+      (keyhole as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
       leafGroup.add(keyhole);
     } else {
       // Right leaf meeting stile lip / rubber sealing bumper
       const lipGeom = new THREE.BoxGeometry(0.08, doorLeafHeight, 0.04);
       const lip = new THREE.Mesh(lipGeom, materials.rubberMat);
       lip.position.set(-doorLeafWidth + 0.04, 0, 0.02);
+      (lip as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
       leafGroup.add(lip);
     }
 
@@ -715,9 +841,11 @@ export function build447510TCabinetGroup(
     [-doorLeafHeight / 2 + 0.15, doorLeafHeight / 2 - 0.15].forEach(hy => {
       const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.16, 12), chromeMat);
       hinge.position.set(0, hy, 0);
+      (hinge as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
       leafGroup.add(hinge);
     });
 
+    (leafGroup as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
     return leafGroup;
   };
 
@@ -727,53 +855,199 @@ export function build447510TCabinetGroup(
   doorsRootGroup.add(rightDoorLeaf);
   group.add(doorsRootGroup);
 
-  // Door animation/state handler
-  const setDoorMode = (mode: 'open' | 'closed' | 'transparent') => {
-    if (mode === 'open') {
-      leftDoorLeaf.rotation.y = -Math.PI * 0.58; // Open 105 degrees outwards
-      rightDoorLeaf.rotation.y = Math.PI * 0.58;
-      perfDoorMat.opacity = 0.90;
-      perfDoorMat.transparent = false;
-    } else if (mode === 'closed') {
-      leftDoorLeaf.rotation.y = 0;
-      rightDoorLeaf.rotation.y = 0;
-      perfDoorMat.opacity = 0.95;
-      perfDoorMat.transparent = false;
-    } else {
-      // 'transparent' (default for comfortable equipment viewing & addition)
-      leftDoorLeaf.rotation.y = 0;
-      rightDoorLeaf.rotation.y = 0;
-      perfDoorMat.opacity = 0.38;
-      perfDoorMat.transparent = true;
-    }
-  };
-
-  // Initialize initial door state
-  setDoorMode(options?.doorState || 'transparent');
-
   // =========================================================================
   // 8. REAR DOUBLE PERFORATED DOORS (Page 1 point 2, Pages 2 & 3)
   // Split French doors with perforated mesh and spring lock on the back
   // =========================================================================
   const rearDoorsGroup = new THREE.Group();
-  rearDoorsGroup.name = 'rear-double-doors';
+  rearDoorsGroup.name = 'rear-double-doors-group';
 
-  [-doorLeafWidth / 2 - 0.02, doorLeafWidth / 2 + 0.02].forEach(rx => {
-    const rDoorFrame = new THREE.Mesh(
-      new THREE.BoxGeometry(doorLeafWidth, doorLeafHeight, doorThick),
-      ral9005Mat
-    );
-    rDoorFrame.position.set(rx, -halfH + baseHeight + doorLeafHeight / 2, -halfD - 0.04);
-    rearDoorsGroup.add(rDoorFrame);
+  const createRearDoorLeaf = (isLeft: boolean) => {
+    const leafGroup = new THREE.Group();
+    leafGroup.name = isLeft ? 'rear-left-door-leaf' : 'rear-right-door-leaf';
+
+    // Pivot point at the outer rear corner
+    const hingeX = isLeft ? -halfW + 0.08 : halfW - 0.08;
+    leafGroup.position.set(hingeX, -halfH + baseHeight + doorLeafHeight / 2, -halfD - 0.04);
+
+    const centerOffset = isLeft ? doorLeafWidth / 2 : -doorLeafWidth / 2;
+
+    const rearDoorItem = {
+      instanceId: isLeft ? 'rear-door-left-447510T' : 'rear-door-right-447510T',
+      sku: 'DOOR-REAR-PERF-SPRING',
+      name: 'דלת אחורית כפולה מחוררת עם מנעול קפיצי (כלול בארון)',
+      description: 'דלת אחורית כפולה מחוררת (Split French Doors) עם מנעול קפיצי ומעבר אוויר חופשי של 75% לפליטת חום יעילה.',
+      price: 0,
+      isIncluded: true,
+      type: 'door',
+    };
+
+    // Hollow 4-piece perimeter frame with genuine open center aperture
+    const frameBorderSide = 0.18;
+    const frameBorderTop = 0.22;
+    const frameBorderBtm = 0.22;
+    const openingW = Math.max(0.2, doorLeafWidth - 2 * frameBorderSide);
+    const openingH = Math.max(0.2, doorLeafHeight - frameBorderTop - frameBorderBtm);
+
+    const rTopBeam = new THREE.Mesh(new THREE.BoxGeometry(doorLeafWidth, frameBorderTop, doorThick), rearDoorFrameMat);
+    rTopBeam.position.set(centerOffset, doorLeafHeight / 2 - frameBorderTop / 2, 0);
+    (rTopBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+    leafGroup.add(rTopBeam);
+
+    const rBtmBeam = new THREE.Mesh(new THREE.BoxGeometry(doorLeafWidth, frameBorderBtm, doorThick), rearDoorFrameMat);
+    rBtmBeam.position.set(centerOffset, -doorLeafHeight / 2 + frameBorderBtm / 2, 0);
+    (rBtmBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+    leafGroup.add(rBtmBeam);
+
+    const rHingeStileX = isLeft ? frameBorderSide / 2 : -frameBorderSide / 2;
+    const rHingeStile = new THREE.Mesh(new THREE.BoxGeometry(frameBorderSide, openingH, doorThick), rearDoorFrameMat);
+    rHingeStile.position.set(rHingeStileX, 0, 0);
+    (rHingeStile as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+    leafGroup.add(rHingeStile);
+
+    const rMeetingStileX = isLeft ? doorLeafWidth - frameBorderSide / 2 : -doorLeafWidth + frameBorderSide / 2;
+    const rMeetingStile = new THREE.Mesh(new THREE.BoxGeometry(frameBorderSide, openingH, doorThick), rearDoorFrameMat);
+    rMeetingStile.position.set(rMeetingStileX, 0, 0);
+    (rMeetingStile as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+    leafGroup.add(rMeetingStile);
 
     const rMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(doorLeafWidth - 0.50, doorLeafHeight - 0.80, doorThick + 0.01),
-      perfDoorMat
+      new THREE.BoxGeometry(openingW + 0.02, openingH + 0.02, doorThick * 0.4),
+      rearPerfDoorMat
     );
-    rMesh.position.set(rx, -halfH + baseHeight + doorLeafHeight / 2, -halfD - 0.04);
-    rearDoorsGroup.add(rMesh);
-  });
+    rMesh.position.set(centerOffset, 0, -0.005);
+    (rMesh as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+    leafGroup.add(rMesh);
+
+    // Spring Lock handle on meeting stile
+    if (isLeft) {
+      const handleBaseGeom = new THREE.BoxGeometry(0.16, 1.40, 0.08);
+      const handleBase = new THREE.Mesh(handleBaseGeom, chromeMat);
+      handleBase.position.set(doorLeafWidth - 0.16, 0, -0.04);
+      (handleBase as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      leafGroup.add(handleBase);
+    } else {
+      const lipGeom = new THREE.BoxGeometry(0.08, doorLeafHeight, 0.04);
+      const lip = new THREE.Mesh(lipGeom, materials.rubberMat);
+      lip.position.set(-doorLeafWidth + 0.04, 0, -0.02);
+      (lip as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      leafGroup.add(lip);
+    }
+
+    // Hinges
+    [-doorLeafHeight / 2 + 0.15, doorLeafHeight / 2 - 0.15].forEach(hy => {
+      const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.16, 12), chromeMat);
+      hinge.position.set(0, hy, 0);
+      (hinge as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      leafGroup.add(hinge);
+    });
+
+    (leafGroup as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+    return leafGroup;
+  };
+
+  const leftRearDoorLeaf = createRearDoorLeaf(true);
+  const rightRearDoorLeaf = createRearDoorLeaf(false);
+  rearDoorsGroup.add(leftRearDoorLeaf);
+  rearDoorsGroup.add(rightRearDoorLeaf);
   group.add(rearDoorsGroup);
+
+  // Door state tracking & cutaway management
+  let currentRearDoorState: DoorLeafState = options?.doorState?.rear || 'transparent';
+  let isCutawayActive = false;
+
+  const updateRearDoorOpacity = () => {
+    if (currentRearDoorState === 'removed') return;
+    if (isCutawayActive && (currentRearDoorState === 'closed' || currentRearDoorState === 'transparent')) {
+      rearPerfDoorMat.opacity = 0.15;
+      rearPerfDoorMat.transparent = true;
+      rearDoorFrameMat.opacity = 0.18;
+      rearDoorFrameMat.transparent = true;
+    } else {
+      if (currentRearDoorState === 'closed') {
+        rearPerfDoorMat.opacity = 0.95;
+        rearPerfDoorMat.transparent = false;
+        rearDoorFrameMat.opacity = 0.95;
+        rearDoorFrameMat.transparent = false;
+      } else if (currentRearDoorState === 'transparent') {
+        rearPerfDoorMat.opacity = 0.38;
+        rearPerfDoorMat.transparent = true;
+        rearDoorFrameMat.opacity = 0.42;
+        rearDoorFrameMat.transparent = true;
+      } else if (currentRearDoorState === 'open') {
+        rearPerfDoorMat.opacity = 0.90;
+        rearPerfDoorMat.transparent = false;
+        rearDoorFrameMat.opacity = 0.95;
+        rearDoorFrameMat.transparent = false;
+      }
+    }
+  };
+
+  const setRearCutaway = (active: boolean) => {
+    isCutawayActive = active;
+    updateRearDoorOpacity();
+  };
+
+  // Door animation/state handler for front and rear leaves
+  const setDoorMode = (side: 'front' | 'rear', state: DoorLeafState) => {
+    if (side === 'front') {
+      if (state === 'removed') {
+        doorsRootGroup.visible = false;
+        setHierarchyRaycast(doorsRootGroup, false);
+      } else {
+        doorsRootGroup.visible = true;
+        setHierarchyRaycast(doorsRootGroup, true);
+        if (state === 'open') {
+          leftDoorLeaf.rotation.y = -Math.PI * 0.58; // Open 105 degrees outwards
+          rightDoorLeaf.rotation.y = Math.PI * 0.58;
+          frontPerfDoorMat.opacity = 0.90;
+          frontPerfDoorMat.transparent = false;
+          frontDoorFrameMat.opacity = 0.95;
+          frontDoorFrameMat.transparent = false;
+        } else if (state === 'closed') {
+          leftDoorLeaf.rotation.y = 0;
+          rightDoorLeaf.rotation.y = 0;
+          frontPerfDoorMat.opacity = 0.95;
+          frontPerfDoorMat.transparent = false;
+          frontDoorFrameMat.opacity = 0.95;
+          frontDoorFrameMat.transparent = false;
+        } else {
+          // 'transparent'
+          leftDoorLeaf.rotation.y = 0;
+          rightDoorLeaf.rotation.y = 0;
+          frontPerfDoorMat.opacity = 0.38;
+          frontPerfDoorMat.transparent = true;
+          frontDoorFrameMat.opacity = 0.42;
+          frontDoorFrameMat.transparent = true;
+        }
+      }
+    } else {
+      // 'rear'
+      currentRearDoorState = state;
+      if (state === 'removed') {
+        rearDoorsGroup.visible = false;
+        setHierarchyRaycast(rearDoorsGroup, false);
+      } else {
+        rearDoorsGroup.visible = true;
+        setHierarchyRaycast(rearDoorsGroup, true);
+        if (state === 'open') {
+          // Opposite rotation direction to front to swing 105° outward behind
+          leftRearDoorLeaf.rotation.y = Math.PI * 0.58;
+          rightRearDoorLeaf.rotation.y = -Math.PI * 0.58;
+        } else {
+          leftRearDoorLeaf.rotation.y = 0;
+          rightRearDoorLeaf.rotation.y = 0;
+        }
+        updateRearDoorOpacity();
+      }
+    }
+  };
+
+  // Initialize initial door states
+  const initialFrontState = options?.doorState?.front || 'transparent';
+  const initialRearState = options?.doorState?.rear || 'transparent';
+  setDoorMode('front', initialFrontState);
+  setDoorMode('rear', initialRearState);
 
   // =========================================================================
   // 9. DETACHABLE SIDE PANELS WITH ROUND LOCKS (Page 1 point 9, Pages 2 & 3)
@@ -782,21 +1056,34 @@ export function build447510TCabinetGroup(
   const sidePanelGeom = new THREE.BoxGeometry(0.04, postHeight * 0.98, sideWidth);
 
   [-halfW + 0.02, halfW - 0.02].forEach((sx, idx) => {
+    const sidePanelItem = {
+      instanceId: `side-panel-${idx === 0 ? 'left' : 'right'}-447510T`,
+      sku: 'SIDE-PANELS-LOCK',
+      name: 'דלתות צד פריקות עם מנעול עגול (כלול בארון)',
+      description: 'זוג דלתות צד מפלדה פריקות עם מנעול עגול (Round Lock) וצילינדר מפתח עליון לפתיחה קלה ותחזוקה מהירה של ציוד התקשורת.',
+      price: 0,
+      isIncluded: true,
+      type: 'door',
+    };
+
     const sPanel = new THREE.Mesh(sidePanelGeom, ral9005Mat);
     sPanel.position.set(sx, -halfH + baseHeight + postHeight / 2, 0);
     sPanel.receiveShadow = true;
+    (sPanel as any).userData = { isProductMesh: true, item: sidePanelItem };
     group.add(sPanel);
 
     // Small Round Lock with keyhole at top center (Page 1 point 9 & Page 3 side view)
     const lockCylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.06, 16), chromeMat);
     lockCylinder.rotateZ(Math.PI / 2);
     lockCylinder.position.set(sx + (sx > 0 ? 0.02 : -0.02), halfH - roofHeight - 0.45, 0);
+    (lockCylinder as any).userData = { isProductMesh: true, item: sidePanelItem };
     group.add(lockCylinder);
 
     // Recessed finger release latches
     [-sideWidth * 0.35, sideWidth * 0.35].forEach(lz => {
       const latch = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.30, 0.15), materials.metalMat);
       latch.position.set(sx, halfH - roofHeight - 0.80, lz);
+      (latch as any).userData = { isProductMesh: true, item: sidePanelItem };
       group.add(latch);
     });
   });
@@ -804,10 +1091,21 @@ export function build447510TCabinetGroup(
   // =========================================================================
   // 10. GROUNDING COPPER BUSBAR & BONDING WIRES (Page 1 point 8)
   // =========================================================================
+  const groundBarItem = {
+    instanceId: 'grounding-busbar-447510T',
+    sku: 'GROUND-BAR-CU',
+    name: 'פס הארקה ראשי מנחושת וכבלים (כלול בארון)',
+    description: 'פס הארקה ראשי מנחושת טהורה בבסיס הארון כולל מחברי הארקה וכבלי הארקה תקניים צהוב-ירוק מחוברים לשלד ולדלתות.',
+    price: 0,
+    isIncluded: true,
+    type: 'hardware',
+  };
+
   const copperRodGeom = new THREE.CylinderGeometry(0.04, 0.04, 4.5, 12);
   copperRodGeom.rotateZ(Math.PI / 2);
   const copperRod = new THREE.Mesh(copperRodGeom, copperMat);
   copperRod.position.set(0, -halfH + baseHeight + 0.15, -halfD + 1.2);
+  (copperRod as any).userData = { isProductMesh: true, item: groundBarItem };
   group.add(copperRod);
 
   // Grounding wires running to chassis & door posts
@@ -816,6 +1114,7 @@ export function build447510TCabinetGroup(
     const wireGeom = new THREE.CylinderGeometry(0.015, 0.015, 1.2, 8);
     const wire = new THREE.Mesh(wireGeom, wireMat);
     wire.position.set(wx, -halfH + baseHeight + 0.45, -halfD + 1.0);
+    (wire as any).userData = { isProductMesh: true, item: groundBarItem };
     group.add(wire);
   });
 
@@ -841,11 +1140,80 @@ export function build447510TCabinetGroup(
   };
   group.add(pduBox);
 
+  // =========================================================================
+  // 12. 50 SETS CAGE NUTS & SCREWS ACCESSORY KIT BOX (Page 1 point 10)
+  // Tool/hardware kit box placed visibly on the interior bottom plinth tray
+  // =========================================================================
+  const cageNutsGroup = new THREE.Group();
+  cageNutsGroup.name = 'cage-nuts-50-kit-box';
+  cageNutsGroup.position.set(-1.2, -halfH + baseHeight + 0.26, 0.4);
+
+  const boxGeom = new THREE.BoxGeometry(1.5, 0.42, 1.1);
+  const boxMat = new THREE.MeshStandardMaterial({
+    color: 0xd97706, // Industrial amber/kraft cardboard
+    roughness: 0.85,
+    metalness: 0.05,
+  });
+  const boxMesh = new THREE.Mesh(boxGeom, boxMat);
+  boxMesh.castShadow = true;
+  cageNutsGroup.add(boxMesh);
+
+  // Printed label on box lid
+  let kitLabelTex: THREE.Texture | null = null;
+  if (typeof document !== 'undefined') {
+    const kitLabelCanvas = document.createElement('canvas');
+    kitLabelCanvas.width = 512;
+    kitLabelCanvas.height = 256;
+    const kCtx = kitLabelCanvas.getContext('2d');
+    if (kCtx) {
+      kCtx.fillStyle = '#ffffff';
+      kCtx.fillRect(0, 0, 512, 256);
+      kCtx.fillStyle = '#0c2d57';
+      kCtx.fillRect(10, 10, 492, 236);
+      kCtx.fillStyle = '#ffffff';
+      kCtx.font = 'bold 36px sans-serif';
+      kCtx.textAlign = 'center';
+      kCtx.fillText('50x M6 CAGE NUTS KIT', 256, 75);
+      kCtx.fillStyle = '#f59e0b';
+      kCtx.font = 'bold 28px sans-serif';
+      kCtx.fillText('SCREWS & WASHERS', 256, 125);
+      kCtx.fillStyle = '#94a3b8';
+      kCtx.font = '22px monospace';
+      kCtx.fillText('BOOST 447510T INCLUDED', 256, 185);
+    }
+    kitLabelTex = new THREE.CanvasTexture(kitLabelCanvas);
+  }
+  const kitLabelMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.3, 0.9),
+    new THREE.MeshBasicMaterial({ map: kitLabelTex })
+  );
+  kitLabelMesh.position.set(0, 0.215, 0);
+  kitLabelMesh.rotateX(-Math.PI / 2);
+  cageNutsGroup.add(kitLabelMesh);
+
+  const cageNutsItem = {
+    instanceId: 'cage-nuts-50-kit-447510T',
+    sku: 'CAGE-NUTS-50',
+    name: '50 סטים ברגים ודיסקיות Cage Nuts (כלול בארון)',
+    description: 'ערכת התקנה מקורית של 50 ברגי פלדה M6, אומים תופסים למסד (Cage Nuts) ודיסקיות פלסטיק שחורות להגנה על ציוד הרשת.',
+    price: 0,
+    isIncluded: true,
+    type: 'hardware',
+  };
+  (boxMesh as any).userData = { isProductMesh: true, item: cageNutsItem };
+  (kitLabelMesh as any).userData = { isProductMesh: true, item: cageNutsItem };
+  (cageNutsGroup as any).userData = { isProductMesh: true, item: cageNutsItem };
+  group.add(cageNutsGroup);
+
+  const doorsInfo = resolveCabinetDoorsInfo(dims, cabinetData);
+
   return {
     group,
     uCenters,
     innerDepthUnits,
     doorsGroup: doorsRootGroup,
     setDoorMode,
+    setRearCutaway,
+    doorsInfo,
   };
 }
