@@ -66,6 +66,7 @@ export interface Cabinet3DViewerProps {
   onProductHover: (slot: VisualSlot | null) => void;
   onProductInspect: (slot: VisualSlot) => void;
   onSlotClickToAdd: (uIndex: number) => void;
+  onProductMoveRequested?: (instanceId: string, newU: number) => void;
   onOpenAuxiliaryModal?: () => void;
   onOpenPduModal?: () => void;
   onIncrementQuantity: (index: number) => void;

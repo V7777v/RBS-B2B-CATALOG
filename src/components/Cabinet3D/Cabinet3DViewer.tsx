@@ -1406,14 +1406,19 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         accessoryRef: acc,
       };
 
-      const isPdu = zone === 'rear' || /פס שקע|שקעים|pdu/i.test(acc.name || '') || /שקע|pdu/i.test(acc.description || '');
+      const isPdu = zone.startsWith('rear') || /פס שקע|שקעים|pdu/i.test(acc.name || '') || /שקע|pdu/i.test(acc.description || '');
 
       if (isPdu) {
-        // Mount 19" horizontal PDU strictly at top of rear rail
-        const targetPduU = Math.max(1, dims.totalU - pduCounter);
+        // Mount 19" horizontal PDU at specified rear rail zone
+        let targetPduU = Math.max(1, dims.totalU - pduCounter);
+        if (zone === 'rear-top') targetPduU = dims.totalU;
+        else if (zone === 'rear-middle') targetPduU = Math.max(1, Math.floor(dims.totalU / 2));
+        else if (zone === 'rear-bottom') targetPduU = 1;
+        else targetPduU = Math.max(1, dims.totalU - pduCounter); // fallback
+        
         pduCounter++;
         const pduInst: Product3DInstance = {
-          instanceId: `pdu-nonu-${idx}`,
+          instanceId: acc.instanceId || `pdu-nonu-${idx}`,
           sku: acc.sku || acc.pn || 'PDU-19',
           name: acc.name,
           description: acc.description || '',

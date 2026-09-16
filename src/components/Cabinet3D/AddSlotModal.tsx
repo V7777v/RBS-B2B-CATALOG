@@ -61,12 +61,14 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
   const [searchFilter, setSearchFilter] = useState('');
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
+  const [pendingPduItem, setPendingPduItem] = useState<any | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Sync subView and reset open sections to closed by default
   useEffect(() => {
     if (isOpen) {
       setSearchFilter('');
+      setPendingPduItem(null);
       if (initialSubView) {
         setSubView(initialSubView);
         setOpenSections({});
@@ -316,10 +318,13 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
             <button
               type="button"
               onClick={() => {
-                const finalItem = isItemPdu ? { ...item, uSize: 0, _pdu: true, zone: 'rear' } : item;
-                onAddAccessoryAtSlot(finalItem, (options?.isAux || isItemPdu) ? null : targetU);
-                onClose();
-                handleProductHover(null);
+                if (isItemPdu) {
+                  setPendingPduItem({ ...item, _pdu: true });
+                } else {
+                  onAddAccessoryAtSlot(item, options?.isAux ? null : targetU);
+                  onClose();
+                  handleProductHover(null);
+                }
               }}
               className={`px-3 py-2 rounded-md text-xs font-bold flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer shadow-xs ${
                 isItemPdu
@@ -328,7 +333,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
               }`}
             >
               {isItemPdu ? <Zap size={14} className="fill-slate-950" /> : <Plus size={15} />}
-              <span>{isItemPdu ? 'הוסף לרלס אחורי (PDU)' : 'הוסף'}</span>
+              <span>{isItemPdu ? 'בחר מיקום להתקנה' : 'הוסף'}</span>
             </button>
           )}
         </div>
@@ -344,8 +349,91 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
       filteredAlternativeItems.length +
       filteredRearrangementItems.length;
 
-  const renderContent = () => (
-    <div className="flex flex-col h-full bg-slate-50 min-h-0" dir="rtl">
+  const renderPduChoiceStep = () => {
+    return (
+      <div className="flex flex-col h-full bg-slate-50 min-h-0" dir="rtl">
+        <div className="p-3.5 sm:p-4 bg-slate-900 text-white flex items-center justify-between shrink-0 shadow-md z-10">
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => setPendingPduItem(null)} className="w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center cursor-pointer transition-colors text-slate-300 hover:text-white">
+              <ArrowLeftRight size={19} className="rotate-180" />
+            </button>
+            <div>
+              <h3 className="font-bold text-[15px] sm:text-base leading-none">
+                בחר מיקום התקנה
+              </h3>
+              <p className="text-[11px] sm:text-xs text-slate-300 mt-1">
+                {pendingPduItem.name || pendingPduItem.pn}
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={() => { handleProductHover(null); onClose(); }} className="p-1.5 text-white/80 hover:text-white bg-white/10 hover:bg-rose-600 rounded-md cursor-pointer transition-colors" title="סגור חלון (Escape)">
+            <X size={17} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
+            <strong>התקנה אחורית (0U):</strong> מותקן באזור האחורי ואינו מקצה משבצות במסילות הקדמיות.
+          </div>
+          <div className="space-y-2">
+            {['top', 'middle', 'bottom'].map(pos => {
+              const label = pos === 'top' ? 'אחורי - למעלה' : pos === 'middle' ? 'אחורי - אמצע' : 'אחורי - למטה';
+              return (
+                <button
+                  key={pos}
+                  onClick={() => {
+                    const finalItem = { ...pendingPduItem, uSize: 0, _pdu: true, zone: `rear-${pos}` };
+                    onAddAccessoryAtSlot(finalItem, null);
+                    onClose();
+                    handleProductHover(null);
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-lg border border-slate-300 hover:border-amber-400 bg-white hover:bg-amber-50 cursor-pointer shadow-xs transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center group-hover:bg-amber-100 group-hover:text-amber-700 transition-colors">
+                      <Zap size={16} />
+                    </div>
+                    <span className="font-bold text-slate-700 group-hover:text-slate-900">{label}</span>
+                  </div>
+                  <ChevronDown className="rotate-90 text-slate-400 group-hover:text-amber-600" size={16} />
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="border-t border-slate-200 my-4" />
+
+          <div className="bg-slate-100 border border-slate-200 rounded-lg p-3 text-sm text-slate-700">
+            <strong>התקנה קדמית ({pendingPduItem.uSize || 1}U):</strong> תופסת מקום בארון על גבי המסילות הקדמיות.
+          </div>
+          <button
+            onClick={() => {
+              const finalItem = { ...pendingPduItem, uSize: pendingPduItem.uSize || 1, zone: 'front' };
+              onAddAccessoryAtSlot(finalItem, targetU);
+              onClose();
+              handleProductHover(null);
+            }}
+            className="w-full flex items-center justify-between p-3 rounded-lg border border-slate-300 hover:border-blue-400 bg-white hover:bg-blue-50 cursor-pointer shadow-xs transition-all group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center group-hover:bg-blue-100 group-hover:text-blue-700 transition-colors">
+                <Box size={16} />
+              </div>
+              <span className="font-bold text-slate-700 group-hover:text-slate-900">
+                {targetU ? `הוסף בחזית החל מ-U${targetU}` : 'הוסף בחזית (ימוקם באזור פנוי)'}
+              </span>
+            </div>
+            <ChevronDown className="rotate-90 text-slate-400 group-hover:text-blue-600" size={16} />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderContent = () => {
+    if (pendingPduItem) return renderPduChoiceStep();
+    return (
+      <div className="flex flex-col h-full bg-slate-50 min-h-0" dir="rtl">
       {/* Header */}
       <div className="p-3.5 sm:p-4 bg-slate-900 text-white flex items-center justify-between shrink-0 shadow-md z-10">
         <div className="flex items-center gap-3">
@@ -713,7 +801,8 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
         </button>
       </div>
     </div>
-  );
+    );
+  };
 
   if (!isOpen) return null;
 

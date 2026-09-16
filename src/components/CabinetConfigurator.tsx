@@ -772,7 +772,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           description: opt.description || opt.name || '',
           accessoryRef: opt,
           optionalIdx: optIdx,
-          zone: getPhysicalZone(opt.sku || opt.pn, opt.name || '', opt.description || ''),
+          zone: opt.zone || getPhysicalZone(opt.sku || opt.pn, opt.name || '', opt.description || ''),
+          instanceId: opt.instanceId || opt.id,
         });
         return;
       }
@@ -887,6 +888,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [zoomMode, setZoomMode] = useState(true);
   const [hoveredProduct, setHoveredProduct] = useState<EnrichedPreviewItem | null>(null);
   const [inspectedProduct, setInspectedProduct] = useState<EnrichedPreviewItem | null>(null);
+  const [movingInstanceId, setMovingInstanceId] = useState<string | null>(null);
   const [modalZoomLevel, setModalZoomLevel] = useState<number>(1);
   const prefersReducedMotion = usePrefersReducedMotion();
 
@@ -909,11 +911,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (inspectedProduct) setInspectedProduct(null);
+        if (movingInstanceId) setMovingInstanceId(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [inspectedProduct]);
+  }, [inspectedProduct, movingInstanceId]);
 
   const [a11yMessage, setA11yMessage] = useState<string>('');
   const [highlightedSku, setHighlightedSku] = useState<string | null>(null);
@@ -1197,6 +1200,16 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
     // 0U items (accessories that don't occupy U space)
     if (uSize === 0) {
+      if (acc.zone && acc.zone.startsWith('rear-')) {
+        // Check rear occupancy
+        const occupiedRear = selectedOptionals.find(opt => opt.uSize === 0 && opt.zone === acc.zone);
+        if (occupiedRear) {
+          setWarningModalMessage(`המיקום האחורי המבוקש תפוס כבר על ידי: ${occupiedRear.name || occupiedRear.pn}. אין אפשרות לחפיפה בהתקנה אחורית.`);
+          setPendingAccessory(acc);
+          setWarningModalOpen(true);
+          return;
+        }
+      }
       const newInstId = `${acc.sku || acc.pn}-0U-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
       setSelectedOptionals(prev => [
         ...prev,
@@ -1285,6 +1298,25 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       setLastAddedInstanceId(null);
       setChassisPulse(false);
     }, 1400);
+  };
+
+  const handleSlotAction = (uIndex: number) => {
+    if (movingInstanceId) {
+      const itemToMoveIndex = selectedOptionals.findIndex(o => o.instanceId === movingInstanceId || o.id === movingInstanceId);
+      if (itemToMoveIndex !== -1) {
+        const item = selectedOptionals[itemToMoveIndex];
+        const newOptionals = [...selectedOptionals];
+        newOptionals.splice(itemToMoveIndex, 1);
+        setSelectedOptionals(newOptionals);
+        setMovingInstanceId(null);
+        setTimeout(() => {
+          validateAndProcessAdd(item, uIndex, -1);
+        }, 100);
+      }
+    } else {
+      setAddSlotTargetU(uIndex);
+      setIsAddSlotModalOpen(true);
+    }
   };
 
   const handleAddOptionalAtSlot = (acc: Accessory, targetU: number | null) => {
@@ -1941,7 +1973,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
 
   const roofItems = nonUAccessories.filter(a => a.zone === 'roof');
-  const rearPduItems = nonUAccessories.filter(a => a.zone === 'rear');
+  const rearPduItems = nonUAccessories.filter(a => a.zone?.startsWith('rear'));
   const verticalItems = nonUAccessories.filter(a => a.zone === 'vertical');
   const plinthItems = nonUAccessories.filter(a => a.zone === 'plinth');
   const hardwareItems = nonUAccessories.filter(a => a.zone === 'hardware');
@@ -2192,6 +2224,22 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
   return (
     <div className="@container mt-8 bg-white border-2 border-[#004387] shadow-sm relative overflow-hidden" dir="rtl">
+      {/* Moving Mode Banner */}
+      {movingInstanceId && (
+        <div className="bg-amber-500 text-slate-900 px-4 py-2 flex items-center justify-between shadow-md z-40 sticky top-0">
+          <div className="flex items-center gap-2 font-bold text-sm">
+            <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
+            <span>מצב הזזת ציוד פעיל: אנא בחרו חריץ U חדש בארון להעברת הציוד.</span>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setMovingInstanceId(null)}
+            className="bg-black/10 hover:bg-black/20 font-bold px-3 py-1 rounded text-xs transition-colors cursor-pointer"
+          >
+            ביטול העברה
+          </button>
+        </div>
+      )}
       
       {/* Header */}
       <div className="bg-[#004387] text-white p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -2318,9 +2366,18 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                   selectedInstanceId={inspectedProduct ? (inspectedProduct.instanceId || inspectedProduct.sku) : undefined}
                   onProductHover={(slot) => setHoveredProduct(slot ? buildPreviewFromSlot(slot) : null)}
                   onProductInspect={(slot) => setInspectedProduct(buildPreviewFromSlot(slot))}
-                  onSlotClickToAdd={(uIndex) => {
-                    setAddSlotTargetU(uIndex);
-                    setIsAddSlotModalOpen(true);
+                  onSlotClickToAdd={handleSlotAction}
+                  onProductMoveRequested={(instanceId, newU) => {
+                    const itemToMoveIndex = selectedOptionals.findIndex(o => o.instanceId === instanceId || o.id === instanceId);
+                    if (itemToMoveIndex !== -1) {
+                      const item = selectedOptionals[itemToMoveIndex];
+                      const newOptionals = [...selectedOptionals];
+                      newOptionals.splice(itemToMoveIndex, 1);
+                      setSelectedOptionals(newOptionals);
+                      setTimeout(() => {
+                        validateAndProcessAdd(item, newU, -1);
+                      }, 100);
+                    }
                   }}
                   onOpenAuxiliaryModal={() => {
                     setAddSlotTargetU(null);
@@ -2618,8 +2675,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     }}
                     onClick={() => {
                       if (isEmpty) {
-                        setAddSlotTargetU(slot.uIndex);
-                        setIsAddSlotModalOpen(true);
+                        handleSlotAction(slot.uIndex);
                       } else if (slotPreview) {
                         setInspectedProduct(slotPreview);
                         if (isOptional && slot.accessoryRef?.pn) {
@@ -2944,9 +3000,35 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                         <span>מיקום: {inspectedProduct.zone || (inspectedProduct.uSize === 0 ? 'אביזר נלווה' : `U${inspectedProduct.minU}-U${inspectedProduct.maxU}`)}</span>
                       </div>
                     </div>
-                    <button onClick={() => setInspectedProduct(null)} className="p-1 hover:bg-indigo-200 rounded text-indigo-600 transition-colors">
-                      <X size={18} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {inspectedProduct.optionalIdx !== undefined && inspectedProduct.optionalIdx !== null && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMovingInstanceId(inspectedProduct.instanceId || inspectedProduct.sku || null);
+                              setInspectedProduct(null);
+                            }}
+                            className="px-2 py-1 text-xs font-semibold text-blue-700 bg-blue-100 hover:bg-blue-200 rounded transition-colors cursor-pointer"
+                          >
+                            הזז ציוד
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleRemoveOptional(inspectedProduct.optionalIdx!);
+                              setInspectedProduct(null);
+                            }}
+                            className="px-2 py-1 text-xs font-semibold text-red-700 bg-red-100 hover:bg-red-200 rounded transition-colors cursor-pointer"
+                          >
+                            הסר ציוד
+                          </button>
+                        </>
+                      )}
+                      <button onClick={() => setInspectedProduct(null)} className="p-1 hover:bg-indigo-200 rounded text-indigo-600 transition-colors">
+                        <X size={18} />
+                      </button>
+                    </div>
                   </div>
                   <div className="flex p-4 gap-4 bg-white">
                     <div className="w-1/3 shrink-0 flex items-center justify-center border border-slate-100 bg-slate-50 p-2 rounded">
@@ -3527,16 +3609,28 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 </div>
                 <div className="flex items-center gap-2">
                   {inspectedProduct.optionalIdx !== undefined && inspectedProduct.optionalIdx !== null && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleRemoveOptional(inspectedProduct.optionalIdx!);
-                        setInspectedProduct(null);
-                      }}
-                      className="px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition-colors cursor-pointer"
-                    >
-                      הסר מסל הארון
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMovingInstanceId(inspectedProduct.instanceId || inspectedProduct.sku || null);
+                          setInspectedProduct(null);
+                        }}
+                        className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded transition-colors cursor-pointer"
+                      >
+                        הזז / שנה מיקום
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleRemoveOptional(inspectedProduct.optionalIdx!);
+                          setInspectedProduct(null);
+                        }}
+                        className="px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded transition-colors cursor-pointer"
+                      >
+                        הסר מסל הארון
+                      </button>
+                    </>
                   )}
                   <button
                     type="button"
