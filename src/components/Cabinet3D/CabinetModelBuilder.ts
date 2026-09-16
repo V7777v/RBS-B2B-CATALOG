@@ -1090,6 +1090,77 @@ export function buildCabinetFrameGroup(
   const doorCenterY = (-roofHeight + baseHeight) / 2;
   const doorThick = 0.05;
 
+  // Helper to generate a repeating perforated hexagonal honeycomb mesh texture
+  const createPerforatedTexture = () => {
+    if (typeof document === 'undefined') return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(0, 0, 128, 128);
+
+    ctx.fillStyle = '#020617';
+    const radius = 5.5;
+    const rowH = 16;
+    const colW = 16;
+
+    for (let y = 0; y < 128; y += rowH) {
+      const isOdd = Math.floor(y / rowH) % 2 === 1;
+      for (let x = 0; x < 128; x += colW) {
+        const cx = x + (isOdd ? colW / 2 : 0);
+        const cy = y + rowH / 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(10, 30);
+    return tex;
+  };
+
+  const perfTex = createPerforatedTexture();
+
+  // Helper to construct door leaf material based on door type (perforated / glass / solid)
+  const createDoorMaterial = (doorType: 'perforated' | 'glass' | 'solid') => {
+    if (doorType === 'perforated') {
+      return new THREE.MeshStandardMaterial({
+        color: 0x334155,
+        map: perfTex || undefined,
+        roughness: 0.6,
+        metalness: 0.65,
+        transparent: true,
+        opacity: 0.72,
+        side: THREE.DoubleSide,
+      });
+    }
+    if (doorType === 'glass') {
+      return new THREE.MeshStandardMaterial({
+        color: 0x93c5fd, // Clear tempered glass with blue-gray tint
+        roughness: 0.08,
+        metalness: 0.15,
+        transparent: true,
+        opacity: 0.22,
+        side: THREE.DoubleSide,
+      });
+    }
+    // Solid steel door
+    return new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.5,
+      metalness: 0.4,
+      transparent: true,
+      opacity: 0.90,
+      side: THREE.DoubleSide,
+    });
+  };
+
   // Front Door
   const frontDoorGroup = new THREE.Group();
   frontDoorGroup.name = 'generic-front-door-group';
@@ -1098,19 +1169,16 @@ export function buildCabinetFrameGroup(
     instanceId: 'generic-front-door',
     sku: 'DOOR-FRONT',
     name: doorsInfo.frontDoorName,
-    description: cabinetData?.frontDoor || 'דלת קדמית (כלול בארון)',
+    description: cabinetData?.frontDoor || (doorsInfo.frontDoorType === 'perforated' ? 'דלת קדמית רשת מחוררת 75% לאוורור מיטבי' : 'דלת קדמית זכוכית מחוסמת 5 מ״מ'),
     price: 0,
     isIncluded: true,
     type: 'door',
   };
 
-  const frontDoorMat = (materials.panelMat as THREE.MeshStandardMaterial).clone();
-  frontDoorMat.transparent = true;
-  frontDoorMat.opacity = 0.38;
-
+  const frontDoorMat = createDoorMaterial(doorsInfo.frontDoorType);
   const frontDoorFrameMat = (materials.frameMat as THREE.MeshStandardMaterial).clone();
   frontDoorFrameMat.transparent = true;
-  frontDoorFrameMat.opacity = 0.42;
+  frontDoorFrameMat.opacity = 0.55;
 
   if (doorsInfo.hasFrontDoor) {
     const frontHingeX = -halfW + 0.10;
@@ -1155,6 +1223,24 @@ export function buildCabinetFrameGroup(
     (frontDoorWindow as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
     frontDoorGroup.add(frontDoorWindow);
 
+    // If glass door, add solid ceramic silkscreen border trim on glass inner perimeter
+    if (doorsInfo.frontDoorType === 'glass') {
+      const ceramicMat = new THREE.MeshBasicMaterial({ color: 0x09090b });
+      const borderThickness = 0.06;
+      // Top/bottom ceramic border
+      [-doorOpeningH / 2 + borderThickness / 2, doorOpeningH / 2 - borderThickness / 2].forEach(by => {
+        const cBeam = new THREE.Mesh(new THREE.BoxGeometry(doorOpeningW, borderThickness, doorThick * 0.42), ceramicMat);
+        cBeam.position.set(doorWidth / 2, by, 0.003);
+        frontDoorGroup.add(cBeam);
+      });
+      // Left/right ceramic border
+      [-doorOpeningW / 2 + borderThickness / 2, doorOpeningW / 2 - borderThickness / 2].forEach(bx => {
+        const cBeam = new THREE.Mesh(new THREE.BoxGeometry(borderThickness, doorOpeningH, doorThick * 0.42), ceramicMat);
+        cBeam.position.set(doorWidth / 2 + bx, 0, 0.003);
+        frontDoorGroup.add(cBeam);
+      });
+    }
+
     // Lock handle on right side
     const frontLockHandle = new THREE.Mesh(
       new THREE.BoxGeometry(0.12, 0.90, 0.06),
@@ -1185,19 +1271,16 @@ export function buildCabinetFrameGroup(
     instanceId: 'generic-rear-door',
     sku: 'DOOR-REAR',
     name: doorsInfo.rearDoorName,
-    description: cabinetData?.rearDoor || 'דלת אחורית (כלול בארון)',
+    description: cabinetData?.rearDoor || (doorsInfo.rearDoorType === 'perforated' ? 'דלת אחורית רשת מחוררת 75%' : 'דלת אחורית מפלדה SPCC מלאה'),
     price: 0,
     isIncluded: true,
     type: 'door',
   };
 
-  const rearDoorMat = (materials.panelMat as THREE.MeshStandardMaterial).clone();
-  rearDoorMat.transparent = true;
-  rearDoorMat.opacity = 0.38;
-
+  const rearDoorMat = createDoorMaterial(doorsInfo.rearDoorType);
   const rearDoorFrameMat = (materials.frameMat as THREE.MeshStandardMaterial).clone();
   rearDoorFrameMat.transparent = true;
-  rearDoorFrameMat.opacity = 0.42;
+  rearDoorFrameMat.opacity = 0.55;
 
   if (hasRearDoor) {
     const rearHingeX = -halfW + 0.10;
@@ -1236,6 +1319,21 @@ export function buildCabinetFrameGroup(
     rearDoorWindow.position.set(doorWidth / 2, 0, -0.002);
     (rearDoorWindow as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
     rearDoorGroup.add(rearDoorWindow);
+
+    if (doorsInfo.rearDoorType === 'glass') {
+      const ceramicMat = new THREE.MeshBasicMaterial({ color: 0x09090b });
+      const borderThickness = 0.06;
+      [-doorOpeningH / 2 + borderThickness / 2, doorOpeningH / 2 - borderThickness / 2].forEach(by => {
+        const cBeam = new THREE.Mesh(new THREE.BoxGeometry(doorOpeningW, borderThickness, doorThick * 0.42), ceramicMat);
+        cBeam.position.set(doorWidth / 2, by, -0.003);
+        rearDoorGroup.add(cBeam);
+      });
+      [-doorOpeningW / 2 + borderThickness / 2, doorOpeningW / 2 - borderThickness / 2].forEach(bx => {
+        const cBeam = new THREE.Mesh(new THREE.BoxGeometry(borderThickness, doorOpeningH, doorThick * 0.42), ceramicMat);
+        cBeam.position.set(doorWidth / 2 + bx, 0, -0.003);
+        rearDoorGroup.add(cBeam);
+      });
+    }
 
     const rearLockHandle = new THREE.Mesh(
       new THREE.BoxGeometry(0.12, 0.90, 0.06),

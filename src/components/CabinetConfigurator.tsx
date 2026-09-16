@@ -1778,32 +1778,59 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     return '';
   };
 
-  const buildPreviewFromSlot = (slot: VisualSlot): EnrichedPreviewItem => {
-    const isPreset = slot.type.startsWith('preset-') || (slot as any).accessoryRef?.isPreset || (slot as any).accessoryRef?.isIncluded;
-    const acc = slot.accessoryRef || {};
-    const sku = acc.sku || acc.pn || (isPreset ? (acc.sku || 'כלול בארון') : '');
-    const name = slot.name || acc.name || (isPreset ? 'ציוד מובנה' : 'ציוד בארון');
+  const buildPreviewFromSlot = (slot: any): EnrichedPreviewItem => {
+    if (!slot) {
+      return {
+        name: 'ציוד לא זוהה',
+        sku: '',
+        description: '',
+        uSize: 0,
+        price: 0,
+        quantity: 1,
+        zone: 'ארון תקשורת',
+        type: 'empty',
+      };
+    }
+
+    const isPreset = slot.isPreset || slot.isIncluded || slot.type?.startsWith('preset-') || slot.accessoryRef?.isPreset || slot.accessoryRef?.isIncluded;
+    const acc = slot.accessoryRef || slot;
+    const sku = slot.sku || acc.sku || acc.pn || (isPreset ? (acc.sku || 'כלול בארון') : '');
+    const name = slot.name || acc.name || (isPreset ? 'ציוד מובנה בארון' : 'ציוד בארון');
     const description = slot.description || acc.description || '';
-    const spanU = slot.spanU || acc.uSize || 1;
+    const spanU = slot.spanU || slot.uSpan || acc.uSize || acc.spanU || 1;
     const uSize = slot.type === 'empty' ? 0 : spanU;
-    const image = getRealProductImage(acc) || getAccessoryImage(acc);
-    const price = acc.price || 0;
-    const quantity = acc.quantity || 1;
+    const image = getRealProductImage(acc) || getRealProductImage(slot) || getAccessoryImage(acc) || slot.image || '';
+    const price = isPreset ? 0 : (slot.price || acc.price || 0);
+    const quantity = slot.quantity || acc.quantity || 1;
     
-    let zone = `מסילות U חזיתיות (U${slot.uIndex}${spanU > 1 ? ` - U${slot.uIndex - spanU + 1}` : ''})`;
-    if (slot.uIndex === 0 || !slot.uIndex) {
-      if (acc.type === 'fan' || /מאוורר|fan/i.test(name)) zone = 'תקרת הארון (יחידת 4 מאווררים מובנית)';
-      else if (acc.type === 'door' || /דלת|רשת/i.test(name)) zone = 'דלתות קדמיות / אחוריות מחוררות';
-      else if (acc.type === 'tray' || /כבילה|tray/i.test(name)) zone = 'תעלות כבילה ורטיקליות 400 מ״מ';
-      else if (acc.type === 'ground' || /הארקה/i.test(name)) zone = 'פס הארקה נחושת אנכי מובנה';
-      else if (acc.type === 'caster' || /גלגל/i.test(name)) zone = 'בסיס הארון (4 גלגלים מחוזקים)';
-      else if (acc.type === 'feet' || /פילוס/i.test(name)) zone = 'בסיס הארון (4 רגלי פילוס מתכווננות)';
-      else if (acc.type === 'hardware' || /כלוב|בורג|אומי/i.test(name)) zone = 'ערכת חומרה (50 אומי כלוב + ברגים)';
-      else zone = 'אביזר נלווה / שלד הארון';
+    let zone = slot.zone;
+    if (!zone) {
+      const uPos = slot.uIndex || slot.uStart;
+      if (uPos && uPos > 0) {
+        zone = `מסילות U חזיתיות (U${uPos}${spanU > 1 ? ` - U${uPos - spanU + 1}` : ''})`;
+      } else if (slot.type === 'fan' || /מאוורר|fan/i.test(name)) {
+        zone = 'תקרת הארון (יחידת מאווררי גג מובנית)';
+      } else if (slot.type === 'door' || /דלת|רשת|זכוכית/i.test(name)) {
+        zone = 'דלתות קדמיות / אחוריות';
+      } else if (slot.type === 'pdu' || /שקע|pdu/i.test(name)) {
+        zone = 'רלס אחורי עליון (פס שקעים PDU 0U)';
+      } else if (slot.type === 'tray' || /כבילה|tray/i.test(name)) {
+        zone = 'תעלות כבילה ורטיקליות 400 מ״מ';
+      } else if (slot.type === 'ground' || /הארקה/i.test(name)) {
+        zone = 'פס הארקה נחושת אנכי מובנה';
+      } else if (slot.type === 'caster' || /גלגל/i.test(name)) {
+        zone = 'בסיס הארון (סט גלגלים מחוזקים)';
+      } else if (slot.type === 'feet' || /פילוס/i.test(name)) {
+        zone = 'בסיס הארון (סט רגלי פילוס מתכווננות)';
+      } else if (slot.type === 'hardware' || /כלוב|בורג|אומי/i.test(name)) {
+        zone = 'ערכת חומרה (50 אומי כלוב + ברגים)';
+      } else {
+        zone = 'אביזר נלווה / שלד הארון';
+      }
     }
 
     return {
-      instanceId: (slot as any).instanceId || (slot as any).id || '',
+      instanceId: slot.instanceId || slot.id || '',
       name,
       sku,
       description,
@@ -1813,7 +1840,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       price,
       quantity,
       zone,
-      type: slot.type,
+      type: slot.type || 'active',
       optionalIdx: slot.optionalIdx,
       isPreset,
     };
