@@ -10,6 +10,7 @@ import {
   CabinetDoorsInfo,
   resolveCabinetDoorsInfo,
 } from './CabinetModelBuilder';
+import { createBoostHeaderBadgeMesh } from './BoostRackMountLogo';
 
 /**
  * High-fidelity 3D simulation strictly built according to the official manufacturer specification:
@@ -60,6 +61,7 @@ export function buildBoost42UCabinetGroup(
   doorsGroup?: THREE.Group;
   setDoorMode?: (side: 'front' | 'rear', state: DoorLeafState) => void;
   setRearCutaway?: (active: boolean) => void;
+  setSidePanel?: (side: 'left' | 'right', state: 'closed' | 'removed') => void;
   doorsInfo?: CabinetDoorsInfo;
 } {
   const group = new THREE.Group();
@@ -186,6 +188,17 @@ export function buildBoost42UCabinetGroup(
   };
   group.add(roofMesh);
 
+  // Boost brand nameplate badge on the front face of the top header bar (FRAME group child)
+  // Right-aligned: right edge at (innerWidth/2 - 0.12); centered on header bar height; z = header front surface + 0.01
+  const headerBadgeMesh = createBoostHeaderBadgeMesh(
+    widthUnits - 0.28, // inner width between 14mm corner posts
+    roofHeight,
+    halfH - roofHeight / 2,
+    halfD,
+    steelMat
+  );
+  group.add(headerBadgeMesh);
+
   // Top cable entry cover board (Page 3 Item 4 & 17)
   const topCoverBoardGeom = new THREE.BoxGeometry(widthUnits * 0.45, 0.03, depthUnits * 0.25);
   const topCoverBoard = new THREE.Mesh(topCoverBoardGeom, chromeMat);
@@ -203,99 +216,6 @@ export function buildBoost42UCabinetGroup(
     },
   };
   group.add(topCoverBoard);
-
-  // 2.1 AUTHENTIC UPPER BRAND BADGE - "BOOST RACKMOUNT 42U"
-  const badgeWidth = Math.min(widthUnits * 0.72, 3.8);
-  const badgeHeight = roofHeight * 0.76;
-  const badgeDepth = 0.02;
-
-  let logoTexture: THREE.Texture | null = null;
-  if (typeof document !== 'undefined') {
-    const logoCanvas = document.createElement('canvas');
-    logoCanvas.width = 1024;
-    logoCanvas.height = 256;
-    const logoCtx = logoCanvas.getContext('2d');
-    if (logoCtx) {
-      // Industrial dark carbon plate
-      const bgGrad = logoCtx.createLinearGradient(0, 0, 1024, 256);
-      bgGrad.addColorStop(0, '#0a0d14');
-      bgGrad.addColorStop(0.5, '#162032');
-      bgGrad.addColorStop(1, '#0a0d14');
-      logoCtx.fillStyle = bgGrad;
-      logoCtx.fillRect(0, 0, 1024, 256);
-
-      // Border bevel
-      logoCtx.strokeStyle = '#475569';
-      logoCtx.lineWidth = 6;
-      logoCtx.strokeRect(6, 6, 1012, 244);
-
-      // Corner rivets
-      [[24, 24], [1000, 24], [24, 232], [1000, 232]].forEach(([rx, ry]) => {
-        logoCtx.fillStyle = '#94a3b8';
-        logoCtx.beginPath();
-        logoCtx.arc(rx, ry, 7, 0, Math.PI * 2);
-        logoCtx.fill();
-      });
-
-      // Stylized Boost Logo Icon (as seen on Page 1: "Boost RackMount" with the green leaf accent)
-      logoCtx.save();
-      logoCtx.translate(95, 128);
-      // Green energy leaf accent
-      logoCtx.fillStyle = '#22c55e';
-      logoCtx.beginPath();
-      logoCtx.moveTo(0, -45);
-      logoCtx.quadraticCurveTo(35, -20, 30, 25);
-      logoCtx.quadraticCurveTo(-10, 45, -35, 10);
-      logoCtx.quadraticCurveTo(-25, -25, 0, -45);
-      logoCtx.fill();
-      // Inner rack outline
-      logoCtx.strokeStyle = '#38bdf8';
-      logoCtx.lineWidth = 4;
-      logoCtx.strokeRect(-22, -32, 44, 64);
-      logoCtx.restore();
-
-      // "Boost" Typography
-      logoCtx.fillStyle = '#ffffff';
-      logoCtx.font = '900 86px system-ui, -apple-system, sans-serif';
-      logoCtx.textAlign = 'left';
-      logoCtx.textBaseline = 'middle';
-      logoCtx.fillText('Boost', 165, 100);
-
-      // "RackMount" in Green/Cyan
-      logoCtx.fillStyle = '#22c55e';
-      logoCtx.font = '800 72px system-ui, -apple-system, sans-serif';
-      logoCtx.fillText('RackMount', 435, 102);
-
-      // Subtitle: 42U SPECIFICATION
-      logoCtx.fillStyle = '#38bdf8';
-      logoCtx.font = '700 24px monospace';
-      logoCtx.letterSpacing = '5px';
-      logoCtx.fillText('42U FLOOR CABINET • SPCC COLD ROLLED STEEL • 800KG', 170, 185);
-    }
-
-    const tex = new THREE.CanvasTexture(logoCanvas);
-    tex.minFilter = THREE.LinearFilter;
-    tex.magFilter = THREE.LinearFilter;
-    logoTexture = tex;
-  }
-
-  const badgeGeom = new THREE.BoxGeometry(badgeWidth, badgeHeight, badgeDepth);
-  const badgeFaceMat = new THREE.MeshStandardMaterial({
-    map: logoTexture,
-    roughness: 0.25,
-    metalness: 0.85,
-  });
-  const badgeEdgeMat = materials.metalMat;
-  const badgeMaterials = [
-    badgeEdgeMat, badgeEdgeMat, badgeEdgeMat, badgeEdgeMat,
-    badgeFaceMat, badgeEdgeMat,
-  ];
-
-  const brandBadgeMesh = new THREE.Mesh(badgeGeom, badgeMaterials);
-  brandBadgeMesh.position.set(0, halfH - roofHeight / 2, halfD + badgeDepth / 2 + 0.005);
-  brandBadgeMesh.name = 'boost-42u-brand-badge';
-  (brandBadgeMesh as any).userData = { isCabinetStructure: true };
-  group.add(brandBadgeMesh);
 
   // =========================================================================
   // 3. FAN UNIT (1 PCS) & 4x INDUSTRIAL FANS 120*120*38mm (Page 2 Items 7, 8; Page 3 Item 11)
@@ -749,6 +669,7 @@ export function buildBoost42UCabinetGroup(
   });
 
   (frontDoorLeaf as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
+
   frontDoorRoot.add(frontDoorLeaf);
   group.add(frontDoorRoot);
 
@@ -825,7 +746,7 @@ export function buildBoost42UCabinetGroup(
     });
   };
 
-  let currentRearState: DoorLeafState = options?.doorState?.rear || 'transparent';
+  let currentRearState: DoorLeafState = options?.doorState?.rear || 'closed';
   let isCutaway = false;
 
   const updateRearDoorOpacity = () => {
@@ -901,7 +822,7 @@ export function buildBoost42UCabinetGroup(
   };
 
   const initialFront = options?.doorState?.front || 'transparent';
-  const initialRear = options?.doorState?.rear || 'transparent';
+  const initialRear = options?.doorState?.rear || 'closed';
   setDoorMode('front', initialFront);
   setDoorMode('rear', initialRear);
 
@@ -913,13 +834,35 @@ export function buildBoost42UCabinetGroup(
   const sideHeight = railHeightUnits;
   const sidePanelGeom = new THREE.BoxGeometry(0.04, sideHeight, sideWidth);
 
+  const leftSideGroup = new THREE.Group();
+  leftSideGroup.name = 'side-panel-left';
+  (leftSideGroup as any).userData = { isSidePanel: true, side: 'left' };
+  const rightSideGroup = new THREE.Group();
+  rightSideGroup.name = 'side-panel-right';
+  (rightSideGroup as any).userData = { isSidePanel: true, side: 'right' };
+
+  // Ghost groups for removed side panels
+  const leftGhostGroup = new THREE.Group();
+  leftGhostGroup.name = 'side-panel-ghost-left';
+  leftGhostGroup.visible = false;
+  (leftGhostGroup as any).userData = { isSidePanelGhost: true, side: 'left' };
+
+  const rightGhostGroup = new THREE.Group();
+  rightGhostGroup.name = 'side-panel-ghost-right';
+  rightGhostGroup.visible = false;
+  (rightGhostGroup as any).userData = { isSidePanelGhost: true, side: 'right' };
+
   [-halfW + 0.02, halfW - 0.02].forEach((sx, idx) => {
-    const sideName = idx === 0 ? 'שמאל' : 'ימין';
+    const isLeft = idx === 0;
+    const targetGroup = isLeft ? leftSideGroup : rightSideGroup;
+    const targetGhostGroup = isLeft ? leftGhostGroup : rightGhostGroup;
+    const sideName = isLeft ? 'שמאל' : 'ימין';
+    const sideDir: 'left' | 'right' = isLeft ? 'left' : 'right';
     const sidePanel = new THREE.Mesh(sidePanelGeom, steelMat);
     sidePanel.position.set(sx, doorCenterY, 0);
 
     const sideItemData = {
-      instanceId: `side-panel-${idx === 0 ? 'left' : 'right'}-boost-42u`,
+      instanceId: `side-panel-${isLeft ? 'left' : 'right'}-boost-42u`,
       sku: 'SIDE-PANEL-1.0',
       name: `דלת צד פריקה SPCC 1.0mm (דופן ${sideName})`,
       description: 'דופן צדדית מפח פלדה 1.0 מ״מ ניתנת לפירוק מהיר בלחיצה לתחזוקה וסלילת כבילה (Item 9 Side Panel).',
@@ -927,17 +870,69 @@ export function buildBoost42UCabinetGroup(
       isIncluded: true,
       type: 'panel',
     };
-    (sidePanel as any).userData = { isProductMesh: true, item: sideItemData };
-    group.add(sidePanel);
+    (sidePanel as any).userData = { isProductMesh: true, item: sideItemData, isSidePanel: true, side: sideDir };
+    targetGroup.add(sidePanel);
+
+    // Lock cylinder on side panel
+    const sideLock = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 16), chromeMat);
+    sideLock.rotateZ(Math.PI / 2);
+    sideLock.position.set(sx + (isLeft ? -0.02 : 0.02), halfH - roofHeight - 0.45, 0);
+    (sideLock as any).userData = { isProductMesh: true, item: sideItemData, isSidePanel: true, side: sideDir };
+    targetGroup.add(sideLock);
 
     // Quick release finger latches (Page 3 Item 20, L Type Side Door Baffle)
     [-sideWidth * 0.32, sideWidth * 0.32].forEach(lz => {
       const latch = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.26, 0.12), chromeMat);
       latch.position.set(sx, halfH - roofHeight - 0.70, lz);
-      (latch as any).userData = { isProductMesh: true, item: sideItemData };
-      group.add(latch);
+      (latch as any).userData = { isProductMesh: true, item: sideItemData, isSidePanel: true, side: sideDir };
+      targetGroup.add(latch);
     });
+
+    // Ghost: LineSegments (EdgesGeometry of the same box, LineDashedMaterial)
+    const ghostEdgesGeom = new THREE.EdgesGeometry(sidePanelGeom);
+    const ghostDashedMat = new THREE.LineDashedMaterial({
+      color: 0x94a3b8,
+      dashSize: 0.15,
+      gapSize: 0.1,
+      transparent: true,
+      opacity: 0.8,
+    });
+    const ghostLines = new THREE.LineSegments(ghostEdgesGeom, ghostDashedMat);
+    ghostLines.computeLineDistances();
+    ghostLines.position.set(sx, doorCenterY, 0);
+    (ghostLines as any).userData = { isSidePanelGhost: true, side: sideDir };
+    targetGhostGroup.add(ghostLines);
+
+    // Invisible thin box helper mesh to ensure reliable raycasting
+    const ghostRaycastHelper = new THREE.Mesh(
+      sidePanelGeom,
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    ghostRaycastHelper.position.set(sx, doorCenterY, 0);
+    (ghostRaycastHelper as any).userData = { isSidePanelGhost: true, side: sideDir };
+    targetGhostGroup.add(ghostRaycastHelper);
   });
+
+  group.add(leftSideGroup);
+  group.add(rightSideGroup);
+  group.add(leftGhostGroup);
+  group.add(rightGhostGroup);
+
+  const setSidePanel = (side: 'left' | 'right', state: 'closed' | 'removed') => {
+    const target = side === 'left' ? leftSideGroup : rightSideGroup;
+    const ghost = side === 'left' ? leftGhostGroup : rightGhostGroup;
+    if (state === 'removed') {
+      target.visible = false;
+      setHierarchyRaycast(target, false);
+      ghost.visible = true;
+      setHierarchyRaycast(ghost, true);
+    } else {
+      target.visible = true;
+      setHierarchyRaycast(target, true);
+      ghost.visible = false;
+      setHierarchyRaycast(ghost, false);
+    }
+  };
 
   // =========================================================================
   // 12. 20 SETS M6 SCREWS & SQUARE CAGE NUTS KIT BOX (Page 2 Item 13; Page 3 Items 18, 19)
@@ -1044,6 +1039,7 @@ export function buildBoost42UCabinetGroup(
     doorsGroup: frontDoorRoot,
     setDoorMode,
     setRearCutaway,
+    setSidePanel,
     doorsInfo,
   };
 }

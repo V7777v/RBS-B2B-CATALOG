@@ -10,6 +10,7 @@ import {
   CabinetDoorsInfo,
   resolveCabinetDoorsInfo,
 } from './CabinetModelBuilder';
+import { createBoostHeaderBadgeMesh } from './BoostRackMountLogo';
 
 /**
  * High-fidelity 3D simulation specifically for SKU 447510T (Boost 44U 75x100 Floor Standing Rack)
@@ -192,6 +193,7 @@ export function build447510TCabinetGroup(
   doorsGroup?: THREE.Group;
   setDoorMode?: (side: 'front' | 'rear', state: DoorLeafState) => void;
   setRearCutaway?: (active: boolean) => void;
+  setSidePanel?: (side: 'left' | 'right', state: 'closed' | 'removed') => void;
   doorsInfo?: CabinetDoorsInfo;
 } {
   const group = new THREE.Group();
@@ -565,6 +567,17 @@ export function build447510TCabinetGroup(
   roofMesh.castShadow = true;
   group.add(roofMesh);
 
+  // Boost brand nameplate badge on the front face of the top header bar (FRAME group child)
+  // Right-aligned: right edge at (innerWidth/2 - 0.12); centered on header bar height; z = header front surface + 0.01
+  const headerBadgeMesh = createBoostHeaderBadgeMesh(
+    widthUnits - postThick * 2,
+    roofHeight,
+    halfH - roofHeight / 2,
+    halfD,
+    ral9005Mat
+  );
+  group.add(headerBadgeMesh);
+
   // Central Raised Fan Hood (390 mm wide, Page 3 top view)
   const fanHoodWidth = 3.90;
   const fanHoodDepth = 5.60;
@@ -686,38 +699,6 @@ export function build447510TCabinetGroup(
   const rearCutout = new THREE.Mesh(rearCutoutGeom, brushMat);
   rearCutout.position.set(0, halfH + 0.005, -halfD + 0.70);
   group.add(rearCutout);
-
-  // Upper Header Brand Plate (Boost RackMount PN 447510T)
-  let badgeTex: THREE.Texture | null = null;
-  if (typeof document !== 'undefined') {
-    const badgeCanvas = document.createElement('canvas');
-    badgeCanvas.width = 1024;
-    badgeCanvas.height = 256;
-    const bCtx = badgeCanvas.getContext('2d');
-    if (bCtx) {
-      bCtx.fillStyle = '#0a0f1d';
-      bCtx.fillRect(0, 0, 1024, 256);
-      bCtx.strokeStyle = '#0284c7';
-      bCtx.lineWidth = 6;
-      bCtx.strokeRect(6, 6, 1012, 244);
-      bCtx.fillStyle = '#ffffff';
-      bCtx.font = '900 76px sans-serif';
-      bCtx.fillText('BOOST RACKMOUNT', 40, 95);
-      bCtx.fillStyle = '#38bdf8';
-      bCtx.font = '700 52px monospace';
-      bCtx.fillText('PN 447510T • 44U 75x100', 40, 165);
-      bCtx.fillStyle = '#94a3b8';
-      bCtx.font = '600 28px sans-serif';
-      bCtx.fillText('ANSI/EIA RS-310-D • DIN 41494 • COLD ROLLED STEEL', 40, 220);
-    }
-    badgeTex = new THREE.CanvasTexture(badgeCanvas);
-  }
-  const badgeMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(4.8, roofHeight * 0.85, 0.02),
-    new THREE.MeshStandardMaterial({ map: badgeTex, roughness: 0.3, metalness: 0.8 })
-  );
-  badgeMesh.position.set(0, halfH - roofHeight / 2, halfD + 0.015);
-  group.add(badgeMesh);
 
   // =========================================================================
   // 7. FRONT DOUBLE PERFORATED DOORS WITH SPRING LOCK (Page 1 point 1, Pages 2 & 3)
@@ -846,6 +827,7 @@ export function build447510TCabinetGroup(
     });
 
     (leafGroup as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
+
     return leafGroup;
   };
 
@@ -953,7 +935,7 @@ export function build447510TCabinetGroup(
   group.add(rearDoorsGroup);
 
   // Door state tracking & cutaway management
-  let currentRearDoorState: DoorLeafState = options?.doorState?.rear || 'transparent';
+  let currentRearDoorState: DoorLeafState = options?.doorState?.rear || 'closed';
   let isCutawayActive = false;
 
   const updateRearDoorOpacity = () => {
@@ -1045,7 +1027,7 @@ export function build447510TCabinetGroup(
 
   // Initialize initial door states
   const initialFrontState = options?.doorState?.front || 'transparent';
-  const initialRearState = options?.doorState?.rear || 'transparent';
+  const initialRearState = options?.doorState?.rear || 'closed';
   setDoorMode('front', initialFrontState);
   setDoorMode('rear', initialRearState);
 
@@ -1055,9 +1037,33 @@ export function build447510TCabinetGroup(
   const sideWidth = depthUnits - 0.40;
   const sidePanelGeom = new THREE.BoxGeometry(0.04, postHeight * 0.98, sideWidth);
 
+  const leftSideGroup = new THREE.Group();
+  leftSideGroup.name = 'side-panel-left';
+  (leftSideGroup as any).userData = { isSidePanel: true, side: 'left' };
+  const rightSideGroup = new THREE.Group();
+  rightSideGroup.name = 'side-panel-right';
+  (rightSideGroup as any).userData = { isSidePanel: true, side: 'right' };
+
+  // Ghost groups for removed side panels
+  const leftGhostGroup = new THREE.Group();
+  leftGhostGroup.name = 'side-panel-ghost-left';
+  leftGhostGroup.visible = false;
+  (leftGhostGroup as any).userData = { isSidePanelGhost: true, side: 'left' };
+
+  const rightGhostGroup = new THREE.Group();
+  rightGhostGroup.name = 'side-panel-ghost-right';
+  rightGhostGroup.visible = false;
+  (rightGhostGroup as any).userData = { isSidePanelGhost: true, side: 'right' };
+
   [-halfW + 0.02, halfW - 0.02].forEach((sx, idx) => {
+    const isLeft = idx === 0;
+    const targetGroup = isLeft ? leftSideGroup : rightSideGroup;
+    const targetGhostGroup = isLeft ? leftGhostGroup : rightGhostGroup;
+    const sideName: 'left' | 'right' = isLeft ? 'left' : 'right';
+    const panelCenterY = -halfH + baseHeight + postHeight / 2;
+
     const sidePanelItem = {
-      instanceId: `side-panel-${idx === 0 ? 'left' : 'right'}-447510T`,
+      instanceId: `side-panel-${isLeft ? 'left' : 'right'}-447510T`,
       sku: 'SIDE-PANELS-LOCK',
       name: 'דלתות צד פריקות עם מנעול עגול (כלול בארון)',
       description: 'זוג דלתות צד מפלדה פריקות עם מנעול עגול (Round Lock) וצילינדר מפתח עליון לפתיחה קלה ותחזוקה מהירה של ציוד התקשורת.',
@@ -1067,26 +1073,71 @@ export function build447510TCabinetGroup(
     };
 
     const sPanel = new THREE.Mesh(sidePanelGeom, ral9005Mat);
-    sPanel.position.set(sx, -halfH + baseHeight + postHeight / 2, 0);
+    sPanel.position.set(sx, panelCenterY, 0);
     sPanel.receiveShadow = true;
-    (sPanel as any).userData = { isProductMesh: true, item: sidePanelItem };
-    group.add(sPanel);
+    (sPanel as any).userData = { isProductMesh: true, item: sidePanelItem, isSidePanel: true, side: sideName };
+    targetGroup.add(sPanel);
 
     // Small Round Lock with keyhole at top center (Page 1 point 9 & Page 3 side view)
     const lockCylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.06, 16), chromeMat);
     lockCylinder.rotateZ(Math.PI / 2);
     lockCylinder.position.set(sx + (sx > 0 ? 0.02 : -0.02), halfH - roofHeight - 0.45, 0);
-    (lockCylinder as any).userData = { isProductMesh: true, item: sidePanelItem };
-    group.add(lockCylinder);
+    (lockCylinder as any).userData = { isProductMesh: true, item: sidePanelItem, isSidePanel: true, side: sideName };
+    targetGroup.add(lockCylinder);
 
     // Recessed finger release latches
     [-sideWidth * 0.35, sideWidth * 0.35].forEach(lz => {
       const latch = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.30, 0.15), materials.metalMat);
       latch.position.set(sx, halfH - roofHeight - 0.80, lz);
-      (latch as any).userData = { isProductMesh: true, item: sidePanelItem };
-      group.add(latch);
+      (latch as any).userData = { isProductMesh: true, item: sidePanelItem, isSidePanel: true, side: sideName };
+      targetGroup.add(latch);
     });
+
+    // Ghost: LineSegments (EdgesGeometry of the same box, LineDashedMaterial)
+    const ghostEdgesGeom = new THREE.EdgesGeometry(sidePanelGeom);
+    const ghostDashedMat = new THREE.LineDashedMaterial({
+      color: 0x94a3b8,
+      dashSize: 0.15,
+      gapSize: 0.1,
+      transparent: true,
+      opacity: 0.8,
+    });
+    const ghostLines = new THREE.LineSegments(ghostEdgesGeom, ghostDashedMat);
+    ghostLines.computeLineDistances();
+    ghostLines.position.set(sx, panelCenterY, 0);
+    (ghostLines as any).userData = { isSidePanelGhost: true, side: sideName };
+    targetGhostGroup.add(ghostLines);
+
+    // Invisible thin box helper mesh to ensure reliable raycasting
+    const ghostRaycastHelper = new THREE.Mesh(
+      sidePanelGeom,
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    ghostRaycastHelper.position.set(sx, panelCenterY, 0);
+    (ghostRaycastHelper as any).userData = { isSidePanelGhost: true, side: sideName };
+    targetGhostGroup.add(ghostRaycastHelper);
   });
+
+  group.add(leftSideGroup);
+  group.add(rightSideGroup);
+  group.add(leftGhostGroup);
+  group.add(rightGhostGroup);
+
+  const setSidePanel = (side: 'left' | 'right', state: 'closed' | 'removed') => {
+    const target = side === 'left' ? leftSideGroup : rightSideGroup;
+    const ghost = side === 'left' ? leftGhostGroup : rightGhostGroup;
+    if (state === 'removed') {
+      target.visible = false;
+      setHierarchyRaycast(target, false);
+      ghost.visible = true;
+      setHierarchyRaycast(ghost, true);
+    } else {
+      target.visible = true;
+      setHierarchyRaycast(target, true);
+      ghost.visible = false;
+      setHierarchyRaycast(ghost, false);
+    }
+  };
 
   // =========================================================================
   // 10. GROUNDING COPPER BUSBAR & BONDING WIRES (Page 1 point 8)
@@ -1214,6 +1265,7 @@ export function build447510TCabinetGroup(
     doorsGroup: doorsRootGroup,
     setDoorMode,
     setRearCutaway,
+    setSidePanel,
     doorsInfo,
   };
 }

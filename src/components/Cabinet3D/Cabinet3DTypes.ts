@@ -8,8 +8,10 @@ export interface CabinetDimensions3D {
   heightMm: number;
   isSchematicDimensions: boolean;
   isSchematicCapacity: boolean;
+  removableSides?: boolean;
   isSpecific447510T?: boolean;
   isSpecificBoost42U?: boolean;
+  isSpecific221221?: boolean;
 }
 
 export type DoorLeafState = 'transparent' | 'open' | 'closed' | 'removed';
@@ -32,6 +34,7 @@ export interface Product3DInstance {
   image?: string;
   optionalIdx?: number;
   accessoryRef?: any;
+  zone?: string;
 }
 
 export interface NonU3DItem {
@@ -74,4 +77,5 @@ export interface Cabinet3DViewerProps {
   onFallbackTo2D?: () => void;
   catalogData?: any[];
   className?: string;
+  onSnapshotReady?: (fn: () => string | null) => void;
 }

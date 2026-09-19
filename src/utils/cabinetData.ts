@@ -16,6 +16,7 @@ export interface CabinetMatrixData {
   suitableStandard: string[];
   suitableHanging: string[];
   suitableSliding: string[];
+  removableSides?: boolean;
 }
 
 export const normalizeSku = (sku: any): string => String(sku ?? '').trim().toUpperCase();
@@ -129,6 +130,23 @@ export const fetchCabinetMatrix = async (appCheckTok: string): Promise<Record<st
     const cabRows = (Papa.parse(cabCsvText, { header: false, skipEmptyLines: false }).data) as any[][];
     
     const matrix: Record<string, CabinetMatrixData> = {};
+
+    // Check header row (row 0 or row 1) to identify optional "sidePanels" / "פאנלי צד" column index
+    let sidePanelsColIdx = -1;
+    for (let r = 0; r < Math.min(cabRows.length, 3); r++) {
+      const headerRow = cabRows[r];
+      if (Array.isArray(headerRow)) {
+        for (let c = 0; c < headerRow.length; c++) {
+          const colName = String(headerRow[c] ?? '').trim().toLowerCase();
+          if (colName.includes('פאנלי צד') || colName.includes('פאנל צד') || colName.includes('sidepanels') || colName.includes('side panels') || colName.includes('side_panels')) {
+            sidePanelsColIdx = c;
+            break;
+          }
+        }
+      }
+      if (sidePanelsColIdx !== -1) break;
+    }
+
     for (let i = 2; i < cabRows.length; i++) {
        const row = cabRows[i];
        if (!row || row[0] === undefined || row[0] === null) continue;
@@ -138,10 +156,22 @@ export const fetchCabinetMatrix = async (appCheckTok: string): Promise<Record<st
        const uVal = parseInt(String(row[2]), 10);
        const widthVal = parseInt(String(row[3]), 10);
        const depthVal = parseInt(String(row[4]), 10);
+       const resolvedU = isNaN(uVal) ? 0 : uVal;
+
+       // 1. cabinetData.ts: read a new optional sheet column "sidePanels" (header text may be "פאנלי צד").
+       // Values: "ניתן להסרה" → removableSides: true, anything else/empty → false.
+       // Default when the column is missing: true for totalU >= 22, false otherwise.
+       let removableSides: boolean;
+       if (sidePanelsColIdx !== -1 && row[sidePanelsColIdx] !== undefined && row[sidePanelsColIdx] !== null && String(row[sidePanelsColIdx]).trim() !== '') {
+         const sideVal = String(row[sidePanelsColIdx]).trim();
+         removableSides = sideVal.includes('ניתן להסרה') || sideVal.toLowerCase().includes('removable');
+       } else {
+         removableSides = resolvedU >= 22;
+       }
 
        matrix[sku] = {
          sku,
-         u: isNaN(uVal) ? 0 : uVal,
+         u: resolvedU,
          width: isNaN(widthVal) ? null : widthVal,
          depth: isNaN(depthVal) ? null : depthVal,
          frontDoor: String(row[5] ?? '').trim(),
@@ -154,6 +184,7 @@ export const fetchCabinetMatrix = async (appCheckTok: string): Promise<Record<st
          suitableStandard: parseCompatibleSkus(row[12]),
          suitableHanging: parseCompatibleSkus(row[13]),
          suitableSliding: parseCompatibleSkus(row[14]),
+         removableSides,
        };
     }
     return matrix;

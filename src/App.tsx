@@ -2455,21 +2455,28 @@ const ProductDetailsView = (props: any) => {
                   </div>
 
                   {currentOptionals.map((opt, i) => {
-                    const catItem = catalogData.find(
-                      (p) => p.sku === opt.sku || p.sku === opt.pn,
-                    );
-                    const optPrice = catItem ? catItem.price : opt.price || 0;
+                    const sku = opt.sku || opt.pn || '';
+                    const name = opt.name || opt.description || sku;
+                    const qty = Number(opt.qty || opt.quantity) || 1;
+                    const lineTot =
+                      opt.lineTotal !== undefined && opt.lineTotal !== null
+                        ? Number(opt.lineTotal)
+                        : (Number(opt.unitPrice || opt.price || 0) * qty);
+                    const posStr = opt.positions && opt.positions.length > 0 ? opt.positions.join(', ') : '';
                     return (
                       <div
-                        key={i}
+                        key={sku || i}
                         className="flex justify-between items-center text-sm py-1.5 text-[#004387]"
                       >
                         <span className="flex-1 pl-2 truncate relative pl-4 after:content-['+'] after:absolute after:right-0 after:top-0 after:font-bold after:mr-[-10px]">
-                          + {opt.name || opt.description || opt.pn}
+                          + {name}
+                          {sku && <span className="font-mono text-xs text-gray-500 mr-1" dir="ltr">[{sku}]</span>}
+                          {qty > 1 && <span className="font-bold mr-1">×{qty}</span>}
+                          {posStr && <span className="text-gray-400 text-xs mr-1">({posStr})</span>}
                         </span>
-                        <span className="font-semibold whitespace-nowrap">
+                        <span className="font-semibold whitespace-nowrap font-mono">
                           ₪
-                          {optPrice.toLocaleString("he-IL", {
+                          {lineTot.toLocaleString("he-IL", {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
@@ -2480,17 +2487,16 @@ const ProductDetailsView = (props: any) => {
 
                   <div className="flex justify-between items-center text-lg lg:text-xl font-bold text-[#c2410c] pt-3 mt-2 border-t border-gray-200/60 bg-white -mx-4 -mb-4 p-4 rounded-b">
                     <span>סה"כ:</span>
-                    <span>
+                    <span className="font-mono">
                       ₪
                       {(
-                        selectedProduct.price +
+                        (Number(selectedProduct.price) || 0) +
                         currentOptionals.reduce((acc, opt) => {
-                          const catItem = catalogData.find(
-                            (p) => p.sku === opt.sku || p.sku === opt.pn,
-                          );
-                          return (
-                            acc + (catItem ? catItem.price : opt.price || 0)
-                          );
+                          const lineTot =
+                            opt.lineTotal !== undefined && opt.lineTotal !== null
+                              ? Number(opt.lineTotal)
+                              : (Number(opt.unitPrice || opt.price || 0) * (Number(opt.qty || opt.quantity) || 1));
+                          return acc + lineTot;
                         }, 0)
                       ).toLocaleString("he-IL", {
                         minimumFractionDigits: 2,
@@ -2617,7 +2623,7 @@ const ProductDetailsView = (props: any) => {
                                 (p) => p.sku === opt.sku || p.sku === opt.pn,
                               );
                               if (catItem) {
-                                addToCart(catItem, opt.quantity || 1, []);
+                                addToCart(catItem, opt.qty || opt.quantity || 1, []);
                               }
                             });
                             setIsAdded(true);
@@ -2965,7 +2971,14 @@ const CheckoutView = (props: any) => {
       if (item.optionals && item.optionals.length > 0) {
         orderDetails += `   תוספות בארון:\n`;
         item.optionals.forEach((opt: any) => {
-          orderDetails += `     - ${opt.pn} | ${opt.description}\n`;
+          const sku = opt.sku || opt.pn || '';
+          const name = opt.name || opt.description || sku;
+          const qty = Number(opt.qty || opt.quantity) || 1;
+          const qtyStr = qty > 1 ? ` (כמות: ${qty})` : '';
+          const posStr = opt.positions && opt.positions.length > 0 ? ` [מיקום: ${opt.positions.join(', ')}]` : '';
+          const lineTot = opt.lineTotal !== undefined && opt.lineTotal !== null ? Number(opt.lineTotal) : ((Number(opt.unitPrice || opt.price) || 0) * qty);
+          const priceStr = lineTot > 0 ? ` - ₪${lineTot.toLocaleString('he-IL')}` : '';
+          orderDetails += `     - ${sku ? `${sku} | ` : ''}${name}${qtyStr}${posStr}${priceStr}\n`;
         });
       }
       orderDetails += `\n`;
@@ -3325,16 +3338,42 @@ const CheckoutView = (props: any) => {
                       />
                     </div>
                     {item.optionals && item.optionals.length > 0 && (
-                      <div className="text-xs text-gray-600 mb-2 bg-gray-50 border border-gray-200 p-2 rounded">
-                        <strong className="block mb-1">
-                          תוספות מצורפות לארון:
-                        </strong>
-                        <ul className="list-disc pl-4 pr-1">
-                          {item.optionals.map((opt: any, i: number) => (
-                            <li key={i}>
-                              {opt.pn} - {opt.description}
-                            </li>
-                          ))}
+                      <div className="text-xs text-gray-700 mb-2 bg-gray-50 border border-gray-200 p-2.5 rounded">
+                        <div className="flex justify-between items-center mb-1.5">
+                          <strong className="block text-[#004387] font-bold">
+                            תוספות מצורפות לארון ({item.optionals.reduce((s: number, o: any) => s + (Number(o.qty || o.quantity) || 1), 0)} פריטים):
+                          </strong>
+                          <span className="font-mono text-xs text-slate-600 font-semibold">
+                            ₪{item.optionals.reduce((s: number, o: any) => s + (Number(o.lineTotal) || (Number(o.unitPrice || o.price || 0) * (Number(o.qty || o.quantity) || 1))), 0).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <ul className="space-y-1">
+                          {item.optionals.map((opt: any, i: number) => {
+                            const sku = opt.sku || opt.pn || '';
+                            const name = opt.name || opt.description || sku;
+                            const qty = Number(opt.qty || opt.quantity) || 1;
+                            const lineTot = opt.lineTotal !== undefined && opt.lineTotal !== null
+                              ? Number(opt.lineTotal)
+                              : ((Number(opt.unitPrice || opt.price) || 0) * qty);
+                            const posStr = opt.positions && opt.positions.length > 0 ? opt.positions.join(', ') : '';
+                            return (
+                              <li key={sku || i} className="flex justify-between items-center text-xs pt-1 border-t border-gray-200/60 first:border-0 first:pt-0">
+                                <div>
+                                  <span className="font-medium text-gray-900">{name}</span>
+                                  {sku && <span className="font-mono text-gray-500 text-[11px] mr-1" dir="ltr">[{sku}]</span>}
+                                  {qty > 1 && (
+                                    <span className="inline-block mx-1 font-bold text-[#004387] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                      ×{qty}
+                                    </span>
+                                  )}
+                                  {posStr && <span className="text-gray-400 text-[11px] mr-1 font-mono">({posStr})</span>}
+                                </div>
+                                <span className="font-mono font-semibold text-gray-700 whitespace-nowrap">
+                                  ₪{lineTot.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     )}
@@ -3665,12 +3704,28 @@ export default function App() {
     trackPageView(path, title);
   }, [currentView, selectedCatalog, selectedSubcategory, selectedProduct]);
   const [currentOptionals, setCurrentOptionals] = useState<any[]>([]);
-  const handleOptionalsChange = useCallback((newOptionals: any[]) => {
-    setCurrentOptionals((prev) => {
-      if (JSON.stringify(prev) === JSON.stringify(newOptionals)) return prev;
-      return newOptionals;
-    });
-  }, []);
+  const handleOptionalsChange = useCallback(
+    (newOptionals: any[]) => {
+      setCurrentOptionals((prev) => {
+        if (JSON.stringify(prev) === JSON.stringify(newOptionals)) return prev;
+        return newOptionals;
+      });
+
+      // Store them on the cart item as optionals
+      if (selectedProduct) {
+        setCart((prevCart) => {
+          const matchIndex = prevCart.findIndex(
+            (item) => item.id === selectedProduct.id || item.sku === selectedProduct.sku
+          );
+          if (matchIndex === -1) return prevCart;
+          return prevCart.map((item, idx) =>
+            idx === matchIndex ? { ...item, optionals: newOptionals } : item
+          );
+        });
+      }
+    },
+    [selectedProduct],
+  );
   const [searchQuery, setSearchQuery] = useState("");
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -6665,15 +6720,18 @@ export default function App() {
     );
   };
   const cartTotal = cart.reduce((sum, item) => {
-    let itemTotal = item.price * item.quantity;
+    const itemBasePrice = Number(item.price) || 0;
+    let optionalsTotal = 0;
     if (item.optionals && item.optionals.length > 0) {
       item.optionals.forEach((opt: any) => {
-        const accCatalogItem = catalogData.find((p) => p.sku === opt.pn);
-        if (accCatalogItem) {
-          itemTotal += (accCatalogItem.price || 0) * item.quantity;
-        }
+        const lineTotal =
+          opt.lineTotal !== undefined && opt.lineTotal !== null
+            ? Number(opt.lineTotal)
+            : (Number(opt.unitPrice ?? opt.price ?? 0) * (Number(opt.qty ?? opt.quantity) || 1));
+        optionalsTotal += lineTotal;
       });
     }
+    const itemTotal = (itemBasePrice + optionalsTotal) * (Number(item.quantity) || 1);
     return sum + itemTotal;
   }, 0);
   const cartTotalWithVat = cartTotal * 1.18; // חישוב מע"מ סטנדרטי (18% נכון ל-2025)
@@ -8487,28 +8545,53 @@ export default function App() {
                             )}
 
                             {item.optionals && item.optionals.length > 0 && (
-                              <div className="text-[10px] text-gray-600 mt-2 bg-gray-50 p-1.5 border border-gray-100 rounded">
-                                <strong className="block mb-0.5">
-                                  תוספות:
-                                </strong>
-                                <ul className="pl-3 pr-1 list-disc">
+                              <div className="text-[11px] text-gray-700 mt-2 bg-slate-50 p-2 border border-slate-200 rounded">
+                                <div className="font-bold text-[#004387] mb-1 flex justify-between items-center text-[11px]">
+                                  <span>תוספות לארון ({item.optionals.reduce((s: number, o: any) => s + (Number(o.qty || o.quantity) || 1), 0)} פריטים):</span>
+                                  <span className="font-mono text-slate-600 font-semibold">
+                                    ₪{item.optionals.reduce((s: number, o: any) => s + (Number(o.lineTotal) || (Number(o.unitPrice || o.price || 0) * (Number(o.qty || o.quantity) || 1))), 0).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <ul className="space-y-1">
                                   {item.optionals.map((opt: any, i: number) => {
-                                    const accCatalogItem = catalogData.find(
-                                      (p) => p.sku === opt.pn,
-                                    );
+                                    const sku = opt.sku || opt.pn || '';
+                                    const name = opt.name || opt.description || sku;
+                                    const qty = Number(opt.qty || opt.quantity) || 1;
+                                    const lineTot = opt.lineTotal !== undefined && opt.lineTotal !== null
+                                      ? Number(opt.lineTotal)
+                                      : ((Number(opt.unitPrice || opt.price) || 0) * qty);
+                                    const posStr = opt.positions && opt.positions.length > 0 ? opt.positions.join(', ') : '';
                                     return (
-                                      <li key={i}>
-                                        {opt.pn}{" "}
-                                        {accCatalogItem
-                                          ? `(₪${accCatalogItem.price.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
-                                          : ""}
+                                      <li key={sku || i} className="flex justify-between items-center text-[11px] pt-1 border-t border-slate-100 first:border-0 first:pt-0">
+                                        <div className="flex-1 pl-2 truncate" title={`${name} (${sku})`}>
+                                          <span className="font-medium text-slate-800">{name}</span>
+                                          {sku && <span className="font-mono text-slate-400 text-[10px] mr-1" dir="ltr">[{sku}]</span>}
+                                          {qty > 1 && (
+                                            <span className="inline-block mx-1 font-bold text-[#004387] bg-blue-50 px-1 rounded border border-blue-100">
+                                              ×{qty}
+                                            </span>
+                                          )}
+                                          {posStr && <span className="text-slate-400 text-[10px] mr-1 font-mono">({posStr})</span>}
+                                        </div>
+                                        <span className="font-mono font-semibold text-slate-700 whitespace-nowrap">
+                                          ₪{lineTot.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </span>
                                       </li>
                                     );
                                   })}
                                 </ul>
                               </div>
                             )}
-                            <div className="mt-auto pt-2 flex items-end justify-end">
+                            <div className="mt-auto pt-2 flex items-center justify-between">
+                              <div className="text-xs font-bold text-[#004387] font-mono">
+                                סה"כ: ₪{(
+                                  ((Number(item.price) || 0) +
+                                    (item.optionals || []).reduce(
+                                      (s: number, o: any) => s + (Number(o.lineTotal) || (Number(o.unitPrice || o.price || 0) * (Number(o.qty || o.quantity) || 1))),
+                                      0
+                                    )) * (Number(item.quantity) || 1)
+                                ).toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
                               <div className="flex items-center bg-[#f2f2f2] border border-gray-200 overflow-hidden">
                                 <button
                                   onClick={() => updateCartQuantity(item, -1)}
@@ -8545,10 +8628,16 @@ export default function App() {
                 </div>
                 {cart.length > 0 && (
                   <div className="border-t border-gray-200 p-5 bg-[#f2f2f2] shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.02)]">
-                    <div className="flex justify-between items-center mb-4 text-lg font-bold text-[#0c2d57]">
+                    <div className="flex justify-between items-center mb-1 text-sm text-gray-600">
                       <span>סה"כ כמות פריטים:</span>
-                      <span className="text-2xl text-[#c2410c]">
+                      <span className="font-bold text-[#0c2d57]">
                         {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center mb-4 text-base sm:text-lg font-bold text-[#0c2d57]">
+                      <span>סה"כ לתשלום:</span>
+                      <span className="text-xl sm:text-2xl text-[#c2410c] font-mono font-black">
+                        ₪{cartTotal.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <button

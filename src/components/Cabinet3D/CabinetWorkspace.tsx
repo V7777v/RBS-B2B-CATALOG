@@ -71,6 +71,7 @@ export interface CabinetWorkspaceProps {
   buildPreviewFromSlot: (slot: VisualSlot) => EnrichedPreviewItem;
   buildPreviewFromNonU: (item: any, zoneType: 'roof' | 'vertical' | 'plinth' | 'hardware') => EnrichedPreviewItem;
   getAccessoryImage: (item: any) => string;
+  onSnapshotReady?: (fn: () => string | null) => void;
 }
 
 export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
@@ -118,6 +119,7 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
   buildPreviewFromSlot,
   buildPreviewFromNonU,
   getAccessoryImage,
+  onSnapshotReady,
 }) => {
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280);
   const [isRightCollapsed, setIsRightCollapsed] = useState(false);
@@ -535,7 +537,7 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
 
                   return (
                     <motion.div
-                      key={item.instanceId || item.id || `${item.sku || item.pn}-${idx}`}
+                      key={item.instanceId || `${item.sku || item.pn || item.id}-${idx}`}
                       layout
                       initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -798,6 +800,7 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
                 onIncrementQuantity={onIncrementQuantity}
                 onRemoveOptional={onRemoveOptional}
                 onFallbackTo2D={() => setViewMode('2d')}
+                onSnapshotReady={onSnapshotReady}
               />
             </React.Suspense>
           </Cabinet3DErrorBoundary>

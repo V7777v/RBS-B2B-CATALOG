@@ -97,6 +97,12 @@ export const VERIFIED_ZERO_U_EXCEPTIONS: Record<string, ZeroUException> = {
     zone: 'hardware',
     reason: 'מארז 50 ברגים ואומי כלוב להתקנת ציוד',
   },
+  '111014': {
+    sku: '111014',
+    name: 'כלי להחלפת אום כלובים',
+    zone: 'hardware',
+    reason: 'כלי ידני להחלפת אומי כלוב, אינו תופס מקום במסילות ה-U (0U)',
+  },
 
   // Vertical 12-outlet PDUs (mount vertically in side/rear cable channels)
   '812131111': {

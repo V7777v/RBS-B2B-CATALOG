@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from "motion/react";
 import { 
   AlertCircle,
@@ -9,6 +9,7 @@ import {
   X,
   Server,
   Download,
+  MessageCircle,
   Box,
   AlertTriangle,
   ChevronDown,
@@ -55,8 +56,12 @@ import { getToken as getAppCheckToken } from 'firebase/app-check';
 import { appCheck } from '../firebase';
 import { Cabinet3DErrorBoundary } from './Cabinet3D/Cabinet3DErrorBoundary';
 import { AddSlotModal } from './Cabinet3D/AddSlotModal';
-import { isCabinetBoost42U } from './Cabinet3D/CabinetModelBuilder';
+import { isCabinetBoost42U, isCabinet221221 } from './Cabinet3D/CabinetModelBuilder';
 import { CabinetWorkspace } from './Cabinet3D/CabinetWorkspace';
+import { OrderSummaryTable, OrderLine, OrderTotals } from './OrderSummaryTable';
+export type { OrderLine, OrderTotals };
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const Cabinet3DViewer = React.lazy(() =>
   import('./Cabinet3D/Cabinet3DViewer').then(m => ({ default: m.Cabinet3DViewer }))
@@ -85,6 +90,8 @@ interface Accessory {
   image?: string;
   brand?: string;
   brandLogo?: string;
+  zone?: string;
+  category?: string;
   _pdu?: boolean;
   _curated?: boolean;
   _promoted?: boolean;
@@ -96,7 +103,6 @@ interface Accessory {
   targetU?: number;
   id?: string;
 }
-
 
 // Only items belonging to Infrastructure pricelist / categories should appear as cabinet accessories (Track 2)
 const isInfrastructureItem = (pp: any): boolean => {
@@ -143,7 +149,7 @@ const isInfrastructureItem = (pp: any): boolean => {
   return isInfraCategory || isInfraSub || isRackmount;
 };
 
-export type PhysicalZone = 'roof' | 'rear' | 'plinth' | 'vertical' | 'hardware';
+export type PhysicalZone = 'roof' | 'rear' | 'rear-top' | 'rear-middle' | 'rear-bottom' | 'plinth' | 'vertical' | 'hardware';
 
 const getPhysicalZone = (sku: string, name: string, desc: string): PhysicalZone => {
   const norm = normalizeSku(sku);
@@ -263,6 +269,19 @@ const buildCatalogAccessories = (
       VERIFIED_ZERO_U_EXCEPTIONS[normSku] !== undefined;
 
     if (!isAccCategory) return;
+
+    // Filter out built-in zero-U items to prevent duplicate incompatible additions
+    const itemHay = `${pp.name || ''} ${pp.description || ''}`.toLowerCase();
+    const uSizeCheck = resolveUConsumption(pp).u;
+    
+    if (uSizeCheck === 0) {
+      if (/מאוורר|fan|מפוח/i.test(itemHay) && cabinet && parseAccessoryCount(cabinet.fans) > 0) {
+        return; // Cabinet already has built-in fans and no extra roof bays are available
+      }
+      if (/גלגל|caster|wheel/i.test(itemHay) && cabinet && parseAccessoryCount(cabinet.wheels) > 0) {
+        return; // Cabinet already has casters
+      }
+    }
 
     // Validate physical compatibility with cabinet
     const compatResult = checkTrackBAccessoryCompatibility(pp, cabinet, compatMap);
@@ -571,7 +590,7 @@ const RenderSchematicFallback: React.FC<{ item: EnrichedPreviewItem; isLarge?: b
 interface CabinetConfiguratorProps {
   product: any;
   catalogData: any[];
-  onOptionalsChange?: (optionals: Accessory[]) => void;
+  onOptionalsChange?: (optionals: OrderLine[]) => void;
   initialAccessory?: any;
 }
 
@@ -719,7 +738,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
     // 2. Optional accessories added by user (Contiguous allocation)
     const optionalItemsAssignment: { uIndex: number; name: string; description: string; accessoryRef: any; optionalIdx: number; isAnchor: boolean; spanU: number; error?: string; instanceId?: string }[] = [];
-    const nonUAccessories: { name: string; sku: string; quantity: number; description: string; accessoryRef: any; optionalIdx: number; zone: PhysicalZone }[] = [];
+    const nonUAccessories: { name: string; sku: string; quantity: number; description: string; accessoryRef: any; optionalIdx: number; zone: PhysicalZone; instanceId?: string }[] = [];
     
     // Pass 1: only items with opt.targetU (pinned)
     selectedOptionals.forEach((opt: any, optIdx: number) => {
@@ -833,19 +852,19 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         builtSlots.push({
           uIndex: u,
           type: 'preset-shelf',
-          name: 'מדף מובנה (כלול בארון)',
-          description: 'מדף מתכת הכלול בארון כחלק מתצורת היצרן. ניתן לשינוי מיקום לפי צורך.',
+          name: 'מדף קבוע בעומס כבד (כלול בארון)',
+          description: 'מדף קבוע בעומס כבד מאוורר 19 אינץ׳ (דגם 117914). חלק מתצורת היצרן. ניתן לשינוי מיקום.',
           spanU: 1,
           isAnchor: true,
           instanceId: shelfEntry.instanceId,
           accessoryRef: {
-            name: 'מדף מובנה (כלול בארון)',
-            sku: 'BUILTIN-SHELF',
+            name: 'מדף קבוע בעומס כבד מאוורר 19 אינץ׳',
+            sku: '117914',
             isPreset: true,
             isLocked: false,
             price: 0,
             uSize: 1,
-            description: 'מדף מתכת הכלול בארון כחלק מהתצורה הסטנדרטית.'
+            description: 'מדף קבוע בעומס כבד מאוורר 19 אינץ׳ (דגם 117914). חלק מתצורת היצרן.'
           }
         });
       } else {
@@ -875,6 +894,111 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     
     return { usedU: calcUsedU, slots: builtSlots, nonUAccessories, unallocatedItems };
   }, [totalU, includedItems, selectedOptionals, cabinetData, presetOverrides]);
+
+  const orderLines = React.useMemo<OrderLine[]>(() => {
+    const groupMap = new Map<string, {
+      sku: string;
+      name: string;
+      uSize: number;
+      qty: number;
+      unitPrice: number;
+      items: any[];
+    }>();
+
+    (selectedOptionals || []).forEach((opt: any) => {
+      if ((opt as any)?._illustration) return;
+      const rawKey = String(opt.sku || opt.pn || '').trim();
+      if (!rawKey) return;
+      const key = normalizeSku(rawKey) || rawKey;
+      const quantity = Math.max(1, Number(opt.quantity) || 1);
+      const existing = groupMap.get(key);
+      if (!existing) {
+        groupMap.set(key, {
+          sku: opt.sku || opt.pn || rawKey,
+          name: opt.name || opt.description || opt.pn || rawKey,
+          uSize: Number(opt.uSize) || 0,
+          qty: quantity,
+          unitPrice: Number(opt.price) || 0,
+          items: [opt],
+        });
+      } else {
+        existing.qty += quantity;
+        existing.items.push(opt);
+      }
+    });
+
+    const lines: OrderLine[] = [];
+
+    groupMap.forEach((group, key) => {
+      const normGroupKey = normalizeSku(group.sku) || key;
+
+      // Anchor slots in `slots` (type 'optional-accessory', isAnchor !== false)
+      const anchorSlots = (slots || [])
+        .filter((s: any) => {
+          if (s.type !== 'optional-accessory' || s.isAnchor === false) return false;
+          const refKey = String(s.accessoryRef?.sku || s.accessoryRef?.pn || '').trim();
+          return refKey === group.sku || (Boolean(refKey) && normalizeSku(refKey) === normGroupKey);
+        })
+        .map((s: any) => Number(s.uIndex))
+        .filter((u: number) => !isNaN(u) && u > 0)
+        .sort((a: number, b: number) => a - b)
+        .map((u: number) => `U${u}`);
+
+      // Check if item appears in unallocatedItems
+      const appearsInUnallocated = (unallocatedItems || []).some((item: any) => {
+        const itemKey = String(item.sku || item.pn || '').trim();
+        return itemKey === group.sku || (Boolean(itemKey) && normalizeSku(itemKey) === normGroupKey);
+      });
+
+      let status: 'unplaced' | 'aux' | 'placed';
+      let positions: string[];
+
+      if (group.uSize === 0) {
+        status = 'aux';
+        positions = ['0U'];
+      } else if (appearsInUnallocated) {
+        status = 'unplaced';
+        positions = anchorSlots.length > 0 ? [...anchorSlots, 'לא שובץ'] : ['לא שובץ'];
+      } else if (anchorSlots.length > 0) {
+        status = 'placed';
+        positions = anchorSlots;
+      } else {
+        status = 'unplaced';
+        positions = ['לא שובץ'];
+      }
+
+      lines.push({
+        sku: group.sku,
+        name: group.name,
+        uSize: group.uSize,
+        qty: group.qty,
+        unitPrice: group.unitPrice,
+        lineTotal: group.unitPrice * group.qty,
+        positions,
+        status,
+      });
+    });
+
+    return lines;
+  }, [selectedOptionals, slots, nonUAccessories, unallocatedItems]);
+
+  const orderTotals = React.useMemo<OrderTotals>(() => {
+    const accessoriesTotal = orderLines.reduce((sum, line) => sum + line.lineTotal, 0);
+    const cabinetPrice = Number(product?.price) || 0;
+    const grandTotal = cabinetPrice + accessoriesTotal;
+    const unplacedCount = unallocatedItems.length > 0
+      ? unallocatedItems.length
+      : orderLines.filter(line => line.status === 'unplaced').reduce((sum, line) => sum + (line.qty || 1), 0);
+    const extraCount = orderLines.reduce((sum, line) => sum + line.qty, 0);
+
+    return {
+      accessoriesTotal,
+      cabinetPrice,
+      grandTotal,
+      unplacedCount,
+      extraCount,
+    };
+  }, [orderLines, product?.price, unallocatedItems.length]);
 
   const totalSlotsU = totalU || 0;
   const availableU = totalU - usedU;
@@ -923,6 +1047,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [chassisPulse, setChassisPulse] = useState(false);
   const [pdfWithPrice, setPdfWithPrice] = useState(false);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [pdfSnapshot, setPdfSnapshot] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isSharingWhatsApp, setIsSharingWhatsApp] = useState(false);
   const [accSearch, setAccSearch] = useState('');
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
@@ -930,6 +1057,13 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [customAccU, setCustomAccU] = useState<number>(1);
 
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d');
+  const snapshot3DRef = useRef<(() => string | null) | null>(null);
+
+  useEffect(() => {
+    if (viewMode === '2d') {
+      snapshot3DRef.current = null;
+    }
+  }, [viewMode]);
   const [isWideLayout, setIsWideLayout] = useState<boolean>(true);
   const [isStudioMode, setIsStudioMode] = useState<boolean>(false);
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState<boolean>(false);
@@ -955,6 +1089,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [previewAddSlotSpanU, setPreviewAddSlotSpanU] = useState<number>(1);
   const [isAuxiliaryModalOpen, setIsAuxiliaryModalOpen] = useState(false);
   const [isPduModalOpen, setIsPduModalOpen] = useState(false);
+  const [globalPendingPduItem, setGlobalPendingPduItem] = useState<any | null>(null);
 
   // Drag and Drop & Floating Hover Cursor Tracker
   const [draggedSlot, setDraggedSlot] = useState<VisualSlot | null>(null);
@@ -1160,21 +1295,27 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     );
 
     if (!undoState.stateSignatureAfter || currentSig === undoState.stateSignatureAfter) {
-      setSelectedOptionals(undoState.previousOptionals);
-      setPresetOverrides(undoState.previousPresetOverrides);
+      if (undoState.previousOptionals) {
+        setSelectedOptionals(undoState.previousOptionals);
+      }
+      if (undoState.previousPresetOverrides) {
+        setPresetOverrides(undoState.previousPresetOverrides);
+      }
     } else {
       // Revert moves and remove added instance while retaining independent additions
       setSelectedOptionals(current => {
         const filtered = current.filter(c => (c.instanceId || c.id) !== undoState.actionAddedInstanceId);
         return filtered.map(item => {
-          const orig = undoState.previousOptionals.find((p: any) => (p.instanceId || p.id) === (item.instanceId || item.id));
+          const orig = undoState.previousOptionals?.find((p: any) => (p.instanceId || p.id) === (item.instanceId || item.id));
           if (orig) {
             return { ...item, targetU: orig.targetU, quantity: orig.quantity };
           }
           return item;
         });
       });
-      setPresetOverrides(undoState.previousPresetOverrides);
+      if (undoState.previousPresetOverrides) {
+        setPresetOverrides(undoState.previousPresetOverrides);
+      }
     }
 
     setUndoState(null);
@@ -1215,7 +1356,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         ...prev,
         { ...acc, quantity: 1, id: newInstId, instanceId: newInstId, targetU: undefined }
       ]);
-      setUndoState(null);
       setChassisPulse(true);
       if (sourceIdx >= 0) {
         setAddedIdx(sourceIdx);
@@ -1283,7 +1423,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     ]);
 
     setLastAddedInstanceId(newInstId);
-    setUndoState(null);
     setChassisPulse(true);
     if (sourceIdx >= 0) {
       setAddedIdx(sourceIdx);
@@ -1304,7 +1443,11 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     if (movingInstanceId) {
       const itemToMoveIndex = selectedOptionals.findIndex(o => o.instanceId === movingInstanceId || o.id === movingInstanceId);
       if (itemToMoveIndex !== -1) {
-        const item = selectedOptionals[itemToMoveIndex];
+        let item = selectedOptionals[itemToMoveIndex];
+        // If moving a rear PDU to a front U slot, convert to 1U
+        if (item.uSize === 0 && item.zone?.startsWith('rear')) {
+          item = { ...item, uSize: 1, zone: undefined };
+        }
         const newOptionals = [...selectedOptionals];
         newOptionals.splice(itemToMoveIndex, 1);
         setSelectedOptionals(newOptionals);
@@ -1320,6 +1463,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   };
 
   const handleAddOptionalAtSlot = (acc: Accessory, targetU: number | null) => {
+    setUndoState({
+      previousOptionals: [...selectedOptionals],
+      previousPresetOverrides: { ...presetOverrides },
+      actionAddedInstanceId: '',
+      message: `נוסף פריט: ${acc.name || acc.description || acc.sku || ''}${targetU ? ` ב-U${targetU}` : ''}`,
+    } as any);
     validateAndProcessAdd(acc, targetU);
   };
 
@@ -1341,8 +1490,17 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     setCustomAccU(1);
   };
 
-  const handleIncrementQuantity = (index: number) => {
-    const item = selectedOptionals[index];
+  const handleIncrementQuantity = (target: number | string) => {
+    let item: any = null;
+    if (typeof target === 'number') {
+      item = selectedOptionals[target];
+    } else {
+      const norm = normalizeSku(target);
+      item = selectedOptionals.find(p => {
+        const pSku = String(p.sku || p.pn || '').trim();
+        return pSku === target || (Boolean(pSku) && normalizeSku(pSku) === norm);
+      });
+    }
     if (!item) return;
     validateAndProcessAdd(item, null, -1);
   };
@@ -1501,6 +1659,44 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             'כבלים ומחברי הארקה (Grounding Kit)'
           ]);
           setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, specBoost42U, compatMap, allMatrixShelves));
+          setLoading(false);
+          return;
+        }
+
+        // Dedicated handling for SKU 221221 (Boost RackMount 4U Single Section Wall Cabinet) based on manufacturer blueprint
+        if (productSkuNorm === '221221' || productSkuNorm === '221-221' || isCabinet221221(product, null)) {
+          const spec221221: CabinetMatrixData = {
+            sku: '221221',
+            model: 'Boost RackMount 4U Single Section Wall Cabinet (550*400*200)',
+            u: 4,
+            width: 550,
+            depth: 400,
+            frontDoor: 'דלת קדמית זכוכית מחוסמת 4.0 מ״מ עם מסגרת פלדה SPCC ומנעול עגול',
+            rearDoor: 'ללא דלת אחורית (גב פלדה SPCC 0.8 מ״מ לתלייה על קיר)',
+            color: 'RAL9005 Black SPCC Cold Rolled Steel',
+            fans: '1 (מגרעת בגג להרכבת מאוורר 120 מ״מ)',
+            wheels: '0',
+            levelingFeet: '0',
+            shelvesQty: '0',
+            suitableStandard: [],
+            suitableHanging: [],
+            suitableSliding: []
+          };
+          setCabinetData(spec221221);
+          setTotalU(4);
+          inMatrixShelvesRef.current = new Set<string>();
+          setIncludedItems([
+            'גוף ארון מודולרי SPCC Cold Rolled Steel תקן 19 אינץ׳ (ANSI/EIA RS-310-D)',
+            'דלת קדמית זכוכית מחוסמת 4.0 מ״מ עם מסגרת פלדה SPCC 1.0 מ״מ ומנעול עגול קטן עם מפתחות',
+            'גב פלדה SPCC 0.8 מ״מ לתלייה על הקיר עם חורי מפתח ופתח כבילה ייעודי',
+            '2 דלתות צד פריקות SPCC 0.8 מ״מ עם פתחי אוורור (Louvers) ובריחי נעילה מהירים',
+            'מגרעת עליונה (Fan Cutout) להרכבת מאוורר 120 מ״מ בגג הארון',
+            'פתחי כבילה עליון ותחתון עם פלטת Knockout נשלפת',
+            'זוג עמודי מונטינג קדמיים 19" בעובי 1.2 מ״מ SPCC עם סימוני 4U וחורי כלוב',
+            'ערכת ברגים, דיסקיות ואומי כלוב M6 Cage Nuts',
+            'הכנה וברגי הארקה (Grounding Studs)'
+          ]);
+          setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, spec221221, compatMap, allMatrixShelves));
           setLoading(false);
           return;
         }
@@ -1716,32 +1912,170 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   // Fire onOptionalsChange
   useEffect(() => {
     if (onOptionalsChangeRef.current) {
-      const flattened: Accessory[] = [];
-      selectedOptionals.forEach(item => {
-        if ((item as any)._illustration) return; // visual-only, never added to the order
-        const qty = Math.max(1, Number(item.quantity) || 1);
-        for (let i = 0; i < qty; i++) {
-          flattened.push(item);
-        }
-      });
-      onOptionalsChangeRef.current(flattened);
+      onOptionalsChangeRef.current(orderLines);
     }
-  }, [selectedOptionals]);
+  }, [orderLines]);
 
   const handleAddOptional = (acc: Accessory, idx: number) => {
-    validateAndProcessAdd(acc, null, idx);
+    setUndoState({
+      previousOptionals: [...selectedOptionals],
+      previousPresetOverrides: { ...presetOverrides },
+      actionAddedInstanceId: '',
+      message: `נוסף פריט: ${acc.name || acc.description || acc.sku || ''}`,
+    } as any);
+    const itemText = `${acc.name || ''} ${acc.description || ''}`.toLowerCase();
+    const isItemPdu = acc._pdu || /פס שקע|שקעים|pdu/i.test(itemText) || String(acc.category || '').includes('פסי שקעים');
+    
+    if (isItemPdu) {
+      setAddSlotTargetU(null);
+      setGlobalPendingPduItem({ ...acc, _pdu: true });
+      setIsPduModalOpen(true);
+    } else {
+      validateAndProcessAdd(acc, null, idx);
+    }
   };
 
-  const handleRemoveOptional = (index: number, fullyRemove = false) => {
-    const item = selectedOptionals[index];
+  const handleRemoveOptional = (target: number | string, fullyRemove = false) => {
+    let item: any = null;
+    let targetIndex = -1;
+
+    if (typeof target === 'number') {
+      targetIndex = target;
+      item = selectedOptionals[targetIndex];
+    } else {
+      const norm = normalizeSku(target);
+      for (let i = selectedOptionals.length - 1; i >= 0; i--) {
+        const pSku = String(selectedOptionals[i].sku || selectedOptionals[i].pn || '').trim();
+        if (pSku === target || (Boolean(pSku) && normalizeSku(pSku) === norm)) {
+          targetIndex = i;
+          item = selectedOptionals[i];
+          break;
+        }
+      }
+    }
+
     if (!item) return;
-    setUndoState(null);
+
+    setUndoState({
+      previousOptionals: [...selectedOptionals],
+      previousPresetOverrides: { ...presetOverrides },
+      actionAddedInstanceId: '',
+      message: `הוסר פריט: ${item.name || item.description || item.sku || ''}`,
+    } as any);
 
     setSelectedOptionals(prev => {
-      if (fullyRemove) {
-        return prev.filter(p => (p.sku || p.pn) !== (item.sku || item.pn));
+      if (typeof target === 'string') {
+        const norm = normalizeSku(target);
+        if (fullyRemove) {
+          return prev.filter(p => {
+            const pSku = String(p.sku || p.pn || '').trim();
+            return pSku !== target && normalizeSku(pSku) !== norm;
+          });
+        }
+        let matchIdx = -1;
+        for (let i = prev.length - 1; i >= 0; i--) {
+          const pSku = String(prev[i].sku || prev[i].pn || '').trim();
+          if (pSku === target || (Boolean(pSku) && normalizeSku(pSku) === norm)) {
+            matchIdx = i;
+            break;
+          }
+        }
+        if (matchIdx === -1) return prev;
+        const targetItem = prev[matchIdx];
+        if (Number(targetItem.quantity) > 1) {
+          const next = [...prev];
+          next[matchIdx] = { ...targetItem, quantity: Number(targetItem.quantity) - 1 };
+          return next;
+        }
+        return prev.filter((_, i) => i !== matchIdx);
       }
-      return prev.filter((_, i) => i !== index);
+
+      if (fullyRemove) {
+        const itemToRemove = prev[target];
+        if (!itemToRemove) return prev;
+        const norm = normalizeSku(itemToRemove.sku || itemToRemove.pn);
+        return prev.filter(p => normalizeSku(p.sku || p.pn) !== norm);
+      }
+      return prev.filter((_, i) => i !== target);
+    });
+  };
+
+  const handleRemoveUnplaced = () => {
+    // Identify lines that are unplaced
+    const unplacedLines = orderLines.filter(line => line.status === 'unplaced');
+    if (unplacedLines.length === 0 && unallocatedItems.length === 0) return;
+
+    // Track placed anchor count for each unplaced SKU
+    const placedCountsByNormSku = new Map<string, number>();
+    unplacedLines.forEach(line => {
+      const normKey = normalizeSku(line.sku) || line.sku;
+      const placedCount = (slots || []).filter((s: any) => {
+        if (s.type !== 'optional-accessory' || s.isAnchor === false) return false;
+        const refKey = String(s.accessoryRef?.sku || s.accessoryRef?.pn || '').trim();
+        return refKey === line.sku || (Boolean(refKey) && normalizeSku(refKey) === normKey);
+      }).length;
+      placedCountsByNormSku.set(normKey, placedCount);
+    });
+
+    // Also include any items specifically in unallocatedItems
+    (unallocatedItems || []).forEach((item: any) => {
+      const rawSku = String(item.sku || item.pn || '').trim();
+      const normKey = normalizeSku(rawSku) || rawSku;
+      if (!placedCountsByNormSku.has(normKey)) {
+        const placedCount = (slots || []).filter((s: any) => {
+          if (s.type !== 'optional-accessory' || s.isAnchor === false) return false;
+          const refKey = String(s.accessoryRef?.sku || s.accessoryRef?.pn || '').trim();
+          return refKey === rawSku || (Boolean(refKey) && normalizeSku(refKey) === normKey);
+        }).length;
+        placedCountsByNormSku.set(normKey, placedCount);
+      }
+    });
+
+    setUndoState({
+      previousOptionals: [...selectedOptionals],
+      previousPresetOverrides: { ...presetOverrides },
+      actionAddedInstanceId: '',
+      message: 'הוסרו פריטים שלא שובצו בארון',
+    } as any);
+
+    setSelectedOptionals(prev => {
+      const remainingPlaced = new Map(placedCountsByNormSku);
+      const next: any[] = [];
+
+      prev.forEach(opt => {
+        if ((opt as any)?._illustration) {
+          next.push(opt);
+          return;
+        }
+        if (opt.uSize === 0) {
+          next.push(opt);
+          return;
+        }
+        const optSku = String(opt.sku || opt.pn || '').trim();
+        const normKey = normalizeSku(optSku) || optSku;
+
+        if (!remainingPlaced.has(normKey)) {
+          next.push(opt);
+          return;
+        }
+
+        const allowed = remainingPlaced.get(normKey) || 0;
+        const optQty = Math.max(1, Number(opt.quantity) || 1);
+
+        if (allowed <= 0) {
+          // Zero units placed, completely remove
+          return;
+        } else if (optQty <= allowed) {
+          next.push(opt);
+          remainingPlaced.set(normKey, allowed - optQty);
+        } else {
+          // Partial placement: keep only placed units
+          next.push({ ...opt, quantity: allowed });
+          remainingPlaced.set(normKey, 0);
+        }
+      });
+
+      return next;
     });
   };
 
@@ -1861,12 +2195,41 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       }
     }
 
+    let finalSku = sku;
+    let finalImage = image;
+    let finalDesc = description;
+
+    if (slot.sku === 'BUILTIN-FAN' || slot.sku === 'OPTIONAL-FAN') {
+      const isOpt = slot.sku === 'OPTIONAL-FAN';
+      const actualFan = isOpt 
+         ? selectedOptionals.find(o => /מאוורר|fan/i.test(`${o.name} ${o.description}`)) 
+         : catalogData?.find((p: any) => /מאוורר|fan/i.test(`${p.name} ${p.description}`) && p.images?.length > 0);
+      
+      if (actualFan) {
+        finalSku = actualFan.sku || actualFan.pn || finalSku;
+        finalImage = actualFan.images?.[0] || actualFan.imageURL || finalImage;
+        if (isOpt) finalDesc = actualFan.description || finalDesc;
+      }
+    } else if (slot.sku === 'WHEELS' || slot.type === 'caster') {
+      const casterProd = catalogData?.find((p: any) => /גלגל|casters/i.test(`${p.name} ${p.description}`) && p.images?.length > 0);
+      if (casterProd) {
+        finalSku = casterProd.sku || casterProd.pn || finalSku;
+        finalImage = casterProd.images?.[0] || casterProd.imageURL || finalImage;
+      }
+    } else if (slot.sku === 'FEET' || slot.type === 'feet') {
+      const feetProd = catalogData?.find((p: any) => /פילוס/i.test(`${p.name} ${p.description}`) && p.images?.length > 0);
+      if (feetProd) {
+        finalSku = feetProd.sku || feetProd.pn || finalSku;
+        finalImage = feetProd.images?.[0] || feetProd.imageURL || finalImage;
+      }
+    }
+
     return {
       instanceId: slot.instanceId || slot.id || '',
       name,
-      sku,
-      description,
-      image,
+      sku: finalSku,
+      description: finalDesc,
+      image: finalImage,
       uSize,
       spanU,
       price,
@@ -1902,6 +2265,11 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     } else if (isFan) {
       zone = 'תקרת הארון (Roof Unit)';
       description = 'יחידת 4 מאווררי יניקה שקטים מובנים בגג הארון לסירקולציית אוויר וקירור מיטבי.';
+      const fanProd = catalogData?.find((p: any) => /מאוורר|fan/i.test(`${p.name} ${p.description}`) && p.images && p.images.length > 0);
+      if (fanProd) {
+        sku = fanProd.sku || sku;
+        image = fanProd.images?.[0] || fanProd.imageURL || '';
+      }
     } else if (isDoors) {
       zone = 'חזית וגב הארון';
       description = 'דלת קדמית ואחורית עם רשת מחוררת 71% אוורור וידיות נעילה בריח.';
@@ -1914,6 +2282,11 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     } else if (isWheels) {
       zone = 'בסיס הארון';
       description = 'סט 4 גלגלים כבדים (2 עם מעצור) לשינוע קל ובטוח של הארון.';
+      const casterProd = catalogData?.find((p: any) => /גלגל|casters/i.test(`${p.name} ${p.description}`) && p.images && p.images.length > 0);
+      if (casterProd) {
+        sku = casterProd.sku || sku;
+        image = casterProd.images?.[0] || casterProd.imageURL || '';
+      }
     } else if (isFeet) {
       zone = 'בסיס הארון';
       description = 'סט 4 רגלי פילוס מתכווננות בגובה לקיבוע יציב ומפולס.';
@@ -1947,7 +2320,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     const quantity = Math.max(1, Number(item.quantity) || Number(acc.quantity) || 1);
     const zoneMap: Record<PhysicalZone, string> = {
       roof: 'תקרת הארון (Roof) · איוורור ותאורה',
-      rear: 'רלס אחורי עליון (Rear Rail) · פס שקעים (0U)',
+      rear: 'רלסים אחוריים (Rear Rails) · פס שקעים (0U)',
+      'rear-top': 'רלס אחורי עליון (Rear Rails - Top) · פס שקעים (0U)',
+      'rear-middle': 'רלס אחורי אמצעי (Rear Rails - Middle) · פס שקעים (0U)',
+      'rear-bottom': 'רלס אחורי תחתון (Rear Rails - Bottom) · פס שקעים (0U)',
       vertical: 'דופן ורטיקלית וצדית (Vertical Rails)',
       plinth: 'בסיס ותחתית הארון (Plinth / Base)',
       hardware: 'חומרת הרכבה וציוד נלווה (Hardware)',
@@ -2165,11 +2541,115 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   // which iOS/PWA blocks and which clipped the layout on desktop).
   const handleDownloadPdf = (withPrice: boolean) => {
     setPdfWithPrice(withPrice);
+    setPdfSnapshot(snapshot3DRef.current ? snapshot3DRef.current() : null);
     setShowPdfPreview(true);
+  };
+
+  const buildPdfBlob = async (): Promise<Blob> => {
+    const el = document.getElementById('cabinet-pdf-doc');
+    if (!el) {
+      throw new Error('Document element cabinet-pdf-doc not found');
+    }
+
+    const canvas = await html2canvas(el, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+    });
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const pdf = new jsPDF({
+      unit: 'mm',
+      format: 'a4',
+      orientation: 'portrait',
+    });
+
+    const pdfWidth = 210;
+    const pdfPageHeight = 297;
+    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+    heightLeft -= pdfPageHeight;
+
+    while (heightLeft > 0) {
+      position -= pdfPageHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+      heightLeft -= pdfPageHeight;
+    }
+
+    return pdf.output('blob');
+  };
+
+  const downloadBlob = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPdfFile = async () => {
+    try {
+      setIsGeneratingPdf(true);
+      const blob = await buildPdfBlob();
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const yyyymmdd = `${year}${month}${day}`;
+      const sku = product?.sku || cabinetData?.sku || 'CABINET';
+      const fileName = `RBS-ארון-${sku}-${yyyymmdd}.pdf`;
+
+      downloadBlob(blob, fileName);
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleShareWhatsApp = async () => {
+    try {
+      setIsSharingWhatsApp(true);
+      const blob = await buildPdfBlob();
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const yyyymmdd = `${year}${month}${day}`;
+      const sku = product?.sku || cabinetData?.sku || 'CABINET';
+      const fileName = `RBS-ארון-${sku}-${yyyymmdd}.pdf`;
+
+      const file = new File([blob], fileName, { type: 'application/pdf' });
+      const text = `הצעת תצורה לארון ${product?.name || cabinetData?.model || 'תקשורת'} (${sku}) — ${orderTotals.extraCount} אביזרים, סה"כ ₪${orderTotals.grandTotal.toLocaleString('he-IL')}`;
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'הצעת תצורה RBS', text });
+      } else {
+        // desktop fallback: download the file, then open WhatsApp with the text
+        downloadBlob(blob, fileName);
+        window.open(`https://wa.me/?text=${encodeURIComponent(text + '\n(הקובץ ירד למחשב — צרף אותו לשיחה)')}`, '_blank');
+      }
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        console.error('Failed to share to WhatsApp:', err);
+      }
+    } finally {
+      setIsSharingWhatsApp(false);
+    }
   };
 
   if (loading) return <div className="p-8 mt-8 bg-gray-50 text-center text-gray-500 border border-gray-200">טוען קונפיגורטור ארון מותאם אישית...</div>;
   if (errorMsg) return <div className="p-8 mt-8 bg-red-50 text-center text-red-700 border border-red-200" dir="rtl">{errorMsg}</div>;
+
+  const canUndo = !!undoState;
 
   if (isStudioMode) {
     return (
@@ -2218,6 +2698,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         buildPreviewFromSlot={buildPreviewFromSlot}
         buildPreviewFromNonU={buildPreviewFromNonU}
         getAccessoryImage={getAccessoryImage}
+        onSnapshotReady={(fn) => { snapshot3DRef.current = fn; }}
       />
     );
   }
@@ -2259,6 +2740,13 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             <Box size={16} />
             מקום פנוי (המחשה): {availableU}U / {totalSlotsU}U
           </div>
+          {canUndo && (
+            <button type="button" onClick={handleUndoLastAction}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded border border-white/40 text-white hover:bg-white/10"
+              title="בטל את הפעולה האחרונה">
+              <Undo2 size={14} /> בטל פעולה אחרונה
+            </button>
+          )}
         </div>
       </div>
 
@@ -2370,7 +2858,11 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                   onProductMoveRequested={(instanceId, newU) => {
                     const itemToMoveIndex = selectedOptionals.findIndex(o => o.instanceId === instanceId || o.id === instanceId);
                     if (itemToMoveIndex !== -1) {
-                      const item = selectedOptionals[itemToMoveIndex];
+                      let item = selectedOptionals[itemToMoveIndex];
+                      // If it's a 0U PDU being dragged to a front U slot, convert it back to a 1U front item
+                      if (item.uSize === 0 && newU !== null && item.zone?.startsWith('rear')) {
+                         item = { ...item, uSize: 1, zone: undefined };
+                      }
                       const newOptionals = [...selectedOptionals];
                       newOptionals.splice(itemToMoveIndex, 1);
                       setSelectedOptionals(newOptionals);
@@ -2390,6 +2882,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                   onIncrementQuantity={handleIncrementQuantity}
                   onRemoveOptional={handleRemoveOptional}
                   onFallbackTo2D={() => setViewMode('2d')}
+                  onSnapshotReady={(fn) => { snapshot3DRef.current = fn; }}
                 />
               </React.Suspense>
             </Cabinet3DErrorBoundary>
@@ -2466,10 +2959,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 <div className="flex items-center justify-between text-[9px] font-black tracking-wider text-amber-300 uppercase mb-1 border-b border-slate-800 pb-0.5 select-none">
                   <span className="flex items-center gap-1.5">
                     <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                    <span>רלס אחורי עליון (Rear Rails - Top) · פס שקעים PDU</span>
+                    <span>רלסים אחוריים (Rear Rails) · פסי שקעים</span>
                   </span>
                   <span className="bg-amber-400/20 text-amber-300 font-mono text-[9px] px-1.5 py-0.5 rounded border border-amber-500/30">
-                    אינו תופס מקום חזיתי (0U)
+                    אינם תופסים מקום חזיתי (0U)
                   </span>
                 </div>
                 {rearPduItems.map((item, i) => {
@@ -2478,7 +2971,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                   return (
                     <div
                       key={i}
-                      className="flex items-center justify-between text-slate-100 text-[11px] py-1 hover:bg-slate-800/80 px-1.5 rounded cursor-pointer transition-colors group bg-slate-900/60 border border-slate-800"
+                      className="flex items-center justify-between text-slate-100 text-[11px] py-1 hover:bg-slate-800/80 px-1.5 rounded cursor-pointer transition-colors group bg-slate-900/60 border border-slate-800 mb-1 last:mb-0"
                       onMouseEnter={(e) => {
                         setMousePos({ x: e.clientX, y: e.clientY });
                         setHoveredProduct(preview);
@@ -2509,7 +3002,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                           </div>
                         </div>
 
-                        <span className="font-bold text-amber-200 truncate">{preview.name || preview.description}</span>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-bold text-amber-200 truncate">{preview.name || preview.description}</span>
+                          <span className="text-[9px] text-amber-500/80 mr-1 mt-0.5">
+                            {item.zone === 'rear-top' ? 'מיקום: עליון' : item.zone === 'rear-middle' ? 'מיקום: אמצעי' : item.zone === 'rear-bottom' ? 'מיקום: תחתון' : 'מיקום: כללי'}
+                          </span>
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
@@ -2959,15 +3457,17 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         <div className="w-full flex-1 flex flex-col gap-6 min-w-0">
           
           {/* Add Slot Panel (When Active on Desktop - replaces Column 2 content seamlessly) */}
-          {isDesktop && (isAddSlotModalOpen || isAuxiliaryModalOpen) ? (
+          {isDesktop && (isAddSlotModalOpen || isAuxiliaryModalOpen || isPduModalOpen) ? (
             <div className="w-full h-[600px] sm:h-[680px] lg:h-[740px] flex flex-col bg-white border border-slate-200 rounded-xl overflow-hidden shadow-md">
               <AddSlotModal
                 isOpen={true}
                 onClose={() => {
                   setIsAddSlotModalOpen(false);
                   setIsAuxiliaryModalOpen(false);
+                  setIsPduModalOpen(false);
                   setAddSlotTargetU(null);
                   setPreviewAddSlotSpanU(1);
+                  setGlobalPendingPduItem(null);
                 }}
                 targetU={addSlotTargetU}
                 totalU={totalSlotsU}
@@ -2978,10 +3478,21 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 onRequestRearrangement={(plan, item) => {
                   setIsAddSlotModalOpen(false);
                   setIsAuxiliaryModalOpen(false);
+                  setIsPduModalOpen(false);
                   setAddSlotTargetU(null);
-                  setPendingRearrangementPlan({ plan, item });
+                  setPreviewAddSlotSpanU(1);
+                  setGlobalPendingPduItem(null);
+                  const currentSignature = computeStateSignature(
+                    product?.sku || '',
+                    totalSlotsU,
+                    selectedOptionals,
+                    presetOverrides
+                  );
+                  setPendingRearrangementPlan({ plan, item, stateSignature: currentSignature });
                 }}
                 isAuxiliaryMode={isAuxiliaryModalOpen}
+                initialSubView={isPduModalOpen ? 'pdu' : isAuxiliaryModalOpen ? 'aux' : 'slots'}
+                initialPendingPduItem={globalPendingPduItem}
                 mode="desktop-sidebar"
                 onHoverProductItem={(uSize) => setPreviewAddSlotSpanU(uSize || 1)}
               />
@@ -3103,152 +3614,41 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                       <span>אביזרים ששדרגתם לארון</span>
                     </span>
                     <span className="bg-[#004387] text-white text-xs px-2.5 py-0.5 rounded-none font-mono">
-                      {selectedOptionals.reduce((acc, curr) => acc + curr.quantity, 0)} EXTRA
+                      {orderTotals.extraCount} EXTRA
                     </span>
                   </h3>
+
+                  {orderTotals.unplacedCount > 0 && (
+                    <div
+                      id="unplaced-items-banner"
+                      className="mb-4 p-3 bg-amber-50 border border-amber-300 text-amber-900 rounded flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs sm:text-sm font-medium shadow-xs"
+                      dir="rtl"
+                    >
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="text-amber-600 shrink-0 w-4 h-4 sm:w-5 sm:h-5" />
+                        <span>{orderTotals.unplacedCount} פריטים לא שובצו — פנה מקום או הסר אותם</span>
+                      </div>
+                      <button
+                        type="button"
+                        id="btn-remove-unplaced-items"
+                        onClick={handleRemoveUnplaced}
+                        className="bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-bold px-3 py-1.5 rounded transition-colors whitespace-nowrap shadow-xs cursor-pointer"
+                      >
+                        הסר לא משובצים
+                      </button>
+                    </div>
+                  )}
                   
-                  {selectedOptionals.length > 0 ? (
-              <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto pr-1">
-                 <AnimatePresence initial={false}>
-                 {selectedOptionals.map((item, idx) => {
-                   const itemQty = Math.max(1, Number(item.quantity) || 1);
-                   const optPreview: EnrichedPreviewItem = {
-                     name: item.name || item.description || item.pn,
-                     sku: item.pn || item.sku || '',
-                     description: item.description || '',
-                     image: item.image || getAccessoryImage(item),
-                     uSize: item.uSize || 0,
-                     price: item.price || 0,
-                     quantity: itemQty,
-                     zone: item.uSize > 0 ? `תופס ${item.uSize * itemQty}U בארון` : 'אביזר נלווה (0U)',
-                     type: 'optional-accessory',
-                     optionalIdx: idx,
-                     isPreset: false,
-                   };
-
-                   return (
-                   <motion.div 
-                    key={item.instanceId || item.id || `${item.sku || item.pn}-${idx}`} 
-                    id={`selected-opt-${idx}`}
-                    layout={prefersReducedMotion ? false : "position"}
-                    initial={prefersReducedMotion ? false : { opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
-                    onMouseEnter={() => setHoveredProduct(optPreview)}
-                    onMouseLeave={() => setHoveredProduct(null)}
-                    onClick={() => {
-                      // Highlight in chassis and open preview modal
-                      setHighlightedOptIdx(idx);
-                      setInspectedProduct(optPreview);
-                      setTimeout(() => setHighlightedOptIdx(null), 2000);
-                    }}
-                    className={`flex flex-col bg-white border p-3 rounded-none text-sm font-medium shadow-sm transition-all cursor-pointer group ${highlightedOptIdx === idx ? 'border-amber-500 ring-2 ring-amber-500/50 bg-amber-50/30' : 'border-[#b3d4f5] hover:border-[#004387]'}`}
-                    title="לחץ או גע להגדלת תמונת המוצר ומפרט מלא"
-                   >
-                     <div className="flex items-start justify-between gap-2">
-                       <div className="flex items-center gap-2 overflow-hidden">
-                         <div 
-                           className="relative w-8 h-8 flex-shrink-0 bg-white border border-slate-200 rounded overflow-hidden cursor-pointer hover:ring-2 hover:ring-[#004387] transition-all"
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             setInspectedProduct(optPreview);
-                           }}
-                           title="הגדל תמונה"
-                         >
-                           {optPreview.image ? (
-                             <img referrerPolicy="no-referrer" src={optPreview.image} alt="" className="w-full h-full object-contain p-0.5" />
-                           ) : (
-                             <div className="w-full h-full flex items-center justify-center text-slate-400"><Box size={14} /></div>
-                           )}
-                           <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
-                             <ZoomIn size={12} />
-                           </div>
-                         </div>
-                         <div className="min-w-0">
-                           <span className="text-gray-800 font-bold leading-tight truncate inline-block" dir="ltr">
-                              {item.pn}
-                           </span>
-                           {item.name && item.name !== item.pn && (
-                             <div className="text-[11px] text-slate-500 truncate leading-none mt-0.5">
-                               {item.name}
-                             </div>
-                           )}
-                         </div>
-                       </div>
-                       <div className="flex items-center gap-1.5 shrink-0">
-                         <button
-                           type="button"
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             setInspectedProduct(optPreview);
-                           }}
-                           className="text-slate-400 hover:text-[#004387] p-1 rounded hover:bg-slate-100 transition-colors"
-                           title="תקריב מוצר"
-                         >
-                           <ZoomIn size={14} />
-                         </button>
-                         <span className="text-xs text-[#004387] font-bold bg-[#e6f0fa] px-2 py-0.5 rounded-none font-mono whitespace-nowrap">
-                           ₪{((item.price || 0) * itemQty).toLocaleString('he-IL', { minimumFractionDigits: 2 })}
-                         </span>
-                       </div>
-                     </div>
-                     
-                     <p className="text-gray-500 text-xs mt-1.5 line-clamp-2 leading-relaxed font-normal">
-                       {item.description}
-                     </p>
-                     {unallocatedItems.some(i => i.pn === item.pn) && (
-                       <p className="text-[10px] text-red-600 font-bold mt-1 bg-red-50 p-1 px-2 animate-pulse border border-red-100">⚠️ נדרש אימות התקנה (אין רצף פנוי מספיק)</p>
-                     )}
-
-                     <div className="flex items-center justify-between border-t border-gray-100 mt-2.5 pt-2">
-                       <span className="text-[11px] font-mono font-medium text-slate-400 flex items-center gap-1">
-                         <span>{item.uSize > 0 ? `תופס: ${item.uSize * itemQty}U מתוך הארון` : 'ללא נפח בארון'}</span>
-                         <span className="text-amber-600 text-[10px] font-bold">• לחץ להגדלה</span>
-                       </span>
-                       
-                       <div className="flex bg-slate-50 border border-slate-200 rounded-none overflow-hidden h-7">
-                         <button 
-                           type="button"
-                           title="הוסף 1"
-                           onClick={() => handleIncrementQuantity(idx)} 
-                           className="px-2.5 hover:bg-slate-200 text-[#004387] transition-colors"
-                         >
-                           <Plus size={12} />
-                         </button>
-                         <span className="w-8 flex items-center justify-center border-x border-slate-200 text-xs font-bold bg-white text-slate-800 font-mono">
-                           {itemQty}
-                         </span>
-                         <button 
-                           type="button"
-                           title="הפחת 1"
-                           onClick={() => handleRemoveOptional(idx)} 
-                           className="px-2.5 hover:bg-slate-200 text-red-500 transition-colors"
-                         >
-                           <Minus size={12} />
-                         </button>
-                         <button 
-                           type="button"
-                           title="הסר לחלוטין"
-                           onClick={() => handleRemoveOptional(idx, true)} 
-                           className="px-2 border-r border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
-                         >
-                           <X size={12} />
-                         </button>
-                       </div>
-                     </div>
-                   </motion.div>
-                  );
-                })}
-                </AnimatePresence>
-              </div>
-            ) : (
-              <div className="py-8 text-center text-gray-500 text-sm italic bg-white border border-[#b3d4f5]/60">
-                טרם בחרתם אביזרים נוספים.
-                <br/>
-                בחרו אביזרי הרחבה בהמשך או לחצו על תאים פנויים בארון משמאל!
-              </div>
-            )}
-          </div>
+                  <OrderSummaryTable
+                    lines={orderLines}
+                    totals={orderTotals}
+                    withPrice={true}
+                    readOnly={false}
+                    onIncrement={(sku) => handleIncrementQuantity(sku)}
+                    onDecrement={(sku) => handleRemoveOptional(sku, false)}
+                    onRemove={(sku) => handleRemoveOptional(sku, true)}
+                  />
+                </div>
         </div>
         {/* Column 3: Optional Compatible Upgrades / Accessories (Left side) */}
         <div id="com-accessories-list" className="border border-gray-200 p-5 bg-white space-y-4">
@@ -3362,130 +3762,290 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       {/* Printable spec sheet (hidden on screen, shown on print) */}
       {showPdfPreview && (
       <div className="fixed inset-0 z-[99999] bg-black/60 overflow-auto p-2 sm:p-6 print:bg-white print:p-0 print:static" onClick={() => setShowPdfPreview(false)}>
-        <div className="bg-white w-full max-w-2xl mx-auto shadow-2xl print:shadow-none print:max-w-none" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center justify-between gap-2 p-3 bg-[#0c2d57] text-white print:hidden sticky top-0 z-10">
-            <button type="button" onClick={() => setShowPdfPreview(false)} className="flex items-center gap-1 px-3 py-2 bg-white/15 hover:bg-white/25 rounded font-bold text-sm active:scale-95">
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media print {
+            .no-print { display: none !important; }
+            @page { size: A4; margin: 12mm; }
+            body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        ` }} />
+        <div className="bg-white w-full max-w-[794px] mx-auto shadow-2xl print:shadow-none print:max-w-none" onClick={(e) => e.stopPropagation()}>
+          <div className="no-print flex items-center justify-between gap-2 p-3 bg-[#0c2d57] text-white print:hidden sticky top-0 z-10">
+            <button type="button" onClick={() => setShowPdfPreview(false)} className="no-print flex items-center gap-1 px-3 py-2 bg-white/15 hover:bg-white/25 rounded font-bold text-sm active:scale-95">
               <X size={17} /> סגור
             </button>
             <span className="font-bold text-xs sm:text-sm">תצוגה מקדימה {pdfWithPrice ? '(עם מחירים)' : '(ללא מחירים)'}</span>
-            <button type="button" onClick={() => { try { window.print(); } catch {} }} className="flex items-center gap-1 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 rounded font-bold text-sm active:scale-95">
-              <Download size={17} /> שמור / הדפס
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                type="button" 
+                onClick={handleShareWhatsApp} 
+                disabled={isSharingWhatsApp || isGeneratingPdf}
+                className="no-print flex items-center gap-1.5 px-3 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white disabled:opacity-50 disabled:cursor-not-allowed rounded font-bold text-sm active:scale-95 transition-all shadow-sm"
+              >
+                <MessageCircle size={17} /> {isSharingWhatsApp ? 'משתף...' : 'שלח בוואטסאפ'}
+              </button>
+              <button 
+                type="button" 
+                onClick={handleDownloadPdfFile} 
+                disabled={isGeneratingPdf || isSharingWhatsApp}
+                className="no-print flex items-center gap-1 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed rounded font-bold text-sm active:scale-95 transition-all shadow-sm"
+              >
+                <Download size={17} /> {isGeneratingPdf ? 'מייצר PDF...' : 'הורד PDF'}
+              </button>
+              <button 
+                type="button" 
+                onClick={() => { try { window.print(); } catch {} }} 
+                className="no-print flex items-center gap-1 px-2.5 py-2 bg-white/15 hover:bg-white/25 rounded font-semibold text-xs active:scale-95 transition-all"
+                title="הדפסה ישירה דרך הדפדפן"
+              >
+                הדפס
+              </button>
+            </div>
           </div>
-      <div id="printable-cabinet-area" dir="rtl" style={{ fontFamily: 'Arial, sans-serif', color: '#111', padding: '24px', direction: 'rtl' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #004387', paddingBottom: '12px', marginBottom: '16px' }}>
-          <div>
-            <div style={{ fontSize: '20px', fontWeight: 800, color: '#0c2d57' }}>מפרט תצורת ארון תקשורת</div>
-            <div style={{ fontSize: '12px', color: '#555' }}>{new Date().toLocaleDateString('he-IL')}</div>
-          </div>
-          <img src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" alt="RBS" style={{ height: '42px' }} />
-        </div>
-
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px', fontSize: '13px' }}>
-          <tbody>
-            <tr><td style={{ padding: '4px 8px', fontWeight: 700, background: '#f1f5f9', width: '30%' }}>דגם הארון</td><td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{product?.name}</td></tr>
-            <tr><td style={{ padding: '4px 8px', fontWeight: 700, background: '#f1f5f9' }}>מק״ט</td><td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{product?.sku}</td></tr>
-            <tr><td style={{ padding: '4px 8px', fontWeight: 700, background: '#f1f5f9' }}>נפח כולל</td><td style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>{totalU}U — נוצלו {usedU}U, פנויים {availableU}U</td></tr>
-          </tbody>
-        </table>
-
-        {/* Visual rack diagram — a print copy of the on-screen simulator */}
-        {slots.length > 0 && (
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: '#004387', marginBottom: '6px' }}>תצוגת הארון (סכמה)</div>
-            <div style={{ border: '3px solid #0c2d57', maxWidth: '360px', margin: '0 auto', borderRadius: '4px', overflow: 'hidden', background: '#0f172a', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as any}>
-              {roofItems.length > 0 && (
-                <div style={{ background: '#e0f2fe', borderBottom: '1px solid #94a3b8', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#075985' }}>
-                  ▲ תקרה: {roofItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
+          <div id="cabinet-pdf-doc" dir="rtl" className="bg-white text-slate-900 font-sans p-8 max-w-[794px] mx-auto [direction:rtl]">
+            {/* 1. Header: RBS Telecom logo (left), title "הצעת תצורה — ארון תקשורת", today's date (he-IL), cabinet name + SKU */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #004387', paddingBottom: '12px', marginBottom: '16px', gap: '16px' }}>
+              <div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0c2d57' }}>הצעת תצורה — ארון תקשורת</div>
+                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{new Date().toLocaleDateString('he-IL')}</div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', marginTop: '4px' }}>
+                  <span>{product?.name || cabinetData?.model || 'ארון תקשורת'}</span>
+                  {product?.sku && <span style={{ marginRight: '8px', color: '#64748b', fontWeight: 500 }}>(מק״ט: {product.sku})</span>}
                 </div>
-              )}
-              {slots.slice().sort((a, b) => b.uIndex - a.uIndex).map((s) => {
-                const occupied = s.type !== 'empty';
-                const isOpt = s.type === 'optional-accessory';
-                const isCont2 = isOpt && s.isAnchor === false;
-                const isShelfItem = /מדף|shelf/.test(`${s.name || ''} ${s.description || ''}`);
-                const img = (s.accessoryRef && s.accessoryRef.image) || '';
-                const rowH = isOpt ? 40 : (occupied ? 20 : 15);
-                const bg = !occupied ? '#0f172a' : (isOpt ? '#1e3a8a' : '#334155');
-                if (isCont2) return null;
-                return (
-                  <div key={s.uIndex} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #1e293b', minHeight: isOpt && s.spanU && s.spanU > 1 ? `${s.spanU * 40}px` : `${rowH}px`, background: bg, position: 'relative', overflow: 'hidden' } as any}>
-                    <div style={{ width: '28px', textAlign: 'center', fontWeight: 700, fontSize: '8px', color: '#cbd5e1', borderLeft: '1px solid #1e293b', flexShrink: 0, position: 'relative', zIndex: 2 }}>{s.spanU && s.spanU > 1 ? `${s.uIndex}-${s.uIndex - s.spanU + 1}` : s.uIndex}</div>
-                    {isOpt && img && !isShelfItem && (
-                      <img src={img} referrerPolicy="no-referrer" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', opacity: 0.92 } as any} onError={(e: any) => { e.currentTarget.style.display = 'none'; }} />
-                    )}
-                    {isOpt && isShelfItem && (
-                      <div style={{ position: 'absolute', left: '30px', right: '4px', top: '20%', bottom: '20%', background: 'linear-gradient(#64748b,#334155)', border: '1px solid #0f172a', borderRadius: '2px' } as any}></div>
-                    )}
-                    <div style={{ flex: 1, padding: '1px 6px', fontSize: '9px', color: occupied ? '#fff' : '#64748b', fontWeight: occupied ? 700 : 400, position: 'relative', zIndex: 2, textShadow: (isOpt && img) ? '0 1px 3px rgba(0,0,0,0.9)' : 'none' } as any}>{!occupied ? '—' : (s.name + ((s.spanU && s.spanU > 1) ? `  (${s.spanU}U)` : ''))}</div>
+              </div>
+              <img 
+                src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
+                alt="RBS Telecom" 
+                style={{ height: '42px', objectFit: 'contain' }} 
+              />
+            </div>
+
+            {/* 2. Cabinet section, two columns */}
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', alignItems: 'start' }}>
+              {/* Right: the 3D snapshot <img src={pdfSnapshot}> (max-height 300px, object-contain). If pdfSnapshot is null, show the existing 2D U-map instead */}
+              <div style={{ flex: '1 1 50%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 0 }}>
+                {pdfSnapshot ? (
+                  <img
+                    src={pdfSnapshot}
+                    alt="3D Cabinet Snapshot"
+                    style={{ maxHeight: '300px', maxWidth: '100%', objectFit: 'contain', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#f8fafc', padding: '4px' }}
+                  />
+                ) : (
+                  slots.length > 0 && (
+                    <div style={{ border: '3px solid #0c2d57', width: '100%', maxWidth: '320px', margin: '0 auto', borderRadius: '4px', overflow: 'hidden', background: '#0f172a', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as any}>
+                      {roofItems.length > 0 && (
+                        <div style={{ background: '#e0f2fe', borderBottom: '1px solid #94a3b8', padding: '3px 6px', fontSize: '9.5px', textAlign: 'center', fontWeight: 700, color: '#075985' }}>
+                          ▲ תקרה: {roofItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
+                        </div>
+                      )}
+                      {slots.slice().sort((a, b) => b.uIndex - a.uIndex).map((s) => {
+                        const occupied = s.type !== 'empty';
+                        const isOpt = s.type === 'optional-accessory';
+                        const isCont2 = isOpt && s.isAnchor === false;
+                        const isShelfItem = /מדף|shelf/.test(`${s.name || ''} ${s.description || ''}`);
+                        const img = (s.accessoryRef && s.accessoryRef.image) || '';
+                        const rowH = isOpt ? 32 : (occupied ? 18 : 13);
+                        const bg = !occupied ? '#0f172a' : (isOpt ? '#1e3a8a' : '#334155');
+                        if (isCont2) return null;
+                        return (
+                          <div key={s.uIndex} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #1e293b', minHeight: isOpt && s.spanU && s.spanU > 1 ? `${s.spanU * 32}px` : `${rowH}px`, background: bg, position: 'relative', overflow: 'hidden' } as any}>
+                            <div style={{ width: '26px', textAlign: 'center', fontWeight: 700, fontSize: '8px', color: '#cbd5e1', borderLeft: '1px solid #1e293b', flexShrink: 0, position: 'relative', zIndex: 2 }}>{s.spanU && s.spanU > 1 ? `${s.uIndex}-${s.uIndex - s.spanU + 1}` : s.uIndex}</div>
+                            {isOpt && img && !isShelfItem && (
+                              <img src={img} referrerPolicy="no-referrer" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', opacity: 0.92 } as any} onError={(e: any) => { e.currentTarget.style.display = 'none'; }} />
+                            )}
+                            {isOpt && isShelfItem && (
+                              <div style={{ position: 'absolute', left: '26px', right: '4px', top: '20%', bottom: '20%', background: 'linear-gradient(#64748b,#334155)', border: '1px solid #0f172a', borderRadius: '2px' } as any}></div>
+                            )}
+                            <div style={{ flex: 1, padding: '1px 6px', fontSize: '8.5px', color: occupied ? '#fff' : '#64748b', fontWeight: occupied ? 700 : 400, position: 'relative', zIndex: 2, textShadow: (isOpt && img) ? '0 1px 3px rgba(0,0,0,0.9)' : 'none' } as any}>{!occupied ? '—' : (s.name + ((s.spanU && s.spanU > 1) ? `  (${s.spanU}U)` : ''))}</div>
+                          </div>
+                        );
+                      })}
+                      {plinthItems.length > 0 && (
+                        <div style={{ background: '#f1f5f9', borderTop: '1px solid #94a3b8', padding: '3px 6px', fontSize: '9.5px', textAlign: 'center', fontWeight: 700, color: '#475569' }}>
+                          ▼ בסיס: {plinthItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
+                        </div>
+                      )}
+                      {verticalItems.length > 0 && (
+                        <div style={{ background: '#fef2f2', borderTop: '1px solid #fca5a5', padding: '3px 6px', fontSize: '9.5px', textAlign: 'center', fontWeight: 700, color: '#b91c1c' }}>
+                          ◄ ורטיקלי / צדי: {verticalItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
+                        </div>
+                      )}
+                      {hardwareItems.length > 0 && (
+                        <div style={{ background: '#fffbeb', borderTop: '1px solid #fde68a', padding: '3px 6px', fontSize: '9.5px', textAlign: 'center', fontWeight: 700, color: '#b45309' }}>
+                          ◄ חומרה וברגים: {hardwareItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
+                        </div>
+                      )}
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* Left: spec card with rows: U, מידות (רוחב×עומק), דלת קדמית, דלת אחורית, מאווררים, גלגלים/רגליות, and the "כלול בארון" items as a compact checklist (✓ per item) */}
+              <div style={{ flex: '1 1 50%', display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
+                <div className="border border-slate-300 rounded-md bg-slate-50 text-[12px] p-2.5">
+                  <div className="text-sm font-bold uppercase tracking-wide text-[#0c2d57] border-b-2 border-[#c2410c] pb-1 mb-2">
+                    מפרט ארון
                   </div>
-                );
-              })}
-              {plinthItems.length > 0 && (
-                <div style={{ background: '#f1f5f9', borderTop: '1px solid #94a3b8', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#475569' }}>
-                  ▼ בסיס: {plinthItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '4px 6px', fontWeight: 700, width: '35%', color: '#334155' }}>U</td>
+                        <td style={{ padding: '4px 6px', color: '#0f172a' }}>{totalU}U</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '4px 6px', fontWeight: 700, color: '#334155' }}>מידות (רוחב×עומק)</td>
+                        <td style={{ padding: '4px 6px', color: '#0f172a' }}>
+                          {cabinetData?.width && cabinetData?.depth ? `${cabinetData.width} × ${cabinetData.depth} מ״מ` : '—'}
+                        </td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '4px 6px', fontWeight: 700, color: '#334155' }}>דלת קדמית</td>
+                        <td style={{ padding: '4px 6px', color: '#0f172a' }}>{cabinetData?.frontDoor || 'דלת זכוכית מחוסמת / פלדה'}</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '4px 6px', fontWeight: 700, color: '#334155' }}>דלת אחורית</td>
+                        <td style={{ padding: '4px 6px', color: '#0f172a' }}>{cabinetData?.rearDoor || 'דלת פלדה / גב תלייה'}</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '4px 6px', fontWeight: 700, color: '#334155' }}>מאווררים</td>
+                        <td style={{ padding: '4px 6px', color: '#0f172a' }}>{cabinetData?.fans || 'יחידת אוורור בגג הארון'}</td>
+                      </tr>
+                      <tr>
+                        <td style={{ padding: '4px 6px', fontWeight: 700, color: '#334155' }}>גלגלים/רגליות</td>
+                        <td style={{ padding: '4px 6px', color: '#0f172a' }}>
+                          {[
+                            cabinetData?.wheels && `גלגלים: ${cabinetData.wheels}`,
+                            cabinetData?.levelingFeet && `רגליות: ${cabinetData.levelingFeet}`
+                          ].filter(Boolean).join(' · ') || '4 גלגלים + 4 רגליות פילוס'}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {includedItems && includedItems.length > 0 && (
+                    <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#0c2d57', marginBottom: '3px' }}>כלול בארון:</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#334155' }}>
+                        {includedItems.map((item, idx) => (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '4px', lineHeight: '1.25' }}>
+                            <span style={{ color: '#16a34a', fontWeight: 700, flexShrink: 0 }}>✓</span>
+                            <span>{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-              {verticalItems.length > 0 && (
-                <div style={{ background: '#fef2f2', borderTop: '1px solid #fca5a5', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#b91c1c' }}>
-                  ◄ ורטיקלי / צדי: {verticalItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
+              </div>
+            </div>
+
+            {/* 3. Section BOM, then clean styled BOM table */}
+            <div style={{ marginBottom: '16px' }}>
+              <div className="text-sm font-bold uppercase tracking-wide text-[#0c2d57] border-b-2 border-[#c2410c] pb-1 mb-2">
+                ציוד שנוסף (BOM)
+              </div>
+              {orderLines.length === 0 ? (
+                <div className="py-3 text-center text-slate-500 text-[12px] italic bg-slate-50 border border-slate-300 rounded-md">
+                  לא נבחרו אביזרים נוספים
                 </div>
-              )}
-              {hardwareItems.length > 0 && (
-                <div style={{ background: '#fffbeb', borderTop: '1px solid #fde68a', padding: '4px 8px', fontSize: '10.5px', textAlign: 'center', fontWeight: 700, color: '#b45309' }}>
-                  ◄ חומרה וברגים: {hardwareItems.map((r: any) => `${r.description || r.name} ×${r.quantity}`).join(' · ')}
+              ) : (
+                <div className="border border-slate-300 rounded-md overflow-hidden bg-white">
+                  <table className="w-full text-right border-collapse text-[12px]" dir="rtl">
+                    <thead>
+                      <tr className="bg-[#0c2d57] text-white">
+                        <th className="py-1.5 px-2.5 text-right font-bold">מוצר</th>
+                        <th className="py-1.5 px-2.5 text-right font-bold">מק״ט</th>
+                        <th className="py-1.5 px-2.5 text-center font-bold">כמות</th>
+                        <th className="py-1.5 px-2.5 text-right font-bold">מיקום</th>
+                        {pdfWithPrice && <th className="py-1.5 px-2.5 text-left font-bold tabular-nums">מחיר יח׳</th>}
+                        {pdfWithPrice && <th className="py-1.5 px-2.5 text-left font-bold tabular-nums">סה״כ</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {orderLines.map((line, idx) => {
+                        const isUnplaced = line.status === 'unplaced';
+                        return (
+                          <tr
+                            key={line.sku || idx}
+                            className={`border-b ${idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'} ${
+                              isUnplaced ? 'bg-red-50 text-red-950' : 'text-slate-800'
+                            }`}
+                          >
+                            <td className="py-1.5 px-2.5 font-medium text-slate-900 leading-tight">
+                              {line.name}
+                            </td>
+                            <td className="py-1.5 px-2.5 font-mono text-[11px] text-slate-600 whitespace-nowrap" dir="ltr">
+                              {line.sku}
+                            </td>
+                            <td className="py-1.5 px-2.5 text-center font-mono font-bold text-slate-800 tabular-nums">
+                              {line.qty}
+                            </td>
+                            <td className="py-1.5 px-2.5 whitespace-nowrap">
+                              {isUnplaced ? (
+                                <span className="text-red-700 font-semibold text-[11px]">
+                                  לא שובץ
+                                </span>
+                              ) : (
+                                <span className="font-mono text-[11px] font-medium text-slate-700">
+                                  {line.positions.join(', ')}
+                                </span>
+                              )}
+                            </td>
+                            {pdfWithPrice && (
+                              <td className="py-1.5 px-2.5 font-mono text-[11px] text-slate-700 whitespace-nowrap tabular-nums text-left" dir="ltr">
+                                ₪{line.unitPrice.toLocaleString('he-IL', { minimumFractionDigits: 2 })}
+                              </td>
+                            )}
+                            {pdfWithPrice && (
+                              <td className="py-1.5 px-2.5 font-mono text-[11px] font-bold text-[#0c2d57] whitespace-nowrap tabular-nums text-left" dir="ltr">
+                                ₪{line.lineTotal.toLocaleString('he-IL', { minimumFractionDigits: 2 })}
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
+
+            {/* 4. Totals box, right-aligned, rendered only when pdfWithPrice is true */}
+            {pdfWithPrice && (
+              <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-start' }}>
+                <div className="w-[280px] border border-slate-300 rounded-md bg-slate-50 p-3 text-[12px]">
+                  <div className="text-sm font-bold uppercase tracking-wide text-[#0c2d57] border-b-2 border-[#c2410c] pb-1 mb-2">
+                    סיכום עלויות
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#475569' }}>
+                    <span>ארון:</span>
+                    <span className="font-mono font-semibold tabular-nums text-left" dir="ltr">₪{orderTotals.cabinetPrice.toLocaleString('he-IL')}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#475569' }}>
+                    <span>אביזרים:</span>
+                    <span className="font-mono font-semibold tabular-nums text-left" dir="ltr">₪{orderTotals.accessoriesTotal.toLocaleString('he-IL')}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', paddingTop: '4px', borderTop: '1px solid #e2e8f0', fontWeight: 700, color: '#1e293b' }}>
+                    <span>סה"כ לפני מע"מ:</span>
+                    <span className="font-mono tabular-nums text-left" dir="ltr">₪{orderTotals.grandTotal.toLocaleString('he-IL')}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#475569' }}>
+                    <span>מע"מ 18%:</span>
+                    <span className="font-mono font-semibold tabular-nums text-left" dir="ltr">₪{Math.round(orderTotals.grandTotal * 0.18).toLocaleString('he-IL')}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', borderTop: '2px solid #004387', fontWeight: 800, fontSize: '13px', color: '#0c2d57' }}>
+                    <span>סה"כ כולל מע"מ:</span>
+                    <span className="font-mono tabular-nums text-left" dir="ltr">₪{(orderTotals.grandTotal + Math.round(orderTotals.grandTotal * 0.18)).toLocaleString('he-IL')}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 5. Footer */}
+            <div style={{ marginTop: '20px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', fontSize: '11px', color: '#64748b', textAlign: 'center' }}>
+              המחירים בש״ח לפני מע״מ, תקפים ל-14 יום · rbs-telecom.com
+            </div>
           </div>
-        )}
-
-        {includedItems.length > 0 && (
-          <div style={{ marginBottom: '14px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: '#004387', marginBottom: '6px' }}>כלול בארון</div>
-            <ul style={{ margin: 0, paddingRight: '18px', fontSize: '13px' }}>
-              {includedItems.map((it, i) => <li key={i} style={{ marginBottom: '2px' }}>{it}</li>)}
-            </ul>
-          </div>
-        )}
-
-        <div style={{ fontSize: '14px', fontWeight: 800, color: '#004387', marginBottom: '6px' }}>אביזרים שנוספו</div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
-          <thead>
-            <tr style={{ background: '#0c2d57', color: '#fff' }}>
-              <th style={{ padding: '6px', textAlign: 'right' }}>מק״ט</th>
-              <th style={{ padding: '6px', textAlign: 'right' }}>שם</th>
-              <th style={{ padding: '6px', textAlign: 'center' }}>כמות</th>
-              <th style={{ padding: '6px', textAlign: 'center' }}>נפח</th>
-              {pdfWithPrice && <th style={{ padding: '6px', textAlign: 'center' }}>מחיר</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {pdfOrderable.length === 0 ? (
-              <tr><td colSpan={pdfWithPrice ? 5 : 4} style={{ padding: '10px', textAlign: 'center', color: '#888', border: '1px solid #e2e8f0' }}>לא נוספו אביזרים</td></tr>
-            ) : pdfOrderable.map((o: any, i: number) => (
-              <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                <td style={{ padding: '5px 6px', border: '1px solid #e2e8f0' }}>{o.pn}</td>
-                <td style={{ padding: '5px 6px', border: '1px solid #e2e8f0' }}>{o.name || o.description}</td>
-                <td style={{ padding: '5px 6px', textAlign: 'center', border: '1px solid #e2e8f0' }}>{o.quantity || 1}</td>
-                <td style={{ padding: '5px 6px', textAlign: 'center', border: '1px solid #e2e8f0' }}>{o.uSize > 0 ? `${o.uSize}U` : '—'}</td>
-                {pdfWithPrice && <td style={{ padding: '5px 6px', textAlign: 'center', border: '1px solid #e2e8f0' }}>₪{(Math.round(Number(o.price) || 0) * (o.quantity || 1)).toLocaleString('he-IL')}</td>}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {pdfWithPrice && (
-          <div style={{ marginTop: '14px', textAlign: 'left', fontSize: '15px', fontWeight: 800, color: '#0c2d57' }}>
-            סה״כ (ארון + אביזרים): ₪{pdfGrandTotal.toLocaleString('he-IL')}
-            <div style={{ fontSize: '11px', fontWeight: 400, color: '#777' }}>* מחיר מומלץ, לפני מע״מ</div>
-          </div>
-        )}
-
-        <div style={{ marginTop: '22px', paddingTop: '10px', borderTop: '1px solid #ddd', fontSize: '11px', color: '#666', textAlign: 'center' }}>
-          רבס טלקום בע״מ · 077-2045522 · info@rbs-telecom.com
-        </div>
-      </div>
         </div>
       </div>
       )}
@@ -3646,41 +4206,46 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         )}
       </AnimatePresence>
 
-      {/* Modal / Drawer (Add Slot / Auxiliary / PDU) */}
-      <AddSlotModal
-        isOpen={isAddSlotModalOpen || isAuxiliaryModalOpen || isPduModalOpen}
-        onClose={() => {
-          setIsAddSlotModalOpen(false);
-          setIsAuxiliaryModalOpen(false);
-          setIsPduModalOpen(false);
-          setAddSlotTargetU(null);
-          setPreviewAddSlotSpanU(1);
-        }}
-        targetU={addSlotTargetU}
-        totalU={totalSlotsU}
-        slots={slots}
-        availableU={availableU}
-        compatibleAccessories={compatibleAccessories}
-        onAddAccessoryAtSlot={handleAddOptionalAtSlot}
-        onRequestRearrangement={(plan, item) => {
-          setIsAddSlotModalOpen(false);
-          setIsAuxiliaryModalOpen(false);
-          setIsPduModalOpen(false);
-          setAddSlotTargetU(null);
-          setPreviewAddSlotSpanU(1);
-          const currentSignature = computeStateSignature(
-            product?.sku || '',
-            totalSlotsU,
-            selectedOptionals,
-            presetOverrides
-          );
-          setPendingRearrangementPlan({ plan, item, stateSignature: currentSignature });
-        }}
-        isAuxiliaryMode={isAuxiliaryModalOpen}
-        initialSubView={isPduModalOpen ? 'pdu' : isAuxiliaryModalOpen ? 'aux' : 'slots'}
-        mode="mobile-drawer"
-        onHoverProductItem={(uSize) => setPreviewAddSlotSpanU(uSize || 1)}
-      />
+      {/* Modal / Drawer (Add Slot / Auxiliary / PDU) - Mobile only */}
+      {!isDesktop && (
+        <AddSlotModal
+          isOpen={isAddSlotModalOpen || isAuxiliaryModalOpen || isPduModalOpen}
+          onClose={() => {
+            setIsAddSlotModalOpen(false);
+            setIsAuxiliaryModalOpen(false);
+            setIsPduModalOpen(false);
+            setAddSlotTargetU(null);
+            setPreviewAddSlotSpanU(1);
+            setGlobalPendingPduItem(null);
+          }}
+          targetU={addSlotTargetU}
+          totalU={totalSlotsU}
+          slots={slots}
+          availableU={availableU}
+          compatibleAccessories={compatibleAccessories}
+          onAddAccessoryAtSlot={handleAddOptionalAtSlot}
+          onRequestRearrangement={(plan, item) => {
+            setIsAddSlotModalOpen(false);
+            setIsAuxiliaryModalOpen(false);
+            setIsPduModalOpen(false);
+            setAddSlotTargetU(null);
+            setPreviewAddSlotSpanU(1);
+            setGlobalPendingPduItem(null);
+            const currentSignature = computeStateSignature(
+              product?.sku || '',
+              totalSlotsU,
+              selectedOptionals,
+              presetOverrides
+            );
+            setPendingRearrangementPlan({ plan, item, stateSignature: currentSignature });
+          }}
+          isAuxiliaryMode={isAuxiliaryModalOpen}
+          initialSubView={isPduModalOpen ? 'pdu' : isAuxiliaryModalOpen ? 'aux' : 'slots'}
+          initialPendingPduItem={globalPendingPduItem}
+          mode="mobile-drawer"
+          onHoverProductItem={(uSize) => setPreviewAddSlotSpanU(uSize || 1)}
+        />
+      )}
 
       {/* Rearrangement Approval Modal */}
       {pendingRearrangementPlan && (

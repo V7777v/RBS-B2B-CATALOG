@@ -38,6 +38,7 @@ export interface AddSlotModalProps {
   mode?: 'desktop-sidebar' | 'mobile-drawer';
   onHoverProductItem?: (uSize: number | null) => void;
   initialSubView?: 'slots' | 'pdu' | 'aux';
+  initialPendingPduItem?: any;
 }
 
 export const AddSlotModal: React.FC<AddSlotModalProps> = ({
@@ -54,6 +55,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
   mode = 'mobile-drawer',
   onHoverProductItem,
   initialSubView,
+  initialPendingPduItem,
 }) => {
   const [subView, setSubView] = useState<'slots' | 'pdu' | 'aux'>(
     initialSubView || (isAuxiliaryMode ? 'aux' : 'slots')
@@ -61,14 +63,14 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
   const [searchFilter, setSearchFilter] = useState('');
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
-  const [pendingPduItem, setPendingPduItem] = useState<any | null>(null);
+  const [pendingPduItem, setPendingPduItem] = useState<any | null>(initialPendingPduItem || null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Sync subView and reset open sections to closed by default
   useEffect(() => {
     if (isOpen) {
       setSearchFilter('');
-      setPendingPduItem(null);
+      setPendingPduItem(initialPendingPduItem || null);
       if (initialSubView) {
         setSubView(initialSubView);
         setOpenSections({});
@@ -252,13 +254,13 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
 
   const contiguousFreeCount = spaceAnalysis.contiguousFreeAtTarget;
 
-  const renderProductCard = (item: any, options?: { isAux?: boolean; customAction?: React.ReactNode; badge?: React.ReactNode }) => {
+  const renderProductCard = (item: any, idx: number, options?: { isAux?: boolean; customAction?: React.ReactNode; badge?: React.ReactNode }) => {
     const itemText = `${item.name || ''} ${item.description || ''}`.toLowerCase();
     const isItemPdu = item._pdu || /פס שקע|שקעים|pdu/i.test(itemText) || String(item.category || '').includes('פסי שקעים');
     const uSize = isItemPdu ? 0 : (item.uSize ?? (options?.isAux ? 0 : 1));
     return (
       <div
-        key={item.sku || item.pn || item.id}
+        key={`${item.sku || item.pn || item.id}-${idx}`}
         className={`bg-white border p-3 rounded-lg flex flex-col gap-2 transition-all shadow-2xs hover:shadow-xs group ${
           isItemPdu ? 'border-amber-300 hover:border-amber-500 bg-amber-50/10' : 'border-slate-200 hover:border-[#004387]'
         }`}
@@ -496,7 +498,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
       </div>
 
       {/* Mode Navigation Tabs */}
-      <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-200/80 border-b border-slate-300 text-xs shrink-0 overflow-x-auto select-none">
+      <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-200/80 border-b border-slate-300 text-xs shrink-0 flex-wrap select-none">
         <button
           type="button"
           onClick={() => {
@@ -645,8 +647,8 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
                   </button>
                   {isOpenSection && (
                     <div className="p-2.5 space-y-2 bg-slate-50/50 border-t border-slate-100">
-                      {rubric.items.map((item: any) =>
-                        renderProductCard(item, {
+                      {rubric.items.map((item: any, idx: number) =>
+                        renderProductCard(item, idx, {
                           isAux: subView === 'pdu' || subView === 'aux' || isAuxiliaryMode || item.uSize === 0,
                           badge: targetU && subView === 'slots' ? (
                             <div className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold flex items-center gap-1 w-fit">
@@ -688,8 +690,8 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
                     <p className="text-[11px] text-blue-800 px-1">
                       הפריטים הבאים דורשים רצף רחב יותר מ-U{targetU}, אך יש עבורם מקום פנוי קיים ללא הזזות:
                     </p>
-                    {filteredAlternativeItems.map(({ item, alternateTargetU }) =>
-                      renderProductCard(item, {
+                    {filteredAlternativeItems.map(({ item, alternateTargetU }, idx) =>
+                      renderProductCard(item, idx, {
                         customAction: (
                           <button
                             type="button"
@@ -743,8 +745,8 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
                     <p className="text-[11px] text-amber-900 px-1">
                       הפריטים הבאים יותקנו ב-U{targetU} על ידי הזזת פריטים קיימים למיקומים פנויים:
                     </p>
-                    {filteredRearrangementItems.map(({ item, plan }) =>
-                      renderProductCard(item, {
+                    {filteredRearrangementItems.map(({ item, plan }, idx) =>
+                      renderProductCard(item, idx, {
                         customAction: (
                           <button
                             type="button"

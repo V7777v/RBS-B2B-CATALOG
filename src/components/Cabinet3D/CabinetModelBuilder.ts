@@ -3,6 +3,8 @@ import { CabinetDimensions3D, DoorLeafState, DoorState } from './Cabinet3DTypes'
 import { CabinetMatrixData, parseAccessoryCount, normalizeSku } from '../../utils/cabinetData';
 import { build447510TCabinetGroup } from './CabinetModel447510T';
 import { buildBoost42UCabinetGroup } from './CabinetModelBoost42U';
+import { build221221CabinetGroup } from './CabinetModel221221';
+import { createBoostHeaderBadgeMesh } from './BoostRackMountLogo';
 
 export const SCALE_MM_TO_UNITS = 0.01; // 1 unit = 100mm (0.1 meter)
 export const U_HEIGHT_UNITS = 0.4445; // 44.45mm in 3D units
@@ -40,6 +42,22 @@ export function resolveCabinetDoorsInfo(
 ): CabinetDoorsInfo {
   const is447510T = Boolean(dims.isSpecific447510T || isCabinet447510T(product, cabinetData));
   const isBoost42U = Boolean(dims.isSpecificBoost42U || isCabinetBoost42U(product, cabinetData));
+  const is221221 = Boolean(dims.isSpecific221221 || isCabinet221221(product, cabinetData));
+
+  if (is221221) {
+    return {
+      hasFrontDoor: true,
+      hasRearDoor: false,
+      frontDoorType: 'glass',
+      rearDoorType: 'solid',
+      isDoubleFront: false,
+      isDoubleRear: false,
+      frontDoorName: 'דלת קדמית זכוכית מחוסמת 4.0 מ״מ עם מנעול עגול',
+      rearDoorName: 'ללא דלת אחורית (גב לתליית קיר)',
+      isFrontDoorIllustrative: false,
+      isRearDoorIllustrative: false,
+    };
+  }
 
   if (is447510T) {
     return {
@@ -97,9 +115,15 @@ export function resolveCabinetDoorsInfo(
       isDoubleFront = true;
     }
   } else {
-    // Empty / unknown front door in matrix: provide illustrative glass door
+    // Empty / unknown front door in matrix: provide illustrative door based on product description
     isFrontDoorIllustrative = true;
-    frontDoorType = 'glass';
+    if (/רשת|מחורר|perforated|mesh/i.test(nameLower)) {
+      frontDoorType = 'perforated';
+    } else if (/פח|מלא|solid|steel/i.test(nameLower)) {
+      frontDoorType = 'solid';
+    } else {
+      frontDoorType = 'glass';
+    }
   }
 
   // Rear Door Resolution:
@@ -130,7 +154,7 @@ export function resolveCabinetDoorsInfo(
 
   const frontDoorName = frontDoorRaw
     ? (isFrontDoorIllustrative ? `${frontDoorRaw} (המחשה)` : frontDoorRaw)
-    : 'דלת קדמית זכוכית (המחשה)';
+    : `דלת קדמית ${frontDoorType === 'perforated' ? 'רשת מחוררת' : frontDoorType === 'solid' ? 'פח מלאה' : 'זכוכית'} (המחשה)`;
 
   const rearDoorName = hasRearDoor
     ? (isRearDoorIllustrative ? `${rearDoorRaw} (המחשה)` : rearDoorRaw)
@@ -205,6 +229,31 @@ export function isCabinetBoost42U(product: any, cabinetData?: CabinetMatrixData 
 }
 
 /**
+ * Checks specifically for SKU 221221 (Boost RackMount 4U Wall Cabinet 550x400x200mm)
+ */
+export function isCabinet221221(product: any, cabinetData?: CabinetMatrixData | null): boolean {
+  const normProductSku = normalizeSku(product?.sku);
+  const normProductPn = normalizeSku(product?.pn);
+  const normCabinetSku = normalizeSku(cabinetData?.sku);
+  const normCabinetModel = normalizeSku(cabinetData?.model);
+  const nameUpper = String(product?.name || '').toUpperCase();
+  const descUpper = String(product?.description || '').toUpperCase();
+
+  if (
+    normProductSku === '221221' ||
+    normProductPn === '221221' ||
+    normCabinetSku === '221221' ||
+    normCabinetModel === '221221'
+  ) {
+    return true;
+  }
+  if (nameUpper.includes('221221') || descUpper.includes('221221')) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Derives verified cabinet dimensions or provides clear schematic fallback
  */
 export function resolveCabinetDimensions(
@@ -212,6 +261,20 @@ export function resolveCabinetDimensions(
   cabinetData: CabinetMatrixData | null,
   totalU: number
 ): CabinetDimensions3D {
+  // Check specifically for SKU 221221 (from manufacturer technical drawing: 4U 550x400x200)
+  if (isCabinet221221(product, cabinetData)) {
+    return {
+      totalU: 4,
+      widthMm: 550,
+      depthMm: 400,
+      heightMm: 200,
+      isSchematicDimensions: false,
+      isSchematicCapacity: false,
+      removableSides: false,
+      isSpecific221221: true,
+    };
+  }
+
   // Check specifically for SKU 447510T (from manufacturer technical drawing)
   if (isCabinet447510T(product, cabinetData)) {
     return {
@@ -221,6 +284,7 @@ export function resolveCabinetDimensions(
       heightMm: 2061, // 2060.7mm frame height, 2148.3mm with casters & feet
       isSchematicDimensions: false,
       isSchematicCapacity: false,
+      removableSides: true,
       isSpecific447510T: true,
     };
   }
@@ -236,6 +300,7 @@ export function resolveCabinetDimensions(
       heightMm: 2055, // ~2000mm frame + 55mm casters/feet
       isSchematicDimensions: false,
       isSchematicCapacity: false,
+      removableSides: true,
       isSpecificBoost42U: true,
     };
   }
@@ -273,6 +338,10 @@ export function resolveCabinetDimensions(
   // Outer height in mm: U capacity * 44.45mm + roof + base margins
   const heightMm = Math.round(resolvedU * 44.45 + 100);
 
+  const resolvedRemovableSides = cabinetData?.removableSides !== undefined
+    ? cabinetData.removableSides
+    : resolvedU >= 22;
+
   return {
     totalU: resolvedU,
     widthMm,
@@ -280,6 +349,7 @@ export function resolveCabinetDimensions(
     heightMm,
     isSchematicDimensions: isSchematic,
     isSchematicCapacity: isSchematicCap,
+    removableSides: resolvedRemovableSides,
   };
 }
 
@@ -355,9 +425,20 @@ export function buildCabinetFrameGroup(
   doorsGroup?: THREE.Group;
   setDoorMode?: (side: 'front' | 'rear', state: DoorLeafState) => void;
   setRearCutaway?: (active: boolean) => void;
+  setSidePanel?: (side: 'left' | 'right', state: 'closed' | 'removed') => void;
   doorsInfo?: CabinetDoorsInfo;
 } {
   const materials = materialsInput || createCabinetMaterials();
+
+  // If this is specifically SKU 221221 (Boost 4U Wall Cabinet), route to dedicated 221221 simulation!
+  if (dims.isSpecific221221 || isCabinet221221(null, cabinetData)) {
+    return build221221CabinetGroup(
+      dims,
+      cabinetData,
+      materials as any,
+      options
+    );
+  }
 
   // If this is specifically SKU 447510T, route to dedicated manufacturer schematic simulation!
   if (dims.isSpecific447510T || isCabinet447510T(null, cabinetData)) {
@@ -417,11 +498,28 @@ export function buildCabinetFrameGroup(
   baseMesh.receiveShadow = true;
   group.add(baseMesh);
 
-  // Bottom cable entry cutout plate
+  // Bottom cable entry cutout plate (Center interior)
   const baseCutoutGeom = new THREE.BoxGeometry(widthUnits * 0.4, 0.02, depthUnits * 0.3);
   const baseCutoutMesh = new THREE.Mesh(baseCutoutGeom, materials.accentMat);
   baseCutoutMesh.position.set(0, -halfH + baseHeight + 0.01, 0);
   group.add(baseCutoutMesh);
+
+  // Cable entry cutout on BASE rear edge: 0.9 x 0.25 units with brush-strip look (thin grey lines)
+  const baseCableBrushGroup = new THREE.Group();
+  baseCableBrushGroup.name = 'base-rear-cable-entry';
+  const baseBrushPlateGeom = new THREE.BoxGeometry(0.90, 0.02, 0.25);
+  const baseBrushPlateMesh = new THREE.Mesh(baseBrushPlateGeom, materials.rubberMat);
+  baseBrushPlateMesh.position.set(0, 0, 0);
+  baseCableBrushGroup.add(baseBrushPlateMesh);
+  // Brush strip lines (thin grey lines)
+  const baseBrushBristleGeom = new THREE.BoxGeometry(0.84, 0.024, 0.012);
+  [-0.08, -0.04, 0, 0.04, 0.08].forEach(bz => {
+    const bristleMesh = new THREE.Mesh(baseBrushBristleGeom, materials.railMat);
+    bristleMesh.position.set(0, 0.002, bz);
+    baseCableBrushGroup.add(bristleMesh);
+  });
+  baseCableBrushGroup.position.set(0, -halfH + baseHeight + 0.01, -halfD + 0.18);
+  group.add(baseCableBrushGroup);
 
   // 2. ROOF CANOPY (Top panel)
   const roofGeom = new THREE.BoxGeometry(widthUnits, roofHeight, depthUnits);
@@ -430,143 +528,16 @@ export function buildCabinetFrameGroup(
   roofMesh.castShadow = true;
   group.add(roofMesh);
 
-  // 2.1. UPPER BEAM BRAND BADGE - "BOOST RACKMOUNT" LOGO
-  const badgeWidth = Math.min(widthUnits * 0.62, 3.6);
-  const badgeHeight = roofHeight * 0.74;
-  const badgeDepth = 0.02;
-
-  // High-resolution Canvas Texture for BOOST RACKMOUNT logo
-  let logoTexture: THREE.Texture | null = null;
-  if (typeof document !== 'undefined') {
-    const logoCanvas = document.createElement('canvas');
-    logoCanvas.width = 1024;
-    logoCanvas.height = 256;
-    const logoCtx = logoCanvas.getContext('2d');
-    if (logoCtx) {
-      // Brushed metallic / carbon plate background
-      const bgGrad = logoCtx.createLinearGradient(0, 0, 1024, 256);
-      bgGrad.addColorStop(0, '#070b14');
-      bgGrad.addColorStop(0.5, '#162032');
-      bgGrad.addColorStop(1, '#070b14');
-      logoCtx.fillStyle = bgGrad;
-      logoCtx.fillRect(0, 0, 1024, 256);
-
-      // Subtle carbon grid lines pattern
-      logoCtx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-      logoCtx.lineWidth = 1;
-      for (let x = 0; x < 1024; x += 16) {
-        logoCtx.beginPath();
-        logoCtx.moveTo(x, 0);
-        logoCtx.lineTo(x, 256);
-        logoCtx.stroke();
-      }
-
-      // Outer high-contrast metallic frame
-      logoCtx.strokeStyle = '#0284c7';
-      logoCtx.lineWidth = 6;
-      logoCtx.strokeRect(6, 6, 1012, 244);
-
-      // Inner bright cyan border accent
-      logoCtx.strokeStyle = '#38bdf8';
-      logoCtx.lineWidth = 2;
-      logoCtx.strokeRect(12, 12, 1000, 232);
-
-      // Corner industrial hex rivets
-      const rivetPositions = [
-        [24, 24], [1000, 24],
-        [24, 232], [1000, 232]
-      ];
-      rivetPositions.forEach(([rx, ry]) => {
-        logoCtx.fillStyle = '#64748b';
-        logoCtx.beginPath();
-        logoCtx.arc(rx, ry, 6, 0, Math.PI * 2);
-        logoCtx.fill();
-        logoCtx.strokeStyle = '#cbd5e1';
-        logoCtx.lineWidth = 1.5;
-        logoCtx.stroke();
-      });
-
-      // Brand Icon Glyph (Stylized 19" Rack Emblem with Lightning Boost)
-      logoCtx.save();
-      logoCtx.translate(90, 128);
-      // Outer rack icon rectangle
-      logoCtx.strokeStyle = '#38bdf8';
-      logoCtx.lineWidth = 4;
-      logoCtx.strokeRect(-36, -45, 72, 90);
-      // Rack rail slots
-      logoCtx.fillStyle = '#38bdf8';
-      for (let slotY = -35; slotY <= 35; slotY += 14) {
-        logoCtx.fillRect(-30, slotY, 6, 6);
-        logoCtx.fillRect(24, slotY, 6, 6);
-      }
-      // Energy / Boost Lightning Arrow in center
-      logoCtx.fillStyle = '#f59e0b';
-      logoCtx.beginPath();
-      logoCtx.moveTo(4, -30);
-      logoCtx.lineTo(-12, 6);
-      logoCtx.lineTo(0, 6);
-      logoCtx.lineTo(-4, 30);
-      logoCtx.lineTo(14, -6);
-      logoCtx.lineTo(2, -6);
-      logoCtx.closePath();
-      logoCtx.fill();
-      logoCtx.restore();
-
-      // Main Brand Typography: "BOOST RACKMOUNT"
-      // "BOOST"
-      logoCtx.fillStyle = '#ffffff';
-      logoCtx.font = '900 84px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      logoCtx.textAlign = 'left';
-      logoCtx.textBaseline = 'middle';
-      logoCtx.shadowColor = 'rgba(56, 189, 248, 0.6)';
-      logoCtx.shadowBlur = 12;
-      logoCtx.fillText('BOOST', 160, 112);
-
-      // "RACKMOUNT"
-      logoCtx.fillStyle = '#38bdf8';
-      logoCtx.font = '800 70px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      logoCtx.shadowColor = 'rgba(56, 189, 248, 0.4)';
-      logoCtx.shadowBlur = 8;
-      logoCtx.fillText('RACKMOUNT', 475, 114);
-
-      // Subtitle / Enterprise Specification Badge
-      logoCtx.shadowBlur = 0;
-      logoCtx.fillStyle = '#94a3b8';
-      logoCtx.font = '700 24px monospace';
-      logoCtx.letterSpacing = '6px';
-      logoCtx.fillText('ENTERPRISE RACK SYSTEMS • 19" ENCLOSURE', 165, 186);
-    }
-
-    logoTexture = new THREE.CanvasTexture(logoCanvas);
-    logoTexture.minFilter = THREE.LinearFilter;
-    logoTexture.magFilter = THREE.LinearFilter;
-  }
-
-  const badgeGeom = new THREE.BoxGeometry(badgeWidth, badgeHeight, badgeDepth);
-  const badgeFaceMat = new THREE.MeshStandardMaterial({
-    map: logoTexture,
-    roughness: 0.25,
-    metalness: 0.85,
-  });
-  const badgeEdgeMat = materials.metalMat;
-  // Apply logo map only to front face (material index 4 in Three.js BoxGeometry)
-  const badgeMaterials = [
-    badgeEdgeMat, // right
-    badgeEdgeMat, // left
-    badgeEdgeMat, // top
-    badgeEdgeMat, // bottom
-    badgeFaceMat, // front (+Z)
-    badgeEdgeMat, // back (-Z)
-  ];
-
-  const brandBadgeMesh = new THREE.Mesh(badgeGeom, badgeMaterials);
-  brandBadgeMesh.position.set(0, halfH - roofHeight / 2, halfD + badgeDepth / 2 + 0.005);
-  brandBadgeMesh.name = 'boost-rackmount-header-badge';
-  // Pure aesthetic cabinet frame badge - not an interactive product mesh
-  (brandBadgeMesh as any).userData = {
-    isCabinetStructure: true,
-  };
-  group.add(brandBadgeMesh);
+  // Boost brand nameplate badge on the front face of the top header bar (FRAME group child)
+  // Right-aligned: right edge at (innerWidth/2 - 0.12); centered on header bar height; z = header front surface + 0.01
+  const headerBadgeMesh = createBoostHeaderBadgeMesh(
+    widthUnits - wallThick * 2,
+    roofHeight,
+    halfH - roofHeight / 2,
+    halfD,
+    materials.frameMat
+  );
+  group.add(headerBadgeMesh);
 
   // =========================================================================
   // 2.2 ROOF & INTERIOR CEILING VENTILATION TRAY & 120MM FAN ARRAY
@@ -591,11 +562,22 @@ export function buildCabinetFrameGroup(
   ventTrimMesh.position.set(0, roofTopY + 0.01, 0);
   group.add(ventTrimMesh);
 
-  // Rear Cable Entry Brush Port on Roof
-  const cableBrushGeom = new THREE.BoxGeometry(Math.min(widthUnits * 0.45, 2.6), 0.03, 0.35);
-  const cableBrushMesh = new THREE.Mesh(cableBrushGeom, materials.rubberMat);
-  cableBrushMesh.position.set(0, roofTopY + 0.02, -depthUnits * 0.30);
-  group.add(cableBrushMesh);
+  // Rear Cable Entry Brush Port on ROOF rear edge: 0.9 x 0.25 units with brush-strip look (thin grey lines)
+  const roofCableBrushGroup = new THREE.Group();
+  roofCableBrushGroup.name = 'roof-rear-cable-entry';
+  const roofBrushPlateGeom = new THREE.BoxGeometry(0.90, 0.02, 0.25);
+  const roofBrushPlateMesh = new THREE.Mesh(roofBrushPlateGeom, materials.rubberMat);
+  roofBrushPlateMesh.position.set(0, 0, 0);
+  roofCableBrushGroup.add(roofBrushPlateMesh);
+  // Brush strip lines (thin grey lines)
+  const roofBrushBristleGeom = new THREE.BoxGeometry(0.84, 0.024, 0.012);
+  [-0.08, -0.04, 0, 0.04, 0.08].forEach(bz => {
+    const bristleMesh = new THREE.Mesh(roofBrushBristleGeom, materials.railMat);
+    bristleMesh.position.set(0, 0.002, bz);
+    roofCableBrushGroup.add(bristleMesh);
+  });
+  roofCableBrushGroup.position.set(0, roofTopY + 0.015, -halfD + 0.18);
+  group.add(roofCableBrushGroup);
 
   // Underside Interior Ceiling Ventilation Panel (visible from inside cabinet)
   const ceilingPanelGeom = new THREE.BoxGeometry(ventCanopyWidth, 0.03, ventCanopyDepth);
@@ -810,24 +792,98 @@ export function buildCabinetFrameGroup(
     group.add(postMesh);
   });
 
-// 4. SIDE PANELS (Solid / vented side walls with subtle gap to see inside)
+  // 4. SIDE PANELS (Solid / vented side walls built as separate groups with lock cylinder)
   const sideWidth = depthUnits - wallThick * 2;
-  const sideGeom = new THREE.BoxGeometry(0.04, postHeight * 0.98, sideWidth);
+  const sidePanelHeight = postHeight * 0.98;
+  const sideGeom = new THREE.BoxGeometry(0.04, sidePanelHeight, sideWidth);
   const sideMat = (materials.panelMat as THREE.MeshStandardMaterial).clone();
+  const chromeMat = materials.railMat || new THREE.MeshStandardMaterial({ color: 0xd4d4d8, metalness: 0.9, roughness: 0.15 });
 
-  // Left side panel
-  const leftSide = new THREE.Mesh(sideGeom, sideMat);
-  leftSide.position.set(-halfW + 0.02, -halfH + baseHeight + postHeight / 2, 0);
-  leftSide.receiveShadow = true;
-  (leftSide as any).userData = { isCabinetStructure: true, isSidePanel: true };
-  group.add(leftSide);
+  const leftSideGroup = new THREE.Group();
+  leftSideGroup.name = 'side-panel-left';
+  (leftSideGroup as any).userData = { isSidePanel: true, side: 'left' };
 
-  // Right side panel
-  const rightSide = new THREE.Mesh(sideGeom, sideMat);
-  rightSide.position.set(halfW - 0.02, -halfH + baseHeight + postHeight / 2, 0);
-  rightSide.receiveShadow = true;
-  (rightSide as any).userData = { isCabinetStructure: true, isSidePanel: true };
-  group.add(rightSide);
+  const rightSideGroup = new THREE.Group();
+  rightSideGroup.name = 'side-panel-right';
+  (rightSideGroup as any).userData = { isSidePanel: true, side: 'right' };
+
+  // Ghost groups for removed side panels (EdgesGeometry dashed lines)
+  const leftGhostGroup = new THREE.Group();
+  leftGhostGroup.name = 'side-panel-ghost-left';
+  leftGhostGroup.visible = false;
+  (leftGhostGroup as any).userData = { isSidePanelGhost: true, side: 'left' };
+
+  const rightGhostGroup = new THREE.Group();
+  rightGhostGroup.name = 'side-panel-ghost-right';
+  rightGhostGroup.visible = false;
+  (rightGhostGroup as any).userData = { isSidePanelGhost: true, side: 'right' };
+
+  [-halfW + 0.02, halfW - 0.02].forEach((sx, idx) => {
+    const isLeft = idx === 0;
+    const targetGroup = isLeft ? leftSideGroup : rightSideGroup;
+    const targetGhostGroup = isLeft ? leftGhostGroup : rightGhostGroup;
+    const sideName: 'left' | 'right' = isLeft ? 'left' : 'right';
+    const panelCenterY = -halfH + baseHeight + postHeight / 2;
+
+    // Main steel panel mesh
+    const sideMesh = new THREE.Mesh(sideGeom, sideMat);
+    sideMesh.position.set(sx, panelCenterY, 0);
+    sideMesh.receiveShadow = true;
+    (sideMesh as any).userData = { isSidePanel: true, side: sideName };
+    targetGroup.add(sideMesh);
+
+    // Small lock cylinder
+    const lockCylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 16), chromeMat);
+    lockCylinder.rotateZ(Math.PI / 2);
+    lockCylinder.position.set(sx + (isLeft ? -0.02 : 0.02), halfH - roofHeight - 0.45, 0);
+    (lockCylinder as any).userData = { isSidePanel: true, side: sideName };
+    targetGroup.add(lockCylinder);
+
+    // Ghost: LineSegments (EdgesGeometry of the same box, LineDashedMaterial)
+    const ghostEdgesGeom = new THREE.EdgesGeometry(sideGeom);
+    const ghostDashedMat = new THREE.LineDashedMaterial({
+      color: 0x94a3b8,
+      dashSize: 0.15,
+      gapSize: 0.1,
+      transparent: true,
+      opacity: 0.8,
+    });
+    const ghostLines = new THREE.LineSegments(ghostEdgesGeom, ghostDashedMat);
+    ghostLines.computeLineDistances();
+    ghostLines.position.set(sx, panelCenterY, 0);
+    (ghostLines as any).userData = { isSidePanelGhost: true, side: sideName };
+    targetGhostGroup.add(ghostLines);
+
+    // Invisible thin box helper mesh to ensure reliable raycasting
+    const ghostRaycastHelper = new THREE.Mesh(
+      sideGeom,
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    ghostRaycastHelper.position.set(sx, panelCenterY, 0);
+    (ghostRaycastHelper as any).userData = { isSidePanelGhost: true, side: sideName };
+    targetGhostGroup.add(ghostRaycastHelper);
+  });
+
+  group.add(leftSideGroup);
+  group.add(rightSideGroup);
+  group.add(leftGhostGroup);
+  group.add(rightGhostGroup);
+
+  const setSidePanel = (side: 'left' | 'right', state: 'closed' | 'removed') => {
+    const target = side === 'left' ? leftSideGroup : rightSideGroup;
+    const ghost = side === 'left' ? leftGhostGroup : rightGhostGroup;
+    if (state === 'removed') {
+      target.visible = false;
+      setHierarchyRaycast(target, false);
+      ghost.visible = true;
+      setHierarchyRaycast(ghost, true);
+    } else {
+      target.visible = true;
+      setHierarchyRaycast(target, true);
+      ghost.visible = false;
+      setHierarchyRaycast(ghost, false);
+    }
+  };
 
   // 5. 19-INCH VERTICAL RAILS (Front Left, Front Right, Rear Left, Rear Right)
   const railPostGeom = new THREE.BoxGeometry(0.18, railHeightUnits, 0.18);
@@ -1102,7 +1158,8 @@ export function buildCabinetFrameGroup(
     ctx.fillStyle = '#1e293b';
     ctx.fillRect(0, 0, 128, 128);
 
-    ctx.fillStyle = '#020617';
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = '#000000';
     const radius = 5.5;
     const rowH = 16;
     const colW = 16;
@@ -1117,7 +1174,6 @@ export function buildCabinetFrameGroup(
         ctx.fill();
       }
     }
-
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
@@ -1136,7 +1192,8 @@ export function buildCabinetFrameGroup(
         roughness: 0.6,
         metalness: 0.65,
         transparent: true,
-        opacity: 0.72,
+        opacity: 1.0,
+        alphaTest: 0.1, // Ensure the destination-out holes are fully transparent
         side: THREE.DoubleSide,
       });
     }
@@ -1146,7 +1203,7 @@ export function buildCabinetFrameGroup(
         roughness: 0.08,
         metalness: 0.15,
         transparent: true,
-        opacity: 0.22,
+        opacity: 0.12, // Much more transparent
         side: THREE.DoubleSide,
       });
     }
@@ -1231,12 +1288,14 @@ export function buildCabinetFrameGroup(
       [-doorOpeningH / 2 + borderThickness / 2, doorOpeningH / 2 - borderThickness / 2].forEach(by => {
         const cBeam = new THREE.Mesh(new THREE.BoxGeometry(doorOpeningW, borderThickness, doorThick * 0.42), ceramicMat);
         cBeam.position.set(doorWidth / 2, by, 0.003);
+        (cBeam as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
         frontDoorGroup.add(cBeam);
       });
       // Left/right ceramic border
       [-doorOpeningW / 2 + borderThickness / 2, doorOpeningW / 2 - borderThickness / 2].forEach(bx => {
         const cBeam = new THREE.Mesh(new THREE.BoxGeometry(borderThickness, doorOpeningH, doorThick * 0.42), ceramicMat);
         cBeam.position.set(doorWidth / 2 + bx, 0, 0.003);
+        (cBeam as any).userData = { isProductMesh: true, isDoor: true, item: frontDoorItem };
         frontDoorGroup.add(cBeam);
       });
     }
@@ -1262,125 +1321,273 @@ export function buildCabinetFrameGroup(
     group.add(frontDoorGroup);
   }
 
-  // Rear Door (Check doorsInfo if rear door is present; otherwise rear remains open without any blocking mesh)
+  // Rear Door (Check doorsInfo if rear door is present; otherwise rear has a fixed solid panel)
   const hasRearDoor = doorsInfo.hasRearDoor;
+  const isRearPerforated = doorsInfo.rearDoorType === 'perforated';
+
   const rearDoorGroup = new THREE.Group();
   rearDoorGroup.name = 'generic-rear-door-group';
+
+  const rearLeftLeafRoot = new THREE.Group();
+  rearLeftLeafRoot.name = 'generic-rear-left-leaf';
+
+  const rearRightLeafRoot = new THREE.Group();
+  rearRightLeafRoot.name = 'generic-rear-right-leaf';
 
   const rearDoorItem = {
     instanceId: 'generic-rear-door',
     sku: 'DOOR-REAR',
     name: doorsInfo.rearDoorName,
-    description: cabinetData?.rearDoor || (doorsInfo.rearDoorType === 'perforated' ? 'דלת אחורית רשת מחוררת 75%' : 'דלת אחורית מפלדה SPCC מלאה'),
+    description: cabinetData?.rearDoor || (isRearPerforated ? 'דלת אחורית רשת מחוררת 75%' : 'דלת אחורית מפלדה SPCC מלאה'),
     price: 0,
     isIncluded: true,
     type: 'door',
   };
 
-  const rearDoorMat = createDoorMaterial(doorsInfo.rearDoorType);
+  const rearDoorMat = isRearPerforated ? createDoorMaterial('perforated') : null;
   const rearDoorFrameMat = (materials.frameMat as THREE.MeshStandardMaterial).clone();
   rearDoorFrameMat.transparent = true;
   rearDoorFrameMat.opacity = 0.55;
 
+  const rearSolidMat = (materials.frameMat as THREE.MeshStandardMaterial).clone();
+  rearSolidMat.transparent = true;
+  rearSolidMat.opacity = 1.0;
+
   if (hasRearDoor) {
-    const rearHingeX = -halfW + 0.10;
-    rearDoorGroup.position.set(rearHingeX, doorCenterY, -halfD - 0.03);
+    // Two leaves, each (innerWidth / 2 - 0.02) wide, hinged on outer edges, opening outward
+    const leafWidth = innerWidth / 2 - 0.02;
+    const rearZ = -halfD - 0.03;
 
-    // 4-piece frame with genuine opening
-    const frameBorderW = 0.20;
-    const frameBorderH = 0.22;
-    const doorOpeningW = Math.max(0.2, doorWidth - 2 * frameBorderW);
-    const doorOpeningH = Math.max(0.2, doorHeight - 2 * frameBorderH);
+    // Left Leaf Hinge positioned at left outer edge: -innerWidth / 2
+    rearLeftLeafRoot.position.set(-innerWidth / 2, doorCenterY, rearZ);
+    // Right Leaf Hinge positioned at right outer edge: innerWidth / 2
+    rearRightLeafRoot.position.set(innerWidth / 2, doorCenterY, rearZ);
 
-    const rearTopBeam = new THREE.Mesh(new THREE.BoxGeometry(doorWidth, frameBorderH, doorThick), rearDoorFrameMat);
-    rearTopBeam.position.set(doorWidth / 2, doorHeight / 2 - frameBorderH / 2, 0);
-    (rearTopBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
-    rearDoorGroup.add(rearTopBeam);
+    if (isRearPerforated && rearDoorMat) {
+      // 1. PERFORATED DUAL LEAVES: Solid steel frame 0.35 units wide (RAL 9005) + perforated center panel
+      const frameBorder = 0.35;
+      const centerW = Math.max(0.1, leafWidth - 2 * frameBorder);
+      const centerH = Math.max(0.1, doorHeight - 2 * frameBorder);
 
-    const rearBtmBeam = new THREE.Mesh(new THREE.BoxGeometry(doorWidth, frameBorderH, doorThick), rearDoorFrameMat);
-    rearBtmBeam.position.set(doorWidth / 2, -doorHeight / 2 + frameBorderH / 2, 0);
-    (rearBtmBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
-    rearDoorGroup.add(rearBtmBeam);
+      // Build Left Perforated Leaf (extends in +X from hinge at 0)
+      const leftTopBeam = new THREE.Mesh(new THREE.BoxGeometry(leafWidth, frameBorder, doorThick), rearDoorFrameMat);
+      leftTopBeam.position.set(leafWidth / 2, doorHeight / 2 - frameBorder / 2, 0);
+      (leftTopBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearLeftLeafRoot.add(leftTopBeam);
 
-    const rearLeftBeam = new THREE.Mesh(new THREE.BoxGeometry(frameBorderW, doorOpeningH, doorThick), rearDoorFrameMat);
-    rearLeftBeam.position.set(frameBorderW / 2, 0, 0);
-    (rearLeftBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
-    rearDoorGroup.add(rearLeftBeam);
+      const leftBtmBeam = new THREE.Mesh(new THREE.BoxGeometry(leafWidth, frameBorder, doorThick), rearDoorFrameMat);
+      leftBtmBeam.position.set(leafWidth / 2, -doorHeight / 2 + frameBorder / 2, 0);
+      (leftBtmBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearLeftLeafRoot.add(leftBtmBeam);
 
-    const rearRightBeam = new THREE.Mesh(new THREE.BoxGeometry(frameBorderW, doorOpeningH, doorThick), rearDoorFrameMat);
-    rearRightBeam.position.set(doorWidth - frameBorderW / 2, 0, 0);
-    (rearRightBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
-    rearDoorGroup.add(rearRightBeam);
+      const leftOuterBeam = new THREE.Mesh(new THREE.BoxGeometry(frameBorder, centerH, doorThick), rearDoorFrameMat);
+      leftOuterBeam.position.set(frameBorder / 2, 0, 0);
+      (leftOuterBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearLeftLeafRoot.add(leftOuterBeam);
 
-    const rearDoorWindow = new THREE.Mesh(
-      new THREE.BoxGeometry(doorOpeningW + 0.02, doorOpeningH + 0.02, doorThick * 0.4),
-      rearDoorMat
-    );
-    rearDoorWindow.position.set(doorWidth / 2, 0, -0.002);
-    (rearDoorWindow as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
-    rearDoorGroup.add(rearDoorWindow);
+      const leftInnerBeam = new THREE.Mesh(new THREE.BoxGeometry(frameBorder, centerH, doorThick), rearDoorFrameMat);
+      leftInnerBeam.position.set(leafWidth - frameBorder / 2, 0, 0);
+      (leftInnerBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearLeftLeafRoot.add(leftInnerBeam);
 
-    if (doorsInfo.rearDoorType === 'glass') {
-      const ceramicMat = new THREE.MeshBasicMaterial({ color: 0x09090b });
-      const borderThickness = 0.06;
-      [-doorOpeningH / 2 + borderThickness / 2, doorOpeningH / 2 - borderThickness / 2].forEach(by => {
-        const cBeam = new THREE.Mesh(new THREE.BoxGeometry(doorOpeningW, borderThickness, doorThick * 0.42), ceramicMat);
-        cBeam.position.set(doorWidth / 2, by, -0.003);
-        rearDoorGroup.add(cBeam);
-      });
-      [-doorOpeningW / 2 + borderThickness / 2, doorOpeningW / 2 - borderThickness / 2].forEach(bx => {
-        const cBeam = new THREE.Mesh(new THREE.BoxGeometry(borderThickness, doorOpeningH, doorThick * 0.42), ceramicMat);
-        cBeam.position.set(doorWidth / 2 + bx, 0, -0.003);
-        rearDoorGroup.add(cBeam);
-      });
+      const leftMeshPanel = new THREE.Mesh(new THREE.BoxGeometry(centerW + 0.01, centerH + 0.01, doorThick * 0.4), rearDoorMat);
+      leftMeshPanel.position.set(leafWidth / 2, 0, -0.002);
+      (leftMeshPanel as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearLeftLeafRoot.add(leftMeshPanel);
+
+      // Build Right Perforated Leaf (extends in -X from hinge at 0)
+      const rightTopBeam = new THREE.Mesh(new THREE.BoxGeometry(leafWidth, frameBorder, doorThick), rearDoorFrameMat);
+      rightTopBeam.position.set(-leafWidth / 2, doorHeight / 2 - frameBorder / 2, 0);
+      (rightTopBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearRightLeafRoot.add(rightTopBeam);
+
+      const rightBtmBeam = new THREE.Mesh(new THREE.BoxGeometry(leafWidth, frameBorder, doorThick), rearDoorFrameMat);
+      rightBtmBeam.position.set(-leafWidth / 2, -doorHeight / 2 + frameBorder / 2, 0);
+      (rightBtmBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearRightLeafRoot.add(rightBtmBeam);
+
+      const rightOuterBeam = new THREE.Mesh(new THREE.BoxGeometry(frameBorder, centerH, doorThick), rearDoorFrameMat);
+      rightOuterBeam.position.set(-frameBorder / 2, 0, 0);
+      (rightOuterBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearRightLeafRoot.add(rightOuterBeam);
+
+      const rightInnerBeam = new THREE.Mesh(new THREE.BoxGeometry(frameBorder, centerH, doorThick), rearDoorFrameMat);
+      rightInnerBeam.position.set(-leafWidth + frameBorder / 2, 0, 0);
+      (rightInnerBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearRightLeafRoot.add(rightInnerBeam);
+
+      const rightMeshPanel = new THREE.Mesh(new THREE.BoxGeometry(centerW + 0.01, centerH + 0.01, doorThick * 0.4), rearDoorMat);
+      rightMeshPanel.position.set(-leafWidth / 2, 0, -0.002);
+      (rightMeshPanel as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearRightLeafRoot.add(rightMeshPanel);
+    } else {
+      // 2. SOLID STEEL DUAL LEAVES: Solid steel frame 0.35 units wide (RAL 9005) + solid steel center panel (no texture)
+      const frameBorder = 0.35;
+      const centerW = Math.max(0.1, leafWidth - 2 * frameBorder);
+      const centerH = Math.max(0.1, doorHeight - 2 * frameBorder);
+
+      // Left solid leaf
+      const leftTopBeam = new THREE.Mesh(new THREE.BoxGeometry(leafWidth, frameBorder, doorThick), rearSolidMat);
+      leftTopBeam.position.set(leafWidth / 2, doorHeight / 2 - frameBorder / 2, 0);
+      (leftTopBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearLeftLeafRoot.add(leftTopBeam);
+
+      const leftBtmBeam = new THREE.Mesh(new THREE.BoxGeometry(leafWidth, frameBorder, doorThick), rearSolidMat);
+      leftBtmBeam.position.set(leafWidth / 2, -doorHeight / 2 + frameBorder / 2, 0);
+      (leftBtmBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearLeftLeafRoot.add(leftBtmBeam);
+
+      const leftOuterBeam = new THREE.Mesh(new THREE.BoxGeometry(frameBorder, centerH, doorThick), rearSolidMat);
+      leftOuterBeam.position.set(frameBorder / 2, 0, 0);
+      (leftOuterBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearLeftLeafRoot.add(leftOuterBeam);
+
+      const leftInnerBeam = new THREE.Mesh(new THREE.BoxGeometry(frameBorder, centerH, doorThick), rearSolidMat);
+      leftInnerBeam.position.set(leafWidth - frameBorder / 2, 0, 0);
+      (leftInnerBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearLeftLeafRoot.add(leftInnerBeam);
+
+      const leftSolidCenter = new THREE.Mesh(new THREE.BoxGeometry(centerW + 0.01, centerH + 0.01, doorThick * 0.9), rearSolidMat);
+      leftSolidCenter.position.set(leafWidth / 2, 0, 0);
+      (leftSolidCenter as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearLeftLeafRoot.add(leftSolidCenter);
+
+      // Right solid leaf
+      const rightTopBeam = new THREE.Mesh(new THREE.BoxGeometry(leafWidth, frameBorder, doorThick), rearSolidMat);
+      rightTopBeam.position.set(-leafWidth / 2, doorHeight / 2 - frameBorder / 2, 0);
+      (rightTopBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearRightLeafRoot.add(rightTopBeam);
+
+      const rightBtmBeam = new THREE.Mesh(new THREE.BoxGeometry(leafWidth, frameBorder, doorThick), rearSolidMat);
+      rightBtmBeam.position.set(-leafWidth / 2, -doorHeight / 2 + frameBorder / 2, 0);
+      (rightBtmBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearRightLeafRoot.add(rightBtmBeam);
+
+      const rightOuterBeam = new THREE.Mesh(new THREE.BoxGeometry(frameBorder, centerH, doorThick), rearSolidMat);
+      rightOuterBeam.position.set(-frameBorder / 2, 0, 0);
+      (rightOuterBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearRightLeafRoot.add(rightOuterBeam);
+
+      const rightInnerBeam = new THREE.Mesh(new THREE.BoxGeometry(frameBorder, centerH, doorThick), rearSolidMat);
+      rightInnerBeam.position.set(-leafWidth + frameBorder / 2, 0, 0);
+      (rightInnerBeam as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearRightLeafRoot.add(rightInnerBeam);
+
+      const rightSolidCenter = new THREE.Mesh(new THREE.BoxGeometry(centerW + 0.01, centerH + 0.01, doorThick * 0.9), rearSolidMat);
+      rightSolidCenter.position.set(-leafWidth / 2, 0, 0);
+      (rightSolidCenter as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearRightLeafRoot.add(rightSolidCenter);
     }
 
-    const rearLockHandle = new THREE.Mesh(
-      new THREE.BoxGeometry(0.12, 0.90, 0.06),
-      materials.metalMat
-    );
-    rearLockHandle.position.set(doorWidth - 0.18, 0, -0.035);
-    (rearLockHandle as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
-    rearDoorGroup.add(rearLockHandle);
+    // 3 Hinges per leaf (small cylinders on the outer edge: X = 0 in each leaf root)
+    const hingePositionsY = [-doorHeight * 0.38, 0, doorHeight * 0.38];
+    hingePositionsY.forEach(hy => {
+      // Left leaf hinge on outer edge
+      const leftHinge = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.12, 12), materials.metalMat);
+      leftHinge.position.set(0, hy, 0);
+      (leftHinge as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearLeftLeafRoot.add(leftHinge);
 
-    [-doorHeight / 2 + 0.2, doorHeight / 2 - 0.2].forEach(hy => {
-      const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.12, 10), materials.metalMat);
-      hinge.position.set(0, hy, 0);
-      (hinge as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
-      rearDoorGroup.add(hinge);
+      // Right leaf hinge on outer edge
+      const rightHinge = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.12, 12), materials.metalMat);
+      rightHinge.position.set(0, hy, 0);
+      (rightHinge as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+      rearRightLeafRoot.add(rightHinge);
     });
 
+    // Right leaf: vertical swing handle (0.9 tall) with lock cylinder
+    const rightHandleGroup = new THREE.Group();
+    rightHandleGroup.name = 'rear-right-swing-handle';
+    const handleBarMesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.90, 0.05), materials.metalMat);
+    handleBarMesh.position.set(0, 0, -0.03);
+    rightHandleGroup.add(handleBarMesh);
+
+    const lockCylinderMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.06, 16), materials.railMat);
+    lockCylinderMesh.rotateX(Math.PI / 2);
+    lockCylinderMesh.position.set(0, 0.18, -0.04);
+    rightHandleGroup.add(lockCylinderMesh);
+
+    // Keyhole slit
+    const keyholeMesh = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.03, 0.07), materials.accentMat);
+    keyholeMesh.position.set(0, 0.18, -0.042);
+    rightHandleGroup.add(keyholeMesh);
+
+    // Place handle near the inner edge of right leaf
+    rightHandleGroup.position.set(-leafWidth + 0.14, 0, 0);
+    (rightHandleGroup as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+    rearRightLeafRoot.add(rightHandleGroup);
+
+    // Left leaf: small latch at inner edge
+    const leftLatchMesh = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.22, 0.04), materials.metalMat);
+    leftLatchMesh.position.set(leafWidth - 0.10, 0, -0.025);
+    (leftLatchMesh as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+    rearLeftLeafRoot.add(leftLatchMesh);
+
+    (rearLeftLeafRoot as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+    (rearRightLeafRoot as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
+
+    rearDoorGroup.add(rearLeftLeafRoot);
+    rearDoorGroup.add(rearRightLeafRoot);
     (rearDoorGroup as any).userData = { isProductMesh: true, isDoor: true, item: rearDoorItem };
     group.add(rearDoorGroup);
+  } else {
+    // 3. If hasRearDoor is false: one fixed solid panel, no hinges/handle
+    const fixedRearPanelMat = (materials.frameMat as THREE.MeshStandardMaterial).clone();
+    const rearPanelMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(doorWidth, doorHeight, doorThick),
+      fixedRearPanelMat
+    );
+    rearPanelMesh.position.set(0, doorCenterY, -halfD - 0.02);
+    rearPanelMesh.receiveShadow = true;
+    (rearPanelMesh as any).userData = { isDoor: false };
+    group.add(rearPanelMesh);
   }
 
   // Door state & Cutaway handling
-  let currentRearDoorState: DoorLeafState = options?.doorState?.rear || 'transparent';
+  let currentRearDoorState: DoorLeafState = options?.doorState?.rear || 'closed';
   let isCutawayActive = false;
 
   const updateRearDoorOpacity = () => {
     if (!hasRearDoor || currentRearDoorState === 'removed') return;
-    if (isCutawayActive && (currentRearDoorState === 'closed' || currentRearDoorState === 'transparent')) {
-      rearDoorMat.opacity = 0.15;
-      rearDoorMat.transparent = true;
-      rearDoorFrameMat.opacity = 0.18;
-      rearDoorFrameMat.transparent = true;
-    } else {
-      if (currentRearDoorState === 'closed') {
-        rearDoorMat.opacity = 0.95;
-        rearDoorMat.transparent = false;
-        rearDoorFrameMat.opacity = 0.95;
-        rearDoorFrameMat.transparent = false;
-      } else if (currentRearDoorState === 'transparent') {
-        rearDoorMat.opacity = 0.38;
+    if (doorsInfo.rearDoorType !== 'perforated') {
+      if (isCutawayActive && (currentRearDoorState === 'closed' || currentRearDoorState === 'transparent')) {
+        rearSolidMat.opacity = 0.15;
+        rearSolidMat.transparent = true;
+      } else {
+        if (currentRearDoorState === 'closed') {
+          rearSolidMat.opacity = 1.0;
+          rearSolidMat.transparent = false;
+        } else if (currentRearDoorState === 'transparent') {
+          rearSolidMat.opacity = 0.35;
+          rearSolidMat.transparent = true;
+        } else if (currentRearDoorState === 'open') {
+          rearSolidMat.opacity = 1.0;
+          rearSolidMat.transparent = false;
+        }
+      }
+    } else if (rearDoorMat) {
+      if (isCutawayActive && (currentRearDoorState === 'closed' || currentRearDoorState === 'transparent')) {
+        rearDoorMat.opacity = 0.15;
         rearDoorMat.transparent = true;
-        rearDoorFrameMat.opacity = 0.42;
+        rearDoorFrameMat.opacity = 0.18;
         rearDoorFrameMat.transparent = true;
-      } else if (currentRearDoorState === 'open') {
-        rearDoorMat.opacity = 0.90;
-        rearDoorMat.transparent = false;
-        rearDoorFrameMat.opacity = 0.95;
-        rearDoorFrameMat.transparent = false;
+      } else {
+        if (currentRearDoorState === 'closed') {
+          rearDoorMat.opacity = 0.95;
+          rearDoorMat.transparent = false;
+          rearDoorFrameMat.opacity = 0.95;
+          rearDoorFrameMat.transparent = false;
+        } else if (currentRearDoorState === 'transparent') {
+          rearDoorMat.opacity = 0.38;
+          rearDoorMat.transparent = true;
+          rearDoorFrameMat.opacity = 0.42;
+          rearDoorFrameMat.transparent = true;
+        } else if (currentRearDoorState === 'open') {
+          rearDoorMat.opacity = 0.90;
+          rearDoorMat.transparent = false;
+          rearDoorFrameMat.opacity = 0.95;
+          rearDoorFrameMat.transparent = false;
+        }
       }
     }
   };
@@ -1431,9 +1638,13 @@ export function buildCabinetFrameGroup(
         rearDoorGroup.visible = true;
         setHierarchyRaycast(rearDoorGroup, true);
         if (state === 'open') {
-          rearDoorGroup.rotation.y = Math.PI * 0.58; // swing outward to rear
+          // 5. setDoorMode('rear', 'open') rotates each leaf 105° outward around its own hinge edge (opposite directions)
+          const angle105 = (105 * Math.PI) / 180;
+          rearLeftLeafRoot.rotation.y = -angle105; // rotates outward towards -Z/+X around left hinge
+          rearRightLeafRoot.rotation.y = angle105;  // rotates outward towards -Z/-X around right hinge
         } else {
-          rearDoorGroup.rotation.y = 0;
+          rearLeftLeafRoot.rotation.y = 0;
+          rearRightLeafRoot.rotation.y = 0;
         }
         updateRearDoorOpacity();
       }
@@ -1441,7 +1652,7 @@ export function buildCabinetFrameGroup(
   };
 
   const initialFront = options?.doorState?.front || 'transparent';
-  const initialRear = options?.doorState?.rear || 'transparent';
+  const initialRear = options?.doorState?.rear || 'closed';
   if (doorsInfo.hasFrontDoor) {
     setDoorMode('front', initialFront);
   }
@@ -1463,6 +1674,7 @@ export function buildCabinetFrameGroup(
     doorsGroup: frontDoorGroup,
     setDoorMode,
     setRearCutaway,
+    setSidePanel,
     doorsInfo,
   };
 }

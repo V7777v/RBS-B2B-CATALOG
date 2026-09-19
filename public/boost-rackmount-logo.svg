@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 160" width="400" height="160">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@800;900&amp;display=swap');
+      .boost-b { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 900; font-size: 110px; fill: #000000; }
+      .boost-oost { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 800; font-size: 80px; fill: #000000; letter-spacing: -1px; }
+      .rackmount-text { font-family: 'Inter', system-ui, -apple-system, sans-serif; font-weight: 800; font-size: 46px; fill: #5fe000; letter-spacing: -0.5px; }
+    </style>
+  </defs>
+
+  <!-- Group containing the logo -->
+  <g transform="translate(10, 10)">
+    <!-- Capital B -->
+    <text x="0" y="112" class="boost-b">B</text>
+    <!-- Lowercase oost -->
+    <text x="76" y="88" class="boost-oost">oost</text>
+
+    <!-- Boost icon/emblem above 'ost' -->
+    <g transform="translate(258, 2)">
+      <!-- Orange Right Triangle -->
+      <polygon points="12,78 64,78 24,36" fill="#ea4d1d" />
+
+      <!-- Vibrant Lime Swoosh / Wing -->
+      <path d="M 44,80 C 62,75 88,60 102,10 C 94,36 78,54 52,66 C 44,70 38,75 44,80 Z" fill="#5fe000" />
+      <path d="M 42,68 C 66,54 86,34 98,12 C 86,30 68,48 44,60 C 38,63 36,66 42,68 Z" fill="#5fe000" />
+    </g>
+
+    <!-- RackMount in Vibrant Lime Green -->
+    <text x="78" y="138" class="rackmount-text">RackMount</text>
+  </g>
+</svg>

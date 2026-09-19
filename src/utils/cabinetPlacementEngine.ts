@@ -405,18 +405,19 @@ export function classifyItemPlacement(
   }
 
   // Case 2: No specific targetU (general list view)
-  const directSegment = analysis.freeSegments.find(s => s.span >= uSize);
+  const directSegment = [...analysis.freeSegments].reverse().find(s => s.span >= uSize);
   if (directSegment) {
+    const highestU = directSegment.endU - uSize + 1;
     return {
       category: 'direct',
       uSize,
-      alternateTargetU: directSegment.startU,
-      alternateEndU: directSegment.startU + uSize - 1,
+      alternateTargetU: highestU,
+      alternateEndU: directSegment.endU,
     };
   }
 
   // Check if rearrangement can create space anywhere
-  for (let candU = 1; candU <= analysis.totalU - uSize + 1; candU++) {
+  for (let candU = analysis.totalU - uSize + 1; candU >= 1; candU--) {
     const plan = findRearrangementPlan(item, candU, analysis, slots);
     if (plan && plan.moves.length > 0) {
       return {
