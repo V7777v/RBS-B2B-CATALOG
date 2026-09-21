@@ -8085,6 +8085,19 @@ export default function App() {
                         </button>
                       </li>
                     ))}
+                    <hr className="border-gray-100" />
+                    <li>
+                      <button
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          window.dispatchEvent(new CustomEvent('show-install-prompt'));
+                        }}
+                        className="flex items-center gap-2.5 text-[#004387] font-bold text-sm text-right w-full bg-blue-50/70 hover:bg-blue-100/80 p-3 rounded-xl border border-blue-100 transition-colors"
+                      >
+                        <Download size={18} className="text-[#ff7a00] flex-shrink-0" />
+                        <span>התקנת אפליקציה למסך הבית (PWA)</span>
+                      </button>
+                    </li>
                   </ul>
                   </div>
                   {/* Distributor login button in hamburger menu */}
@@ -8797,7 +8810,7 @@ export default function App() {
               </span>
             </button>
           )}
-          <InstallBanner disabled={!isHumanVerified || showGuestNotice} />
+          <InstallBanner disabled={!isHumanVerified} />
           {/* SHOPPING CART ADDITION CONFIRMATION MODAL */}
           {addedItemConfirm && addedItemConfirm.isOpen && (
             <div

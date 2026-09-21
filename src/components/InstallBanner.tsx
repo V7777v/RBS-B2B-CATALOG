@@ -44,8 +44,8 @@ class BannerErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
-const DISMISS_KEY = 'rbs_pwa_install_dismissed_v1.2';
-const DISMISS_DAYS = 14;
+const DISMISS_KEY = 'rbs_pwa_install_dismissed_v2';
+const DISMISS_DAYS = 1;
 
 type Platform = 'ios' | 'android' | 'desktop' | 'unknown';
 
@@ -76,7 +76,7 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
       // 1. Check if already installed
       const isStandaloneCheck =
         window.matchMedia?.('(display-mode: standalone)').matches ||
-        window.navigator.standalone === true ||
+        (window.navigator as any).standalone === true ||
         document.referrer.startsWith('android-app://');
 
       setIsStandalone(!!isStandaloneCheck);
@@ -85,7 +85,7 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
       // 2. Detect Platform
       const ua = window.navigator.userAgent || '';
       const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-      const isIOS = (/iPhone|iPad|iPod/i.test(ua) && !window.MSStream) || isIPadOS;
+      const isIOS = (/iPhone|iPad|iPod/i.test(ua) && !(window as any).MSStream) || isIPadOS;
       const isAndroid = /Android/i.test(ua);
       
       let detectedPlatform: Platform = 'desktop';
@@ -120,18 +120,28 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
 
       window.addEventListener('appinstalled', installedHandler);
 
+      // Custom event to trigger install prompt anytime
+      const manualShowHandler = () => {
+        setShow(true);
+        if (detectedPlatform === 'ios') {
+          setShowInstructions(true);
+        }
+      };
+      window.addEventListener('show-install-prompt', manualShowHandler);
+
       return () => {
         if (window.__promptListeners) {
           window.__promptListeners = window.__promptListeners.filter(l => l !== promptHandler);
         }
         window.removeEventListener('appinstalled', installedHandler);
+        window.removeEventListener('show-install-prompt', manualShowHandler);
       };
     } catch (err) {
       console.warn('[InstallBanner] init failed:', err);
     }
   }, []);
 
-  // Control banner display: postpone by 20 seconds after disabled turns false
+  // Control banner display: show after short 2-second delay
   useEffect(() => {
     if (disabled || isStandalone) {
       setShow(false);
@@ -152,7 +162,7 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
       if (platform === 'ios') {
         setShowInstructions(true);
       }
-    }, 20000);
+    }, 2000);
 
     return () => {
       clearTimeout(timer);
@@ -299,12 +309,24 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
 
   return (
     <div style={containerStyle} role="dialog" aria-label="הצעת התקנה">
-      <h3 style={titleStyle}>
-        <span style={{ fontSize: '24px' }}>📲</span> גישה מהירה לקטלוג RBS
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <img 
+          src="/apple-touch-icon.png" 
+          alt="RBS Logo" 
+          style={{ width: '46px', height: '46px', borderRadius: '10px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', flexShrink: 0 }} 
+        />
+        <div>
+          <h3 style={titleStyle}>
+            גישה מהירה לקטלוג RBS
+          </h3>
+          <p style={{ ...textStyle, fontSize: '13px', marginTop: '2px', color: '#6b7280' }}>
+            התקנה למסך הבית לגישה מיידית
+          </p>
+        </div>
+      </div>
       
       <p style={textStyle}>
-        התקן את הקטלוג כאפליקציה וקבל גישה מהירה מהמחשב או מהטלפון.
+        התקן את הקטלוג כאפליקציה בטלפון או במחשב לעבודה חלקה ומהירה יותר.
       </p>
 
       {/* Show instructions automatically on iOS and Desktop without native prompt */}

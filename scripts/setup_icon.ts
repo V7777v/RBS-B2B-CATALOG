@@ -79,6 +79,11 @@ async function main() {
       { name: 'icons/icon-512-maskable.png', size: 512 },
       { name: 'icons/icon-192.png', size: 192 },
       { name: 'apple-touch-icon.png', size: 180 },
+      { name: 'apple-touch-icon-precomposed.png', size: 180 },
+      { name: 'apple-touch-icon-180x180.png', size: 180 },
+      { name: 'apple-touch-icon-180x180-precomposed.png', size: 180 },
+      { name: 'apple-touch-icon-152x152.png', size: 152 },
+      { name: 'apple-touch-icon-120x120.png', size: 120 },
       { name: 'favicon.png', size: 32 }
     ];
 
