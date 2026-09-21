@@ -12,7 +12,7 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',
-        includeAssets: ['favicon.png', 'apple-touch-icon*.png', 'icons/*.png', 'og-image.png', 'advisor-avatar.png'],
+        includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icons/*.png', 'og-image.png', 'advisor-avatar.png'],
         manifest: {
           name: 'קטלוג RBS Telecom',
           short_name: 'קטלוג RBS',
@@ -26,15 +26,17 @@ export default defineConfig(() => {
           lang: 'he',
           dir: 'rtl',
           icons: [
-            { src: '/rbs-touch-icon.png?v=rbs-logo-1', sizes: '180x180', type: 'image/png', purpose: 'any' },
-            { src: '/icons/icon-192.png?v=rbs-logo-1', sizes: '192x192', type: 'image/png', purpose: 'any' },
-            { src: '/icons/icon-512.png?v=rbs-logo-1', sizes: '512x512', type: 'image/png', purpose: 'any' },
-            { src: '/icons/icon-512-maskable.png?v=rbs-logo-1', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+            { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+            { src: '/icons/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
           ]
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+          cleanupOutdatedCaches: true,
+          skipWaiting: true,
+          clientsClaim: true,
           navigateFallbackDenylist: [
             /^\/api/,
             /sheets\.googleapis\.com/,
@@ -66,6 +68,7 @@ export default defineConfig(() => {
             {
               urlPattern: ({ request, url }) =>
                 request.destination === 'image' &&
+                !url.pathname.startsWith('/icons') &&
                 !url.hostname.includes('googleusercontent.com') &&
                 !url.hostname.includes('drive.google.com'),
               handler: 'CacheFirst',
@@ -100,10 +103,7 @@ export default defineConfig(() => {
                 expiration: { maxEntries: 20, maxAgeSeconds: 31536000 }
               }
             }
-          ],
-          cleanupOutdatedCaches: true,
-          skipWaiting: true,
-          clientsClaim: true
+          ]
         },
         devOptions: { enabled: false }
       })
