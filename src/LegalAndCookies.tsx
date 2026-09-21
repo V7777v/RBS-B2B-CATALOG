@@ -381,7 +381,7 @@ const LegalAndCookies: React.FC<LegalAndCookiesProps> = ({ onConsentChange }) =>
         aria-label="תפריט נגישות"
         aria-expanded={a11yOpen}
         className={`fixed left-4 z-[80] w-12 h-12 rounded-full bg-[#004387] text-white shadow-lg flex items-center justify-center hover:bg-[#0c2d57] transition-all ${
-          !consent ? "max-sm:bottom-[76px] bottom-4" : "bottom-4"
+          !consent ? "max-sm:bottom-[136px] bottom-4" : "max-sm:bottom-[76px] bottom-4"
         }`}
       >
         <A11yIcon />
@@ -392,7 +392,7 @@ const LegalAndCookies: React.FC<LegalAndCookiesProps> = ({ onConsentChange }) =>
         <div className="fixed inset-0 z-[81]" onClick={() => setA11yOpen(false)}>
           <div
             className={`fixed left-4 w-[280px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden ${
-              !consent ? "max-sm:bottom-[136px] bottom-20" : "bottom-20"
+              !consent ? "max-sm:bottom-[196px] bottom-20" : "max-sm:bottom-[140px] bottom-20"
             }`}
             onClick={(e) => e.stopPropagation()}
             dir="rtl"

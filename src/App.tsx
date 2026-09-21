@@ -62,6 +62,7 @@ import {
   Copy,
   Share2,
   Bot,
+  LayoutGrid,
 } from "lucide-react";
 import Papa from "papaparse";
 import { motion, AnimatePresence } from "motion/react";
@@ -7313,24 +7314,24 @@ export default function App() {
             ref={headerRef}
             className="sticky top-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header"
           >
-            <div className="container mx-auto px-4 h-12 sm:min-h-[56px] flex flex-row items-center justify-between gap-1 sm:gap-4">
+            <div className="container mx-auto px-2.5 sm:px-4 h-16 sm:h-[60px] flex flex-row items-center justify-between gap-1 sm:gap-4">
               {/* RIGHT SIDE: Menu & Back (Mobile optimized browser controls & Desktop standard) */}
               <div className="flex flex-row items-center gap-2 md:gap-4 flex-shrink-0">
-                {/* MOBILE ONLY: Hamburger (primary bg-[#0c2d57] text-white) + Logo (height 34px) */}
-                <div className="flex md:hidden items-center gap-2 flex-shrink-0">
+                {/* MOBILE ONLY: Hamburger (primary bg-[#0c2d57] text-white) + Logo (enlarged by 50%) */}
+                <div className="flex md:hidden items-center gap-2.5 flex-shrink-0">
                   {/* 1. Hamburger button: primary (bg-[#0c2d57] text-white) */}
                   <button
                     id="mobile-nav-hamburger"
                     type="button"
                     onClick={() => setMobileMenuOpen(true)}
-                    className="flex items-center justify-center w-9 h-9 bg-[#0c2d57] hover:bg-[#004387] text-white rounded-lg shadow-xs transition-all duration-200 active:scale-95 flex-shrink-0"
+                    className="flex items-center justify-center w-10 h-10 bg-[#0c2d57] hover:bg-[#004387] text-white rounded-xl shadow-xs transition-all duration-200 active:scale-95 flex-shrink-0 cursor-pointer"
                     aria-label="פתח תפריט"
                     title="תפריט ניווט"
                   >
-                    <Menu size={20} className="stroke-[2.5]" />
+                    <Menu size={22} className="stroke-[2.5]" />
                   </button>
 
-                  {/* 2. Clickable RBS Logo: height 34px */}
+                  {/* 2. Clickable RBS Logo: enlarged by 50% */}
                   <button
                     id="mobile-nav-home"
                     type="button"
@@ -7338,15 +7339,15 @@ export default function App() {
                       setSearchQuery("");
                       navigateHome();
                     }}
-                    className="flex items-center justify-center h-[34px] bg-transparent border-none p-0 cursor-pointer active:scale-95 transition-transform flex-shrink-0"
+                    className="flex items-center justify-center h-[50px] bg-transparent border-none p-0 cursor-pointer active:scale-95 transition-transform flex-shrink-0"
                     aria-label="דף הבית"
                     title="דף הבית - RBS"
                   >
                     <img
                       referrerPolicy="no-referrer"
                       src="/new-logo.png"
-                      alt="RBS Logo"
-                      className="h-[34px] w-auto object-contain select-none"
+                      alt="RBS Telecom"
+                      className="h-[48px] sm:h-[52px] w-auto max-w-[155px] object-contain select-none"
                     />
                   </button>
                 </div>
@@ -7661,24 +7662,7 @@ export default function App() {
                 </>
               )}
               {isGuest && (
-                <div className="flex-shrink-0 flex items-center gap-2">
-                  <button
-                    onClick={() => setShowProfile(true)}
-                    aria-label="מועדפים"
-                    title="מועדפים"
-                    className="relative flex items-center justify-center gap-1.5 h-9 sm:h-11 px-2.5 sm:px-4 bg-white border border-gray-200 hover:border-gray-300 text-red-500 font-bold rounded-xl active:scale-95 text-xs sm:text-sm whitespace-nowrap"
-                  >
-                    <Heart
-                      size={18}
-                      className="flex-shrink-0 fill-red-500 stroke-[2.25]"
-                    />{" "}
-                    <span className="hidden sm:inline">מועדפים</span>
-                    {favorites.length > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[11px] sm:text-[10px] font-bold min-w-[18px] sm:min-w-[20px] h-[18px] sm:h-5 px-1 rounded-full flex items-center justify-center shadow-sm ring-2 ring-white">
-                        {favorites.length}
-                      </span>
-                    )}
-                  </button>
+                <div className="flex-shrink-0 flex items-center gap-1.5 sm:gap-2">
                   <button
                     onClick={() => {
                       try {
@@ -7687,10 +7671,27 @@ export default function App() {
                       setIsGuest(false);
                     }}
                     title="כניסה / רישום למפיצים מורשים בלבד"
-                    className="hidden sm:flex items-center justify-center gap-1.5 h-11 !px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl active:scale-95 text-sm whitespace-nowrap"
+                    className="flex items-center justify-center gap-1 sm:gap-1.5 h-9 sm:h-11 px-2.5 sm:px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl active:scale-95 text-xs sm:text-sm whitespace-nowrap shadow-xs cursor-pointer"
                   >
-                    <Lock size={18} className="flex-shrink-0 stroke-[2.25]" />{" "}
-                    כניסת מפיצים
+                    <Lock size={15} className="flex-shrink-0 stroke-[2.25] sm:w-[18px] sm:h-[18px]" />
+                    <span>כניסת מפיצים</span>
+                  </button>
+                  <button
+                    onClick={() => setShowProfile(true)}
+                    aria-label="מועדפים"
+                    title="מועדפים"
+                    className="relative flex items-center justify-center gap-1 h-9 sm:h-11 px-2 sm:px-3 bg-white border border-gray-200 hover:border-gray-300 text-red-500 font-bold rounded-xl active:scale-95 text-xs sm:text-sm whitespace-nowrap cursor-pointer"
+                  >
+                    <Heart
+                      size={18}
+                      className="flex-shrink-0 fill-red-500 stroke-[2.25]"
+                    />
+                    <span className="hidden sm:inline">מועדפים</span>
+                    {favorites.length > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[11px] sm:text-[10px] font-bold min-w-[18px] sm:min-w-[20px] h-[18px] sm:h-5 px-1 rounded-full flex items-center justify-center shadow-sm ring-2 ring-white">
+                        {favorites.length}
+                      </span>
+                    )}
                   </button>
                 </div>
               )}
@@ -7778,6 +7779,48 @@ export default function App() {
                 )}
               </div>
             </div>
+            {/* ROW 3: Mobile Category Chips Bar (One-touch navigation between all catalogs) */}
+            {catalogFolders.length > 0 && !isSearchFocused && (
+              <div
+                className="md:hidden bg-slate-50/90 px-2.5 py-1.5 w-full block border-t border-gray-100 overflow-x-auto"
+                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+              >
+                <div className="flex items-center gap-1.5 whitespace-nowrap min-w-max">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      navigateHome();
+                    }}
+                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                      currentView === "home" && !searchQuery
+                        ? "bg-[#004387] text-white shadow-xs"
+                        : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <Home size={13} className="flex-shrink-0" />
+                    <span>כל המחירונים</span>
+                  </button>
+                  {catalogFolders.map((cat, idx) => {
+                    const isSelected = selectedCatalog === cat.name && currentView !== "home";
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => navigateToCatalog(cat.name)}
+                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                          isSelected
+                            ? "bg-[#004387] text-white shadow-xs font-bold"
+                            : "bg-white border border-gray-200 text-gray-700 hover:border-[#004387] active:scale-95"
+                        }`}
+                      >
+                        <span>{cat.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
           {/* MOBILE ONLY DYNAMIC BREADCRUMB BAR (INTEGRATED AND COMPACT - NO DUPLICATE LOGOS) */}
           {(currentView !== "home" || searchQuery) && (
@@ -8776,7 +8819,7 @@ export default function App() {
             <button
               onClick={() => setAdvisorOpen(true)}
               className={`fixed right-4 z-[80] w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-[#004387] to-[#0c2d57] shadow-[0_8px_24px_rgba(0,67,135,0.45)] hover:scale-105 transition-all border-2 border-white shadow-lg active:scale-95 flex items-center justify-center cursor-pointer ${
-                !hasCookieConsent ? "max-sm:bottom-[76px] bottom-4" : "bottom-4"
+                !hasCookieConsent ? "max-sm:bottom-[136px] bottom-4" : "max-sm:bottom-[76px] bottom-4"
               }`}
               aria-label="פתח יועץ טכני חכם"
             >
@@ -13154,6 +13197,110 @@ export default function App() {
             </button>
           </div>
         )}
+        {/* MOBILE FIXED BOTTOM NAVIGATION BAR */}
+        <nav
+          aria-label="סרגל ניווט תחתון"
+          className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex items-center justify-around px-2 py-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]"
+        >
+          {/* 1. Home */}
+          <button
+            type="button"
+            onClick={() => {
+              setSearchQuery("");
+              navigateHome();
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className={`flex flex-col items-center justify-center flex-1 py-1.5 transition-colors cursor-pointer ${
+              currentView === "home" && !searchQuery
+                ? "text-[#004387] font-bold"
+                : "text-gray-500 hover:text-gray-900 font-medium"
+            }`}
+          >
+            <Home size={20} className={currentView === "home" && !searchQuery ? "stroke-[2.5]" : "stroke-[1.8]"} />
+            <span className="text-[11px] mt-0.5">דף הבית</span>
+          </button>
+
+          {/* 2. Catalogs (Menu Drawer) */}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            className="flex flex-col items-center justify-center flex-1 py-1.5 text-gray-500 hover:text-gray-900 font-medium transition-colors cursor-pointer"
+          >
+            <LayoutGrid size={20} className="stroke-[1.8]" />
+            <span className="text-[11px] mt-0.5">קטלוגים</span>
+          </button>
+
+          {/* 3. Search */}
+          <button
+            type="button"
+            onClick={() => {
+              window.scrollTo({ top: 0, behavior: "smooth" });
+              const searchInputs = document.querySelectorAll('input[aria-label="חיפוש מוצרים"]');
+              const mobileInput = searchInputs[searchInputs.length - 1] as HTMLInputElement | null;
+              if (mobileInput) {
+                mobileInput.focus();
+              }
+            }}
+            className={`flex flex-col items-center justify-center flex-1 py-1.5 transition-colors cursor-pointer ${
+              searchQuery
+                ? "text-[#004387] font-bold"
+                : "text-gray-500 hover:text-gray-900 font-medium"
+            }`}
+          >
+            <Search size={20} className={searchQuery ? "stroke-[2.5]" : "stroke-[1.8]"} />
+            <span className="text-[11px] mt-0.5">חיפוש</span>
+          </button>
+
+          {/* 4. Favorites */}
+          <button
+            type="button"
+            onClick={() => setShowProfile(true)}
+            className="relative flex flex-col items-center justify-center flex-1 py-1.5 text-gray-500 hover:text-gray-900 font-medium transition-colors cursor-pointer"
+          >
+            <div className="relative">
+              <Heart size={20} className={`stroke-[1.8] ${favorites.length > 0 ? "fill-red-500 text-red-500" : ""}`} />
+              {favorites.length > 0 && (
+                <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[10px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center shadow-xs">
+                  {favorites.length}
+                </span>
+              )}
+            </div>
+            <span className="text-[11px] mt-0.5">מועדפים</span>
+          </button>
+
+          {/* 5. Distributor Login / Cart */}
+          {isGuest ? (
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  sessionStorage.removeItem("rbs_guest");
+                } catch {}
+                setIsGuest(false);
+              }}
+              className="flex flex-col items-center justify-center flex-1 py-1.5 text-[#004387] font-bold transition-colors cursor-pointer"
+            >
+              <Lock size={20} className="stroke-[2.25]" />
+              <span className="text-[11px] mt-0.5">כניסת מפיצים</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsCartOpen(true)}
+              className="relative flex flex-col items-center justify-center flex-1 py-1.5 text-[#004387] font-bold transition-colors cursor-pointer"
+            >
+              <div className="relative">
+                <ShoppingCart size={20} className="stroke-[2.25]" />
+                {cart.length > 0 && (
+                  <span className="absolute -top-1.5 -right-2 bg-[#c2410c] text-white text-[10px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center shadow-xs">
+                    {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                  </span>
+                )}
+              </div>
+              <span className="text-[11px] mt-0.5">הזמנה</span>
+            </button>
+          )}
+        </nav>
       </CompareContext.Provider>
     </FavoritesContext.Provider>
   );
