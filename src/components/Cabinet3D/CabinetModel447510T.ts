@@ -11,6 +11,7 @@ import {
   resolveCabinetDoorsInfo,
 } from './CabinetModelBuilder';
 import { createBoostHeaderBadgeMesh } from './BoostRackMountLogo';
+import { createPerforationTexture } from './BrandTextures';
 
 /**
  * High-fidelity 3D simulation specifically for SKU 447510T (Boost 44U 75x100 Floor Standing Rack)
@@ -32,143 +33,102 @@ import { createBoostHeaderBadgeMesh } from './BoostRackMountLogo';
  * - Detachable side panels with small round keylocks (Page 1 point 9 & Page 3)
  */
 
-// Procedural texture generators for authentic physical appearance
-function createPerforatedMeshTexture(): THREE.CanvasTexture | THREE.Texture {
-  if (typeof document === 'undefined') return new THREE.Texture();
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    // Dark RAL9005 steel background
-    ctx.fillStyle = '#151719';
-    ctx.fillRect(0, 0, 256, 256);
-
-    // Honeycomb / hexagonal high-airflow perforations (>75% open area)
-    ctx.fillStyle = '#050607';
-    const hexRadius = 7;
-    const xSpacing = hexRadius * 2.5;
-    const ySpacing = hexRadius * 2.16;
-
-    for (let y = 0; y < 256 + ySpacing; y += ySpacing) {
-      const row = Math.floor(y / ySpacing);
-      const xOffset = (row % 2) * (xSpacing / 2);
-      for (let x = -xSpacing; x < 256 + xSpacing; x += xSpacing) {
-        const cx = x + xOffset;
-        const cy = y;
-
-        // Draw hexagon hole
-        ctx.beginPath();
-        for (let i = 0; i < 6; i++) {
-          const angle = (Math.PI / 3) * i;
-          const hx = cx + hexRadius * Math.cos(angle);
-          const hy = cy + hexRadius * Math.sin(angle);
-          if (i === 0) ctx.moveTo(hx, hy);
-          else ctx.lineTo(hx, hy);
-        }
-        ctx.closePath();
-        ctx.fill();
-
-        // Subtle metallic rim highlight on hole edge
-        ctx.strokeStyle = '#2d333b';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-    }
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(12, 48);
-  return texture;
-}
+let cachedVentSlotTexture: THREE.CanvasTexture | null = null;
 
 // Page 8: Diagonal ventilation slots texture for Fixed Shelf PN 117914
-export function createDiagonalVentSlotTexture(): THREE.CanvasTexture | THREE.Texture {
-  if (typeof document === 'undefined') return new THREE.Texture();
+export function createDiagonalVentSlotTexture(): THREE.CanvasTexture | null {
+  if (cachedVentSlotTexture) return cachedVentSlotTexture;
+  if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 512;
   const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.fillStyle = '#334155'; // Dark industrial steel
-    ctx.fillRect(0, 0, 512, 512);
+  if (!ctx) return null;
 
-    // Diagonal slots (slanted pill capsules at 45 degrees as shown in Page 8)
-    ctx.fillStyle = '#0f172a'; // Deep cutout
-    ctx.strokeStyle = '#64748b'; // Chamfer edge
-    ctx.lineWidth = 2;
+  ctx.fillStyle = '#334155'; // Dark industrial steel
+  ctx.fillRect(0, 0, 512, 512);
 
-    const slotLen = 32;
-    const slotThick = 9;
-    const colStep = 48;
-    const rowStep = 42;
+  // Diagonal slots (slanted pill capsules at 45 degrees as shown in Page 8)
+  ctx.fillStyle = '#0f172a'; // Deep cutout
+  ctx.strokeStyle = '#64748b'; // Chamfer edge
+  ctx.lineWidth = 2;
 
-    for (let y = 16; y < 512; y += rowStep) {
-      const colShift = (Math.floor(y / rowStep) % 2) * 24;
-      for (let x = 16; x < 512; x += colStep) {
-        ctx.save();
-        ctx.translate(x + colShift, y);
-        ctx.rotate(-Math.PI / 4); // 45 degree angle
+  const slotLen = 32;
+  const slotThick = 9;
+  const colStep = 48;
+  const rowStep = 42;
 
-        // Rounded pill capsule
-        ctx.beginPath();
-        const r = slotThick / 2;
-        const hl = slotLen / 2;
-        ctx.arc(-hl + r, 0, r, Math.PI / 2, (Math.PI * 3) / 2);
-        ctx.lineTo(hl - r, -r);
-        ctx.arc(hl - r, 0, r, -Math.PI / 2, Math.PI / 2);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+  for (let y = 16; y < 512; y += rowStep) {
+    const colShift = (Math.floor(y / rowStep) % 2) * 24;
+    for (let x = 16; x < 512; x += colStep) {
+      ctx.save();
+      ctx.translate(x + colShift, y);
+      ctx.rotate(-Math.PI / 4); // 45 degree angle
 
-        ctx.restore();
-      }
+      // Rounded pill capsule
+      ctx.beginPath();
+      const r = slotThick / 2;
+      const hl = slotLen / 2;
+      ctx.arc(-hl + r, 0, r, Math.PI / 2, (Math.PI * 3) / 2);
+      ctx.lineTo(hl - r, -r);
+      ctx.arc(hl - r, 0, r, -Math.PI / 2, Math.PI / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.restore();
     }
   }
+
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(4, 5);
+  cachedVentSlotTexture = texture;
   return texture;
 }
 
+let cachedCableTrayTexture: THREE.CanvasTexture | null = null;
+
 // Page 4: 400mm width cable tray pattern texture
-function createCableTrayTexture(): THREE.CanvasTexture | THREE.Texture {
-  if (typeof document === 'undefined') return new THREE.Texture();
+function createCableTrayTexture(): THREE.CanvasTexture | null {
+  if (cachedCableTrayTexture) return cachedCableTrayTexture;
+  if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 1024;
   const ctx = canvas.getContext('2d');
-  if (ctx) {
-    // Galvanized / coated steel tray surface
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(0, 0, 256, 1024);
+  if (!ctx) return null;
 
-    // Stamped cable-tie bridges (rectangular punchouts in 3 columns)
-    ctx.fillStyle = '#090d16';
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 1.5;
+  // Galvanized / coated steel tray surface
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(0, 0, 256, 1024);
 
-    const cols = [48, 128, 208];
-    for (let y = 30; y < 1024; y += 45) {
-      cols.forEach(cx => {
-        // Horizontal slot
-        ctx.fillRect(cx - 24, y - 6, 48, 12);
-        ctx.strokeRect(cx - 24, y - 6, 48, 12);
+  // Stamped cable-tie bridges (rectangular punchouts in 3 columns)
+  ctx.fillStyle = '#090d16';
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 1.5;
 
-        // Center circular mounting hole between rows
-        ctx.beginPath();
-        ctx.arc(cx, y + 22, 4.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      });
-    }
+  const cols = [48, 128, 208];
+  for (let y = 30; y < 1024; y += 45) {
+    cols.forEach(cx => {
+      // Horizontal slot
+      ctx.fillRect(cx - 24, y - 6, 48, 12);
+      ctx.strokeRect(cx - 24, y - 6, 48, 12);
+
+      // Center circular mounting hole between rows
+      ctx.beginPath();
+      ctx.arc(cx, y + 22, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
   }
+
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.ClampToEdgeWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(1, 2);
+  cachedCableTrayTexture = texture;
   return texture;
 }
 
@@ -254,23 +214,36 @@ export function build447510TCabinetGroup(
     metalness: 0.98,
   });
 
-  const perfTexture = createPerforatedMeshTexture();
+  const postHeight = frameHeightUnits - roofHeight - baseHeight;
+  const doorLeafWidth = (widthUnits - 0.20) / 2; // ~3.65 units
+  const doorLeafHeight = postHeight * 0.99;
+
+  const frontPerfTexture = createPerforationTexture();
+  if (frontPerfTexture) {
+    frontPerfTexture.repeat.set(doorLeafWidth * 3.5, doorLeafHeight * 3.5);
+  }
+
+  const rearPerfTexture = createPerforationTexture();
+  if (rearPerfTexture) {
+    rearPerfTexture.repeat.set(doorLeafWidth * 3.5, doorLeafHeight * 3.5);
+  }
+
   const frontPerfDoorMat = new THREE.MeshStandardMaterial({
-    map: perfTexture,
-    color: 0x181a1e,
+    map: frontPerfTexture || null,
+    color: 0xffffff,
     roughness: 0.35,
     metalness: 0.75,
-    transparent: true,
-    opacity: 0.38,
+    transparent: false,
+    opacity: 1.0,
   });
 
   const rearPerfDoorMat = new THREE.MeshStandardMaterial({
-    map: perfTexture,
-    color: 0x181a1e,
+    map: rearPerfTexture || null,
+    color: 0xffffff,
     roughness: 0.35,
     metalness: 0.75,
-    transparent: true,
-    opacity: 0.38,
+    transparent: false,
+    opacity: 1.0,
   });
 
   const frontDoorFrameMat = (ral9005Mat as THREE.MeshStandardMaterial).clone();
@@ -377,7 +350,6 @@ export function build447510TCabinetGroup(
   // =========================================================================
   // 2. CORNER UPRIGHT POSTS & REINFORCING CASTING BRACKETS (Page 7)
   // =========================================================================
-  const postHeight = frameHeightUnits - roofHeight - baseHeight;
   const postThick = 0.18;
   const postPositions = [
     [-halfW + postThick / 2, -halfD + postThick / 2],
@@ -707,8 +679,6 @@ export function build447510TCabinetGroup(
   const doorsRootGroup = new THREE.Group();
   doorsRootGroup.name = 'front-double-doors-group';
 
-  const doorLeafWidth = (widthUnits - 0.20) / 2; // ~3.65 units
-  const doorLeafHeight = postHeight * 0.99;
   const doorThick = 0.06;
 
   // Raycast toggler helper for removed/active doors
@@ -947,17 +917,17 @@ export function build447510TCabinetGroup(
       rearDoorFrameMat.transparent = true;
     } else {
       if (currentRearDoorState === 'closed') {
-        rearPerfDoorMat.opacity = 0.95;
+        rearPerfDoorMat.opacity = 1.0;
         rearPerfDoorMat.transparent = false;
         rearDoorFrameMat.opacity = 0.95;
         rearDoorFrameMat.transparent = false;
       } else if (currentRearDoorState === 'transparent') {
-        rearPerfDoorMat.opacity = 0.38;
+        rearPerfDoorMat.opacity = 0.3;
         rearPerfDoorMat.transparent = true;
         rearDoorFrameMat.opacity = 0.42;
         rearDoorFrameMat.transparent = true;
       } else if (currentRearDoorState === 'open') {
-        rearPerfDoorMat.opacity = 0.90;
+        rearPerfDoorMat.opacity = 1.0;
         rearPerfDoorMat.transparent = false;
         rearDoorFrameMat.opacity = 0.95;
         rearDoorFrameMat.transparent = false;
@@ -982,14 +952,14 @@ export function build447510TCabinetGroup(
         if (state === 'open') {
           leftDoorLeaf.rotation.y = -Math.PI * 0.58; // Open 105 degrees outwards
           rightDoorLeaf.rotation.y = Math.PI * 0.58;
-          frontPerfDoorMat.opacity = 0.90;
+          frontPerfDoorMat.opacity = 1.0;
           frontPerfDoorMat.transparent = false;
           frontDoorFrameMat.opacity = 0.95;
           frontDoorFrameMat.transparent = false;
         } else if (state === 'closed') {
           leftDoorLeaf.rotation.y = 0;
           rightDoorLeaf.rotation.y = 0;
-          frontPerfDoorMat.opacity = 0.95;
+          frontPerfDoorMat.opacity = 1.0;
           frontPerfDoorMat.transparent = false;
           frontDoorFrameMat.opacity = 0.95;
           frontDoorFrameMat.transparent = false;
@@ -997,7 +967,7 @@ export function build447510TCabinetGroup(
           // 'transparent'
           leftDoorLeaf.rotation.y = 0;
           rightDoorLeaf.rotation.y = 0;
-          frontPerfDoorMat.opacity = 0.38;
+          frontPerfDoorMat.opacity = 0.3;
           frontPerfDoorMat.transparent = true;
           frontDoorFrameMat.opacity = 0.42;
           frontDoorFrameMat.transparent = true;

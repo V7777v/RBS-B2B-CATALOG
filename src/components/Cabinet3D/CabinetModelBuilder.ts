@@ -5,6 +5,7 @@ import { build447510TCabinetGroup } from './CabinetModel447510T';
 import { buildBoost42UCabinetGroup } from './CabinetModelBoost42U';
 import { build221221CabinetGroup } from './CabinetModel221221';
 import { createBoostHeaderBadgeMesh } from './BoostRackMountLogo';
+import { createPerforationTexture } from './BrandTextures';
 
 export const SCALE_MM_TO_UNITS = 0.01; // 1 unit = 100mm (0.1 meter)
 export const U_HEIGHT_UNITS = 0.4445; // 44.45mm in 3D units
@@ -1146,54 +1147,20 @@ export function buildCabinetFrameGroup(
   const doorCenterY = (-roofHeight + baseHeight) / 2;
   const doorThick = 0.05;
 
-  // Helper to generate a repeating perforated hexagonal honeycomb mesh texture
-  const createPerforatedTexture = () => {
-    if (typeof document === 'undefined') return null;
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(0, 0, 128, 128);
-
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = '#000000';
-    const radius = 5.5;
-    const rowH = 16;
-    const colW = 16;
-
-    for (let y = 0; y < 128; y += rowH) {
-      const isOdd = Math.floor(y / rowH) % 2 === 1;
-      for (let x = 0; x < 128; x += colW) {
-        const cx = x + (isOdd ? colW / 2 : 0);
-        const cy = y + rowH / 2;
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(10, 30);
-    return tex;
-  };
-
-  const perfTex = createPerforatedTexture();
-
   // Helper to construct door leaf material based on door type (perforated / glass / solid)
-  const createDoorMaterial = (doorType: 'perforated' | 'glass' | 'solid') => {
+  const createDoorMaterial = (doorType: 'perforated' | 'glass' | 'solid', leafWidthUnits: number, leafHeightUnits: number) => {
     if (doorType === 'perforated') {
+      const perfTexture = createPerforationTexture();
+      if (perfTexture) {
+        perfTexture.repeat.set(leafWidthUnits * 3.5, leafHeightUnits * 3.5);
+      }
       return new THREE.MeshStandardMaterial({
-        color: 0x334155,
-        map: perfTex || undefined,
-        roughness: 0.6,
+        color: 0xffffff,
+        map: perfTexture || null,
+        roughness: 0.45,
         metalness: 0.65,
-        transparent: true,
+        transparent: false,
         opacity: 1.0,
-        alphaTest: 0.1, // Ensure the destination-out holes are fully transparent
         side: THREE.DoubleSide,
       });
     }
@@ -1212,8 +1179,8 @@ export function buildCabinetFrameGroup(
       color: 0x1e293b,
       roughness: 0.5,
       metalness: 0.4,
-      transparent: true,
-      opacity: 0.90,
+      transparent: false,
+      opacity: 1.0,
       side: THREE.DoubleSide,
     });
   };
@@ -1232,7 +1199,7 @@ export function buildCabinetFrameGroup(
     type: 'door',
   };
 
-  const frontDoorMat = createDoorMaterial(doorsInfo.frontDoorType);
+  const frontDoorMat = createDoorMaterial(doorsInfo.frontDoorType, doorWidth, doorHeight);
   const frontDoorFrameMat = (materials.frameMat as THREE.MeshStandardMaterial).clone();
   frontDoorFrameMat.transparent = true;
   frontDoorFrameMat.opacity = 0.55;
@@ -1344,7 +1311,9 @@ export function buildCabinetFrameGroup(
     type: 'door',
   };
 
-  const rearDoorMat = isRearPerforated ? createDoorMaterial('perforated') : null;
+  const innerWidth = doorWidth;
+  const leafWidth = innerWidth / 2 - 0.02;
+  const rearDoorMat = isRearPerforated ? createDoorMaterial('perforated', leafWidth, doorHeight) : null;
   const rearDoorFrameMat = (materials.frameMat as THREE.MeshStandardMaterial).clone();
   rearDoorFrameMat.transparent = true;
   rearDoorFrameMat.opacity = 0.55;
@@ -1355,7 +1324,6 @@ export function buildCabinetFrameGroup(
 
   if (hasRearDoor) {
     // Two leaves, each (innerWidth / 2 - 0.02) wide, hinged on outer edges, opening outward
-    const leafWidth = innerWidth / 2 - 0.02;
     const rearZ = -halfD - 0.03;
 
     // Left Leaf Hinge positioned at left outer edge: -innerWidth / 2
@@ -1573,17 +1541,17 @@ export function buildCabinetFrameGroup(
         rearDoorFrameMat.transparent = true;
       } else {
         if (currentRearDoorState === 'closed') {
-          rearDoorMat.opacity = 0.95;
+          rearDoorMat.opacity = 1.0;
           rearDoorMat.transparent = false;
           rearDoorFrameMat.opacity = 0.95;
           rearDoorFrameMat.transparent = false;
         } else if (currentRearDoorState === 'transparent') {
-          rearDoorMat.opacity = 0.38;
+          rearDoorMat.opacity = 0.3;
           rearDoorMat.transparent = true;
           rearDoorFrameMat.opacity = 0.42;
           rearDoorFrameMat.transparent = true;
         } else if (currentRearDoorState === 'open') {
-          rearDoorMat.opacity = 0.90;
+          rearDoorMat.opacity = 1.0;
           rearDoorMat.transparent = false;
           rearDoorFrameMat.opacity = 0.95;
           rearDoorFrameMat.transparent = false;
@@ -1608,20 +1576,20 @@ export function buildCabinetFrameGroup(
         setHierarchyRaycast(frontDoorGroup, true);
         if (state === 'open') {
           frontDoorGroup.rotation.y = -Math.PI * 0.58; // swing outward to front
-          frontDoorMat.opacity = 0.90;
+          frontDoorMat.opacity = 1.0;
           frontDoorMat.transparent = false;
           frontDoorFrameMat.opacity = 0.95;
           frontDoorFrameMat.transparent = false;
         } else if (state === 'closed') {
           frontDoorGroup.rotation.y = 0;
-          frontDoorMat.opacity = 0.95;
+          frontDoorMat.opacity = 1.0;
           frontDoorMat.transparent = false;
           frontDoorFrameMat.opacity = 0.95;
           frontDoorFrameMat.transparent = false;
         } else {
           // transparent
           frontDoorGroup.rotation.y = 0;
-          frontDoorMat.opacity = 0.38;
+          frontDoorMat.opacity = 0.3;
           frontDoorMat.transparent = true;
           frontDoorFrameMat.opacity = 0.42;
           frontDoorFrameMat.transparent = true;

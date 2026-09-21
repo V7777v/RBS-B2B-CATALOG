@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Cabinet3DViewerProps, Product3DInstance, DoorLeafState, DoorState } from './Cabinet3DTypes';
-import { resolveCabinetDimensions, buildCabinetFrameGroup, resolveCabinetDoorsInfo, SCALE_MM_TO_UNITS, U_HEIGHT_UNITS, RACK_19_WIDTH_UNITS } from './CabinetModelBuilder';
+import { resolveCabinetDimensions, buildCabinetFrameGroup, resolveCabinetDoorsInfo, createCabinetMaterials, SCALE_MM_TO_UNITS, U_HEIGHT_UNITS, RACK_19_WIDTH_UNITS } from './CabinetModelBuilder';
 import { parseAccessoryCount, isProductShelf } from '../../utils/cabinetData';
 import {
   buildProduct3DMesh,
@@ -22,6 +22,9 @@ import {
   ShieldCheck,
   Info,
   ArrowRight,
+  ArrowLeft,
+  ArrowUp,
+  ArrowDown,
   CornerUpLeft,
   Sun,
   Moon,
@@ -102,6 +105,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   // Mesh cache by instanceId for smooth incremental updates and lifecycle management
   const meshMapRef = useRef<Map<string, MeshCacheEntry>>(new Map());
   const lastFramingKeyRef = useRef<string>('');
+  const lastFitDistanceRef = useRef<number>(0);
   const activeAnimationsRef = useRef<Map<string, number>>(new Map());
   const isUserInteractedRef = useRef<boolean>(false);
 
@@ -124,6 +128,8 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   sidePanelStateRef.current = sidePanelState;
 
   const [dismissedAddedBannerId, setDismissedAddedBannerId] = useState<string | null>(null);
+  const [buildError, setBuildError] = useState<string | null>(null);
+  const [buildRetryKey, setBuildRetryKey] = useState<number>(0);
 
   // First 3D load per session hint pill
   const [showInteractionHint, setShowInteractionHint] = useState<boolean>(() => {
@@ -198,6 +204,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     }
   }, [onSnapshotReady]);
 
+  const [sceneReady, setSceneReady] = useState(false);
   const [isWidescreen, setIsWidescreen] = useState(false);
   const [hoveredSlotU, setHoveredSlotU] = useState<number | null>(null);
   const [hoveredDoorPrompt, setHoveredDoorPrompt] = useState<string | null>(null);
@@ -335,40 +342,63 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       box.expandByObject(nonUGroupRef.current);
     }
 
-    if (box.isEmpty() || !isFinite(box.min.x)) {
-      const w = dims.widthMm * SCALE_MM_TO_UNITS;
-      const h = dims.totalU * U_HEIGHT_UNITS + 0.9;
-      const d = dims.depthMm * SCALE_MM_TO_UNITS;
-      box.min.set(-w / 2, -h / 2 - 0.5, -d / 2);
-      box.max.set(w / 2, h / 2 + 0.4, d / 2);
+    const totalU = Number(dims?.totalU) || 42;
+    const fallbackW = (Number(dims?.widthMm) || 600) * SCALE_MM_TO_UNITS;
+    const fallbackH = totalU * U_HEIGHT_UNITS + 0.9;
+    const fallbackD = (Number(dims?.depthMm) || 800) * SCALE_MM_TO_UNITS;
+
+    if (box.isEmpty() || !isFinite(box.min.x) || !isFinite(box.max.x)) {
+      box.min.set(-fallbackW / 2, -fallbackH / 2 - 0.5, -fallbackD / 2);
+      box.max.set(fallbackW / 2, fallbackH / 2 + 0.4, fallbackD / 2);
     }
 
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
+
+    // Final safety validation
+    if (!isFinite(size.x) || size.x <= 0) size.x = fallbackW;
+    if (!isFinite(size.y) || size.y <= 0) size.y = fallbackH;
+    if (!isFinite(size.z) || size.z <= 0) size.z = fallbackD;
+    if (!isFinite(center.x)) center.x = 0;
+    if (!isFinite(center.y)) center.y = totalU * U_HEIGHT_UNITS * 0.07;
+    if (!isFinite(center.z)) center.z = 0;
+
     return { box, size, center };
   }, [dims]);
 
   // Compute camera framing parameters ensuring full cabinet visibility (from roof to feet)
   const computeFramingParams = useCallback((aspect: number) => {
     const camera = cameraRef.current;
-    const fov = camera ? camera.fov : 38;
+    const fov = camera && isFinite(camera.fov) && camera.fov > 10 ? camera.fov : 38;
+    const safeAspect = isFinite(aspect) && aspect > 0.05 ? aspect : 1;
     const fovVRad = (fov * Math.PI) / 180;
-    const fovHRad = 2 * Math.atan(Math.tan(fovVRad / 2) * Math.max(aspect, 0.35));
+    const fovHRad = 2 * Math.atan(Math.tan(fovVRad / 2) * safeAspect);
 
     const { size, center } = getCabinetBounds();
+    const totalU = Number(dims?.totalU) || 42;
+    const fallbackH = totalU * U_HEIGHT_UNITS + 0.9;
+    const fallbackW = (Number(dims?.widthMm) || 600) * SCALE_MM_TO_UNITS;
+    const fallbackD = (Number(dims?.depthMm) || 800) * SCALE_MM_TO_UNITS;
 
-    // 14% breathing room padding so the cabinet is comfortably framed without being cut off
-    const margin = 1.14;
-    const distForHeight = ((size.y * margin) / 2) / Math.tan(fovVRad / 2);
-    const distForWidth = ((size.x * margin) / 2) / Math.tan(fovHRad / 2);
-    const fitDist = Math.max(distForHeight, distForWidth);
+    const safeSizeY = isFinite(size.y) && size.y > 0.5 ? size.y : fallbackH;
+    const safeSizeX = isFinite(size.x) && size.x > 0.5 ? size.x : fallbackW;
+    const safeSizeZ = isFinite(size.z) && size.z > 0.5 ? size.z : fallbackD;
 
-    const halfDepth = Math.max(size.z / 2, (dims.depthMm * SCALE_MM_TO_UNITS) / 2);
-    const centerY = center.y;
+    // 22% margin ensures comfortable breathing room at top and bottom for UI headers / mobile toolbars
+    const margin = 1.22;
+    const distForHeight = ((safeSizeY * margin) / 2) / Math.tan(fovVRad / 2);
+    const distForWidth = ((safeSizeX * margin) / 2) / Math.tan(fovHRad / 2);
+    let fitDist = Math.max(distForHeight, distForWidth);
+    if (!isFinite(fitDist) || fitDist < 2) {
+      fitDist = Math.max(distForHeight, 10);
+    }
+
+    const halfDepth = Math.max(safeSizeZ / 2, fallbackD / 2);
+    const centerY = isFinite(center.y) ? center.y : (totalU * U_HEIGHT_UNITS * 0.07);
 
     return {
-      size,
-      center,
+      size: new THREE.Vector3(safeSizeX, safeSizeY, safeSizeZ),
+      center: new THREE.Vector3(isFinite(center.x) ? center.x : 0, centerY, isFinite(center.z) ? center.z : 0),
       centerY,
       halfDepth,
       fitDist,
@@ -376,42 +406,64 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     };
   }, [getCabinetBounds, dims]);
 
-  // Smooth camera animation helper for camera presets
+  // Smooth camera animation helper for camera presets (400ms duration)
   const animateCameraTo = useCallback((endPos: THREE.Vector3, endTarget?: THREE.Vector3) => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!camera || !controls) return;
 
+    if (
+      !endPos || isNaN(endPos.x) || isNaN(endPos.y) || isNaN(endPos.z) ||
+      !isFinite(endPos.x) || !isFinite(endPos.y) || !isFinite(endPos.z)
+    ) {
+      console.warn('[Cabinet3D] Invalid endPos in animateCameraTo, forcing fallback');
+      endPos = new THREE.Vector3(0, 0.5, 14);
+    }
+
+    const safeTarget = (endTarget && !isNaN(endTarget.x) && !isNaN(endTarget.y) && !isNaN(endTarget.z) &&
+      isFinite(endTarget.x) && isFinite(endTarget.y) && isFinite(endTarget.z))
+      ? endTarget
+      : (controls.target && isFinite(controls.target.x) && !isNaN(controls.target.x)
+          ? controls.target.clone()
+          : new THREE.Vector3(0, 0, 0));
+
     const startPos = camera.position.clone();
     const startTarget = controls.target.clone();
-    const finalTarget = endTarget ? endTarget.clone() : startTarget.clone();
-
-    const prefersReducedMotion = typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    if (prefersReducedMotion) {
+    if (!isFinite(startPos.x) || !isFinite(startPos.y) || !isFinite(startPos.z) || isNaN(startPos.x) || isNaN(startPos.y) || isNaN(startPos.z)) {
+      startPos.copy(endPos);
       camera.position.copy(endPos);
-      controls.target.copy(finalTarget);
+    }
+    if (!isFinite(startTarget.x) || !isFinite(startTarget.y) || !isFinite(startTarget.z) || isNaN(startTarget.x) || isNaN(startTarget.y) || isNaN(startTarget.z)) {
+      startTarget.copy(safeTarget);
+      controls.target.copy(safeTarget);
+    }
+
+    if (startPos.distanceTo(endPos) < 0.05) {
+      camera.position.copy(endPos);
+      controls.target.copy(safeTarget);
       controls.update();
       needsRenderRef.current = true;
       return;
     }
 
-    let progress = 0;
+    const startTime = performance.now();
+    const duration = 400; // 400ms duration
     isAnimatingRef.current = true;
 
-    const animate = () => {
-      progress += 0.055;
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      const ease = Math.sin((progress * Math.PI) / 2);
+      camera.position.lerpVectors(startPos, endPos, ease);
+      controls.target.lerpVectors(startTarget, safeTarget, ease);
+      controls.update();
+      needsRenderRef.current = true;
+
       if (progress < 1) {
-        const ease = Math.sin((progress * Math.PI) / 2);
-        camera.position.lerpVectors(startPos, endPos, ease);
-        controls.target.lerpVectors(startTarget, finalTarget, ease);
-        controls.update();
-        needsRenderRef.current = true;
         requestAnimationFrame(animate);
       } else {
         camera.position.copy(endPos);
-        controls.target.copy(finalTarget);
+        controls.target.copy(safeTarget);
         controls.update();
         isAnimatingRef.current = false;
         needsRenderRef.current = true;
@@ -420,91 +472,89 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     requestAnimationFrame(animate);
   }, []);
 
+  // Helper to compute framing fit distance from cabinet dimensions and frame bounding box
+  const computeFitDistance = useCallback(() => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    const container = containerRef.current;
+    const totalU = Number(dims?.totalU) || 42;
+    const fallbackDist = Math.max(8, totalU * U_HEIGHT_UNITS * 1.6);
+    if (!camera || !controls) return fallbackDist;
+
+    const aspect = container && container.clientWidth > 0 && container.clientHeight > 0
+      ? (container.clientWidth / container.clientHeight)
+      : (camera.aspect && isFinite(camera.aspect) && camera.aspect > 0 ? camera.aspect : 1);
+
+    const safeAspect = isFinite(aspect) && aspect > 0.05 ? aspect : 1;
+    const framing = computeFramingParams(safeAspect);
+    const halfDepth = isFinite(framing.halfDepth) && framing.halfDepth > 0 ? framing.halfDepth : 2;
+    const fitDist = isFinite(framing.fitDist) && framing.fitDist > 0 ? framing.fitDist : (fallbackDist / 1.42);
+
+    let targetDist = (fitDist + halfDepth) * 1.35;
+    if (!isFinite(targetDist) || targetDist < 2) {
+      targetDist = fallbackDist;
+    }
+
+    return targetDist;
+  }, [dims?.totalU, computeFramingParams]);
+
   // "כל הארון" (Fit All Cabinet): Fits entire cabinet into view in the CURRENT camera direction, or straight front if initial
   const fitCameraToCabinet = useCallback((instant: boolean = false) => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
-    const container = containerRef.current;
-    if (!camera || !controls) return;
+    const totalU = Number(dims?.totalU) || 42;
+    const fallbackDist = Math.max(8, totalU * U_HEIGHT_UNITS * 1.6);
+    if (!camera || !controls) return fallbackDist;
 
-    const heightUnits = dims.totalU * U_HEIGHT_UNITS;
+    const heightUnits = totalU * U_HEIGHT_UNITS;
+    const targetCenterY = heightUnits * 0.07;
+    const targetCenter = new THREE.Vector3(0, targetCenterY, 0);
 
-    const aspect = container && container.clientWidth > 0 && container.clientHeight > 0
-      ? (container.clientWidth / container.clientHeight)
-      : (camera.aspect || 1);
-
-    const { size, centerY, halfDepth, fitDist } = computeFramingParams(aspect);
-    const targetCenter = new THREE.Vector3(0, heightUnits * 0.07, 0);
-
-    const dir = camera.position.clone().sub(controls.target);
-    if (dir.lengthSq() < 0.001 || !isUserInteractedRef.current) {
+    let dir = camera.position.clone().sub(controls.target);
+    if (!isFinite(dir.x) || !isFinite(dir.y) || !isFinite(dir.z) || dir.lengthSq() < 0.001 || !isUserInteractedRef.current) {
       dir.set(0, 0, 1);
     } else {
       dir.normalize();
     }
 
-    let targetDist = (fitDist + halfDepth) * 1.42;
+    let targetDist = computeFitDistance();
+    if (!isFinite(targetDist) || targetDist < 2) {
+      targetDist = fallbackDist;
+    }
+    lastFitDistanceRef.current = targetDist;
+
+    controls.minDistance = Math.max(1.5, targetDist * 0.2);
+    controls.maxDistance = Math.max(50, targetDist * 4.0);
+
     let targetPos = targetCenter.clone().add(dir.clone().multiplyScalar(targetDist));
+    if (!isFinite(targetPos.x) || !isFinite(targetPos.y) || !isFinite(targetPos.z)) {
+      targetPos.set(0, targetCenterY + (totalU <= 15 ? heightUnits * 0.15 : 0), targetDist);
+    } else if (totalU <= 15) {
+      targetPos.y = targetCenterY + heightUnits * 0.15;
+    }
+
+    // Hard NaN/Infinite check before assignment
+    if (
+      isNaN(targetPos.x) || isNaN(targetPos.y) || isNaN(targetPos.z) ||
+      !isFinite(targetPos.x) || !isFinite(targetPos.y) || !isFinite(targetPos.z)
+    ) {
+      console.warn('[Cabinet3D] Hard NaN/Infinite detected for camera targetPos in fitCameraToCabinet, forcing fallback');
+      targetPos.set(0, targetCenterY + (totalU <= 15 ? heightUnits * 0.15 : 0), fallbackDist);
+    }
+
+    if (
+      isNaN(targetCenter.x) || isNaN(targetCenter.y) || isNaN(targetCenter.z) ||
+      !isFinite(targetCenter.x) || !isFinite(targetCenter.y) || !isFinite(targetCenter.z)
+    ) {
+      console.warn('[Cabinet3D] Hard NaN/Infinite detected for controls targetCenter in fitCameraToCabinet, forcing fallback');
+      targetCenter.set(0, targetCenterY, 0);
+    }
 
     camera.near = 0.1;
-    camera.far = Math.max(100, targetDist * 4);
+    camera.far = Math.max(100, targetDist * 5);
     camera.up.set(0, 1, 0);
 
-    controls.target.set(0, heightUnits * 0.07, 0);
-    controls.target.y = heightUnits * 0.07;
-
-    if (dims.totalU <= 15) {
-      targetPos.y = controls.target.y + heightUnits * 0.15;
-    }
-
-    // Projection check: Ensure the entire cabinet frame is safely visible within NDC bounds
-    if (frameGroupRef.current && frameGroupRef.current.children.length > 0) {
-      const box = new THREE.Box3().setFromObject(frameGroupRef.current);
-      if (!box.isEmpty()) {
-        const corners = [
-          new THREE.Vector3(box.min.x, box.min.y, box.min.z),
-          new THREE.Vector3(box.min.x, box.min.y, box.max.z),
-          new THREE.Vector3(box.min.x, box.max.y, box.min.z),
-          new THREE.Vector3(box.min.x, box.max.y, box.max.z),
-          new THREE.Vector3(box.max.x, box.min.y, box.min.z),
-          new THREE.Vector3(box.max.x, box.min.y, box.max.z),
-          new THREE.Vector3(box.max.x, box.max.y, box.min.z),
-          new THREE.Vector3(box.max.x, box.max.y, box.max.z),
-        ];
-
-        let maxProjectedY = -Infinity;
-        for (let iter = 0; iter < 12; iter++) {
-          camera.position.copy(targetPos);
-          camera.updateMatrixWorld();
-          camera.updateProjectionMatrix();
-
-          let needsExpand = false;
-          maxProjectedY = -Infinity;
-
-          for (const corner of corners) {
-            const projected = corner.clone().project(camera);
-            if (projected.y > maxProjectedY) {
-              maxProjectedY = projected.y;
-            }
-            // Safe bounds: |x| <= 0.90, y <= 0.72 (top safe zone for toolbar), y >= -0.92
-            if (Math.abs(projected.x) > 0.90 || projected.y > 0.72 || projected.y < -0.92) {
-              needsExpand = true;
-            }
-          }
-
-          if (needsExpand) {
-            targetDist *= 1.06;
-            const dirOffset = targetPos.clone().sub(targetCenter).normalize().multiplyScalar(targetDist);
-            targetPos = targetCenter.clone().add(dirOffset);
-          } else {
-            break;
-          }
-        }
-
-        // Shift controls.target.y down by (0.72 - maxProjectedY) * 0 (keep target, only distance changes)
-        controls.target.y -= (0.72 - maxProjectedY) * 0;
-      }
-    }
+    controls.target.copy(targetCenter);
 
     if (instant) {
       camera.position.copy(targetPos);
@@ -517,7 +567,8 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
     setIsFocusedOnProduct(false);
     needsRenderRef.current = true;
-  }, [dims.totalU, computeFramingParams, animateCameraTo]);
+    return targetDist;
+  }, [dims?.totalU, computeFitDistance, animateCameraTo]);
 
   // Default & Initial View: Crystal clear, straight frontal view showing the entire cabinet from roof to wheels/feet
   const fitFrontalView = useCallback((instant: boolean = true) => {
@@ -528,45 +579,64 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   const setCameraPreset = useCallback((preset: 'front' | 'rear' | 'right' | 'left' | 'iso') => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
-    const container = containerRef.current;
     if (!camera || !controls) return;
 
-    const aspect = container && container.clientWidth > 0 && container.clientHeight > 0
-      ? (container.clientWidth / container.clientHeight)
-      : (camera.aspect || 1);
+    const totalU = Number(dims?.totalU) || 42;
+    const h = totalU * U_HEIGHT_UNITS;
+    const safeH = isFinite(h) && h > 0 ? h : 42 * U_HEIGHT_UNITS;
+    const cy = isFinite(controls.target.y) && !isNaN(controls.target.y) ? controls.target.y : (safeH * 0.07);
 
-    const { size, centerY, halfDepth, fitDist } = computeFramingParams(aspect);
-    const target = new THREE.Vector3(0, centerY, 0);
-    const halfWidth = size.x / 2;
+    let d = computeFitDistance();
+    if (!isFinite(d) || isNaN(d) || d < 2) {
+      d = lastFitDistanceRef.current && isFinite(lastFitDistanceRef.current) && !isNaN(lastFitDistanceRef.current) && lastFitDistanceRef.current > 2
+        ? lastFitDistanceRef.current
+        : Math.max(8, safeH * 1.6);
+    }
+    lastFitDistanceRef.current = d;
+    const target = new THREE.Vector3(0, cy, 0);
 
     let endPos: THREE.Vector3;
 
     switch (preset) {
       case 'front':
-        endPos = new THREE.Vector3(0, centerY, halfDepth + fitDist);
+        endPos = new THREE.Vector3(0, cy + safeH * 0.05, d);
         break;
       case 'rear':
-        endPos = new THREE.Vector3(0, centerY, -(halfDepth + fitDist));
+        endPos = new THREE.Vector3(0, cy + safeH * 0.05, -d);
         break;
       case 'right':
-        endPos = new THREE.Vector3(halfWidth + fitDist, centerY, 0);
+        endPos = new THREE.Vector3(d, cy, 0);
         break;
       case 'left':
-        endPos = new THREE.Vector3(-(halfWidth + fitDist), centerY, 0);
+        endPos = new THREE.Vector3(-d, cy, 0);
         break;
       case 'iso':
-        const isoDist = halfDepth + fitDist;
-        endPos = new THREE.Vector3(
-          Math.sin(0.40) * isoDist,
-          centerY + (fitDist * 0.22),
-          Math.cos(0.40) * isoDist
-        );
+        endPos = new THREE.Vector3(d * 0.7, cy + safeH * 0.25, d * 0.7);
         break;
+      default:
+        endPos = new THREE.Vector3(0, cy + safeH * 0.05, d);
+    }
+
+    // Hard NaN/Infinite check before setting camera endPos and controls target
+    if (
+      isNaN(endPos.x) || isNaN(endPos.y) || isNaN(endPos.z) ||
+      !isFinite(endPos.x) || !isFinite(endPos.y) || !isFinite(endPos.z)
+    ) {
+      console.warn(`[Cabinet3D] Hard NaN/Infinite detected for camera endPos in setCameraPreset(${preset}), forcing fallback`);
+      endPos.set(0, cy + safeH * 0.05, d);
+    }
+
+    if (
+      isNaN(target.x) || isNaN(target.y) || isNaN(target.z) ||
+      !isFinite(target.x) || !isFinite(target.y) || !isFinite(target.z)
+    ) {
+      console.warn(`[Cabinet3D] Hard NaN/Infinite detected for controls target in setCameraPreset(${preset}), forcing fallback`);
+      target.set(0, cy, 0);
     }
 
     setIsFocusedOnProduct(false);
     animateCameraTo(endPos, target);
-  }, [animateCameraTo, computeFramingParams]);
+  }, [dims?.totalU, computeFitDistance, animateCameraTo]);
 
   // Focus directly on the selected product or slot with smooth animation and restore capability
   const focusOnSelectedProduct = useCallback((targetInstId?: string) => {
@@ -697,7 +767,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
   // Helper to cleanly dispose all meshes, geometries, and textures inside a group
   const disposeHierarchy = (group: THREE.Group) => {
-    const sharedMats = Object.values(materialsRef.current);
+    const sharedMats = materialsRef.current ? Object.values(materialsRef.current) : [];
     group.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
@@ -705,12 +775,16 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         if (mesh.material) {
           if (Array.isArray(mesh.material)) {
             mesh.material.forEach(m => {
-              if ((m as any).map) (m as any).map.dispose();
-              if (!sharedMats.includes(m as any)) m.dispose();
+              if (!sharedMats.includes(m as any)) {
+                if ((m as any).map) (m as any).map.dispose();
+                m.dispose();
+              }
             });
           } else {
-            if ((mesh.material as any).map) (mesh.material as any).map.dispose();
-            if (!sharedMats.includes(mesh.material as any)) mesh.material.dispose();
+            if (!sharedMats.includes(mesh.material as any)) {
+              if ((mesh.material as any).map) (mesh.material as any).map.dispose();
+              mesh.material.dispose();
+            }
           }
         }
       }
@@ -814,6 +888,13 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
     cameraRef.current = camera;
 
+    const initTotalU = Number(dimsRef.current?.totalU) || 42;
+    const initHeightUnits = initTotalU * U_HEIGHT_UNITS;
+    const initTargetY = initHeightUnits * 0.07;
+    const initDist = Math.max(10, initHeightUnits * 1.8);
+    camera.position.set(0, initTargetY + initHeightUnits * 0.05, initDist);
+    camera.lookAt(0, initTargetY, 0);
+
     onSnapshotReady?.(() => {
       renderer.render(scene, camera);
       return canvas.toDataURL('image/png');
@@ -824,8 +905,10 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.minDistance = 2.0;
-    controls.maxDistance = 35.0;
+    controls.maxDistance = 200.0;
     controls.maxPolarAngle = Math.PI * 0.90;
+    controls.target.set(0, initTargetY, 0);
+    controls.update();
     controlsRef.current = controls;
 
     const onControlsChange = () => {
@@ -853,6 +936,10 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     animFrameIdRef.current = requestAnimationFrame(renderLoop);
 
     // 6. Lighting Configuration
+    // Basic backup ambient light to prevent any pitch-black / silhouette rendering
+    const backupAmbientLight = new THREE.AmbientLight(0xffffff, 2.0);
+    scene.add(backupAmbientLight);
+
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
     scene.add(ambientLight);
 
@@ -919,13 +1006,16 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h, false);
-      fitCameraToCabinet(true);
+      if (!isUserInteractedRef.current) {
+        fitCameraToCabinet(true);
+      }
       needsRenderRef.current = true;
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(container);
     handleResize();
+    setSceneReady(true);
 
     // 8. Raycasting Interaction & Drag-vs-Click Threshold Detection
     const raycaster = new THREE.Raycaster();
@@ -1403,7 +1493,9 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         Object.values(materialsRef.current).forEach((m: any) => {
           if (m && typeof m.dispose === 'function') m.dispose();
         });
+        materialsRef.current = null;
       }
+      setSceneReady(false);
 
       renderer.dispose();
       scene.clear();
@@ -1441,6 +1533,10 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   // Frame Geometry & Cabinet Framing: Runs when cabinet dimensions change
   useEffect(() => {
     if (!sceneRef.current) return;
+
+    if (!materialsRef.current) {
+      materialsRef.current = createCabinetMaterials();
+    }
 
     disposeHierarchy(floorGroupRef.current);
     disposeHierarchy(frameGroupRef.current);
@@ -1489,61 +1585,104 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     floorGroupRef.current.add(floorMesh);
 
     // Frame Group
-    const {
-      group: newFrameGroup,
-      uCenters,
-      innerDepthUnits,
-      stagingTrayGroup,
-      stagingAccessoriesGroup,
-      hasStagingContent,
-      setDoorMode: frameSetDoorMode,
-      setRearCutaway: frameSetRearCutaway,
-      setSidePanel: frameSetSidePanel,
-    } = buildCabinetFrameGroup(
-      dims,
-      cabinetData,
-      materialsRef.current,
-      {
-        additionalFansCount: optionalFansCount,
-        hasSelectedWheels: isWheelsSelected,
-        hasSelectedFeet: isFeetSelected,
-        doorState: doorStateRef.current,
+    try {
+      const frameResult = buildCabinetFrameGroup(
+        dims,
+        cabinetData,
+        materialsRef.current,
+        {
+          additionalFansCount: optionalFansCount,
+          hasSelectedWheels: isWheelsSelected,
+          hasSelectedFeet: isFeetSelected,
+          doorState: doorStateRef.current,
+        }
+      );
+
+      if (!frameResult || !frameResult.group) {
+        console.error('[Cabinet3D] buildCabinetFrameGroup returned null or undefined group!');
+        throw new Error('Cabinet frame group generation failed (group was null/undefined)');
       }
-    );
 
-    setDoorModeRef.current = frameSetDoorMode || null;
-    setRearCutawayRef.current = frameSetRearCutaway || null;
-    setSidePanelRef.current = frameSetSidePanel || null;
-    if (frameSetDoorMode) {
-      frameSetDoorMode('front', doorStateRef.current.front);
-      frameSetDoorMode('rear', doorStateRef.current.rear);
-    }
-    if (frameSetSidePanel) {
-      frameSetSidePanel('left', sidePanelStateRef.current.left);
-      frameSetSidePanel('right', sidePanelStateRef.current.right);
-    }
+      const {
+        group: newFrameGroup,
+        uCenters,
+        innerDepthUnits,
+        stagingTrayGroup,
+        stagingAccessoriesGroup,
+        hasStagingContent,
+        setDoorMode: frameSetDoorMode,
+        setRearCutaway: frameSetRearCutaway,
+        setSidePanel: frameSetSidePanel,
+      } = frameResult;
 
-    uCentersRef.current = uCenters;
-    innerDepthUnitsRef.current = innerDepthUnits;
-    stagingTrayGroupRef.current = stagingTrayGroup;
-    stagingAccessoriesGroupRef.current = stagingAccessoriesGroup;
-    hasStagingContentRef.current = Boolean(hasStagingContent);
+      // Validate Bounding Box of the generated model
+      const frameBox = new THREE.Box3().setFromObject(newFrameGroup);
+      const frameBoxSize = frameBox.getSize(new THREE.Vector3());
 
-    frameGroupRef.current.add(newFrameGroup);
+      console.log('[Cabinet3D] Model Bounding Box dimensions:', {
+        width_X: frameBoxSize.x,
+        height_Y: frameBoxSize.y,
+        depth_Z: frameBoxSize.z,
+        min: { x: frameBox.min.x, y: frameBox.min.y, z: frameBox.min.z },
+        max: { x: frameBox.max.x, y: frameBox.max.y, z: frameBox.max.z },
+        meshChildrenCount: newFrameGroup.children.length,
+      });
 
-    // Only set camera on initial mount or when cabinet physical dimensions change
-    const framingKey = `${cabinetData?.sku || product?.sku}|${dims.totalU}|${dims.widthMm}|${dims.depthMm}`;
-    if (lastFramingKeyRef.current !== framingKey) {
-      lastFramingKeyRef.current = framingKey;
-      isUserInteractedRef.current = false;
-      fitFrontalView(true);
+      if (frameBoxSize.x === 0 && frameBoxSize.y === 0 && frameBoxSize.z === 0) {
+        console.warn('[Cabinet3D] Warning: Cabinet frame Bounding Box has length 0 / zero volume!');
+      }
+
+      setDoorModeRef.current = frameSetDoorMode || null;
+      setRearCutawayRef.current = frameSetRearCutaway || null;
+      setSidePanelRef.current = frameSetSidePanel || null;
+      if (frameSetDoorMode) {
+        frameSetDoorMode('front', doorStateRef.current.front);
+        frameSetDoorMode('rear', doorStateRef.current.rear);
+      }
+      if (frameSetSidePanel) {
+        frameSetSidePanel('left', sidePanelStateRef.current.left);
+        frameSetSidePanel('right', sidePanelStateRef.current.right);
+      }
+
+      uCentersRef.current = uCenters;
+      innerDepthUnitsRef.current = innerDepthUnits;
+      stagingTrayGroupRef.current = stagingTrayGroup;
+      stagingAccessoriesGroupRef.current = stagingAccessoriesGroup;
+      hasStagingContentRef.current = Boolean(hasStagingContent);
+
+      frameGroupRef.current.add(newFrameGroup);
+
+      if (sceneRef.current) {
+        if (!sceneRef.current.children.includes(frameGroupRef.current)) {
+          sceneRef.current.add(frameGroupRef.current);
+        }
+        if (!sceneRef.current.children.includes(floorGroupRef.current)) {
+          sceneRef.current.add(floorGroupRef.current);
+        }
+      }
+
+      // Only set camera on initial mount or when cabinet physical dimensions change
+      const framingKey = `${cabinetData?.sku || product?.sku}|${dims.totalU}|${dims.widthMm}|${dims.depthMm}`;
+      if (lastFramingKeyRef.current !== framingKey) {
+        lastFramingKeyRef.current = framingKey;
+        isUserInteractedRef.current = false;
+        fitFrontalView(true);
+      }
+      setBuildError(null);
+    } catch (err: any) {
+      console.error('[Cabinet3D] frame build failed', err);
+      setBuildError(err?.message || String(err));
     }
     needsRenderRef.current = true;
-  }, [dims.totalU, dims.widthMm, dims.depthMm, cabinetData?.sku, fitFrontalView, optionalFansCount, isWheelsSelected, isFeetSelected]);
+  }, [sceneReady, dims.totalU, dims.widthMm, dims.depthMm, cabinetData?.sku, fitFrontalView, optionalFansCount, isWheelsSelected, isFeetSelected, buildRetryKey]);
 
   // Equipment & Slot Synchronization (Does NOT reset camera angle or zoom)
   useEffect(() => {
     if (!sceneRef.current) return;
+
+    if (!materialsRef.current) {
+      materialsRef.current = createCabinetMaterials();
+    }
 
     disposeHierarchy(hitboxesGroupRef.current);
     disposeHierarchy(nonUGroupRef.current);
@@ -1909,8 +2048,23 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       });
     }
 
+    if (sceneRef.current) {
+      if (!sceneRef.current.children.includes(productsGroupRef.current)) {
+        sceneRef.current.add(productsGroupRef.current);
+      }
+      if (!sceneRef.current.children.includes(hitboxesGroupRef.current)) {
+        sceneRef.current.add(hitboxesGroupRef.current);
+      }
+      if (!sceneRef.current.children.includes(nonUGroupRef.current)) {
+        sceneRef.current.add(nonUGroupRef.current);
+      }
+      if (!sceneRef.current.children.includes(highlightGroupRef.current)) {
+        sceneRef.current.add(highlightGroupRef.current);
+      }
+    }
+
     needsRenderRef.current = true;
-  }, [productInstances, slots, nonUAccessories, unallocatedItems, selectedSlotU, previewSpanU, lastAddedInstanceId, dims.depthMm, dims.totalU, dims.widthMm]);
+  }, [sceneReady, productInstances, slots, nonUAccessories, unallocatedItems, selectedSlotU, previewSpanU, lastAddedInstanceId, dims.depthMm, dims.totalU, dims.widthMm]);
 
   // Mobile Touch Mode Effect
   useEffect(() => {
@@ -1961,6 +2115,31 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         tabIndex={0}
         aria-label="הדמיית ארון תקשורת תלת-ממדית אינטראקטיבית"
       />
+
+      {/* Frame Build Error Red Pill */}
+      {buildError && (
+        <div
+          role="alert"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 pointer-events-auto max-w-[92%] sm:max-w-lg shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+        >
+          <div className="bg-rose-950/95 border border-rose-500 text-white px-4 py-2.5 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-3 text-xs sm:text-sm font-medium">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shrink-0 animate-ping" />
+            <span className="truncate">
+              שגיאה בבניית הארון: <span className="font-mono text-rose-200">{buildError}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setBuildError(null);
+                setBuildRetryKey((k) => k + 1);
+              }}
+              className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-full text-xs shrink-0 cursor-pointer transition-colors shadow-md active:scale-95"
+            >
+              נסה שוב
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Top Floating Notification Banner for Newly Added Product */}
       {showAddedBanner && newlyAddedInstance && (
@@ -2104,34 +2283,34 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         <button
           type="button"
           onClick={() => setCameraPreset('front')}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer text-[11px] font-bold"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
           title="חזית"
         >
-          חז׳
+          <ArrowDown size={16} />
         </button>
         <button
           type="button"
           onClick={() => setCameraPreset('rear')}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer text-[11px] font-bold"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
           title="אחור"
         >
-          אח׳
+          <ArrowUp size={16} />
         </button>
         <button
           type="button"
           onClick={() => setCameraPreset('right')}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer text-[11px] font-bold"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
           title="צד ימין"
         >
-          ימ׳
+          <ArrowRight size={16} />
         </button>
         <button
           type="button"
           onClick={() => setCameraPreset('left')}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer text-[11px] font-bold"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
           title="צד שמאל"
         >
-          שמ׳
+          <ArrowLeft size={16} />
         </button>
         <button
           type="button"
@@ -2241,34 +2420,34 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         <button
           type="button"
           onClick={() => setCameraPreset('front')}
-          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer text-[11px] font-bold"
+          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
           title="חזית"
         >
-          חז׳
+          <ArrowDown size={16} />
         </button>
         <button
           type="button"
           onClick={() => setCameraPreset('rear')}
-          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer text-[11px] font-bold"
+          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
           title="אחור"
         >
-          אח׳
+          <ArrowUp size={16} />
         </button>
         <button
           type="button"
           onClick={() => setCameraPreset('right')}
-          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer text-[11px] font-bold"
+          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
           title="צד ימין"
         >
-          ימ׳
+          <ArrowRight size={16} />
         </button>
         <button
           type="button"
           onClick={() => setCameraPreset('left')}
-          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer text-[11px] font-bold"
+          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
           title="צד שמאל"
         >
-          שמ׳
+          <ArrowLeft size={16} />
         </button>
         <button
           type="button"

@@ -58,7 +58,11 @@ declare global {
   }
 }
 
-function InstallBannerInner() {
+export interface InstallBannerProps {
+  disabled?: boolean;
+}
+
+function InstallBannerInner({ disabled = false }: InstallBannerProps) {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(
     (typeof window !== 'undefined' ? window.__deferredPrompt : null) as BeforeInstallPromptEvent | null
   );
@@ -78,17 +82,10 @@ function InstallBannerInner() {
       setIsStandalone(!!isStandaloneCheck);
       if (isStandaloneCheck) return;
 
-      // 2. Check if dismissed recently
-      const dismissedAt = localStorage.getItem(DISMISS_KEY);
-      if (dismissedAt) {
-        const daysSince = (Date.now() - parseInt(dismissedAt, 10)) / 86400000;
-        if (daysSince < DISMISS_DAYS) return;
-      }
-
-      // 3. Detect Platform
+      // 2. Detect Platform
       const ua = window.navigator.userAgent || '';
       const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-      const isIOS = /iPhone|iPad|iPod/i.test(ua) && !window.MSStream || isIPadOS;
+      const isIOS = (/iPhone|iPad|iPod/i.test(ua) && !window.MSStream) || isIPadOS;
       const isAndroid = /Android/i.test(ua);
       
       let detectedPlatform: Platform = 'desktop';
@@ -97,16 +94,7 @@ function InstallBannerInner() {
       
       setPlatform(detectedPlatform);
 
-      // Show banner after delay
-      const showTimer = setTimeout(() => {
-        setShow(true);
-        // On iOS, if we show, we might want to automatically show instructions since native prompt won't work
-        if (detectedPlatform === 'ios') {
-          setShowInstructions(true);
-        }
-      }, 2500);
-
-      // 4. Listen for native prompt
+      // 3. Listen for native prompt
       const promptHandler = (e: BeforeInstallPromptEvent) => {
         setDeferredPrompt(e);
         setShowInstructions(false); // Hide instructions if prompt becomes available
@@ -133,7 +121,6 @@ function InstallBannerInner() {
       window.addEventListener('appinstalled', installedHandler);
 
       return () => {
-        clearTimeout(showTimer);
         if (window.__promptListeners) {
           window.__promptListeners = window.__promptListeners.filter(l => l !== promptHandler);
         }
@@ -143,6 +130,34 @@ function InstallBannerInner() {
       console.warn('[InstallBanner] init failed:', err);
     }
   }, []);
+
+  // Control banner display: postpone by 20 seconds after disabled turns false
+  useEffect(() => {
+    if (disabled || isStandalone) {
+      setShow(false);
+      return;
+    }
+
+    // Check if dismissed recently
+    try {
+      const dismissedAt = localStorage.getItem(DISMISS_KEY);
+      if (dismissedAt) {
+        const daysSince = (Date.now() - parseInt(dismissedAt, 10)) / 86400000;
+        if (daysSince < DISMISS_DAYS) return;
+      }
+    } catch (_) {}
+
+    const timer = setTimeout(() => {
+      setShow(true);
+      if (platform === 'ios') {
+        setShowInstructions(true);
+      }
+    }, 20000);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [disabled, isStandalone, platform]);
 
   const handleInstallClick = async () => {
     try {
@@ -170,6 +185,7 @@ function InstallBannerInner() {
     setShow(false);
   };
 
+  if (disabled) return null;
   if (isStandalone) return null;
   if (!show) return null;
 
@@ -319,10 +335,10 @@ function InstallBannerInner() {
   );
 }
 
-export default function InstallBanner() {
+export default function InstallBanner({ disabled = false }: InstallBannerProps) {
   return (
     <BannerErrorBoundary>
-      <InstallBannerInner />
+      <InstallBannerInner disabled={disabled} />
     </BannerErrorBoundary>
   );
 }

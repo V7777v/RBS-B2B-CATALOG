@@ -1,15 +1,18 @@
-import React from 'react';
-import { Plus, Minus, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Minus, X, Box, Maximize2, Info } from 'lucide-react';
 
 export interface OrderLine {
   sku: string;
   name: string;
+  description?: string;
+  image?: string;
   uSize: number;
   qty: number;
   unitPrice: number;
   lineTotal: number;
   positions: string[];
   status: 'unplaced' | 'aux' | 'placed';
+  enrichedItem?: any;
 }
 
 export interface OrderTotals {
@@ -28,6 +31,8 @@ export interface OrderSummaryTableProps {
   onIncrement?: (sku: string) => void;
   onDecrement?: (sku: string) => void;
   onRemove?: (sku: string) => void;
+  onProductHover?: (item: any | null, e?: React.MouseEvent) => void;
+  onProductClick?: (item: any) => void;
 }
 
 export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
@@ -38,7 +43,36 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
   onIncrement,
   onDecrement,
   onRemove,
+  onProductHover,
+  onProductClick,
 }) => {
+  const [fallbackModalItem, setFallbackModalItem] = useState<any | null>(null);
+
+  const getItemPreview = (line: OrderLine) => {
+    return line.enrichedItem || {
+      sku: line.sku,
+      name: line.name,
+      description: line.description || '',
+      image: line.image || '',
+      uSize: line.uSize || 0,
+      price: line.unitPrice || 0,
+      quantity: line.qty || 1,
+      zone: line.positions && line.positions.length > 0 && line.positions[0] !== 'לא שובץ' && line.positions[0] !== '0U'
+        ? `מסילות U חזיתיות (${line.positions.join(', ')})`
+        : (line.uSize === 0 ? 'שלד הארון (0U)' : 'לא שובץ במסד'),
+      type: 'optional-accessory',
+    };
+  };
+
+  const handleItemClick = (line: OrderLine) => {
+    const item = getItemPreview(line);
+    if (onProductClick) {
+      onProductClick(item);
+    } else {
+      setFallbackModalItem(item);
+    }
+  };
+
   if (!lines || lines.length === 0) {
     return (
       <div>
@@ -62,14 +96,14 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
 
   return (
     <div className="w-full">
-      <div className="overflow-x-auto bg-white border border-[#b3d4f5]/80 shadow-sm print:shadow-none print:border-slate-300">
+      <div className="overflow-x-auto bg-white border border-[#b3d4f5]/80 shadow-xs print:shadow-none print:border-slate-300">
         <table className="w-full text-right border-collapse text-xs sm:text-sm" dir="rtl">
           <thead>
             <tr className="bg-[#f0f6fc] border-b border-[#b3d4f5] text-[#004387] font-bold text-xs print:bg-slate-100">
-              <th className="py-2.5 px-3 text-right">מוצר</th>
-              <th className="py-2.5 px-3 text-right">מק"ט</th>
-              <th className="py-2.5 px-3 text-center">כמות</th>
-              <th className="py-2.5 px-3 text-right">מיקום</th>
+              <th className="py-2.5 px-3 text-center w-16 whitespace-nowrap">תמונה</th>
+              <th className="py-2.5 px-3 text-right whitespace-nowrap">מק"ט</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">כמות</th>
+              <th className="py-2.5 px-3 text-right whitespace-nowrap">מיקום</th>
               {withPrice && <th className="py-2.5 px-3 text-right whitespace-nowrap">מחיר יח'</th>}
               {withPrice && <th className="py-2.5 px-3 text-right whitespace-nowrap">סה"כ</th>}
             </tr>
@@ -86,14 +120,72 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                       : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200'
                   }`}
                 >
-                  {/* מוצר */}
-                  <td className="py-2.5 px-3 font-medium text-slate-900 leading-tight">
-                    {line.name}
+                  {/* תמונה של המוצר */}
+                  <td className="py-2 px-2.5 text-center w-16">
+                    <button
+                      type="button"
+                      className="relative w-11 h-11 mx-auto bg-white border border-slate-200 rounded-md overflow-hidden flex items-center justify-center p-1 shadow-2xs hover:border-[#004387] hover:ring-2 hover:ring-blue-100 hover:shadow-md transition-all cursor-pointer group/thumb"
+                      title="הצבע לצפייה בפרטי מוצר או לחץ להגדלה"
+                      aria-label={`פרטי מוצר עבור ${line.sku}`}
+                      onMouseEnter={(e) => {
+                        const item = getItemPreview(line);
+                        onProductHover?.(item, e);
+                      }}
+                      onMouseMove={(e) => {
+                        const item = getItemPreview(line);
+                        onProductHover?.(item, e);
+                      }}
+                      onMouseLeave={() => {
+                        onProductHover?.(null);
+                      }}
+                      onClick={() => handleItemClick(line)}
+                    >
+                      {line.image ? (
+                        <img
+                          src={line.image}
+                          alt={line.sku}
+                          className="w-full h-full object-contain filter drop-shadow-2xs group-hover/thumb:scale-110 transition-transform duration-200"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-slate-400 group-hover/thumb:text-[#004387] transition-colors">
+                          <Box size={18} />
+                          <span className="text-[8px] font-mono leading-none mt-0.5">{line.uSize > 0 ? `${line.uSize}U` : '0U'}</span>
+                        </div>
+                      )}
+                      
+                      {/* Zoom indicator icon on hover */}
+                      <span className="absolute inset-0 bg-[#004387]/15 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                        <Maximize2 size={12} className="text-[#004387] bg-white/95 rounded-full p-0.5 shadow-xs" />
+                      </span>
+                    </button>
                   </td>
 
-                  {/* מק"ט */}
-                  <td className="py-2.5 px-3 font-mono text-xs text-slate-600 whitespace-nowrap" dir="ltr">
-                    {line.sku}
+                  {/* מק"ט בלבד */}
+                  <td className="py-2.5 px-3 whitespace-nowrap">
+                    <button
+                      type="button"
+                      className="text-right hover:text-[#004387] hover:underline cursor-pointer transition-colors font-mono font-bold text-xs sm:text-sm text-slate-800 block"
+                      dir="ltr"
+                      title="הצבע לצפייה בפרטי מוצר או לחץ להגדלה"
+                      onMouseEnter={(e) => {
+                        const item = getItemPreview(line);
+                        onProductHover?.(item, e);
+                      }}
+                      onMouseMove={(e) => {
+                        const item = getItemPreview(line);
+                        onProductHover?.(item, e);
+                      }}
+                      onMouseLeave={() => {
+                        onProductHover?.(null);
+                      }}
+                      onClick={() => handleItemClick(line)}
+                    >
+                      {line.sku}
+                    </button>
                   </td>
 
                   {/* כמות */}
@@ -108,7 +200,7 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                           type="button"
                           title="הוסף 1"
                           onClick={() => onIncrement?.(line.sku)}
-                          className="px-2 hover:bg-slate-200 text-[#004387] transition-colors"
+                          className="px-2 hover:bg-slate-200 text-[#004387] transition-colors cursor-pointer"
                         >
                           <Plus size={12} />
                         </button>
@@ -119,7 +211,7 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                           type="button"
                           title="הפחת 1"
                           onClick={() => onDecrement?.(line.sku)}
-                          className="px-2 hover:bg-slate-200 text-red-500 transition-colors"
+                          className="px-2 hover:bg-slate-200 text-red-500 transition-colors cursor-pointer"
                         >
                           <Minus size={12} />
                         </button>
@@ -127,7 +219,7 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                           type="button"
                           title="הסר לחלוטין"
                           onClick={() => onRemove?.(line.sku)}
-                          className="px-2 border-l border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
+                          className="px-2 border-l border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                         >
                           <X size={12} />
                         </button>
@@ -179,6 +271,61 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
               * מחיר מומלץ, לפני מע״מ
             </div>
           )}
+        </div>
+      )}
+
+      {/* Fallback inspection modal if onProductClick not provided */}
+      {fallbackModalItem && (
+        <div
+          className="fixed inset-0 z-[999999] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+          dir="rtl"
+          onClick={() => setFallbackModalItem(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden border border-slate-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-[#004387] text-white p-4 flex items-center justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-mono text-blue-200">
+                  מק"ט: {fallbackModalItem.sku} {fallbackModalItem.uSize > 0 ? `| ${fallbackModalItem.uSize}U` : ''}
+                </div>
+                <h3 className="font-bold text-base truncate mt-0.5">{fallbackModalItem.name}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFallbackModalItem(null)}
+                className="p-1 rounded-full hover:bg-white/20 transition-colors cursor-pointer text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              {fallbackModalItem.image && (
+                <div className="w-full h-48 bg-slate-50 border border-slate-100 rounded flex items-center justify-center p-2">
+                  <img
+                    src={fallbackModalItem.image}
+                    alt={fallbackModalItem.name}
+                    className="max-h-full max-w-full object-contain filter drop-shadow-sm"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+              {fallbackModalItem.description && (
+                <p className="text-xs text-slate-600 leading-relaxed max-h-40 overflow-y-auto">
+                  {fallbackModalItem.description}
+                </p>
+              )}
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs">
+                <span className="text-slate-500 font-mono">{fallbackModalItem.zone}</span>
+                {fallbackModalItem.price > 0 && (
+                  <span className="font-bold font-mono text-[#004387] text-sm">
+                    ₪{fallbackModalItem.price.toLocaleString('he-IL', { minimumFractionDigits: 2 })}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

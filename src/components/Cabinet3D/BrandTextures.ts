@@ -55,15 +55,24 @@ export const GENERIC_SHELF_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www
   <text x="200" y="176" fill="#38bdf8" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" text-anchor="middle" letter-spacing="0.5">מדף ציוד תקני לארון 19״</text>
 </svg>`;
 
+const polmanTextureCache = new Map<string, THREE.CanvasTexture>();
+const hikvisionTextureCache = new Map<string, THREE.CanvasTexture>();
+
 /**
  * Creates an ultra-realistic 2U Polman Power Amplifier front faceplate canvas texture
  */
-export function createPolmanFaceTexture(item: Product3DInstance, spanHeight: number): THREE.CanvasTexture {
+export function createPolmanFaceTexture(item: Product3DInstance, spanHeight: number): THREE.CanvasTexture | null {
+  const cacheKey = `${item.sku}_${spanHeight}_${item.uSpan}`;
+  const cached = polmanTextureCache.get(cacheKey);
+  if (cached) return cached;
+
+  if (typeof document === 'undefined') return null;
+
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
   canvas.height = 384;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return new THREE.CanvasTexture(canvas);
+  if (!ctx) return null;
 
   const w = canvas.width;
   const h = canvas.height;
@@ -280,6 +289,7 @@ export function createPolmanFaceTexture(item: Product3DInstance, spanHeight: num
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
+  polmanTextureCache.set(cacheKey, texture);
   return texture;
 }
 
@@ -290,12 +300,18 @@ export function createHikvisionFaceTexture(
   item: Product3DInstance,
   spanHeight: number,
   assetDef?: Product3DAssetDef | null
-): THREE.CanvasTexture {
+): THREE.CanvasTexture | null {
+  const cacheKey = `${item.sku}_${spanHeight}_${item.uSpan}_${assetDef?.categoryProfile || ''}`;
+  const cached = hikvisionTextureCache.get(cacheKey);
+  if (cached) return cached;
+
+  if (typeof document === 'undefined') return null;
+
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
   canvas.height = item.uSpan > 1 ? 384 : 192;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return new THREE.CanvasTexture(canvas);
+  if (!ctx) return null;
 
   const w = canvas.width;
   const h = canvas.height;
@@ -493,5 +509,76 @@ export function createHikvisionFaceTexture(
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
+  hikvisionTextureCache.set(cacheKey, texture);
   return texture;
 }
+
+let perforationCanvas: HTMLCanvasElement | null = null;
+
+function getPerforationCanvas(): HTMLCanvasElement | null {
+  if (typeof document === 'undefined') return null;
+  if (perforationCanvas) return perforationCanvas;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.fillStyle = '#0f1113';
+    ctx.fillRect(0, 0, 256, 256);
+
+    const spacing = 11;
+    const rowHeight = spacing * (Math.sqrt(3) / 2);
+    let rowIndex = 0;
+    for (let y = -spacing; y <= 256 + spacing; y += rowHeight, rowIndex++) {
+      const xOffset = (rowIndex % 2 === 0) ? 0 : spacing / 2;
+      for (let x = -spacing; x <= 256 + spacing; x += spacing) {
+        const cx = x + xOffset;
+        const cy = y;
+
+        // 1px lighter rim #4b5158 on each hole
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4.5, 0, Math.PI * 2);
+        ctx.strokeStyle = '#4b5158';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Hole circle radius 4px, fill #3a3f45
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#3a3f45';
+        ctx.fill();
+      }
+    }
+    perforationCanvas = canvas;
+    return perforationCanvas;
+  } catch (err) {
+    console.error('[BrandTextures] Failed to initialize perforation canvas', err);
+    return null;
+  }
+}
+
+/**
+ * Creates a procedural 256x256 hexagonal perforation texture for cabinet doors
+ * - Background #0f1113
+ * - Hexagonal grid of circles radius 4px, spacing 11px, fill #3a3f45 (the holes)
+ * - 1px lighter rim #4b5158 on each hole
+ * - wrapS/wrapT = RepeatWrapping
+ * Returns an independent CanvasTexture per mesh so repeat and disposal are safe.
+ */
+export function createPerforationTexture(): THREE.CanvasTexture | null {
+  const canvas = getPerforationCanvas();
+  if (!canvas) return null;
+  try {
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.needsUpdate = true;
+    return texture;
+  } catch (err) {
+    console.error('[BrandTextures] Failed to create CanvasTexture for perforation', err);
+    return null;
+  }
+}
+

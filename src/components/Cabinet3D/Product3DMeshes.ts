@@ -81,8 +81,9 @@ export function buildProduct3DMesh(
     const isPN117914 = skuLower.includes('117914') || nameLower.includes('117914') || descLower.includes('117914');
     let shelfMat = item.isIncluded ? materials.includedShelfMat : materials.shelfMat;
     if (isPN117914) {
+      const ventTexture = createDiagonalVentSlotTexture();
       shelfMat = new THREE.MeshStandardMaterial({
-        map: createDiagonalVentSlotTexture(),
+        map: ventTexture || null,
         roughness: 0.35,
         metalness: 0.70,
       });
@@ -504,7 +505,7 @@ export function buildProduct3DMesh(
       const faceplateH = spanHeight * 0.98;
       const frontGeom = new THREE.PlaneGeometry(faceplateW, faceplateH);
       const frontMat = new THREE.MeshStandardMaterial({
-        map: polmanTex,
+        map: polmanTex || null,
         roughness: 0.35,
         metalness: 0.7,
         side: THREE.FrontSide,
@@ -527,7 +528,7 @@ export function buildProduct3DMesh(
       const faceplateH = spanHeight * 0.98;
       const frontGeom = new THREE.PlaneGeometry(faceplateW, faceplateH);
       const frontMat = new THREE.MeshStandardMaterial({
-        map: hikTex,
+        map: hikTex || null,
         roughness: 0.35,
         metalness: 0.5,
         side: THREE.FrontSide,

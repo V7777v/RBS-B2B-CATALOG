@@ -9,7 +9,10 @@ import * as THREE from 'three';
  *   - Angled orange/vermilion right triangle (#ea4d1d)
  *   - Upward sweeping vibrant lime green wing (#5fe000)
  */
+let cachedBoostLogoTexture: THREE.CanvasTexture | null = null;
+
 export function createBoostRackMountLogoTexture(): THREE.CanvasTexture | null {
+  if (cachedBoostLogoTexture) return cachedBoostLogoTexture;
   if (typeof document === 'undefined') return null;
 
   const canvas = document.createElement('canvas');
@@ -127,6 +130,7 @@ export function createBoostRackMountLogoTexture(): THREE.CanvasTexture | null {
   const texture = new THREE.CanvasTexture(canvas);
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
+  cachedBoostLogoTexture = texture;
   return texture;
 }
 

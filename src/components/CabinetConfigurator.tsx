@@ -895,10 +895,72 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     return { usedU: calcUsedU, slots: builtSlots, nonUAccessories, unallocatedItems };
   }, [totalU, includedItems, selectedOptionals, cabinetData, presetOverrides]);
 
+  // --- DYNAMIC SLOT CALCULATION FOR VISUAL CHASSIS & ORDER SUMMARY ---
+  const getAccessoryImage = (acc: any): string => {
+    if (!acc) return '';
+    const isShelf = acc.type === 'preset-shelf' || acc.isShelf || /מדף|shelf/i.test(acc.name || acc.description || '');
+    if (isShelf) {
+      return GENERIC_SHELF_IMAGE;
+    }
+    if (acc.image && typeof acc.image === 'string' && acc.image.trim() !== '') {
+      return acc.image;
+    }
+    if (acc.accessoryRef?.image && typeof acc.accessoryRef.image === 'string' && acc.accessoryRef.image.trim() !== '') {
+      return acc.accessoryRef.image;
+    }
+    const targetSku = normalizeSku(acc.sku || acc.pn || acc.accessoryRef?.sku || acc.accessoryRef?.pn || '');
+    if (targetSku && catalogData && Array.isArray(catalogData)) {
+      const found = catalogData.find((p: any) => normalizeSku(p.sku) === targetSku);
+      if (found) {
+        if (found.images && Array.isArray(found.images) && found.images[0]) {
+          return found.images[0];
+        }
+        if (found.imageURL) return found.imageURL;
+      }
+    }
+    return '';
+  };
+
+  const getRealProductImage = (acc: any): string => {
+    if (!acc) return '';
+    const targetSku = normalizeSku(acc.sku || acc.pn || acc.accessoryRef?.sku || acc.accessoryRef?.pn || '');
+    if (targetSku && catalogData && Array.isArray(catalogData)) {
+      const found = catalogData.find((p: any) => normalizeSku(p.sku) === targetSku);
+      if (found) {
+        if (found.images && Array.isArray(found.images) && found.images[0]) return found.images[0];
+        if (found.imageURL) return found.imageURL;
+        if (found.image) return found.image;
+      }
+    }
+    const isShelf = acc.type === 'preset-shelf' || acc.isShelf || /מדף|shelf/i.test(acc.name || acc.description || '');
+    if (isShelf && catalogData && Array.isArray(catalogData)) {
+      if (cabinetData?.suitableStandard?.length) {
+        for (const stdSku of cabinetData.suitableStandard) {
+          const foundStd = catalogData.find((p: any) => normalizeSku(p.sku) === normalizeSku(stdSku));
+          if (foundStd?.images?.[0]) return foundStd.images[0];
+          if (foundStd?.imageURL) return foundStd.imageURL;
+        }
+      }
+      const anyRealShelf = catalogData.find((p: any) => 
+        /מדף|shelf/i.test(p.name || p.description || p.sku || '') && 
+        ((p.images && p.images[0]) || p.imageURL)
+      );
+      if (anyRealShelf?.images?.[0]) return anyRealShelf.images[0];
+      if (anyRealShelf?.imageURL) return anyRealShelf.imageURL;
+    }
+    if (acc.image && typeof acc.image === 'string' && acc.image.trim() !== '') return acc.image;
+    if (acc.accessoryRef?.image && typeof acc.accessoryRef.image === 'string' && acc.accessoryRef.image.trim() !== '') {
+      return acc.accessoryRef.image;
+    }
+    return '';
+  };
+
   const orderLines = React.useMemo<OrderLine[]>(() => {
     const groupMap = new Map<string, {
       sku: string;
       name: string;
+      description: string;
+      image: string;
       uSize: number;
       qty: number;
       unitPrice: number;
@@ -912,18 +974,38 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       const key = normalizeSku(rawKey) || rawKey;
       const quantity = Math.max(1, Number(opt.quantity) || 1);
       const existing = groupMap.get(key);
+
+      const catalogMatch = (catalogData || []).find((pp: any) =>
+        pp && pp.sku && (
+          pp.sku === rawKey ||
+          pp.sku === opt.pn ||
+          pp.sku === opt.sku ||
+          normalizeSku(pp.sku) === key
+        )
+      );
+
+      const optImage = getRealProductImage(opt) || getAccessoryImage(opt) || (catalogMatch?.images && catalogMatch.images[0]) || catalogMatch?.imageURL || opt.image || '';
+      const optDesc = opt.description || catalogMatch?.description || '';
+      const optName = opt.name || catalogMatch?.name || opt.description || opt.pn || rawKey;
+      const optPrice = Number(opt.price) || Number(catalogMatch?.price) || 0;
+      const optUSize = Number(opt.uSize) || Number(catalogMatch?.u) || 0;
+
       if (!existing) {
         groupMap.set(key, {
           sku: opt.sku || opt.pn || rawKey,
-          name: opt.name || opt.description || opt.pn || rawKey,
-          uSize: Number(opt.uSize) || 0,
+          name: optName,
+          description: optDesc,
+          image: optImage,
+          uSize: optUSize,
           qty: quantity,
-          unitPrice: Number(opt.price) || 0,
+          unitPrice: optPrice,
           items: [opt],
         });
       } else {
         existing.qty += quantity;
         existing.items.push(opt);
+        if (!existing.image && optImage) existing.image = optImage;
+        if (!existing.description && optDesc) existing.description = optDesc;
       }
     });
 
@@ -967,20 +1049,39 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         positions = ['לא שובץ'];
       }
 
+      const zoneStr = positions.length > 0 && positions[0] !== 'לא שובץ' && positions[0] !== '0U'
+        ? `מסילות U חזיתיות (${positions.join(', ')})`
+        : (group.uSize === 0 ? 'שלד הארון (0U)' : 'לא שובץ במסד');
+
+      const enrichedItem: EnrichedPreviewItem = {
+        sku: group.sku,
+        name: group.name,
+        description: group.description,
+        image: group.image,
+        uSize: group.uSize,
+        price: group.unitPrice,
+        quantity: group.qty,
+        zone: zoneStr,
+        type: 'optional-accessory',
+      };
+
       lines.push({
         sku: group.sku,
         name: group.name,
+        description: group.description,
+        image: group.image,
         uSize: group.uSize,
         qty: group.qty,
         unitPrice: group.unitPrice,
         lineTotal: group.unitPrice * group.qty,
         positions,
         status,
+        enrichedItem,
       });
     });
 
     return lines;
-  }, [selectedOptionals, slots, nonUAccessories, unallocatedItems]);
+  }, [selectedOptionals, slots, nonUAccessories, unallocatedItems, catalogData]);
 
   const orderTotals = React.useMemo<OrderTotals>(() => {
     const accessoriesTotal = orderLines.reduce((sum, line) => sum + line.lineTotal, 0);
@@ -2082,66 +2183,6 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const forceAddPending = () => {
     setWarningModalOpen(false);
     setPendingAccessory(null);
-  };
-
-  // --- DYNAMIC SLOT CALCULATION FOR VISUAL CHASSIS ---
-  const getAccessoryImage = (acc: any): string => {
-    if (!acc) return '';
-    const isShelf = acc.type === 'preset-shelf' || acc.isShelf || /מדף|shelf/i.test(acc.name || acc.description || '');
-    if (isShelf) {
-      return GENERIC_SHELF_IMAGE;
-    }
-    if (acc.image && typeof acc.image === 'string' && acc.image.trim() !== '') {
-      return acc.image;
-    }
-    if (acc.accessoryRef?.image && typeof acc.accessoryRef.image === 'string' && acc.accessoryRef.image.trim() !== '') {
-      return acc.accessoryRef.image;
-    }
-    const targetSku = normalizeSku(acc.sku || acc.pn || acc.accessoryRef?.sku || acc.accessoryRef?.pn || '');
-    if (targetSku && catalogData && Array.isArray(catalogData)) {
-      const found = catalogData.find((p: any) => normalizeSku(p.sku) === targetSku);
-      if (found) {
-        if (found.images && Array.isArray(found.images) && found.images[0]) {
-          return found.images[0];
-        }
-        if (found.imageURL) return found.imageURL;
-      }
-    }
-    return '';
-  };
-
-  const getRealProductImage = (acc: any): string => {
-    if (!acc) return '';
-    const targetSku = normalizeSku(acc.sku || acc.pn || acc.accessoryRef?.sku || acc.accessoryRef?.pn || '');
-    if (targetSku && catalogData && Array.isArray(catalogData)) {
-      const found = catalogData.find((p: any) => normalizeSku(p.sku) === targetSku);
-      if (found) {
-        if (found.images && Array.isArray(found.images) && found.images[0]) return found.images[0];
-        if (found.imageURL) return found.imageURL;
-        if (found.image) return found.image;
-      }
-    }
-    const isShelf = acc.type === 'preset-shelf' || acc.isShelf || /מדף|shelf/i.test(acc.name || acc.description || '');
-    if (isShelf && catalogData && Array.isArray(catalogData)) {
-      if (cabinetData?.suitableStandard?.length) {
-        for (const stdSku of cabinetData.suitableStandard) {
-          const foundStd = catalogData.find((p: any) => normalizeSku(p.sku) === normalizeSku(stdSku));
-          if (foundStd?.images?.[0]) return foundStd.images[0];
-          if (foundStd?.imageURL) return foundStd.imageURL;
-        }
-      }
-      const anyRealShelf = catalogData.find((p: any) => 
-        /מדף|shelf/i.test(p.name || p.description || p.sku || '') && 
-        ((p.images && p.images[0]) || p.imageURL)
-      );
-      if (anyRealShelf?.images?.[0]) return anyRealShelf.images[0];
-      if (anyRealShelf?.imageURL) return anyRealShelf.imageURL;
-    }
-    if (acc.image && typeof acc.image === 'string' && acc.image.trim() !== '') return acc.image;
-    if (acc.accessoryRef?.image && typeof acc.accessoryRef.image === 'string' && acc.accessoryRef.image.trim() !== '') {
-      return acc.accessoryRef.image;
-    }
-    return '';
   };
 
   const buildPreviewFromSlot = (slot: any): EnrichedPreviewItem => {
@@ -3647,6 +3688,16 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                     onIncrement={(sku) => handleIncrementQuantity(sku)}
                     onDecrement={(sku) => handleRemoveOptional(sku, false)}
                     onRemove={(sku) => handleRemoveOptional(sku, true)}
+                    onProductHover={(item, e) => {
+                      if (e) {
+                        setMousePos({ x: e.clientX, y: e.clientY });
+                      }
+                      setHoveredProduct(item);
+                    }}
+                    onProductClick={(item) => {
+                      setHoveredProduct(null);
+                      setInspectedProduct(item);
+                    }}
                   />
                 </div>
         </div>
