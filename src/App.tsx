@@ -61,6 +61,7 @@ import {
   Image,
   Copy,
   Share2,
+  Bot,
 } from "lucide-react";
 import Papa from "papaparse";
 import { motion, AnimatePresence } from "motion/react";
@@ -8768,13 +8769,19 @@ export default function App() {
             >
               <MessageCircle className="w-6 h-6 text-white sm:hidden" />
               <img
-                src="https://lh3.googleusercontent.com/d/1ivu4rHgeaH6iiodL2WkA6i_6XS_gmmG_"
+                src="/advisor-avatar.png"
                 alt="יועץ טכני"
                 className="hidden sm:block w-full h-full rounded-full object-cover"
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).style.display = "none";
+                  const sibling = (e.currentTarget as HTMLImageElement).nextElementSibling as HTMLElement | SVGElement | null;
+                  if (sibling) {
+                    sibling.style.display = "block";
+                    sibling.classList.remove("hidden");
+                  }
                 }}
               />
+              <Bot size={26} className="text-white hidden" style={{ display: "none" }} />
               <span className="hidden sm:flex absolute -top-0.5 -right-0.5 h-3.5 w-3.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500 border-2 border-white"></span>
