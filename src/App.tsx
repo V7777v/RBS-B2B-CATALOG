@@ -8773,11 +8773,17 @@ export default function App() {
                 alt="יועץ טכני"
                 className="hidden sm:block w-full h-full rounded-full object-cover"
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = "none";
-                  const sibling = (e.currentTarget as HTMLImageElement).nextElementSibling as HTMLElement | SVGElement | null;
-                  if (sibling) {
-                    sibling.style.display = "block";
-                    sibling.classList.remove("hidden");
+                  const target = e.currentTarget as HTMLImageElement;
+                  if (!target.dataset.fallback) {
+                    target.dataset.fallback = "true";
+                    target.src = "https://lh3.googleusercontent.com/d/1ivu4rHgeaH6iiodL2WkA6i_6XS_gmmG_";
+                  } else {
+                    target.style.display = "none";
+                    const sibling = target.nextElementSibling as HTMLElement | SVGElement | null;
+                    if (sibling) {
+                      sibling.style.display = "block";
+                      sibling.classList.remove("hidden");
+                    }
                   }
                 }}
               />

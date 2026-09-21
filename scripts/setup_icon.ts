@@ -55,6 +55,17 @@ async function main() {
     fs.writeFileSync(path.join(pubDir, 'new-logo.png'), newLogoBuffer);
     console.log("Downloaded new-logo.png for Vercel");
 
+    // Fetch advisor avatar
+    try {
+      const avatarBuffer = await fetchImage('1ivu4rHgeaH6iiodL2WkA6i_6XS_gmmG_');
+      const avatarImg = await Jimp.read(avatarBuffer);
+      avatarImg.resize({ w: 112, h: 112 });
+      await avatarImg.write(path.join(pubDir, 'advisor-avatar.png') as any);
+      console.log("Downloaded and generated advisor-avatar.png (112x112)");
+    } catch (e) {
+      console.warn("Could not download advisor avatar in setup_icon:", e);
+    }
+
     console.log(`Downloaded image of size ${buffer.byteLength} bytes.`);
     
     // Save original if needed
