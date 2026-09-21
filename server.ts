@@ -13,6 +13,47 @@ const PORT = 3000;
 
 app.use(express.json());
 
+// PWA Web Manifest handler - guarantees valid JSON & content-type in all environments
+const PWA_MANIFEST = {
+  name: "קטלוג RBS Telecom",
+  short_name: "קטלוג RBS",
+  description: "קטלוג B2B - RBS Telecom",
+  start_url: "/",
+  display: "standalone",
+  background_color: "#ffffff",
+  theme_color: "#0c2d57",
+  lang: "he",
+  scope: "/",
+  orientation: "portrait",
+  dir: "rtl",
+  icons: [
+    {
+      src: "/icons/icon-192.png",
+      sizes: "192x192",
+      type: "image/png",
+      purpose: "any"
+    },
+    {
+      src: "/icons/icon-512.png",
+      sizes: "512x512",
+      type: "image/png",
+      purpose: "any"
+    },
+    {
+      src: "/icons/icon-512-maskable.png",
+      sizes: "512x512",
+      type: "image/png",
+      purpose: "maskable"
+    }
+  ]
+};
+
+app.get(["/manifest.webmanifest", "/manifest.json"], (_req, res) => {
+  res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.json(PWA_MANIFEST);
+});
+
 // Google Sheets context configurations
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
 const PRODUCTS_GID = '1506812668';

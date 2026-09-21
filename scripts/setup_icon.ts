@@ -68,9 +68,6 @@ async function main() {
 
     console.log(`Downloaded image of size ${buffer.byteLength} bytes.`);
     
-    // Save original if needed
-    fs.writeFileSync(path.join(pubDir, 'logo.png'), buffer);
-    
     console.log("Generating PWA icons...");
     const image = await Jimp.read(buffer);
 
@@ -78,15 +75,7 @@ async function main() {
       { name: 'icons/icon-512.png', size: 512 },
       { name: 'icons/icon-512-maskable.png', size: 512 },
       { name: 'icons/icon-192.png', size: 192 },
-      { name: 'rbs-touch-icon.png', size: 180 },
-      { name: 'rbs-icon-180.png', size: 180 },
-      { name: 'rbs-icon-192.png', size: 192 },
       { name: 'apple-touch-icon.png', size: 180 },
-      { name: 'apple-touch-icon-precomposed.png', size: 180 },
-      { name: 'apple-touch-icon-180x180.png', size: 180 },
-      { name: 'apple-touch-icon-180x180-precomposed.png', size: 180 },
-      { name: 'apple-touch-icon-152x152.png', size: 152 },
-      { name: 'apple-touch-icon-120x120.png', size: 120 },
       { name: 'favicon.png', size: 32 }
     ];
 
