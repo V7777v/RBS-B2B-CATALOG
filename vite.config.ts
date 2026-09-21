@@ -26,10 +26,10 @@ export default defineConfig(() => {
           lang: 'he',
           dir: 'rtl',
           icons: [
-            { src: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png', purpose: 'any' },
-            { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-            { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-            { src: '/icons/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+            { src: '/rbs-touch-icon.png?v=rbs-logo-1', sizes: '180x180', type: 'image/png', purpose: 'any' },
+            { src: '/icons/icon-192.png?v=rbs-logo-1', sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: '/icons/icon-512.png?v=rbs-logo-1', sizes: '512x512', type: 'image/png', purpose: 'any' },
+            { src: '/icons/icon-512-maskable.png?v=rbs-logo-1', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
           ]
         },
         workbox: {
