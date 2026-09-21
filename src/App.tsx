@@ -8780,11 +8780,10 @@ export default function App() {
               }`}
               aria-label="פתח יועץ טכני חכם"
             >
-              <MessageCircle className="w-6 h-6 text-white sm:hidden" />
               <img
                 src="/advisor-avatar.png"
                 alt="יועץ טכני"
-                className="hidden sm:block w-full h-full rounded-full object-cover"
+                className="w-full h-full rounded-full object-cover"
                 onError={(e) => {
                   const target = e.currentTarget as HTMLImageElement;
                   if (!target.dataset.fallback) {
@@ -8801,11 +8800,11 @@ export default function App() {
                 }}
               />
               <Bot size={26} className="text-white hidden" style={{ display: "none" }} />
-              <span className="hidden sm:flex absolute -top-0.5 -right-0.5 h-3.5 w-3.5">
+              <span className="flex absolute -top-0.5 -right-0.5 h-3.5 w-3.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500 border-2 border-white"></span>
               </span>
-              <span className="hidden sm:flex absolute -bottom-1 -left-1 bg-[#c2410c] rounded-full p-1 border-2 border-white items-center justify-center">
+              <span className="flex absolute -bottom-1 -left-1 bg-[#c2410c] rounded-full p-1 border-2 border-white items-center justify-center">
                 <Sparkles className="w-2.5 h-2.5 text-white" />
               </span>
             </button>

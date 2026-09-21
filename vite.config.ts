@@ -14,8 +14,8 @@ export default defineConfig(() => {
         injectRegister: 'auto',
         includeAssets: ['favicon.png', 'apple-touch-icon*.png', 'icons/*.png', 'og-image.png', 'advisor-avatar.png'],
         manifest: {
-          name: 'RBS Catalog',
-          short_name: 'RBS',
+          name: 'קטלוג RBS Telecom',
+          short_name: 'קטלוג RBS',
           description: 'קטלוג B2B - RBS Telecom',
           theme_color: '#0c2d57',
           background_color: '#ffffff',
