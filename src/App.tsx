@@ -7379,7 +7379,7 @@ export default function App() {
                     referrerPolicy="no-referrer"
                     src="/new-logo.png"
                     alt="RBS Logo"
-                    className="h-28 w-auto object-contain cursor-pointer hover:opacity-80 active:scale-95 transition-all"
+                    className="h-11 md:h-12 max-h-[48px] w-auto max-w-[180px] object-contain cursor-pointer hover:opacity-80 active:scale-95 transition-all select-none"
                     onClick={() => {
                       setSearchQuery("");
                       navigateHome();
