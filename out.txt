@@ -1,0 +1,21 @@
+                              </div>
+                              <button onClick={() => setEditItems(prev => prev.filter((_, j) => j !== i))} className="w-8 h-8 flex items-center justify-center flex-shrink-0"><Trash2 size={16} className="text-red-500" /></button>
+                            </div>
+                          ))}
+                          {editItems.length === 0 && <p className="text-center text-sm text-gray-400 py-4">אין פריטים — הוסף או בטל</p>}
+                        </div>
+                        <button
+                          onClick={async () => { const items = editItems.map((it: any) => ({ ...it })); const itemCount = items.reduce((acc: number, it: any) => acc + (it.quantity || 0), 0); const detailsText = 'הזמנה (עודכנה על ידי הלקוח)
+---------------------------------
+' + items.map((it: any) => `${it.name} (${it.sku}) — כמות: ${it.quantity}`).join('\n'); await updateOrder(selectedOrder.id, { items, itemCount, detailsText, edited: true }); setOrders(prev => prev.map((o: any) => o.id === selectedOrder.id ? { ...o, items, itemCount, detailsText, edited: true } : o)); setEditMode(false); setSelectedOrder(null); }}
+                          disabled={editItems.length === 0}
+                          className="w-full bg-[#004387] text-white py-3.5 font-bold rounded-xl hover:bg-[#0c2d57] transition-colors flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(0,67,135,0.25)] disabled:opacity-50"
+                        >
+                          <CheckCircle size={18} /> שמור שינויים
+                        </button>
+                        <button onClick={() => setEditMode(false)} className="w-full text-gray-500 py-2 font-semibold text-sm">ביטול</button>
+                        <p className="text-center text-[11px] text-gray-400">השינויים יעודכנו בהזמנה והסוכן יראה את העדכון.</p>
+                      </>
+                    ) : !reorderMode ? (
+                      <>
+                        <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">

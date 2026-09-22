@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShieldCheck, ShieldAlert, Fingerprint, Lock, Sparkles, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Lock, Sparkles, Shield, Fingerprint } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const HumanVerification = ({ onVerified }: { onVerified: () => void }) => {
@@ -8,18 +8,8 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
   const [isPressing, setIsPressing] = useState(false);
   const intervalRef = useRef<number | null>(null);
 
-  const startPress = (e: React.PointerEvent<HTMLButtonElement>) => {
+  const startProgress = () => {
     if (isVerified) return;
-    if (e.cancelable) {
-      e.preventDefault();
-    }
-    
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch (err) {
-      // ignore browser support edge cases
-    }
-
     setIsPressing(true);
     if (intervalRef.current) clearInterval(intervalRef.current);
     
@@ -29,25 +19,19 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
           if (intervalRef.current) clearInterval(intervalRef.current);
           setIsVerified(true);
           setIsPressing(false);
-          // Wait 1.2 seconds for success animations to display and then verify
+          // Wait 1.4 seconds for success animations to display and then verify
           setTimeout(() => onVerified(), 1400);
           return 100;
         }
-        return prev + 2.5; // Takes about 800ms total for perfect pacing
+        return prev + 2.5; 
       });
     }, 20);
   };
 
-  const endPress = (e: React.PointerEvent<HTMLButtonElement>) => {
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch (err) {
-      // ignore
-    }
+  const endProgress = () => {
     setIsPressing(false);
     if (!isVerified) {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      // Fast decrease instead of sudden drop for smoother feel
       intervalRef.current = window.setInterval(() => {
         setProgress((prev) => {
           if (prev <= 0) {
@@ -60,20 +44,41 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
     }
   };
 
+  const startPress = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.cancelable) e.preventDefault();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+    startProgress();
+  };
+
+  const endPress = (e: React.PointerEvent<HTMLButtonElement>) => {
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
+    endProgress();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if ((e.key === ' ' || e.key === 'Enter') && !isPressing && !isVerified) {
+      e.preventDefault();
+      startProgress();
+    }
+  };
+
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      endProgress();
+    }
+  };
+
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
 
-  // Helper to get raw scanner status message text based on progress
   const getScannerStatus = () => {
-    if (isVerified) return 'אימות סייבר ביומטרי עבר בהצלחה!';
-    if (progress === 0) return 'אנא החזק את כפתור הסריקה הביומטרי';
-    if (progress < 25) return 'מזהה מגע אורגני...';
-    if (progress < 55) return 'בודק תנודות מיקרו-שריר אנושיות...';
-    if (progress < 85) return 'מאמת דפוסי הולכה חשמלית של העור...';
-    return 'סורק מרכיבים ביולוגיים... כמעט סיימנו!';
+    if (isVerified) return 'אפשר להמשיך';
+    if (progress === 0) return 'לחצו והחזיקו כדי להתחיל';
+    return 'המשיכו להחזיק...';
   };
 
   return (
@@ -139,16 +144,15 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
         </div>
 
         <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0c2d57] mb-2 tracking-tight">
-          {isVerified ? 'אימות הושלם בהצלחה!' : 'מנגנון אבטחה ביומטרי'}
+          {isVerified ? 'אימות הושלם בהצלחה!' : 'בדיקת כניסה'}
         </h2>
         
         <p className="text-gray-500 text-sm sm:text-base max-w-xs mx-auto mb-8 font-medium leading-relaxed">
-          {isVerified ? 'מזהה אנושי מורשה אושר. מעביר אותך לקטלוג...' : 'הוכח שאינך רובוט על־ידי לחיצה רציפה על כפתור הסריקה המאובטח'}
+          {isVerified ? 'הכניסה אושרה. מעביר אותך לקטלוג...' : 'לחצו והחזיקו כדי להמשיך לקטלוג'}
         </p>
 
         {/* Dynamic Scan Area Visualiser */}
         <div className="w-full max-w-xs mb-8 p-5 bg-gray-50/80 rounded-2xl border border-gray-200/60 relative">
-          {/* High-end biometric ring scanning visual representation */}
           <div className="relative w-40 h-40 mx-auto flex items-center justify-center mb-4">
             
             {/* Ambient background shadow pulse */}
@@ -173,9 +177,8 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
               )}
             </AnimatePresence>
 
-            {/* Circular Progress Gauge using SVG for stunning professional look */}
+            {/* Circular Progress Gauge */}
             <svg className="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-              {/* Background ring track */}
               <circle 
                 cx="50" 
                 cy="50" 
@@ -183,7 +186,6 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
                 className="stroke-gray-100 fill-none" 
                 strokeWidth="6" 
               />
-              {/* Animated active path ring */}
               <motion.circle 
                 cx="50" 
                 cy="50" 
@@ -196,9 +198,9 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
               />
             </svg>
 
-            {/* Inner Glowing Scanning Pad Button */}
+            {/* Inner Button */}
             <button 
-              className={`relative z-10 w-28 h-28 rounded-full flex flex-col items-center justify-center touch-none outline-none transition-all duration-300 pointer-events-auto cursor-pointer shadow-inner border-0 select-none ${
+              className={`relative z-10 w-28 h-28 rounded-full flex flex-col items-center justify-center touch-none outline-none transition-all duration-300 pointer-events-auto cursor-pointer shadow-inner border-0 select-none focus-visible:ring-4 focus-visible:ring-blue-500/50 ${
                 isVerified 
                   ? 'bg-emerald-500 text-white shadow-emerald-500/20' 
                   : isPressing 
@@ -209,9 +211,12 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
               onPointerUp={endPress}
               onPointerLeave={endPress}
               onPointerCancel={endPress}
+              onKeyDown={handleKeyDown}
+              onKeyUp={handleKeyUp}
               onContextMenu={(e) => e.preventDefault()}
+              aria-label="כפתור אישור כניסה"
+              aria-pressed={isPressing}
             >
-              {/* Vertical scanning laser line animation */}
               {isPressing && !isVerified && (
                 <motion.div 
                   initial={{ y: -45 }}
@@ -220,18 +225,18 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
                   className="absolute left-0 right-0 h-1 bg-cyan-400 opacity-80 shadow-[0_0_10px_#22d3ee] z-20"
                 />
               )}
-
+              
               <Fingerprint size={42} className={`${isPressing && !isVerified ? 'animate-pulse text-cyan-200' : ''}`} />
               
               <span className="text-[10px] mt-1.5 font-bold uppercase tracking-wider opacity-90 block">
-                {isVerified ? 'מאומת' : isPressing ? 'סורק...' : 'החזק כאן'}
+                {isVerified ? 'מאומת' : isPressing ? 'מחזיק...' : 'החזק כאן'}
               </span>
             </button>
           </div>
 
           {/* Micro-interaction status readout */}
           <div className="text-center h-12 flex flex-col justify-center items-center">
-            <div className={`text-xs font-bold transition-colors ${isPressing ? 'text-[#004387]' : 'text-gray-400'}`}>
+            <div className={`text-xs font-bold transition-colors ${isPressing ? 'text-[#004387]' : 'text-gray-400'}`} aria-live="polite">
               {getScannerStatus()}
             </div>
             
@@ -240,6 +245,7 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="text-sm font-mono font-extrabold text-[#004387] mt-0.5"
+                aria-hidden="true"
               >
                 {Math.round(progress)}%
               </motion.div>
@@ -247,10 +253,10 @@ export const HumanVerification = ({ onVerified }: { onVerified: () => void }) =>
           </div>
         </div>
 
-        {/* Footer info lock secure banner */}
+        {/* Footer info secure banner */}
         <div className="flex items-center gap-2 text-xs text-gray-400 border-t border-gray-100 pt-4 w-full justify-center">
-          <AlertCircle size={14} className="text-[#004387]/60" />
-          <span>מערכת אבטחה ביומטרית מורשה B2B Secure Gate</span>
+          <Shield size={14} className="text-[#004387]/60" />
+          <span>פורטל B2B מוגן</span>
         </div>
       </motion.div>
     </div>

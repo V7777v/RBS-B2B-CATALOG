@@ -1,6 +1,8 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
+import AppErrorBoundary from './AppErrorBoundary.tsx';
+import { Analytics } from '@vercel/analytics/react';
 import './index.css';
 
 // Automated PWA Update & Hot-Reload Orchestrator
@@ -52,6 +54,16 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <AppErrorBoundary>
+      <App />
+      <Analytics />
+    </AppErrorBoundary>
   </StrictMode>,
 );
+
+// Clear the chunk-reload guard once the app has loaded healthily.
+if (typeof window !== 'undefined') {
+  window.addEventListener('load', () => {
+    setTimeout(() => { try { sessionStorage.removeItem('rbs-chunk-reloaded'); } catch {} }, 4000);
+  });
+}

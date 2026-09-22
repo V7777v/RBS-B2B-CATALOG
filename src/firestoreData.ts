@@ -99,10 +99,8 @@ export async function loadAgentOrders(agentName: string): Promise<any[]> {
     const q = query(collection(db, 'orders'), where('agent', '==', agentName), orderBy('createdAt', 'desc'), limit(200));
     const snap = await getDocs(q);
     const res = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-    console.log('[RBS] loadAgentOrders agent=', JSON.stringify(agentName), '→', res.length, 'orders');
     return res;
   } catch (e) {
-    console.error('loadAgentOrders failed:', e);
     return [];
   }
 }
@@ -123,10 +121,11 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
   } catch { /* ignore */ }
 }
 
-export async function updateOrder(orderId: string, fields: Record<string, any>): Promise<void> {
+export async function updateOrder(orderId: string, fields: Record<string, any>): Promise<boolean> {
   try {
     await setDoc(doc(db, 'orders', orderId), { ...sanitizeForFirestore(fields), updatedAt: serverTimestamp() }, { merge: true });
-  } catch (e) { console.error('updateOrder failed:', e); }
+    return true;
+  } catch (e) { console.error('updateOrder failed:', e); return false; }
 }
 
 // ---------- Real-time order notifications (agent/manager) ----------
@@ -150,27 +149,60 @@ export function subscribeAllOrders(cb: (orders: any[]) => void): () => void {
 }
 
 // ---------- Quotes (quotes/{quoteId}) ----------
-export async function saveQuote(data: Record<string, any>, quoteId?: string | null): Promise<string | null> {
+export const normalizeEmail = (value: unknown): string => String(value ?? '').trim().toLowerCase();
+
+export async function saveQuote(data: Record<string, any>, quoteId?: string | null): Promise<string> {
   try {
+    const payload = { ...data };
+    
     if (quoteId) {
-      await setDoc(doc(db, 'quotes', quoteId), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+      delete payload.customerEmail;
+      delete payload.agentUid;
+      delete payload.createdAt;
+      await setDoc(doc(db, 'quotes', quoteId), { ...sanitizeForFirestore(payload), updatedAt: serverTimestamp() }, { merge: true });
       return quoteId;
     }
-    const ref = await addDoc(collection(db, 'quotes'), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+
+    const normalizedCustomerEmail = normalizeEmail(payload.customerEmail);
+    if (!normalizedCustomerEmail) {
+      const error = new Error('CUSTOMER_EMAIL_REQUIRED');
+      (error as any).code = 'CUSTOMER_EMAIL_REQUIRED';
+      throw error;
+    }
+    payload.customerEmail = normalizedCustomerEmail;
+
+    const ref = await addDoc(collection(db, 'quotes'), { ...sanitizeForFirestore(payload), createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
     return ref.id;
-  } catch {
-    return null;
+  } catch (error: any) {
+    console.error('[Firestore] saveQuote failed', {
+      code: error?.code || 'UNKNOWN'
+    });
+    throw error;
   }
 }
 
-export async function loadAgentQuotes(agentName: string): Promise<any[]> {
+export async function loadAgentQuotes(agentUid: string): Promise<any[]> {
   try {
-    const q = query(collection(db, 'quotes'), where('agentName', '==', agentName));
+    const q = query(collection(db, 'quotes'), where('agentUid', '==', agentUid));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
   } catch {
     return [];
   }
+}
+
+export function subscribeAgentQuotes(agentUid: string, cb: (quotes: any[]) => void): () => void {
+  try {
+    const qq = query(collection(db, 'quotes'), where('agentUid', '==', agentUid));
+    return onSnapshot(qq, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), (e) => console.error('subscribeAgentQuotes error:', e));
+  } catch { return () => {}; }
+}
+
+export function subscribeAllQuotes(cb: (quotes: any[]) => void): () => void {
+  try {
+    const qq = query(collection(db, 'quotes'), orderBy('createdAt', 'desc'), limit(200));
+    return onSnapshot(qq, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), (e) => console.error('subscribeAllQuotes error:', e));
+  } catch { return () => {}; }
 }
 
 export async function loadAllQuotes(): Promise<any[]> {
@@ -185,12 +217,55 @@ export async function loadAllQuotes(): Promise<any[]> {
 
 export async function loadCustomerQuotes(email: string): Promise<any[]> {
   try {
-    const q = query(collection(db, 'quotes'), where('customerEmail', '==', email.toLowerCase()));
+    const q = query(
+      collection(db, 'quotes'),
+      where('customerEmail', '==', normalizeEmail(email)),
+      where('status', 'in', ['sent', 'approved', 'rejected'])
+    );
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-  } catch {
-    return [];
+  } catch (error: any) {
+    console.error('[Firestore] loadCustomerQuotes failed', {
+      code: error?.code || 'UNKNOWN'
+    });
+    throw error;
   }
+}
+
+export function subscribeCustomerQuotes(
+  email: string,
+  onData: (quotes: any[]) => void,
+  onError?: (error: unknown) => void
+): () => void {
+  const normalizedEmail = normalizeEmail(email);
+  const q = query(
+    collection(db, 'quotes'),
+    where('customerEmail', '==', normalizedEmail),
+    where('status', 'in', ['sent', 'approved', 'rejected'])
+  );
+  
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const rows = snapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      }));
+      // Sort in JS to avoid requiring a composite index
+      rows.sort((a: any, b: any) => {
+        const tA = b.updatedAt?.toMillis?.() || b.createdAt?.toMillis?.() || 0;
+        const tB = a.updatedAt?.toMillis?.() || a.createdAt?.toMillis?.() || 0;
+        return tA - tB;
+      });
+      onData(rows);
+    },
+    (error) => {
+      console.error('[Firestore] customer quote subscription failed', {
+        code: (error as any)?.code || 'UNKNOWN'
+      });
+      onError?.(error);
+    }
+  );
 }
 
 export async function updateQuoteStatus(quoteId: string, status: string): Promise<void> {
@@ -200,9 +275,7 @@ export async function updateQuoteStatus(quoteId: string, status: string): Promis
 }
 
 export async function updateQuote(quoteId: string, fields: Record<string, any>): Promise<void> {
-  try {
-    await setDoc(doc(db, 'quotes', quoteId), { ...sanitizeForFirestore(fields), updatedAt: serverTimestamp() }, { merge: true });
-  } catch (e) { console.error('updateQuote failed:', e); }
+  await setDoc(doc(db, 'quotes', quoteId), { ...sanitizeForFirestore(fields), updatedAt: serverTimestamp() }, { merge: true });
 }
 
 export async function deleteQuote(quoteId: string): Promise<void> {

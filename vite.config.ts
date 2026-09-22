@@ -12,10 +12,10 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',
-        includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icons/*.png'],
+        includeAssets: ['favicon.png', 'apple-touch-icon.png', 'apple-touch-icon-v2.png', 'icons/*.png', 'og-image.png', 'advisor-avatar.png'],
         manifest: {
-          name: 'RBS Catalog',
-          short_name: 'RBS',
+          name: 'קטלוג RBS Telecom',
+          short_name: 'קטלוג RBS',
           description: 'קטלוג B2B - RBS Telecom',
           theme_color: '#0c2d57',
           background_color: '#ffffff',
@@ -26,13 +26,17 @@ export default defineConfig(() => {
           lang: 'he',
           dir: 'rtl',
           icons: [
-            { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-            { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-            { src: 'icons/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+            { src: '/icons/icon-192-v2.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: '/icons/icon-512-v2.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+            { src: '/icons/icon-512-maskable-v2.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
           ]
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+          cleanupOutdatedCaches: true,
+          skipWaiting: true,
+          clientsClaim: true,
           navigateFallbackDenylist: [
             /^\/api/,
             /sheets\.googleapis\.com/,
@@ -43,14 +47,12 @@ export default defineConfig(() => {
           ],
           runtimeCaching: [
             {
+              // SECURITY: /api/sheets returns role-dependent data (agents get cost/wholesale).
+              // Never cache it in the Service Worker — a cached agent response must not be
+              // served to a customer/guest on the same device (cross-role leak). Network only.
               urlPattern: ({ url }) => url.pathname.startsWith('/api/sheets'),
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'catalog-data',
-                networkTimeoutSeconds: 4,
-                expiration: { maxEntries: 10, maxAgeSeconds: 24 * 60 * 60 },
-                cacheableResponse: { statuses: [0, 200] }
-              }
+              handler: 'NetworkOnly',
+              options: { cacheName: 'no-cache-catalog' }
             },
             {
               urlPattern: ({ url }) =>
@@ -66,6 +68,7 @@ export default defineConfig(() => {
             {
               urlPattern: ({ request, url }) =>
                 request.destination === 'image' &&
+                !url.pathname.startsWith('/icons') &&
                 !url.hostname.includes('googleusercontent.com') &&
                 !url.hostname.includes('drive.google.com'),
               handler: 'CacheFirst',
@@ -100,12 +103,9 @@ export default defineConfig(() => {
                 expiration: { maxEntries: 20, maxAgeSeconds: 31536000 }
               }
             }
-          ],
-          cleanupOutdatedCaches: true,
-          skipWaiting: true,
-          clientsClaim: true
+          ]
         },
-        devOptions: { enabled: false }
+        devOptions: { enabled: true }
       })
     ],
     resolve: {
@@ -114,6 +114,7 @@ export default defineConfig(() => {
       },
     },
     build: {
+      sourcemap: false,
       cssCodeSplit: true,
       target: 'es2019',
       minify: 'esbuild',
@@ -124,11 +125,8 @@ export default defineConfig(() => {
               if (id.includes('xlsx') || id.includes('jszip')) {
                 return 'vendor-xlsx';
               }
-              if (id.includes('react') || id.includes('scheduler') || id.includes('react-dom') || id.includes('react-zoom-pan-pinch')) {
+              if (id.includes('react') || id.includes('scheduler') || id.includes('react-dom') || id.includes('react-zoom-pan-pinch') || id.includes('motion') || id.includes('framer-motion')) {
                 return 'vendor-react-core';
-              }
-              if (id.includes('motion') || id.includes('framer-motion')) {
-                return 'vendor-motion';
               }
               if (id.includes('lucide-react')) {
                 return 'vendor-icons';

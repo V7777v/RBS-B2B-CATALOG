@@ -1,23 +1,46 @@
 <!doctype html>
 <html lang="he" dir="rtl">
   <head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-NZLQG68M22"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-NZLQG68M22');
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
-    <meta name="theme-color" content="#0c2d57" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-v2.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="RBS" />
+    <meta name="theme-color" content="#0c2d57" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="RBS" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="icon" href="/favicon.png" type="image/png" />
     <link rel="preconnect" href="https://docs.google.com" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" />
     <title>קטלוג RBS</title>
+
+    <!-- Open Graph / link preview (WhatsApp, Telegram, Facebook) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="RBS Telecom" />
+    <meta property="og:title" content="קטלוג RBS Telecom" />
+    <meta property="og:description" content="מצלמות אבטחה, רשת ותקשורת — HIKVISION, EZVIZ ועוד. קטלוג B2B למפיצים ומתקינים." />
+    <meta property="og:image" content="https://rbs-b2-b-catalog.vercel.app/og-image.png" />
+    <meta property="og:image:width" content="256" />
+    <meta property="og:image:height" content="256" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:url" content="https://rbs-b2-b-catalog.vercel.app/" />
+    <meta name="description" content="מצלמות אבטחה, רשת ותקשורת — HIKVISION, EZVIZ ועוד. קטלוג B2B למפיצים ומתקינים." />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="קטלוג RBS Telecom" />
+    <meta name="twitter:description" content="מצלמות אבטחה, רשת ותקשורת — HIKVISION, EZVIZ ועוד." />
+    <meta name="twitter:image" content="https://rbs-b2-b-catalog.vercel.app/og-image.png" />
     <style>
-      .skip-to-content { position: absolute; right: -9999px; top: 8px; z-index: 1000; background: #004387; color: #fff; padding: 10px 18px; border-radius: 6px; font-weight: 700; text-decoration: none; }
-      .skip-to-content:focus { right: 8px; }
       *:focus-visible { outline: 3px solid #f7941d; outline-offset: 2px; }
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
@@ -46,6 +69,15 @@
       /* prevent long unbroken strings (SKUs, emails, URLs) from breaking mobile layout */
       body { overflow-wrap: break-word; }
     </style>
+    <script>
+      window.__deferredPrompt = null;
+      window.__promptListeners = [];
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.__deferredPrompt = e;
+        window.__promptListeners.forEach(function(l) { l(e); });
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

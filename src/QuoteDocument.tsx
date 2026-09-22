@@ -23,7 +23,7 @@ export type QuoteLine = {
 
 export type QuoteDocData = {
   id?: string; agentName?: string; customerCompany?: string; customerEmail?: string;
-  customerPhone?: string; items?: QuoteLine[]; note?: string; createdAt?: any; signature?: string; signerName?: string;
+  customerPhone?: string; items?: QuoteLine[]; note?: string; createdAt?: any; signature?: string; signerName?: string; signedBy?: string;
 };
 
 type Props = {
@@ -256,7 +256,7 @@ const QuoteDocument: React.FC<Props> = ({ data, mode = 'view', onLineChange, onR
           {data.signature
             ? <img src={data.signature} alt="חתימה" className="h-16 w-44 object-contain border border-gray-200 rounded bg-white" />
             : <div className="h-16 w-44 border-b-2 border-gray-300" />}
-          {data.signerName && <div className="text-xs text-gray-600 mt-1">{data.signerName}</div>}
+          {(data.signerName || data.signedBy) && <div className="text-xs text-gray-600 mt-1">{data.signerName || data.signedBy}</div>}
         </div>
       </div>
     </div>
