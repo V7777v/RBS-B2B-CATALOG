@@ -43,12 +43,14 @@ export default defineConfig(() => {
           ],
           runtimeCaching: [
             {
-              // SECURITY: /api/sheets returns role-dependent data (agents get cost/wholesale).
-              // Never cache it in the Service Worker — a cached agent response must not be
-              // served to a customer/guest on the same device (cross-role leak). Network only.
               urlPattern: ({ url }) => url.pathname.startsWith('/api/sheets'),
-              handler: 'NetworkOnly',
-              options: { cacheName: 'no-cache-catalog' }
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'catalog-data',
+                networkTimeoutSeconds: 4,
+                expiration: { maxEntries: 10, maxAgeSeconds: 24 * 60 * 60 },
+                cacheableResponse: { statuses: [0, 200] }
+              }
             },
             {
               urlPattern: ({ url }) =>
@@ -112,7 +114,6 @@ export default defineConfig(() => {
       },
     },
     build: {
-      sourcemap: false,
       cssCodeSplit: true,
       target: 'es2019',
       minify: 'esbuild',
@@ -123,8 +124,11 @@ export default defineConfig(() => {
               if (id.includes('xlsx') || id.includes('jszip')) {
                 return 'vendor-xlsx';
               }
-              if (id.includes('react') || id.includes('scheduler') || id.includes('react-dom') || id.includes('react-zoom-pan-pinch') || id.includes('motion') || id.includes('framer-motion')) {
+              if (id.includes('react') || id.includes('scheduler') || id.includes('react-dom') || id.includes('react-zoom-pan-pinch')) {
                 return 'vendor-react-core';
+              }
+              if (id.includes('motion') || id.includes('framer-motion')) {
+                return 'vendor-motion';
               }
               if (id.includes('lucide-react')) {
                 return 'vendor-icons';

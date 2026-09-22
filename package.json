@@ -7,20 +7,17 @@
     "prebuild": "npx tsx scripts/setup_icon.ts",
     "dev": "tsx server.ts",
     "build": "vite build",
-    "build:selfhost": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=server-dist/server.cjs",
-    "start": "node server-dist/server.cjs",
+    "start": "node server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "npx tsx test-api-sheets.ts"
+    "test": "node fetchCSV.js"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
     "@google/genai": "^2.7.0",
-    "@tailwindcss/container-queries": "^0.1.1",
     "@tailwindcss/vite": "^4.1.14",
     "@types/papaparse": "^5.5.2",
-    "@vercel/analytics": "^2.0.1",
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",

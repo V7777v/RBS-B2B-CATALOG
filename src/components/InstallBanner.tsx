@@ -1,35 +1,14 @@
 import React, { useState, useEffect, ReactNode, Component, ErrorInfo } from 'react';
 
-// TypeScript Declarations
-interface BeforeInstallPromptEvent extends Event {
-  readonly platforms: string[];
-  readonly userChoice: Promise<{
-    outcome: 'accepted' | 'dismissed';
-    platform: string;
-  }>;
-  prompt(): Promise<void>;
-}
-
-declare global {
-  interface WindowEventMap {
-    beforeinstallprompt: BeforeInstallPromptEvent;
-  }
-  interface Window {
-    MSStream?: any;
-  }
-  interface Navigator {
-    standalone?: boolean;
-  }
-}
-
 interface ErrorBoundaryProps {
   children: ReactNode;
 }
+
 interface ErrorBoundaryState {
   hasError: boolean;
 }
 
-class BannerErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class BannerErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false };
@@ -44,99 +23,67 @@ class BannerErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
-const DISMISS_KEY = 'rbs_pwa_install_dismissed_v1.2';
+const DISMISS_KEY = 'rbs_pwa_install_dismissed_v1';
 const DISMISS_DAYS = 14;
 
-type Platform = 'ios' | 'android' | 'desktop' | 'unknown';
-
-// Listen for the prompt event globally, as early as possible.
-// We now rely on the inline script in index.html to catch the very first event.
 declare global {
   interface Window {
-    __deferredPrompt?: BeforeInstallPromptEvent | null;
-    __promptListeners?: ((e: BeforeInstallPromptEvent) => void)[];
+    MSStream?: any;
+  }
+  interface Navigator {
+    standalone?: boolean;
   }
 }
 
 function InstallBannerInner() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(
-    (typeof window !== 'undefined' ? window.__deferredPrompt : null) as BeforeInstallPromptEvent | null
-  );
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [show, setShow] = useState(false);
-  const [platform, setPlatform] = useState<Platform>('unknown');
+  const [platform, setPlatform] = useState('unknown');
   const [isStandalone, setIsStandalone] = useState(false);
-  const [showInstructions, setShowInstructions] = useState(false);
 
   useEffect(() => {
     try {
-      // 1. Check if already installed
-      const isStandaloneCheck =
+      const standaloneCheck =
         window.matchMedia?.('(display-mode: standalone)').matches ||
-        window.navigator.standalone === true ||
-        document.referrer.startsWith('android-app://');
+        window.navigator.standalone === true;
+      setIsStandalone(standaloneCheck);
+      if (standaloneCheck) return;
 
-      setIsStandalone(!!isStandaloneCheck);
-      if (isStandaloneCheck) return;
-
-      // 2. Check if dismissed recently
       const dismissedAt = localStorage.getItem(DISMISS_KEY);
       if (dismissedAt) {
         const daysSince = (Date.now() - parseInt(dismissedAt, 10)) / 86400000;
         if (daysSince < DISMISS_DAYS) return;
       }
 
-      // 3. Detect Platform
       const ua = window.navigator.userAgent || '';
-      const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-      const isIOS = /iPhone|iPad|iPod/i.test(ua) && !window.MSStream || isIPadOS;
+      const isIOS = /iPhone|iPad|iPod/i.test(ua) && !window.MSStream;
       const isAndroid = /Android/i.test(ua);
-      
-      let detectedPlatform: Platform = 'desktop';
-      if (isIOS) detectedPlatform = 'ios';
-      else if (isAndroid) detectedPlatform = 'android';
-      
-      setPlatform(detectedPlatform);
 
-      // Show banner after delay
-      const showTimer = setTimeout(() => {
-        setShow(true);
-        // On iOS, if we show, we might want to automatically show instructions since native prompt won't work
-        if (detectedPlatform === 'ios') {
-          setShowInstructions(true);
-        }
-      }, 2500);
-
-      // 4. Listen for native prompt
-      const promptHandler = (e: BeforeInstallPromptEvent) => {
-        setDeferredPrompt(e);
-        setShowInstructions(false); // Hide instructions if prompt becomes available
-      };
-
-      if (window.__deferredPrompt) {
-        setDeferredPrompt(window.__deferredPrompt);
-      }
-      if (window.__promptListeners) {
-        window.__promptListeners.push(promptHandler);
+      if (isIOS) {
+        setPlatform('ios');
+        setTimeout(() => setShow(true), 1500);
+      } else if (isAndroid) {
+        setPlatform('android');
+        setTimeout(() => setShow(true), 2500);
       } else {
-        window.__promptListeners = [promptHandler];
+        setPlatform('desktop');
       }
+
+      const handler = (e: any) => {
+        e.preventDefault();
+        setDeferredPrompt(e);
+        setShow(true);
+      };
+      window.addEventListener('beforeinstallprompt', handler);
 
       const installedHandler = () => {
         setShow(false);
         setDeferredPrompt(null);
-        if (window) {
-          window.__deferredPrompt = null;
-        }
-        setIsStandalone(true);
       };
-
       window.addEventListener('appinstalled', installedHandler);
 
       return () => {
-        clearTimeout(showTimer);
-        if (window.__promptListeners) {
-          window.__promptListeners = window.__promptListeners.filter(l => l !== promptHandler);
-        }
+        window.removeEventListener('beforeinstallprompt', handler);
         window.removeEventListener('appinstalled', installedHandler);
       };
     } catch (err) {
@@ -146,22 +93,17 @@ function InstallBannerInner() {
 
   const handleInstallClick = async () => {
     try {
-      if (!deferredPrompt) {
-        setShowInstructions(true);
-        return;
-      }
-      await deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
-      if (choice.outcome === 'dismissed') {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'dismissed') {
         localStorage.setItem(DISMISS_KEY, String(Date.now()));
-        setShow(false);
-      } else if (choice.outcome === 'accepted') {
-        setShow(false);
       }
       setDeferredPrompt(null);
+      setShow(false);
     } catch (err) {
       console.warn('[InstallBanner] install prompt failed:', err);
-      setShowInstructions(true);
+      setShow(false);
     }
   };
 
@@ -173,147 +115,53 @@ function InstallBannerInner() {
   if (isStandalone) return null;
   if (!show) return null;
 
-  const getInstructionText = () => {
-    if (platform === 'ios') {
-      return 'באייפון: לחץ על כפתור השיתוף ⬆️ ובחר "הוסף למסך הבית" / "Add to Home Screen".';
-    } else if (platform === 'android') {
-      return 'אם האייקון לא הופיע במסך הבית: פתח את רשימת האפליקציות, מצא את RBS, לחץ לחיצה ארוכה וגרור למסך הבית.';
-    } else {
-      return 'פתח את תפריט הדפדפן ⋮ ובחר "Install app".';
-    }
-  };
-
-  const hasNativePrompt = !!deferredPrompt;
-
   const containerStyle: React.CSSProperties = {
-    position: 'fixed', 
-    bottom: 'calc(16px + env(safe-area-inset-bottom))', 
-    left: '16px', 
-    zIndex: 9999, 
-    background: '#ffffff', 
-    color: '#0c2d57',
-    border: '1px solid #e5e7eb',
-    borderRadius: '16px', 
-    padding: '20px',
-    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)',
-    direction: 'rtl', 
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    width: 'calc(100% - 32px)', 
-    maxWidth: '400px', 
-    display: 'flex', 
-    flexDirection: 'column', 
-    gap: '12px'
+    position: 'fixed', bottom: '16px', left: '16px', right: '16px',
+    zIndex: 9999, background: '#1a1a1a', color: '#fff',
+    borderRadius: '14px', padding: '16px',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+    direction: 'rtl', fontFamily: 'system-ui, -apple-system, sans-serif',
+    maxWidth: '480px', margin: '0 auto',
+    display: 'flex', flexDirection: 'column', gap: '12px'
   };
-
-  const titleStyle: React.CSSProperties = { 
-    fontSize: '18px', 
-    fontWeight: 800, 
-    margin: 0, 
-    color: '#004387',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  };
-  
-  const textStyle: React.CSSProperties = { 
-    fontSize: '14px', 
-    lineHeight: 1.5, 
-    margin: 0, 
-    color: '#4b5563',
-    fontWeight: 500
-  };
-  
-  const instructionBoxStyle: React.CSSProperties = {
-    background: '#f3f4f6',
-    borderRadius: '8px',
-    padding: '12px',
-    fontSize: '13px',
-    color: '#0c2d57',
-    fontWeight: 600,
-    lineHeight: 1.5,
-    borderRight: '4px solid #004387'
-  };
-
-  const buttonsRow: React.CSSProperties = { 
-    display: 'flex', 
-    gap: '12px', 
-    justifyContent: 'flex-start',
-    marginTop: '4px'
-  };
-
+  const titleStyle: React.CSSProperties = { fontSize: '16px', fontWeight: 600, margin: 0 };
+  const textStyle: React.CSSProperties = { fontSize: '14px', lineHeight: 1.5, margin: 0, opacity: 0.9 };
+  const buttonsRow: React.CSSProperties = { display: 'flex', gap: '8px', justifyContent: 'flex-end' };
   const primaryBtn: React.CSSProperties = {
-    background: '#ff7a00', 
-    color: '#fff', 
-    border: 'none',
-    padding: '12px 20px', 
-    borderRadius: '10px',
-    fontSize: '14px', 
-    fontWeight: 700, 
-    cursor: 'pointer',
-    flex: 1,
-    textAlign: 'center',
-    boxShadow: '0 4px 12px rgba(255, 122, 0, 0.3)'
+    background: '#ff7a00', color: '#fff', border: 'none',
+    padding: '10px 16px', borderRadius: '8px',
+    fontSize: '14px', fontWeight: 600, cursor: 'pointer'
   };
-
-  const instructionBtn: React.CSSProperties = {
-    background: '#004387', 
-    color: '#fff', 
-    border: 'none',
-    padding: '12px 20px', 
-    borderRadius: '10px',
-    fontSize: '14px', 
-    fontWeight: 700, 
-    cursor: 'pointer',
-    flex: 1,
-    textAlign: 'center'
-  };
-
   const secondaryBtn: React.CSSProperties = {
-    background: 'transparent', 
-    color: '#6b7280',
-    border: 'none',
-    padding: '12px 16px', 
-    borderRadius: '10px',
-    fontSize: '14px', 
-    fontWeight: 600,
-    cursor: 'pointer',
-    textAlign: 'center',
-    textDecoration: 'underline'
+    background: 'transparent', color: '#fff',
+    border: '1px solid rgba(255,255,255,0.3)',
+    padding: '10px 16px', borderRadius: '8px',
+    fontSize: '14px', cursor: 'pointer'
   };
 
   return (
     <div style={containerStyle} role="dialog" aria-label="הצעת התקנה">
-      <h3 style={titleStyle}>
-        <span style={{ fontSize: '24px' }}>📲</span> גישה מהירה לקטלוג RBS
-      </h3>
-      
-      <p style={textStyle}>
-        התקן את הקטלוג כאפליקציה וקבל גישה מהירה מהמחשב או מהטלפון.
-      </p>
-
-      {/* Show instructions automatically on iOS and Desktop without native prompt */}
-      {(platform === 'ios' || (platform === 'desktop' && !hasNativePrompt) || (platform === 'android' && showInstructions)) && (
-        <div style={instructionBoxStyle}>
-          {getInstructionText()}
-        </div>
+      <h3 style={titleStyle}>📲 התקן את קטלוג RBS למסך הבית</h3>
+      {platform === 'ios' ? (
+        <p style={textStyle}>
+          כדי להוסיף את הקטלוג למסך הבית: לחץ על כפתור השיתוף ⬆️ בתחתית הדפדפן,
+          ואז בחר "הוסף למסך הבית" (Add to Home Screen).
+        </p>
+      ) : platform === 'android' && !deferredPrompt ? (
+        <p style={textStyle}>
+          כדי להוסיף את הקטלוג למסך הבית: פתח את תפריט הדפדפן (שלוש נקודות למעלה)
+          ובחר "הוסף למסך הבית" (Add to Home Screen) או "התקן אפליקציה".
+        </p>
+      ) : (
+        <p style={textStyle}>
+          גישה מהירה לקטלוג ישירות ממסך הבית, ללא צורך בפתיחת דפדפן.
+        </p>
       )}
-
       <div style={buttonsRow}>
-        {hasNativePrompt && platform !== 'ios' && (
-          <button style={primaryBtn} onClick={handleInstallClick}>
-            התקן כאפליקציה
-          </button>
+        <button style={secondaryBtn} onClick={handleDismiss}>המשך לגלוש בדפדפן</button>
+        {platform !== 'ios' && deferredPrompt && (
+          <button style={primaryBtn} onClick={handleInstallClick}>התקן עכשיו</button>
         )}
-
-        {platform === 'android' && !showInstructions && (
-          <button style={secondaryBtn} onClick={() => setShowInstructions(true)}>
-            איך להוסיף למסך הבית?
-          </button>
-        )}
-
-        <button style={secondaryBtn} onClick={handleDismiss}>
-          המשך בדפדפן
-        </button>
       </div>
     </div>
   );

@@ -1,17 +1,41 @@
 import "dotenv/config";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI } from "@google/genai";
+import Papa from "papaparse";
 import { jwtVerify, createRemoteJWKSet } from "jose";
-import { fetchSheetCSVDataV4 } from "../_lib/googleSheets.js";
 
 // App Check token verification (reCAPTCHA v3) via Firebase App Check public JWKS.
 const APP_CHECK_JWKS = createRemoteJWKSet(new URL("https://firebaseappcheck.googleapis.com/v1/jwks"));
 const APP_CHECK_PROJECT_NUMBER = "224025193925";
+// --- Google Service Account OAuth token (for PRIVATE sheet access; cached ~55 min) ---
+import { SignJWT, importPKCS8 } from "jose";
+let googleToken: { token: string; exp: number } | null = null;
+async function getGoogleToken(): Promise<string | null> {
+  const email = process.env.GOOGLE_SA_EMAIL;
+  let key = process.env.GOOGLE_SA_PRIVATE_KEY;
+  if (!email || !key) return null;
+  if (googleToken && Date.now() < googleToken.exp - 60_000) return googleToken.token;
+  try {
+    key = key.replace(/\\n/g, "\n");
+    const pk = await importPKCS8(key, "RS256");
+    const now = Math.floor(Date.now() / 1000);
+    const assertion = await new SignJWT({ scope: "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly" })
+      .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+      .setIssuer(email).setAudience("https://oauth2.googleapis.com/token")
+      .setIssuedAt(now).setExpirationTime(now + 3600).sign(pk);
+    const r = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=${encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer")}&assertion=${assertion}`
+    });
+    if (!r.ok) { console.error("SA token exchange failed:", r.status); return null; }
+    const d: any = await r.json();
+    googleToken = { token: d.access_token, exp: Date.now() + (d.expires_in || 3600) * 1000 };
+    return googleToken.token;
+  } catch (e) { console.error("SA token error:", e); return null; }
+}
 
 async function verifyAppCheck(token: string): Promise<boolean> {
-  if (process.env.NODE_ENV !== "production" && token === "DEV_PREVIEW_BYPASS") {
-    return true;
-  }
   try {
     await jwtVerify(token, APP_CHECK_JWKS, {
       issuer: `https://firebaseappcheck.googleapis.com/${APP_CHECK_PROJECT_NUMBER}`,
@@ -24,6 +48,7 @@ async function verifyAppCheck(token: string): Promise<boolean> {
 }
 
 // Google Sheets context configurations
+const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
 const PRODUCTS_GID = '1506812668';
 const CATALOGS_GID = '1781083359';
 
@@ -41,8 +66,31 @@ const rateMap = new Map<string, number[]>();
 const RATE_LIMIT = 20;
 const RATE_WINDOW_MS = 60 * 1000;
 
+// Helper to fetch and parse Google Sheet as CSV
+async function fetchSheetCSV(gid: string): Promise<any[]> {
+  const url = `${SHEET_URL}/gviz/tq?tqx=out:csv&gid=${gid}&_=${Date.now()}`;
+  const gTok = await getGoogleToken();
+  const response = await fetch(url, gTok ? { headers: { Authorization: `Bearer ${gTok}` } } : undefined);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch sheet GID ${gid}: ${response.statusText}`);
+  }
+  const text = await response.text();
+  return new Promise((resolve) => {
+    Papa.parse(text, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        resolve(results.data);
+      },
+      error: () => {
+        resolve([]);
+      }
+    });
+  });
+}
+
 // Function to pull all products and catalogs
-async function getCatalogDataContext(requestId: string): Promise<any[]> {
+async function getCatalogDataContext(): Promise<any[]> {
   try {
     const now = Date.now();
     if (catalogCache && (now - catalogCache.lastFetchedAt < CACHE_TTL_MS)) {
@@ -50,10 +98,9 @@ async function getCatalogDataContext(requestId: string): Promise<any[]> {
     }
 
     const [productsRaw, catalogsRaw] = await Promise.all([
-      fetchSheetCSVDataV4(PRODUCTS_GID, requestId),
-      fetchSheetCSVDataV4(CATALOGS_GID, requestId)
+      fetchSheetCSV(PRODUCTS_GID),
+      fetchSheetCSV(CATALOGS_GID)
     ]);
-
 
     // Format products lightly for high value / lower token footprint
     const toPrice = (v: any): number | null => {
@@ -264,8 +311,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 1. Get complete context from RBS catalog
-    const requestId = Array.isArray(req.headers["x-vercel-id"]) ? req.headers["x-vercel-id"][0] : (req.headers["x-vercel-id"] || crypto.randomUUID());
-    const products = await getCatalogDataContext(requestId);
+    const products = await getCatalogDataContext();
 
     // 2. Pre-filter relevant products
     const { matches: relevantProducts, maxScore, tokenCount } = findRelevantProducts(message, products);
@@ -383,6 +429,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           type: "ai_response",
           text: `⚠️ **חיבור ה-AI נכשל בפנייה לשרתי Google.**
 
+**פרטי השגיאה:**
+\`\`\`
+${errorMsg}
+\`\`\`
+
 **הצעות לפתרון לעבודה עם RBS Expert:**
 1. פתח את תפריט הגדרות ה-**Secrets** של הפרויקט ב-AI Studio.
 2. ודא שהוספת את המשתנה \`GEMINI_API_KEY\` עם מפתח API תקין ופעיל.
@@ -408,10 +459,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
   } catch (error: any) {
-    console.error("Gemini Advisor Endpoint Error:", { code: error.code || "UNKNOWN" });
+    console.error("Gemini Advisor Endpoint Error:", error);
     res.status(500).json({ 
       error: "Error processing request", 
-      details: "שגיאה בטעינת הקטלוג. נסה שוב."
+      details: error.message || error
     });
   }
 }

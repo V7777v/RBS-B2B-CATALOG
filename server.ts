@@ -5,8 +5,41 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import Papa from "papaparse";
 import fs from "fs";
-import { jwtVerify, createRemoteJWKSet } from "jose";
-import { fetchSheetDataV4, fetchSheetCSVDataV4 } from "./api/_lib/googleSheets.js";
+import { importPKCS8, SignJWT } from "jose";
+
+let googleToken: { token: string; exp: number } | null = null;
+async function getGoogleToken(): Promise<string | null> {
+  const email = process.env.GOOGLE_SA_EMAIL;
+  let key = process.env.GOOGLE_SA_PRIVATE_KEY;
+  if (!email || !key) return null;
+  if (googleToken && Date.now() < googleToken.exp - 60_000) return googleToken.token;
+  try {
+    key = key.replace(/\\n/g, "\n");
+    const pk = await importPKCS8(key, "RS256");
+    const now = Math.floor(Date.now() / 1000);
+    const assertion = await new SignJWT({
+      scope: "https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly"
+    })
+      .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+      .setIssuer(email)
+      .setAudience("https://oauth2.googleapis.com/token")
+      .setIssuedAt(now)
+      .setExpirationTime(now + 3600)
+      .sign(pk);
+    const r = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=${encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer")}&assertion=${assertion}`
+    });
+    if (!r.ok) return null;
+    const d: any = await r.json();
+    googleToken = { token: d.access_token, exp: Date.now() + (d.expires_in || 3600) * 1000 };
+    return googleToken.token;
+  } catch (e) {
+    console.error("SA token error:", e);
+    return null;
+  }
+}
 
 const app = express();
 const PORT = 3000;
@@ -27,6 +60,78 @@ interface CachedCatalog {
 let catalogCache: CachedCatalog | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
 
+// Helper to fetch and parse Google Sheet as CSV
+async function fetchSheetDataV4(gid: string, limit?: string, offset?: string): Promise<string> {
+  const gTok = await getGoogleToken();
+  if (!gTok) {
+    throw new Error("Google Service Account credentials not configured (missing GOOGLE_SA_EMAIL/GOOGLE_SA_PRIVATE_KEY)");
+  }
+  const headers: Record<string, string> = {
+    "Authorization": `Bearer ${gTok}`
+  };
+
+  const SHEET_ID_ACTUAL = '1NtYwQeTX3blf0aMcvtnlk9liIaJOiG9BOsP4Qc8lSRs';
+
+  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID_ACTUAL}`;
+  const metaRes = await fetch(metaUrl, { headers });
+  if (!metaRes.ok) throw new Error(`Failed to fetch sheet metadata: ${metaRes.statusText}`);
+  const metaData = await metaRes.json();
+
+  const sheet = metaData.sheets.find((s: any) => String(s.properties.sheetId) === String(gid));
+  if (!sheet) throw new Error(`Sheet with GID ${gid} not found`);
+  const sheetTitle = sheet.properties.title;
+
+  const dataUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID_ACTUAL}/values/'${sheetTitle}'`;
+  const dataRes = await fetch(dataUrl, { headers });
+  if (!dataRes.ok) throw new Error(`Failed to fetch sheet data: ${dataRes.statusText}`);
+  const dataJson = await dataRes.json();
+
+  const rows = dataJson.values || [];
+  if (rows.length === 0) return "";
+
+  const headersRow = rows[0] || [];
+  let dataRows = rows.slice(1);
+  
+  if (offset) {
+      const off = parseInt(offset, 10);
+      if (!isNaN(off) && off > 0) dataRows = dataRows.slice(off);
+  }
+  if (limit) {
+      const lim = parseInt(limit, 10);
+      if (!isNaN(lim) && lim > 0) dataRows = dataRows.slice(0, lim);
+  }
+
+  const escapeCell = (cell: any) => {
+      if (cell == null) return "";
+      const str = String(cell);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+         return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+  };
+  
+  const csvRows = [];
+  csvRows.push(headersRow.map(escapeCell).join(','));
+  for (const row of dataRows) {
+      const paddedRow = headersRow.map((_, i) => row[i] || "");
+      csvRows.push(paddedRow.map(escapeCell).join(','));
+  }
+  
+  return csvRows.join('\n');
+}
+
+async function fetchSheetCSV(gid: string): Promise<any[]> {
+  const csvString = await fetchSheetDataV4(gid);
+  return new Promise((resolve) => {
+    Papa.parse(csvString, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results: any) => resolve(results.data),
+      error: () => resolve([])
+    });
+  });
+}
+
 // Function to pull all products and catalogs
 async function getCatalogDataContext(): Promise<any[]> {
   try {
@@ -36,10 +141,9 @@ async function getCatalogDataContext(): Promise<any[]> {
     }
 
     const [productsRaw, catalogsRaw] = await Promise.all([
-      fetchSheetCSVDataV4(PRODUCTS_GID, "server-catalog-fetch"),
-      fetchSheetCSVDataV4(CATALOGS_GID, "server-catalog-fetch")
+      fetchSheetCSV(PRODUCTS_GID),
+      fetchSheetCSV(CATALOGS_GID)
     ]);
-
 
     // Format products lightly for high value / lower token footprint
     const parsedProducts = productsRaw.map((row: any) => {
@@ -349,6 +453,11 @@ app.post("/api/advisor/chat", async (req, res) => {
           type: "ai_response",
           text: `⚠️ **חיבור ה-AI נכשל בפנייה לשרתי Google.**
 
+**פרטי השגיאה:**
+\`\`\`
+${errorMsg}
+\`\`\`
+
 **הצעות לפתרון לעבודה עם RBS Expert:**
 1. פתח את תפריט הגדרות ה-**Secrets** של הפרויקט ב-AI Studio.
 2. ודא שהוספת את המשתנה \`GEMINI_API_KEY\` עם מפתח API תקין ופעיל.
@@ -374,10 +483,10 @@ app.post("/api/advisor/chat", async (req, res) => {
     });
 
   } catch (error: any) {
-    console.error("Gemini Advisor Endpoint Error:", { code: error.code || "UNKNOWN" });
+    console.error("Gemini Advisor Endpoint Error:", error);
     res.status(500).json({ 
       error: "Error processing request", 
-      details: "שגיאה בטעינת הקטלוג. נסה שוב."
+      details: error.message || error
     });
   }
 });
@@ -400,72 +509,6 @@ interface SheetsCacheEntry {
 const sheetsCacheMap = new Map<string, SheetsCacheEntry>();
 const CACHE_TTL_SHEETS_MS = 45 * 1000; // 45 seconds cache is ideal
 
-const SENSITIVE_COLS_SERVER = ["מחיר עלות", "מחיר סיטונאות", "מחיר סיטונאי", "needsReview", "notes"];
-const FIREBASE_JWKS_SERVER = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
-
-async function isAgentOrManagerServer(authHeader: string | undefined): Promise<boolean> {
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return false;
-  }
-  const token = authHeader.substring(7);
-  try {
-    const { payload } = await jwtVerify(token, FIREBASE_JWKS_SERVER, {
-      issuer: "https://securetoken.google.com/rbs-b2b",
-      audience: "rbs-b2b"
-    });
-    
-    const uid = payload.sub;
-    if (!uid) return false;
-    
-    const url = `https://firestore.googleapis.com/v1/projects/rbs-b2b/databases/(default)/documents/approvedDistributors/${uid}`;
-    const res = await fetch(url, {
-      headers: { "Authorization": `Bearer ${token}` }
-    });
-    if (!res.ok) {
-      return false;
-    }
-    const data: any = await res.json();
-    const role = data.fields?.role?.stringValue;
-    return role === "agent" || role === "sales_manager";
-  } catch (err) {
-    console.warn("Express: Token or role verification failed:", err);
-    return false;
-  }
-}
-
-function stripSensitiveColumnsServer(csv: string, gid: string): string {
-  const parsed = Papa.parse<string[]>(csv, { skipEmptyLines: false });
-  const rows = (parsed.data || []) as string[][];
-  if (!rows.length || !Array.isArray(rows[0])) return csv;
-  
-  const header = rows[0];
-  const headerStrs = header.map(c => String(c).trim());
-  
-  // Is this the Products_React sheet?
-  // Check GID directly or specific product columns
-  const isProductsGid = gid === '1506812668';
-  const hasProductHeaders = headerStrs.includes('sku') && 
-                            headerStrs.includes('name') && 
-                            headerStrs.includes('price') && 
-                            headerStrs.includes('retailPrice');
-                            
-  if (!isProductsGid && !hasProductHeaders) {
-    return csv; // Do not strip other sheets like CatalogFolders or Subcategories!
-  }
-
-  const dropIdx = new Set<number>();
-  header.forEach((c, i) => { if (SENSITIVE_COLS_SERVER.includes(String(c).trim())) dropIdx.add(i); });
-  
-  if (dropIdx.size === 0) return csv;
-  
-  console.warn('[Sheets API] Product sensitive columns removed', { removedCount: dropIdx.size });
-
-  const out = rows
-    .filter((r) => !(r.length === 1 && r[0] === ""))
-    .map((r) => r.filter((_, i) => !dropIdx.has(i)));
-  return Papa.unparse(out);
-}
-
 // Proxy endpoint for cached Google Sheets access on Express
 app.get("/api/sheets", async (req, res) => {
   const { gid, limit, offset } = req.query;
@@ -474,8 +517,7 @@ app.get("/api/sheets", async (req, res) => {
   }
 
   const bypassCache = req.query.bypass_cache === "true";
-  const authorized = await isAgentOrManagerServer(req.headers.authorization);
-  const cacheKey = `${gid}_${limit || ""}_${offset || ""}_${authorized ? "auth" : "guest"}`;
+  const cacheKey = `${gid}_${limit || ""}_${offset || ""}`;
 
   // Serve from cache if valid and not bypassing
   if (!bypassCache) {
@@ -488,12 +530,8 @@ app.get("/api/sheets", async (req, res) => {
   }
 
   try {
-    let csvString = await fetchSheetDataV4(String(gid), limit as string, offset as string);
+    const csvString = await fetchSheetDataV4(String(gid), limit as string, offset as string);
     
-    if (!authorized) {
-      csvString = stripSensitiveColumnsServer(csvString, String(gid));
-    }
-
     if (!bypassCache) {
       sheetsCacheMap.set(cacheKey, {
         text: csvString,
