@@ -14,6 +14,3 @@ html, body {
   -moz-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
-
-.skip-to-content { position: absolute; top: -100px; left: 8px; z-index: 1000; background:#0c2d57; color:#fff; padding:8px 12px; border-radius:6px; transition: top .15s; }
-.skip-to-content:focus { top: 8px; }

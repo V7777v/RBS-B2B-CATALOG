@@ -1,4 +1,5 @@
 import fs from 'fs';
+import https from 'https';
 import path from 'path';
 import { Jimp } from 'jimp';
 
@@ -22,23 +23,6 @@ async function resizeAndSave(image: any, size: number, outputPath: string) {
   console.log(`Generated ${outputPath} (${size}x${size})`);
 }
 
-async function generateOgImage(logoImage: any, outputPath: string) {
-  const size = 256;
-  const bg = new Jimp({ width: size, height: size, color: 0xffffffff });
-
-  const logoClone = logoImage.clone();
-  const logoWidth = 200;
-  const logoHeight = Math.round((logoClone.bitmap.height / logoClone.bitmap.width) * logoWidth);
-  logoClone.resize({ w: logoWidth, h: logoHeight });
-
-  const logoX = Math.round((size - logoWidth) / 2);
-  const logoY = Math.round((size - logoHeight) / 2);
-  bg.composite(logoClone, logoX, logoY);
-
-  await bg.write(outputPath as any);
-  console.log(`Generated ${outputPath} (${size}x${size})`);
-}
-
 async function main() {
   console.log("Fetching source logo from Google Drive...");
   try {
@@ -55,42 +39,26 @@ async function main() {
     fs.writeFileSync(path.join(pubDir, 'new-logo.png'), newLogoBuffer);
     console.log("Downloaded new-logo.png for Vercel");
 
-    // Fetch advisor avatar
-    try {
-      const avatarBuffer = await fetchImage('1ivu4rHgeaH6iiodL2WkA6i_6XS_gmmG_');
-      const avatarImg = await Jimp.read(avatarBuffer);
-      avatarImg.resize({ w: 112, h: 112 });
-      await avatarImg.write(path.join(pubDir, 'advisor-avatar.png') as any);
-      console.log("Downloaded and generated advisor-avatar.png (112x112)");
-    } catch (e) {
-      console.warn("Could not download advisor avatar in setup_icon:", e);
-    }
-
     console.log(`Downloaded image of size ${buffer.byteLength} bytes.`);
+    
+    // Save original if needed
+    fs.writeFileSync(path.join(pubDir, 'logo.png'), buffer);
     
     console.log("Generating PWA icons...");
     const image = await Jimp.read(buffer);
 
     const targets = [
       { name: 'icons/icon-512.png', size: 512 },
-      { name: 'icons/icon-512-v2.png', size: 512 },
       { name: 'icons/icon-512-maskable.png', size: 512 },
-      { name: 'icons/icon-512-maskable-v2.png', size: 512 },
       { name: 'icons/icon-192.png', size: 192 },
-      { name: 'icons/icon-192-v2.png', size: 192 },
       { name: 'apple-touch-icon.png', size: 180 },
-      { name: 'apple-touch-icon-v2.png', size: 180 },
       { name: 'favicon.png', size: 32 }
     ];
 
     for (const target of targets) {
       await resizeAndSave(image, target.size, path.join(pubDir, target.name));
     }
-
-    console.log("Generating OG image (public/og-image.png)...");
-    await generateOgImage(image, path.join(pubDir, 'og-image.png'));
-
-    console.log("Successfully generated all icons and OG image for Vercel build.");
+    console.log("Successfully generated all icons for Vercel build.");
   } catch (error) {
     console.warn("⚠️ Warning: Failed to fetch/generate latest icons from Google Drive during prebuild. Using fallback or existing assets. Error:", error);
     // Let the build proceed smoothly instead of failing the entire deployment.

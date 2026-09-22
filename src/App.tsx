@@ -57,12 +57,7 @@ import {
   Phone,
   Mail,
   MessageSquare,
-  MessageCircle,
-  Image,
   Copy,
-  Share2,
-  Bot,
-  LayoutGrid,
 } from "lucide-react";
 import Papa from "papaparse";
 import { motion, AnimatePresence } from "motion/react";
@@ -377,86 +372,75 @@ const SUBCATEGORIES_ORDER: Record<string, string[]> = {
     "ציוד עבודה",
   ],
 };
-const fetchCSV = async (
+const fetchCSV = (
   gid: string,
   limit?: number,
   offset?: number,
   bypassCache?: boolean,
-): Promise<any[]> => {
-  let url = `/api/sheets?gid=${gid}`;
-  if (limit !== undefined && offset !== undefined) {
-    url += `&limit=${limit}&offset=${offset}`;
-  }
-  if (bypassCache) {
-    url += `&bypass_cache=true&_=${Date.now()}`;
-  }
-
-  let appCheckTok = "DEV_PREVIEW_BYPASS";
-  try {
-    const tokObj = await getAppCheckToken(appCheck);
-    if (tokObj?.token) {
-      appCheckTok = tokObj.token;
+) => {
+  return new Promise<any[]>((resolve, reject) => {
+    // 1. First, call our edge-cached CDN proxy on Vercel/Express for instant connection and 100% Google Sheets quota protection:
+    let url = `/api/sheets?gid=${gid}`;
+    if (limit !== undefined && offset !== undefined) {
+      url += `&limit=${limit}&offset=${offset}`;
     }
-  } catch (err) {
-    // In preview or dev environments, fallback cleanly to DEV_PREVIEW_BYPASS
-    appCheckTok = "DEV_PREVIEW_BYPASS";
-  }
-
-  const reqHeaders: Record<string, string> = {
-    "X-Firebase-AppCheck": appCheckTok,
-  };
-  try {
-    if (auth.currentUser) {
-      const idTok = await auth.currentUser.getIdToken();
-      if (idTok) reqHeaders["X-Firebase-Id-Token"] = idTok;
+    if (bypassCache) {
+      url += `&bypass_cache=true&_=${Date.now()}`;
     }
-  } catch {}
-
-  // Fetch with automatic retry (up to 2 retries on 502/503/504 or network glitch)
-  let lastError: any = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-      const res = await fetch(url, {
-        headers: reqHeaders,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        let errBody = "";
-        try {
-          errBody = await res.text();
-        } catch {}
-        throw new Error(`HTTP ${res.status}: ${res.statusText || ""} ${errBody}`.trim());
+    const runParse = async (targetUrl: string, useFallbackOnFail: boolean) => {
+      let appCheckTok = "";
+      try {
+        appCheckTok = (await getAppCheckToken(appCheck)).token;
+      } catch (err) {
+        console.warn("Failed to obtain App Check token.", err);
+        const isPreview =
+          window.location.hostname.includes("run.app") ||
+          window.location.hostname.includes("localhost");
+        if (isPreview) {
+          console.warn("Bypassing App Check failure in preview environment.");
+          appCheckTok = "DEV_PREVIEW_BYPASS";
+        } else {
+          reject(
+            new Error("אבטחת המערכת (App Check) נכשלה. אנא רענן את העמוד."),
+          );
+          return;
+        }
       }
 
-      const csvText = await res.text();
-      const parseResult = Papa.parse(csvText, {
+      const reqHeaders: Record<string, string> = {
+        "X-Firebase-AppCheck": appCheckTok,
+      };
+      try {
+        if (auth.currentUser) {
+          const idTok = await auth.currentUser.getIdToken();
+          if (idTok) reqHeaders["X-Firebase-Id-Token"] = idTok;
+        }
+      } catch {}
+      Papa.parse(targetUrl, {
+        download: true,
+        downloadRequestHeaders: reqHeaders,
         header: true,
         skipEmptyLines: true,
+        complete: (results) => {
+          const normalizedData = results.data.map((row) => {
+            const newRow: any = {};
+            for (const key in row as object) {
+              newRow[key.trim()] = (row as any)[key];
+            }
+            return newRow;
+          });
+          resolve(normalizedData);
+        },
+        error: (error: any) => {
+          // B-06: no direct public-Sheets fallback. All data must go through
+          // the controlled /api/sheets proxy; on failure we surface an error.
+          console.error("Sheets proxy request failed:", error);
+          reject(error);
+        },
       });
-
-      const normalizedData = parseResult.data.map((row) => {
-        const newRow: any = {};
-        for (const key in row as object) {
-          newRow[key.trim()] = (row as any)[key];
-        }
-        return newRow;
-      });
-
-      return normalizedData;
-    } catch (err: any) {
-      lastError = err;
-      if (attempt < 2) {
-        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
-      }
-    }
-  }
-
-  console.error("Sheets proxy request failed:", lastError?.message || lastError);
-  throw lastError;
+    };
+    runParse(url, true);
+  });
 };
 const parseProductRow = (row: any) => {
   let itemImages: string[] = [];
@@ -507,14 +491,6 @@ const parseProductRow = (row: any) => {
     typeof row["Niche Category"] === "string"
       ? row["Niche Category"].trim()
       : row["Niche Category"] || null;
-  const activeColKey = Object.keys(row).find(
-    (k) => k.trim().toLowerCase() === "active" || k.trim() === "פעיל",
-  );
-  const activeVal = activeColKey ? String(row[activeColKey] || "").trim().toLowerCase() : "";
-  const isActive = activeColKey
-    ? !(activeVal === "false" || activeVal === "no" || activeVal === "0" || activeVal === "לא" || activeVal === "n" || activeVal === "f" || activeVal === "לא פעיל")
-    : true;
-
   const isComingSoon =
     row["Coming Soon"]?.toString()?.trim()?.toUpperCase() === "TRUE" ||
     row["Cooming Soon"]?.toString()?.trim()?.toUpperCase() === "TRUE";
@@ -661,7 +637,6 @@ const parseProductRow = (row: any) => {
     nestedSubcategory: nestedSubcategoryName,
     nicheCategory: nicheCategoryName,
     isComingSoon: isComingSoon,
-    active: isActive,
     isNew: isNew,
     isHotSale: isHotSale,
     isClearance: isClearance,
@@ -691,57 +666,6 @@ const parseProductRow = (row: any) => {
     ),
   };
 };
-
-export const PRODUCT_447510T = {
-  id: "447510T",
-  sku: "447510T",
-  pn: "447510T",
-  name: "ארון תקשורת עומד 44U 75x100 דגם 447510T Boost-RackMount",
-  description: "ארון שרתים ותקשורת מסיבי 44U ברוחב 750 מ״מ ועומק 1000 מ״מ מבית Boost-RackMount (מק״ט 447510T). מפרט יצרן מלא: דלתות קדמיות ואחוריות כפולות מחוררות עם מנעול קפיצי (Spring Lock), 4 מאווררי גג מובנים בפלטה אחת עם כבל, 4 גלגלים כבדים ו-4 רגליות פילוס, 2 מדפים קבועים 470*650*48 (מק״ט 117914) עם פתחי איוורור אלכסוניים, 2 תעלות כבילה אנכיות 400 מ״מ, מוט הארקה ראשי מנחושת עם כבלים, דלתות צד פריקות עם מנעול עגול, וקופסת חיבור לפס 12 שקעים PDU.",
-  price: 2890,
-  category: "ארונות תקשורת ואביזרים",
-  catalog: "ארונות תקשורת ואביזרים",
-  subcategory: "ארונות עומדים",
-  brand: "BOOST",
-  active: true,
-  isNew: false,
-  isHotSale: false,
-  isClearance: false,
-  u: 44,
-  width: 750,
-  depth: 1000,
-  height: 2061,
-  images: [
-    "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80",
-  ],
-  inStock: true,
-};
-
-export const PRODUCT_BOOST_42U = {
-  id: "BOOST-42U",
-  sku: "BOOST-42U",
-  pn: "BOOST-42U",
-  name: "ארון תקשורת עומד 42U דגם Boost RackMount",
-  description: "ארון שרתים ותקשורת מסיבי 42U מבית Boost RackMount לפי מפרט יצרן רשמי (SPCC Cold Rolled Steel). כולל: דלת קדמית מזכוכית מחוסמת 5.0 מ״מ עם מסגרת פלדה ומנעול ידית מגולוון עם 2 מפתחות, דלת אחורית פלדה SPCC 1.2 מ״מ עם מנעול עגול, 2 דלתות צד פריקות עם בריחים מהירים, יחידת גג 4 מאווררים תעשייתיים (120 מ״מ), 4 גלגלים כבדים (Castors), 4 רגליות פילוס מתכווננות M10 לעומס 800 ק״ג, 6 קורות עומק Mounting Angles, 4 פרופילי עמודים 19 אינץ' 2.0 מ״מ עם סימוני U, מכסי כבילה עליונים ותחתונים ו-20 סטים של ברגי כלוב M6.",
-  price: 2650,
-  category: "ארונות תקשורת ואביזרים",
-  catalog: "ארונות תקשורת ואביזרים",
-  subcategory: "ארונות עומדים",
-  brand: "BOOST",
-  active: true,
-  isNew: false,
-  isHotSale: false,
-  isClearance: false,
-  u: 42,
-  width: 600,
-  depth: 1000,
-  height: 2055,
-  images: [
-    "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80",
-  ],
-  inStock: true,
-};
-
 // --- VIEWPORT INTERSECTION OBSERVER HOOK ---
 interface UseIntersectionObserverProps {
   threshold?: number;
@@ -907,7 +831,7 @@ const BrandBadge: React.FC<{ brand: string }> = ({ brand }) => {
   }
   return (
     <span
-      className={`text-[11px] sm:text-xs font-bold px-2 py-1 rounded shadow-xs border inline-block ${theme.badge} max-w-[120px] truncate`}
+      className={`text-[10px] sm:text-xs font-bold px-2 py-1 rounded shadow-xs border inline-block ${theme.badge} max-w-[120px] truncate`}
     >
       {displayName}
     </span>
@@ -933,11 +857,11 @@ const MakatBadge = ({
     <button
       onClick={handleCopy}
       title="העתק מק״ט"
-      className={`group/makat inline-flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 bg-gray-50 hover:bg-blue-50 active:bg-blue-100/80 border border-gray-200 hover:border-[#004387] active:border-[#002f5e] transition-all rounded-xl py-3.5 px-5 sm:py-2 sm:px-4 w-full sm:w-auto cursor-pointer focus:outline-none select-none touch-manipulation min-h-[48px] sm:min-h-[auto] ${className}`}
+      className={`group/makat inline-flex items-center justify-center gap-2.5 bg-gray-50 hover:bg-blue-50 active:bg-blue-100/80 border border-gray-200 hover:border-[#004387] active:border-[#002f5e] transition-all rounded-xl py-3.5 px-5 sm:py-2 sm:px-4 w-full sm:w-auto cursor-pointer focus:outline-none select-none touch-manipulation min-h-[48px] sm:min-h-[auto] ${className}`}
     >
-      <span className="text-gray-600 group-hover/makat:text-[#0c2d57] transition-colors text-sm sm:text-sm font-bold flex flex-wrap items-center justify-center text-center">
+      <span className="text-gray-600 group-hover/makat:text-[#0c2d57] transition-colors text-base sm:text-sm font-bold flex items-center">
         מק״ט:{" "}
-        <span dir="ltr" className="font-mono mx-1 tracking-wide text-gray-800 group-hover/makat:text-[#004387] break-all">
+        <span className="font-mono mr-1.5 tracking-wide text-gray-800 group-hover/makat:text-[#004387]">
           {sku}
         </span>
       </span>
@@ -960,75 +884,53 @@ const CatalogCard: React.FC<CatalogCardProps> = ({
   catalog,
   navigateToCatalog,
   isNew,
-}) => {
-  const [imgError, setImgError] = useState(false);
-
-  useEffect(() => {
-    setImgError(false);
-  }, [catalog.image]);
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          navigateToCatalog(catalog.name);
-        }
-      }}
-      onClick={() => navigateToCatalog(catalog.name)}
-      className="group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative"
-    >
-      <div className={`aspect-square w-full relative border-b border-gray-100 flex items-center justify-center overflow-hidden ${!catalog.image || imgError ? "bg-slate-100" : "bg-white p-3 sm:p-6"}`}>
-        {catalog.brand && (
-          <div className={`absolute ${isNew ? "top-9" : "top-2"} right-2 z-10`}>
-            <BrandBadge brand={catalog.brand} />
-          </div>
-        )}
-        {catalog.image && !imgError ? (
-          <img
-            referrerPolicy="no-referrer"
-            src={transformImageLink(catalog.image, 400)}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            onError={() => setImgError(true)}
-            className="max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-slate-100">
-            <Image className="text-slate-400 w-10 h-10 sm:w-12 sm:h-12" />
-          </div>
-        )}
-        {isNew && (
-          <div className="absolute top-2 right-2 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[11px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(16,185,129,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-            </span>
-            <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
-          </div>
-        )}
+}) => (
+  <div
+    onClick={() => navigateToCatalog(catalog.name)}
+    className="group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative"
+  >
+    <div className="aspect-square w-full relative border-b border-gray-100 bg-white flex items-center justify-center p-3 sm:p-6 overflow-hidden">
+      {catalog.brand && (
+        <div className="absolute top-2 right-2 z-10">
+          <BrandBadge brand={catalog.brand} />
+        </div>
+      )}
+      <img
+        referrerPolicy="no-referrer"
+        src={transformImageLink(catalog.image, 400)}
+        alt={catalog.name}
+        loading="lazy"
+        decoding="async"
+        onError={handleImageError}
+        className="max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105"
+      />
+    </div>
+    <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right relative">
+      {isNew && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[10px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(16,185,129,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+          </span>
+          <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
+        </div>
+      )}
+      <div className="min-h-[2.5rem] sm:min-h-0 flex items-center justify-center sm:justify-start mb-1 sm:mb-2 w-full">
+        <h3 className="font-semibold text-[#0c2d57] text-sm sm:text-lg line-clamp-2 leading-tight text-center sm:text-right w-full">
+          {catalog.name}
+        </h3>
       </div>
-      <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white group-hover:bg-gray-50 transition-colors text-center sm:text-right relative">
-        <div className="min-h-[2.5rem] sm:min-h-0 flex items-center justify-center sm:justify-start mb-1 sm:mb-2 w-full">
-          <h3 className="font-semibold text-[#0c2d57] text-sm sm:text-lg line-clamp-2 leading-tight text-center sm:text-right w-full">
-            {catalog.name}
-          </h3>
-        </div>
-        <p className="text-gray-600 text-xs sm:text-sm leading-relaxed mb-2 sm:mb-4 line-clamp-2 hidden sm:block">
-          {catalog.desc}
-        </p>
-        <div className="mt-auto pt-2 border-t border-gray-50 sm:border-none flex justify-center sm:justify-between items-center text-[#c2410c] font-bold text-xs sm:text-sm">
-          <span className="hidden sm:inline">פתח מחירון</span>
-          <span className="sm:hidden">פתח</span>
-          <ChevronLeft size={16} className="w-4 h-4 sm:w-5 sm:h-5 ml-1 sm:ml-0" />
-        </div>
+      <p className="text-gray-600 text-xs sm:text-sm leading-relaxed mb-2 sm:mb-4 line-clamp-2 hidden sm:block">
+        {catalog.desc}
+      </p>
+      <div className="mt-auto pt-2 border-t border-gray-50 sm:border-none flex justify-center sm:justify-between items-center text-[#c2410c] font-bold text-xs sm:text-sm">
+        <span className="hidden sm:inline">פתח מחירון</span>
+        <span className="sm:hidden">פתח</span>
+        <ChevronLeft size={16} className="w-4 h-4 sm:w-5 sm:h-5 ml-1 sm:ml-0" />
       </div>
     </div>
-  );
-};
+  </div>
+);
 interface SubcategoryCardProps {
   sub: any;
   onClick?: () => void;
@@ -1038,77 +940,67 @@ const SubcategoryCard: React.FC<SubcategoryCardProps> = ({
   sub,
   onClick,
   navigateToSubcategory,
-}) => {
-  const [imgError, setImgError] = useState(false);
-
-  useEffect(() => {
-    setImgError(false);
-  }, [sub.image]);
-
-  return (
-    <div
-      onClick={
-        onClick ||
-        (() => navigateToSubcategory && navigateToSubcategory(sub.name))
-      }
-      className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 relative border border-gray-100"
-    >
-      <div className={`relative aspect-square w-full flex items-center justify-center transition-colors border-b border-gray-100 overflow-hidden ${!sub.image || imgError ? "bg-slate-100" : "bg-white group-hover:bg-gray-50/50 p-3 sm:p-6"}`}>
-        {sub.brand && (
-          <div className={`absolute ${sub.isComingSoon || (sub.isNew && !sub.isComingSoon) ? "top-9" : "top-2"} right-2 z-10`}>
-            <BrandBadge brand={sub.brand} />
-          </div>
-        )}
-        {sub.image && !imgError ? (
-          <img
-            referrerPolicy="no-referrer"
-            src={transformImageLink(sub.image, 400)}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            onError={() => setImgError(true)}
-            className="max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-slate-100">
-            <Image className="text-slate-400 w-10 h-10 sm:w-12 sm:h-12" />
-          </div>
-        )}
-        {sub.isComingSoon && (
-          <div className="absolute top-2 right-2 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[2px] border-white text-[11px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(220,38,38,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
-            <Fingerprint size={12} className="text-red-100 animate-pulse" />
-            <span className="drop-shadow-md tracking-wide">בקרוב!</span>
-          </div>
-        )}
-        {sub.isNew && !sub.isComingSoon && (
-          <div className="absolute top-2 right-2 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[11px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(16,185,129,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-            </span>
-            <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
-          </div>
-        )}
+}) => (
+  <div
+    onClick={
+      onClick ||
+      (() => navigateToSubcategory && navigateToSubcategory(sub.name))
+    }
+    className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 relative border border-gray-100"
+  >
+    <div className="relative aspect-square w-full p-3 sm:p-6 flex items-center justify-center bg-white group-hover:bg-gray-50/50 transition-colors border-b border-gray-100 overflow-hidden">
+      {sub.brand && (
+        <div className="absolute top-2 right-2 z-10">
+          <BrandBadge brand={sub.brand} />
+        </div>
+      )}
+      {sub.image ? (
+        <img
+          referrerPolicy="no-referrer"
+          src={transformImageLink(sub.image, 400)}
+          alt={sub.name}
+          loading="lazy"
+          decoding="async"
+          onError={handleImageError}
+          className="max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-500 group-hover:scale-105"
+        />
+      ) : (
+        <FolderOpen className="text-gray-400 w-10 h-10 sm:w-12 sm:h-12" />
+      )}
+    </div>
+    <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white text-center justify-between relative">
+      {sub.isComingSoon && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[2px] border-white text-[10px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(220,38,38,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
+          <Fingerprint size={12} className="text-red-100 animate-pulse" />
+          <span className="drop-shadow-md tracking-wide">בקרוב!</span>
+        </div>
+      )}
+      {sub.isNew && !sub.isComingSoon && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[10px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(16,185,129,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+          </span>
+          <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
+        </div>
+      )}
+      <div className="w-full">
+        <div className="min-h-[2.75rem] sm:min-h-[3rem] flex items-center justify-center mb-1 sm:mb-2 w-full">
+          <h3 className="font-bold text-[#0c2d57] text-base sm:text-xl leading-snug line-clamp-2 text-center w-full">
+            {sub.name}
+          </h3>
+        </div>
+        <p className="text-gray-600 text-[13px] sm:text-sm mb-1 sm:mb-4 font-semibold">
+          {sub.count} מוצרים
+        </p>
       </div>
-      <div className="p-3 sm:p-5 flex flex-col flex-grow bg-white text-center justify-between relative">
-        <div className="w-full">
-          <div className="min-h-[2.75rem] sm:min-h-[3rem] flex items-center justify-center mb-1 sm:mb-2 w-full">
-            <h3 className="font-bold text-[#0c2d57] text-base sm:text-xl leading-snug line-clamp-2 text-center w-full">
-              {sub.name}
-            </h3>
-          </div>
-          <p className="text-gray-600 text-[13px] sm:text-sm mb-1 sm:mb-4 font-semibold">
-            {sub.count} מוצרים
-          </p>
-        </div>
-        <div className="mt-auto flex justify-center items-center gap-1 text-[#c2410c] font-bold text-xs sm:text-sm opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity pt-1 border-t border-gray-50 sm:border-none">
-          <span className="hidden sm:inline">הצג</span>
-          <ChevronLeft size={14} className="w-4 h-4 sm:w-4 sm:h-4" />
-        </div>
+      <div className="mt-auto flex justify-center items-center gap-1 text-[#c2410c] font-bold text-xs sm:text-sm opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity pt-1 border-t border-gray-50 sm:border-none">
+        <span className="hidden sm:inline">הצג</span>
+        <ChevronLeft size={14} className="w-4 h-4 sm:w-4 sm:h-4" />
       </div>
     </div>
-  );
-};
+  </div>
+);
 // --- DETECT NETWORK CABLE ROLLS ---
 const isNetworkCableRoll = (product: any): boolean => {
   if (!product) return false;
@@ -1272,14 +1164,6 @@ const ProductCard = React.memo(
 
     return (
       <div
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            navigateToProduct(product);
-          }
-        }}
         onClick={() => navigateToProduct(product)}
         className={`group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}
       >
@@ -1323,7 +1207,7 @@ const ProductCard = React.memo(
               ease: "easeInOut",
             }}
           >
-            <div className="bg-gradient-to-r from-emerald-600 to-green-500 text-white border border-emerald-400 text-[11px] sm:text-xs font-extrabold px-2.5 py-1 sm:py-1.5 rounded-md shadow-[0_4px_12px_rgba(16,185,129,0.35),_inset_0_1px_0_rgba(255,255,255,0.3)] flex items-center gap-1.5 select-none font-sans transform -rotate-[12deg] origin-center">
+            <div className="bg-gradient-to-r from-emerald-600 to-green-500 text-white border border-emerald-400 text-[10px] sm:text-xs font-extrabold px-2.5 py-1 sm:py-1.5 rounded-md shadow-[0_4px_12px_rgba(16,185,129,0.35),_inset_0_1px_0_rgba(255,255,255,0.3)] flex items-center gap-1.5 select-none font-sans transform -rotate-[12deg] origin-center">
               <Tag
                 size={10}
                 className="text-emerald-100 transform -rotate-12 animate-pulse"
@@ -1337,7 +1221,7 @@ const ProductCard = React.memo(
           <div
             className={`absolute left-3 z-20 transition-all duration-200 ${onBulkSelectionChange && !product.isComingSoon ? "top-12 sm:top-14" : "top-3"}`}
           >
-            <div className="bg-white text-red-600 border-2 border-red-500 text-[11px] sm:text-xs font-bold px-2 py-0.5 sm:py-1 rounded-md shadow-md flex items-center gap-1.5 select-none font-sans">
+            <div className="bg-white text-red-600 border-2 border-red-500 text-[10px] sm:text-xs font-bold px-2 py-0.5 sm:py-1 rounded-md shadow-md flex items-center gap-1.5 select-none font-sans">
               <Flame size={10} className="text-red-500 animate-bounce" />
               <span>מבצע חם!</span>
             </div>
@@ -1357,29 +1241,14 @@ const ProductCard = React.memo(
             className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105 ${product.isComingSoon ? "opacity-70" : ""}`}
           />
 
-          {/* Visual disclaimer overlay - Moved to top left to avoid overlap with action buttons */}
-          <div className="absolute top-2 left-2 z-10 bg-white/90 border border-gray-200/80 rounded px-1.5 py-0.5 text-[11px] sm:text-[11px] text-gray-500 font-semibold shadow-2xs select-none pointer-events-none">
+          {/* Visual disclaimer overlay */}
+          <div className="absolute bottom-2 left-2 bg-white/90 border border-gray-200/80 rounded px-1.5 py-0.5 text-[8px] sm:text-[9px] text-gray-500 font-semibold shadow-2xs select-none pointer-events-none">
             תמונות להמחשה בלבד
           </div>
           {/* BrandBadge stays peaceful and elegant on the top right */}
-          <div className={`absolute ${product.isComingSoon || (product.isNew && !product.isComingSoon) ? "top-9" : "top-2"} right-2 z-10 transition-all duration-200`}>
+          <div className="absolute top-2 right-2 z-10 transition-all duration-200">
             <BrandBadge brand={product.brand} />
           </div>
-          {product.isComingSoon && (
-            <div className="absolute top-2 right-2 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[2px] border-white text-[11px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(220,38,38,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
-              <Fingerprint size={12} className="text-red-100 animate-pulse" />
-              <span className="drop-shadow-md tracking-wide">בקרוב!</span>
-            </div>
-          )}
-          {product.isNew && !product.isComingSoon && (
-            <div className="absolute top-2 right-2 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[11px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(16,185,129,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-              </span>
-              <span className="drop-shadow-md tracking-wide">חדש!</span>
-            </div>
-          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -1419,7 +1288,7 @@ const ProductCard = React.memo(
               }
             />
             <span
-              className={`text-[11px] sm:text-[10px] font-bold whitespace-nowrap overflow-hidden transition-all duration-300 ${
+              className={`text-[10px] font-bold whitespace-nowrap overflow-hidden transition-all duration-300 ${
                 compareIds.has(product.id)
                   ? "w-auto opacity-100"
                   : "w-0 group-hover/compare:w-auto opacity-0 group-hover/compare:opacity-100"
@@ -1431,6 +1300,21 @@ const ProductCard = React.memo(
         </div>
 
         <div className="p-3 sm:p-4 flex flex-col flex-grow text-center relative">
+          {product.isComingSoon && (
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[2px] border-white text-[10px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(220,38,38,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
+              <Fingerprint size={12} className="text-red-100 animate-pulse" />
+              <span className="drop-shadow-md tracking-wide">בקרוב!</span>
+            </div>
+          )}
+          {product.isNew && !product.isComingSoon && (
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[10px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(16,185,129,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+              </span>
+              <span className="drop-shadow-md tracking-wide">חדש!</span>
+            </div>
+          )}
           <div className="mb-2.5 flex flex-row items-center justify-center w-full">
             <MakatBadge sku={product.sku} />
           </div>
@@ -1444,13 +1328,13 @@ const ProductCard = React.memo(
             {isGuest ? (
               <div className="flex flex-col items-center leading-tight mb-2 w-full text-center">
                 {product.retailPrice && (
-                  <span className="text-[11px] sm:text-xs text-gray-600 font-semibold leading-[1.2] mb-1 w-full block">
+                  <span className="text-[9px] sm:text-xs text-gray-600 font-semibold leading-[1.2] mb-1 w-full block">
                     צרכן: ₪
                     {product.retailPrice.toLocaleString("he-IL", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
-                    <span className="text-[11px] sm:text-[11px] text-gray-400 font-normal inline-block mr-1">
+                    <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block mr-1">
                       (כולל מע"מ)
                     </span>
                   </span>
@@ -1466,17 +1350,17 @@ const ProductCard = React.memo(
                         maximumFractionDigits: 2,
                       })}
                       {isNetworkCableRoll(product) && (
-                        <span className="inline-block text-[11px] sm:text-[10px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold align-middle select-none">
+                        <span className="inline-block text-[9px] sm:text-[10px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold align-middle select-none">
                           מחיר למטר
                         </span>
                       )}
                     </span>
-                    <span className="block text-[11px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
+                    <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
                       מחיר מתקין (ללא מע"מ)
                     </span>
                   </>
                 ) : (
-                  <div className="text-[11px] sm:text-xs font-bold text-gray-400 mt-1">
+                  <div className="text-[10px] sm:text-xs font-bold text-gray-400 mt-1">
                     צור קשר למחירים
                   </div>
                 )}
@@ -1495,13 +1379,13 @@ const ProductCard = React.memo(
                 {product.price > 0 ? (
                   <div className="flex flex-col items-center leading-tight w-full text-center opacity-70">
                     {product.retailPrice && (
-                      <span className="text-[11px] sm:text-[10px] text-gray-500 font-semibold leading-[1.2] w-full block">
+                      <span className="text-[9px] sm:text-[10px] text-gray-500 font-semibold leading-[1.2] w-full block">
                         צרכן: ₪
                         {product.retailPrice.toLocaleString("he-IL", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
-                        <span className="text-[11px] sm:text-[11px] text-gray-400 font-normal inline-block mr-1">
+                        <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block mr-1">
                           (כולל מע"מ)
                         </span>
                       </span>
@@ -1513,17 +1397,17 @@ const ProductCard = React.memo(
                         maximumFractionDigits: 2,
                       })}
                       {isNetworkCableRoll(product) && (
-                        <span className="text-[11px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold inline-block align-middle select-none">
+                        <span className="text-[9px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold inline-block align-middle select-none">
                           מחיר למטר
                         </span>
                       )}
-                      <span className="text-[11px] text-gray-400 font-normal inline-block mr-1">
+                      <span className="text-[9px] text-gray-400 font-normal inline-block mr-1">
                         (ללא מע"מ)
                       </span>
                     </span>
                   </div>
                 ) : (
-                  <div className="text-[11px] sm:text-xs font-bold text-gray-400">
+                  <div className="text-[10px] sm:text-xs font-bold text-gray-400">
                     צור קשר למחירים
                   </div>
                 )}
@@ -1535,19 +1419,19 @@ const ProductCard = React.memo(
             ) : product.retailPrice || product.oldPrice ? (
               <div className="flex flex-col items-center leading-tight mb-2 w-full text-center">
                 {product.retailPrice && (
-                  <span className="text-[11px] sm:text-xs text-gray-600 font-semibold leading-[1.2] mb-1 w-full block">
+                  <span className="text-[9px] sm:text-xs text-gray-600 font-semibold leading-[1.2] mb-1 w-full block">
                     צרכן: ₪
                     {product.retailPrice.toLocaleString("he-IL", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
-                    <span className="text-[11px] sm:text-[11px] text-gray-400 font-normal inline-block mr-1">
+                    <span className="text-[8px] sm:text-[9px] text-gray-400 font-normal inline-block mr-1">
                       (כולל מע"מ)
                     </span>
                   </span>
                 )}
                 {product.oldPrice && (
-                  <span className="text-[11px] sm:text-xs text-red-500 font-medium leading-[1.2] mb-1 w-full block line-through">
+                  <span className="text-[9px] sm:text-xs text-red-500 font-medium leading-[1.2] mb-1 w-full block line-through">
                     מחירון מתקין מקורי (ללא מע"מ): ₪
                     {product.oldPrice.toLocaleString("he-IL", {
                       minimumFractionDigits: 2,
@@ -1564,11 +1448,11 @@ const ProductCard = React.memo(
                     maximumFractionDigits: 2,
                   })}
                   {isNetworkCableRoll(product) && (
-                    <span className="inline-block text-[11px] sm:text-[10px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold align-middle select-none">
+                    <span className="inline-block text-[9px] sm:text-[10px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold align-middle select-none">
                       מחיר למטר
                     </span>
                   )}
-                  <span className="block text-[11px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
+                  <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
                     {product.isClearance
                       ? 'מבצע מציאון (ללא מע"מ)'
                       : 'מחיר מומלץ למתקין (ללא מע"מ)'}
@@ -1586,12 +1470,12 @@ const ProductCard = React.memo(
                     maximumFractionDigits: 2,
                   })}
                   {isNetworkCableRoll(product) && (
-                    <span className="inline-block text-[11px] sm:text-[10px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold align-middle select-none">
+                    <span className="inline-block text-[9px] sm:text-[10px] text-[#004387] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 mr-1 font-bold align-middle select-none">
                       מחיר למטר
                     </span>
                   )}
                 </span>
-                <span className="block text-[11px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
+                <span className="block text-[9px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
                   {product.isClearance
                     ? 'מבצע מציאון (ללא מע"מ)'
                     : 'מחיר מומלץ למתקין (ללא מע"מ)'}
@@ -1630,7 +1514,7 @@ const ProductCard = React.memo(
                 </button>
                 <span className="font-bold text-[#004387] text-xs sm:text-sm flex flex-col items-center leading-none">
                   <span>{bulkQuantity}</span>
-                  <span className="text-[11px] sm:text-[10px] font-normal mt-0.5">
+                  <span className="text-[9px] sm:text-[10px] font-normal mt-0.5">
                     סומנו להוספה
                   </span>
                 </span>
@@ -1778,7 +1662,11 @@ const ProductDetailsView = (props: any) => {
       if (carousel) {
         const activeThumb = carousel.children[newIndex] as HTMLElement;
         if (activeThumb) {
-          activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+          const scrollLeft =
+            activeThumb.offsetLeft -
+            carousel.clientWidth / 2 +
+            activeThumb.clientWidth / 2;
+          carousel.scrollTo({ left: scrollLeft, behavior: "smooth" });
         }
       }
     }, 50);
@@ -1793,7 +1681,11 @@ const ProductDetailsView = (props: any) => {
       if (carousel) {
         const activeThumb = carousel.children[newIndex] as HTMLElement;
         if (activeThumb) {
-          activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+          const scrollLeft =
+            activeThumb.offsetLeft -
+            carousel.clientWidth / 2 +
+            activeThumb.clientWidth / 2;
+          carousel.scrollTo({ left: scrollLeft, behavior: "smooth" });
         }
       }
     }, 50);
@@ -1865,7 +1757,7 @@ const ProductDetailsView = (props: any) => {
                 </div>
               )}
               {/* Visual disclaimer overlay */}
-              <div className="absolute bottom-3 left-3 bg-white/95 border border-slate-200/90 rounded-md px-2 py-1 text-[11px] sm:text-xs text-slate-500 font-extrabold shadow-sm select-none pointer-events-none z-10">
+              <div className="absolute bottom-3 left-3 bg-white/95 border border-slate-200/90 rounded-md px-2 py-1 text-[10px] sm:text-xs text-slate-500 font-extrabold shadow-sm select-none pointer-events-none z-10">
                 התמונות להמחשה בלבד
               </div>
               {/* Left & Right Chevrons overlaid on main image */}
@@ -1917,7 +1809,14 @@ const ProductDetailsView = (props: any) => {
                             idx
                           ] as HTMLElement;
                           if (activeThumb) {
-                            activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                            const scrollLeft =
+                              activeThumb.offsetLeft -
+                              carousel.clientWidth / 2 +
+                              activeThumb.clientWidth / 2;
+                            carousel.scrollTo({
+                              left: scrollLeft,
+                              behavior: "smooth",
+                            });
                           }
                         }
                       }}
@@ -1971,7 +1870,7 @@ const ProductDetailsView = (props: any) => {
             <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] mb-2 leading-tight">
               {selectedProduct.name}
             </h1>
-            <div className="mb-4 flex flex-row items-center justify-center w-full">
+            <div className="mb-4 flex flex-row items-center justify-start w-full">
               <MakatBadge
                 sku={selectedProduct.sku}
                 className="!w-full sm:!w-auto sm:!text-[17px] !py-3 sm:!py-2"
@@ -2107,7 +2006,7 @@ const ProductDetailsView = (props: any) => {
                                 activePreview === "specs" ? null : "specs",
                               );
                             }}
-                            className="mt-1 text-[11px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                            className="mt-1 text-[10px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
                           >
                             <Eye size={12} />
                             <span>
@@ -2168,7 +2067,7 @@ const ProductDetailsView = (props: any) => {
                                 activePreview === "manual" ? null : "manual",
                               );
                             }}
-                            className="mt-1 text-[11px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                            className="mt-1 text-[10px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
                           >
                             <Eye size={12} />
                             <span>
@@ -2249,7 +2148,7 @@ const ProductDetailsView = (props: any) => {
                                     activePreview === "video" ? null : "video",
                                   );
                                 }}
-                                className={`mt-1 text-[11px] sm:text-xs font-bold px-1.5 py-0.5 rounded border transition-all flex items-center gap-1 active:scale-95 cursor-pointer ${isYouTube ? "text-[#ff0000] border-red-100 bg-red-50 hover:bg-orange-50" : "text-blue-600 border-blue-100 bg-blue-50 hover:bg-orange-50"}`}
+                                className={`mt-1 text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded border transition-all flex items-center gap-1 active:scale-95 cursor-pointer ${isYouTube ? "text-[#ff0000] border-red-100 bg-red-50 hover:bg-orange-50" : "text-blue-600 border-blue-100 bg-blue-50 hover:bg-orange-50"}`}
                               >
                                 <PlayCircle size={12} />
                                 <span>
@@ -2414,7 +2313,7 @@ const ProductDetailsView = (props: any) => {
                                           : `labCert_${idx}`,
                                       );
                                     }}
-                                    className="mt-1 text-[11px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
+                                    className="mt-1 text-[10px] sm:text-xs text-blue-600 hover:text-orange-500 font-bold bg-blue-50 hover:bg-orange-50 px-1.5 py-0.5 rounded border border-blue-100 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
                                   >
                                     <Eye size={12} />
                                     <span>
@@ -2436,6 +2335,26 @@ const ProductDetailsView = (props: any) => {
                   )}
               </div>
             )}
+            {/* SPECIFIC CONFIGURATORS (Only for Cabinets, not accessories) */}
+            {selectedProduct.subcategory === "ארונות תקשורת ואביזרים" &&
+              !selectedProduct["Nested subcategory"]?.includes("אביזרים") &&
+              /ארון|מסד|מארז/i.test(selectedProduct.name) && (
+                <div className="mb-6">
+                  <React.Suspense
+                    fallback={
+                      <div className="animate-pulse h-32 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center text-sm text-gray-500">
+                        טוען קונפיגורטור...
+                      </div>
+                    }
+                  >
+                    <CabinetConfigurator
+                      product={selectedProduct}
+                      catalogData={catalogData}
+                      onOptionalsChange={handleOptionalsChange}
+                    />
+                  </React.Suspense>
+                </div>
+              )}
             {/* COMPATIBLE CABINETS (If this is an accessory) */}
             {(((selectedProduct["Nested subcategory"]?.includes("אביזר") ||
               selectedProduct.nestedSubcategory?.includes("אביזר")) &&
@@ -2484,28 +2403,21 @@ const ProductDetailsView = (props: any) => {
                   </div>
 
                   {currentOptionals.map((opt, i) => {
-                    const sku = opt.sku || opt.pn || '';
-                    const name = opt.name || opt.description || sku;
-                    const qty = Number(opt.qty || opt.quantity) || 1;
-                    const lineTot =
-                      opt.lineTotal !== undefined && opt.lineTotal !== null
-                        ? Number(opt.lineTotal)
-                        : (Number(opt.unitPrice || opt.price || 0) * qty);
-                    const posStr = opt.positions && opt.positions.length > 0 ? opt.positions.join(', ') : '';
+                    const catItem = catalogData.find(
+                      (p) => p.sku === opt.sku || p.sku === opt.pn,
+                    );
+                    const optPrice = catItem ? catItem.price : opt.price || 0;
                     return (
                       <div
-                        key={sku || i}
+                        key={i}
                         className="flex justify-between items-center text-sm py-1.5 text-[#004387]"
                       >
                         <span className="flex-1 pl-2 truncate relative pl-4 after:content-['+'] after:absolute after:right-0 after:top-0 after:font-bold after:mr-[-10px]">
-                          + {name}
-                          {sku && <span className="font-mono text-xs text-gray-500 mr-1" dir="ltr">[{sku}]</span>}
-                          {qty > 1 && <span className="font-bold mr-1">×{qty}</span>}
-                          {posStr && <span className="text-gray-400 text-xs mr-1">({posStr})</span>}
+                          + {opt.name || opt.description || opt.pn}
                         </span>
-                        <span className="font-semibold whitespace-nowrap font-mono">
+                        <span className="font-semibold whitespace-nowrap">
                           ₪
-                          {lineTot.toLocaleString("he-IL", {
+                          {optPrice.toLocaleString("he-IL", {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
@@ -2516,16 +2428,17 @@ const ProductDetailsView = (props: any) => {
 
                   <div className="flex justify-between items-center text-lg lg:text-xl font-bold text-[#c2410c] pt-3 mt-2 border-t border-gray-200/60 bg-white -mx-4 -mb-4 p-4 rounded-b">
                     <span>סה"כ:</span>
-                    <span className="font-mono">
+                    <span>
                       ₪
                       {(
-                        (Number(selectedProduct.price) || 0) +
+                        selectedProduct.price +
                         currentOptionals.reduce((acc, opt) => {
-                          const lineTot =
-                            opt.lineTotal !== undefined && opt.lineTotal !== null
-                              ? Number(opt.lineTotal)
-                              : (Number(opt.unitPrice || opt.price || 0) * (Number(opt.qty || opt.quantity) || 1));
-                          return acc + lineTot;
+                          const catItem = catalogData.find(
+                            (p) => p.sku === opt.sku || p.sku === opt.pn,
+                          );
+                          return (
+                            acc + (catItem ? catItem.price : opt.price || 0)
+                          );
                         }, 0)
                       ).toLocaleString("he-IL", {
                         minimumFractionDigits: 2,
@@ -2652,7 +2565,7 @@ const ProductDetailsView = (props: any) => {
                                 (p) => p.sku === opt.sku || p.sku === opt.pn,
                               );
                               if (catItem) {
-                                addToCart(catItem, opt.qty || opt.quantity || 1, []);
+                                addToCart(catItem, 1, []);
                               }
                             });
                             setIsAdded(true);
@@ -2721,27 +2634,6 @@ const ProductDetailsView = (props: any) => {
             </div>
           </div>
         </div>
-
-        {/* FULL-WIDTH CABINET CONFIGURATOR (Spans 100% of the product content wrapper) */}
-        {selectedProduct.subcategory === "ארונות תקשורת ואביזרים" &&
-          !selectedProduct["Nested subcategory"]?.includes("אביזרים") &&
-          /ארון|מסד|מארז/i.test(selectedProduct.name) && (
-            <div className="border-t-2 border-[#004387]/20 bg-slate-50/50 p-3 sm:p-5 lg:p-6">
-              <React.Suspense
-                fallback={
-                  <div className="animate-pulse h-48 bg-white border border-gray-200 rounded flex items-center justify-center text-sm text-gray-500 font-semibold">
-                    טוען קונפיגורטור ארון...
-                  </div>
-                }
-              >
-                <CabinetConfigurator
-                  product={selectedProduct}
-                  catalogData={catalogData}
-                  onOptionalsChange={handleOptionalsChange}
-                />
-              </React.Suspense>
-            </div>
-          )}
       </div>
       {/* MOBILE FULL SCREEN IMAGE MODAL */}
       {isMobileModalOpen && (
@@ -3000,14 +2892,7 @@ const CheckoutView = (props: any) => {
       if (item.optionals && item.optionals.length > 0) {
         orderDetails += `   תוספות בארון:\n`;
         item.optionals.forEach((opt: any) => {
-          const sku = opt.sku || opt.pn || '';
-          const name = opt.name || opt.description || sku;
-          const qty = Number(opt.qty || opt.quantity) || 1;
-          const qtyStr = qty > 1 ? ` (כמות: ${qty})` : '';
-          const posStr = opt.positions && opt.positions.length > 0 ? ` [מיקום: ${opt.positions.join(', ')}]` : '';
-          const lineTot = opt.lineTotal !== undefined && opt.lineTotal !== null ? Number(opt.lineTotal) : ((Number(opt.unitPrice || opt.price) || 0) * qty);
-          const priceStr = lineTot > 0 ? ` - ₪${lineTot.toLocaleString('he-IL')}` : '';
-          orderDetails += `     - ${sku ? `${sku} | ` : ''}${name}${qtyStr}${posStr}${priceStr}\n`;
+          orderDetails += `     - ${opt.pn} | ${opt.description}\n`;
         });
       }
       orderDetails += `\n`;
@@ -3367,42 +3252,16 @@ const CheckoutView = (props: any) => {
                       />
                     </div>
                     {item.optionals && item.optionals.length > 0 && (
-                      <div className="text-xs text-gray-700 mb-2 bg-gray-50 border border-gray-200 p-2.5 rounded">
-                        <div className="flex justify-between items-center mb-1.5">
-                          <strong className="block text-[#004387] font-bold">
-                            תוספות מצורפות לארון ({item.optionals.reduce((s: number, o: any) => s + (Number(o.qty || o.quantity) || 1), 0)} פריטים):
-                          </strong>
-                          <span className="font-mono text-xs text-slate-600 font-semibold">
-                            ₪{item.optionals.reduce((s: number, o: any) => s + (Number(o.lineTotal) || (Number(o.unitPrice || o.price || 0) * (Number(o.qty || o.quantity) || 1))), 0).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                        <ul className="space-y-1">
-                          {item.optionals.map((opt: any, i: number) => {
-                            const sku = opt.sku || opt.pn || '';
-                            const name = opt.name || opt.description || sku;
-                            const qty = Number(opt.qty || opt.quantity) || 1;
-                            const lineTot = opt.lineTotal !== undefined && opt.lineTotal !== null
-                              ? Number(opt.lineTotal)
-                              : ((Number(opt.unitPrice || opt.price) || 0) * qty);
-                            const posStr = opt.positions && opt.positions.length > 0 ? opt.positions.join(', ') : '';
-                            return (
-                              <li key={sku || i} className="flex justify-between items-center text-xs pt-1 border-t border-gray-200/60 first:border-0 first:pt-0">
-                                <div>
-                                  <span className="font-medium text-gray-900">{name}</span>
-                                  {sku && <span className="font-mono text-gray-500 text-[11px] mr-1" dir="ltr">[{sku}]</span>}
-                                  {qty > 1 && (
-                                    <span className="inline-block mx-1 font-bold text-[#004387] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
-                                      ×{qty}
-                                    </span>
-                                  )}
-                                  {posStr && <span className="text-gray-400 text-[11px] mr-1 font-mono">({posStr})</span>}
-                                </div>
-                                <span className="font-mono font-semibold text-gray-700 whitespace-nowrap">
-                                  ₪{lineTot.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </span>
-                              </li>
-                            );
-                          })}
+                      <div className="text-xs text-gray-600 mb-2 bg-gray-50 border border-gray-200 p-2 rounded">
+                        <strong className="block mb-1">
+                          תוספות מצורפות לארון:
+                        </strong>
+                        <ul className="list-disc pl-4 pr-1">
+                          {item.optionals.map((opt: any, i: number) => (
+                            <li key={i}>
+                              {opt.pn} - {opt.description}
+                            </li>
+                          ))}
                         </ul>
                       </div>
                     )}
@@ -3641,23 +3500,14 @@ const CheckoutView = (props: any) => {
 };
 /* ===== end hoisted ===== */
 const GuestNoticeModal = ({ onDismiss }: { onDismiss: () => void }) => {
-  React.useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onDismiss();
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [onDismiss]);
-
   return (
     <div
       className="fixed inset-0 z-[9999] bg-black/70 flex items-center justify-center p-4 animate-fade-in"
       dir="rtl"
       role="dialog"
       aria-modal="true"
-      onClick={onDismiss}
     >
-      <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-[560px] w-full text-center shadow-2xl relative" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-[560px] w-full text-center shadow-2xl relative">
         <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0c2d57] mb-3">
           הקטלוג בהרצה
         </h2>
@@ -3686,7 +3536,7 @@ export default function App() {
   const [subcategoriesGlobalData, setSubcategoriesGlobalData] = useState<any[]>(
     [],
   );
-  const [catalogData, setCatalogData] = useState<any[]>([PRODUCT_447510T, PRODUCT_BOOST_42U]);
+  const [catalogData, setCatalogData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProductsLoading, setIsProductsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -3733,28 +3583,12 @@ export default function App() {
     trackPageView(path, title);
   }, [currentView, selectedCatalog, selectedSubcategory, selectedProduct]);
   const [currentOptionals, setCurrentOptionals] = useState<any[]>([]);
-  const handleOptionalsChange = useCallback(
-    (newOptionals: any[]) => {
-      setCurrentOptionals((prev) => {
-        if (JSON.stringify(prev) === JSON.stringify(newOptionals)) return prev;
-        return newOptionals;
-      });
-
-      // Store them on the cart item as optionals
-      if (selectedProduct) {
-        setCart((prevCart) => {
-          const matchIndex = prevCart.findIndex(
-            (item) => item.id === selectedProduct.id || item.sku === selectedProduct.sku
-          );
-          if (matchIndex === -1) return prevCart;
-          return prevCart.map((item, idx) =>
-            idx === matchIndex ? { ...item, optionals: newOptionals } : item
-          );
-        });
-      }
-    },
-    [selectedProduct],
-  );
+  const handleOptionalsChange = useCallback((newOptionals: any[]) => {
+    setCurrentOptionals((prev) => {
+      if (JSON.stringify(prev) === JSON.stringify(newOptionals)) return prev;
+      return newOptionals;
+    });
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -3766,19 +3600,6 @@ export default function App() {
   }, [searchQuery]);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [advisorOpen, setAdvisorOpen] = useState(false);
-  const [hasCookieConsent, setHasCookieConsent] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem("rbs_cookie_consent") === "1";
-    } catch {
-      return true;
-    }
-  });
-
-  useEffect(() => {
-    const handleConsent = () => setHasCookieConsent(true);
-    window.addEventListener("rbs_cookie_consent_accepted", handleConsent);
-    return () => window.removeEventListener("rbs_cookie_consent_accepted", handleConsent);
-  }, []);
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
   const mobileSearchRef = useRef<HTMLInputElement>(null);
   const [cart, setCart] = useState<any[]>([]);
@@ -5278,7 +5099,6 @@ export default function App() {
     category?: string;
   } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [categoryShareOpen, setCategoryShareOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(50);
   // Promo Banner State for Hot Sales & Clearance/Metsian items
   const [showPromoBanner, setShowPromoBanner] = useState(false);
@@ -5299,11 +5119,10 @@ export default function App() {
       const hasSeen =
         sessionStorage.getItem("dismissed_promo_banner") === "true";
       if (hasPromos && !hasSeen) {
-        // Hot Sale popup disabled for now
-        // const timer = setTimeout(() => {
-        //   setShowPromoBanner(true);
-        // }, 1200);
-        // return () => clearTimeout(timer);
+        const timer = setTimeout(() => {
+          setShowPromoBanner(true);
+        }, 1200); // 1.2s delay for a highly native & elegant pop-in effect
+        return () => clearTimeout(timer);
       }
     }
   }, [isLoading, catalogData, currentView]);
@@ -5598,14 +5417,12 @@ export default function App() {
   const lastFetchTimeRef = useRef(0);
   const [productsOffset, setProductsOffset] = useState(0);
   const [hasMoreProducts, setHasMoreProducts] = useState(true);
-  const loadMoreFailuresRef = useRef(0);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const loadMoreProducts = useCallback(async () => {
     if (isFetchingMore || !hasMoreProducts) return;
     setIsFetchingMore(true);
     try {
       const productsCsv = await fetchCSV(PRODUCTS_GID, 50, productsOffset);
-      loadMoreFailuresRef.current = 0;
       if (productsCsv.length < 50) {
         setHasMoreProducts(false);
       }
@@ -5620,26 +5437,14 @@ export default function App() {
             ids.add(p.id);
             return true;
           });
-          const combined = [...prev, ...uniqueNew];
-          if (!ids.has(PRODUCT_447510T.id)) {
-            combined.push(PRODUCT_447510T);
-          }
-          if (!ids.has(PRODUCT_BOOST_42U.id)) {
-            combined.push(PRODUCT_BOOST_42U);
-          }
-          return combined;
+          return [...prev, ...uniqueNew];
         });
         setProductsOffset((prev) => prev + 50);
       } else {
         setHasMoreProducts(false);
       }
     } catch (err) {
-      loadMoreFailuresRef.current += 1;
-      console.warn(`Error fetching more products (attempt ${loadMoreFailuresRef.current}):`, err);
-      if (loadMoreFailuresRef.current >= 3) {
-        console.warn("Disabling incremental chunk fetching after 3 consecutive failures; background full loader will synchronize catalog.");
-        setHasMoreProducts(false);
-      }
+      console.error("Error fetching more products:", err);
     } finally {
       setIsFetchingMore(false);
     }
@@ -5816,18 +5621,11 @@ export default function App() {
         const parsedProducts = productsCsv.map(parseProductRow);
         const deduplicate = (arr: any[]) => {
           const seen = new Set();
-          const res = arr.filter((p) => {
-            if (!p || seen.has(p.id)) return false;
+          return arr.filter((p) => {
+            if (seen.has(p.id)) return false;
             seen.add(p.id);
             return true;
           });
-          if (!seen.has(PRODUCT_447510T.id)) {
-            res.push(PRODUCT_447510T);
-          }
-          if (!seen.has(PRODUCT_BOOST_42U.id)) {
-            res.push(PRODUCT_BOOST_42U);
-          }
-          return res;
         };
         setCatalogData(deduplicate(parsedProducts));
         setProductsOffset(50);
@@ -6201,7 +5999,14 @@ export default function App() {
             (p) => p.subcategory && p.subcategory.startsWith("Inginium - "),
           ).length;
         }
-
+        if (subName === "מתגי ליבה ורשת מנוהלים") {
+          count += productsInCat.filter(
+            (p) =>
+              p.subcategory ===
+                "מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)" ||
+              p.subcategory === "מתגי ליבה אופטי - Access Switches L3",
+          ).length;
+        }
         if (subName === "ספקי כוח ומתח") {
           const extra = productsInCat.filter(
             (p) =>
@@ -6284,7 +6089,16 @@ export default function App() {
             .map((p) => p.subcategory),
         ),
       ];
-
+    } else if (selectedSubcategory === "מתגי ליבה ורשת מנוהלים") {
+      const explicitSubs = productsInCat
+        .filter(
+          (p) =>
+            p.subcategory ===
+              "מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)" ||
+            p.subcategory === "מתגי ליבה אופטי - Access Switches L3",
+        )
+        .map((p) => p.subcategory);
+      nestedSubs = [...new Set(explicitSubs)];
     } else if (selectedSubcategory === "ספקי כוח ומתח") {
       const explicitSubs = productsInCat
         .filter((p) => p.subcategory === "ספקי כוח ומתח" && p.nestedSubcategory)
@@ -6337,7 +6151,8 @@ export default function App() {
 
         let prods: any[] = [];
         if (
-          selectedSubcategory === "Inginium Full Channel"
+          selectedSubcategory === "Inginium Full Channel" ||
+          selectedSubcategory === "מתגי ליבה ורשת מנוהלים"
         ) {
           // for these, the nested name is actually the subcategory name in products
           prods = productsInCat.filter(
@@ -6512,7 +6327,8 @@ export default function App() {
 
         if (selectedNestedSubcategory) {
           if (
-            selectedSubcategory === "Inginium Full Channel"
+            selectedSubcategory === "Inginium Full Channel" ||
+            selectedSubcategory === "מתגי ליבה ורשת מנוהלים"
           ) {
             return item.subcategory === selectedNestedSubcategory;
           }
@@ -6540,7 +6356,13 @@ export default function App() {
         if (selectedSubcategory === "Inginium Full Channel") {
           return item.subcategory && item.subcategory.startsWith("Inginium - ");
         }
-
+        if (selectedSubcategory === "מתגי ליבה ורשת מנוהלים") {
+          return (
+            item.subcategory ===
+              "מתגי רשת מנוהלים - Smart Cloud Managed (ללא POE)" ||
+            item.subcategory === "מתגי ליבה אופטי - Access Switches L3"
+          );
+        }
         if (selectedSubcategory === "ספקי כוח ומתח") {
           return (
             item.subcategory === "ספקי כוח ומתח" ||
@@ -6638,10 +6460,9 @@ export default function App() {
   useEffect(() => {
     if (isLoading || isProductsLoading || error) return;
     if (hasMoreProducts && !isFetchingMore) {
-      const delay = loadMoreFailuresRef.current > 0 ? 3000 : 250;
       const timer = setTimeout(() => {
         loadMoreProducts();
-      }, delay);
+      }, 50);
       return () => clearTimeout(timer);
     }
   }, [
@@ -6763,18 +6584,15 @@ export default function App() {
     );
   };
   const cartTotal = cart.reduce((sum, item) => {
-    const itemBasePrice = Number(item.price) || 0;
-    let optionalsTotal = 0;
+    let itemTotal = item.price * item.quantity;
     if (item.optionals && item.optionals.length > 0) {
       item.optionals.forEach((opt: any) => {
-        const lineTotal =
-          opt.lineTotal !== undefined && opt.lineTotal !== null
-            ? Number(opt.lineTotal)
-            : (Number(opt.unitPrice ?? opt.price ?? 0) * (Number(opt.qty ?? opt.quantity) || 1));
-        optionalsTotal += lineTotal;
+        const accCatalogItem = catalogData.find((p) => p.sku === opt.pn);
+        if (accCatalogItem) {
+          itemTotal += (accCatalogItem.price || 0) * item.quantity;
+        }
       });
     }
-    const itemTotal = (itemBasePrice + optionalsTotal) * (Number(item.quantity) || 1);
     return sum + itemTotal;
   }, 0);
   const cartTotalWithVat = cartTotal * 1.18; // חישוב מע"מ סטנדרטי (18% נכון ל-2025)
@@ -7314,24 +7132,53 @@ export default function App() {
             ref={headerRef}
             className="sticky top-0 z-40 w-full bg-white shadow-md border-b border-gray-100 fixed-header"
           >
-            <div className="container mx-auto px-2.5 sm:px-4 h-16 sm:h-[60px] flex flex-row items-center justify-between gap-1 sm:gap-4">
+            <div className="container mx-auto px-4 min-h-[56px] flex flex-row items-center justify-between flex-wrap gap-1 sm:gap-4">
               {/* RIGHT SIDE: Menu & Back (Mobile optimized browser controls & Desktop standard) */}
               <div className="flex flex-row items-center gap-2 md:gap-4 flex-shrink-0">
-                {/* MOBILE ONLY: Hamburger (primary bg-[#0c2d57] text-white) + Logo (enlarged by 50%) */}
-                <div className="flex md:hidden items-center gap-2.5 flex-shrink-0">
-                  {/* 1. Hamburger button: primary (bg-[#0c2d57] text-white) */}
+                {/* MOBILE ONLY: Browser-style Navigation Controls with large touch targets */}
+                <div
+                  id="mobile-browser-navigation-bar"
+                  className="flex md:hidden items-center gap-0.5 bg-gray-50 border border-gray-200/80 p-1 rounded-xl shadow-xs"
+                >
+                  {/* 1. Menu Button: 52px size, large Menu bars */}
                   <button
                     id="mobile-nav-hamburger"
                     type="button"
                     onClick={() => setMobileMenuOpen(true)}
-                    className="flex items-center justify-center w-10 h-10 bg-[#0c2d57] hover:bg-[#004387] text-white rounded-xl shadow-xs transition-all duration-200 active:scale-95 flex-shrink-0 cursor-pointer"
+                    className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 rounded-lg shadow-sm transition-all duration-200 active:scale-95 flex-shrink-0"
                     aria-label="פתח תפריט"
                     title="תפריט ניווט"
                   >
-                    <Menu size={22} className="stroke-[2.5]" />
+                    <Menu size={30} className="stroke-[2.5]" />
                   </button>
-
-                  {/* 2. Clickable RBS Logo: enlarged by 50% */}
+                  <div className="h-9 w-[1px] bg-gray-300/60 mx-0.5"></div>
+                  {/* 2. Back Button (ChevronRight for RTL back) */}
+                  <button
+                    id="mobile-nav-back"
+                    type="button"
+                    onClick={() => goBack()}
+                    className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                    aria-label="אחורה"
+                    title="חזור אחורה"
+                  >
+                    <ChevronRight size={28} className="stroke-[2.5]" />
+                  </button>
+                  {/* 3. Forward Button (ChevronLeft for RTL forward) */}
+                  <button
+                    id="mobile-nav-forward"
+                    type="button"
+                    onClick={() => {
+                      if (window.history.state) {
+                        window.history.forward();
+                      }
+                    }}
+                    className="flex items-center justify-center w-12 h-12 bg-white hover:bg-gray-100 text-[#004387] border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
+                    aria-label="קדימה"
+                    title="חזור קדימה"
+                  >
+                    <ChevronLeft size={28} className="stroke-[2.5]" />
+                  </button>
+                  {/* 4. Clickable RBS Logo / Home Button */}
                   <button
                     id="mobile-nav-home"
                     type="button"
@@ -7339,15 +7186,15 @@ export default function App() {
                       setSearchQuery("");
                       navigateHome();
                     }}
-                    className="flex items-center justify-center h-[50px] bg-transparent border-none p-0 cursor-pointer active:scale-95 transition-transform flex-shrink-0"
+                    className="flex items-center justify-center h-20 w-32 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg shadow-sm transition-all duration-200 active:scale-90 flex-shrink-0"
                     aria-label="דף הבית"
                     title="דף הבית - RBS"
                   >
                     <img
                       referrerPolicy="no-referrer"
                       src="/new-logo.png"
-                      alt="RBS Telecom"
-                      className="h-[48px] sm:h-[52px] w-auto max-w-[155px] object-contain select-none"
+                      alt="RBS Logo"
+                      className="h-16 w-28 object-contain select-none"
                     />
                   </button>
                 </div>
@@ -7379,7 +7226,7 @@ export default function App() {
                     referrerPolicy="no-referrer"
                     src="/new-logo.png"
                     alt="RBS Logo"
-                    className="h-11 md:h-12 max-h-[48px] w-auto max-w-[180px] object-contain cursor-pointer hover:opacity-80 active:scale-95 transition-all select-none"
+                    className="h-28 w-auto object-contain cursor-pointer hover:opacity-80 active:scale-95 transition-all"
                     onClick={() => {
                       setSearchQuery("");
                       navigateHome();
@@ -7616,7 +7463,7 @@ export default function App() {
                           עגלת הזמנה
                         </span>
                         {cart.length > 0 && (
-                          <span className="absolute -top-2 -right-2 bg-[#c2410c] text-white text-[11px] sm:text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
+                          <span className="absolute -top-2 -right-2 bg-[#c2410c] text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
                             {cart.reduce((sum, item) => sum + item.quantity, 0)}
                           </span>
                         )}
@@ -7636,7 +7483,7 @@ export default function App() {
                         אזור אישי
                       </span>
                       {agentUnread > 0 && (
-                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[11px] sm:text-[10px] font-bold min-w-[20px] h-5 px-1 rounded-full flex items-center justify-center shadow-sm ring-2 ring-white">
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold min-w-[20px] h-5 px-1 rounded-full flex items-center justify-center shadow-sm ring-2 ring-white">
                           {agentUnread > 99 ? "99+" : agentUnread}
                         </span>
                       )}
@@ -7662,7 +7509,24 @@ export default function App() {
                 </>
               )}
               {isGuest && (
-                <div className="flex-shrink-0 flex items-center gap-1.5 sm:gap-2">
+                <div className="flex-shrink-0 flex items-center gap-2">
+                  <button
+                    onClick={() => setShowProfile(true)}
+                    aria-label="מועדפים"
+                    title="מועדפים"
+                    className="relative flex items-center justify-center gap-1.5 h-11 !px-4 bg-white border border-gray-200 hover:border-gray-300 text-red-500 font-bold rounded-xl active:scale-95 text-sm whitespace-nowrap"
+                  >
+                    <Heart
+                      size={18}
+                      className="flex-shrink-0 fill-red-500 stroke-[2.25]"
+                    />{" "}
+                    <span className="hidden sm:inline">מועדפים</span>
+                    {favorites.length > 0 && (
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold min-w-[20px] h-5 px-1 rounded-full flex items-center justify-center shadow-sm ring-2 ring-white">
+                        {favorites.length}
+                      </span>
+                    )}
+                  </button>
                   <button
                     onClick={() => {
                       try {
@@ -7671,37 +7535,20 @@ export default function App() {
                       setIsGuest(false);
                     }}
                     title="כניסה / רישום למפיצים מורשים בלבד"
-                    className="flex items-center justify-center gap-1 sm:gap-1.5 h-9 sm:h-11 px-2.5 sm:px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl active:scale-95 text-xs sm:text-sm whitespace-nowrap shadow-xs cursor-pointer"
+                    className="flex items-center justify-center gap-1.5 h-11 !px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl active:scale-95 text-sm whitespace-nowrap"
                   >
-                    <Lock size={15} className="flex-shrink-0 stroke-[2.25] sm:w-[18px] sm:h-[18px]" />
-                    <span>כניסת מפיצים</span>
-                  </button>
-                  <button
-                    onClick={() => setShowProfile(true)}
-                    aria-label="מועדפים"
-                    title="מועדפים"
-                    className="relative flex items-center justify-center gap-1 h-9 sm:h-11 px-2 sm:px-3 bg-white border border-gray-200 hover:border-gray-300 text-red-500 font-bold rounded-xl active:scale-95 text-xs sm:text-sm whitespace-nowrap cursor-pointer"
-                  >
-                    <Heart
-                      size={18}
-                      className="flex-shrink-0 fill-red-500 stroke-[2.25]"
-                    />
-                    <span className="hidden sm:inline">מועדפים</span>
-                    {favorites.length > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[11px] sm:text-[10px] font-bold min-w-[18px] sm:min-w-[20px] h-[18px] sm:h-5 px-1 rounded-full flex items-center justify-center shadow-sm ring-2 ring-white">
-                        {favorites.length}
-                      </span>
-                    )}
+                    <Lock size={18} className="flex-shrink-0 stroke-[2.25]" />{" "}
+                    כניסת מפיצים
                   </button>
                 </div>
               )}
             </div>
-            {/* ROW 2: Mobile Search Bar + Ghost Back/Forward pair */}
+            {/* MOBILE SEARCH BAR INTEGRATED INTO STICKY HEADER */}
             <div
-              className={`md:hidden bg-white px-4 py-1.5 w-full block border-t border-gray-100 ${isSearchFocused ? "shadow-xs" : ""}`}
+              className={`md:hidden bg-white px-4 py-2.5 w-full block transition-all ${isSearchFocused ? "pt-3 pb-2 shadow-xs" : "pb-3"}`}
             >
-              <div className="flex items-center gap-2 h-9">
-                <div className="flex-grow flex items-center bg-[#f2f2f2] px-3.5 h-9 border border-transparent focus-within:border-[#004387] focus-within:bg-white rounded-xl transition-all">
+              <div className="flex items-center gap-2">
+                <div className="flex-grow flex items-center bg-[#f2f2f2] px-3.5 py-2 border border-transparent focus-within:border-[#004387] focus-within:bg-white rounded-xl transition-all">
                   <Search
                     size={18}
                     className="text-gray-400 ml-2 flex-shrink-0"
@@ -7710,7 +7557,7 @@ export default function App() {
                     type="text"
                     placeholder="חיפוש חופשי (מק״ט, שם, מותג)..."
                     aria-label="חיפוש מוצרים"
-                    className="bg-transparent border-none outline-none w-full min-w-0 text-sm shadow-none focus:ring-0 !p-0 !m-0 text-right text-gray-700"
+                    className="bg-transparent border-none outline-none w-full min-w-0 text-base shadow-none focus:ring-0 !p-0 !m-0 text-right text-gray-700"
                     value={searchQuery}
                     onFocus={() => setIsSearchFocused(true)}
                     onBlur={() => {
@@ -7734,31 +7581,6 @@ export default function App() {
                     </button>
                   )}
                 </div>
-                {/* the back/forward arrows as one small ghost button pair (h-9) left of the search field */}
-                <div className="flex items-center h-9 bg-gray-50 border border-gray-200/80 rounded-lg overflow-hidden divide-x divide-gray-200/80 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (window.history.state) {
-                        window.history.forward();
-                      }
-                    }}
-                    className="flex items-center justify-center w-8 h-9 text-gray-600 hover:text-[#0c2d57] hover:bg-gray-100 transition-colors active:scale-90"
-                    aria-label="קדימה"
-                    title="חזור קדימה"
-                  >
-                    <ChevronLeft size={18} className="stroke-[2.25]" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => goBack()}
-                    className="flex items-center justify-center w-8 h-9 text-gray-600 hover:text-[#0c2d57] hover:bg-gray-100 transition-colors active:scale-90"
-                    aria-label="אחורה"
-                    title="חזור אחורה"
-                  >
-                    <ChevronRight size={18} className="stroke-[2.25]" />
-                  </button>
-                </div>
                 {isSearchFocused && (
                   <button
                     type="button"
@@ -7772,61 +7594,18 @@ export default function App() {
                         document.activeElement.blur();
                       }
                     }}
-                    className="text-xs font-bold text-[#004387] px-2 py-1.5 focus:outline-none shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                    className="text-sm font-bold text-[#004387] px-2 py-1.5 focus:outline-none shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                   >
                     ביטול
                   </button>
                 )}
               </div>
             </div>
-            {/* ROW 3: Mobile Category Chips Bar (One-touch navigation between all catalogs) */}
-            {catalogFolders.length > 0 && !isSearchFocused && (
+            {/* MOBILE ONLY DYNAMIC BREADCRUMB BAR (INTEGRATED AND COMPACT - NO DUPLICATE LOGOS) */}
+            {(currentView !== "home" || searchQuery) && (
               <div
-                className="md:hidden bg-slate-50/90 px-2.5 py-1.5 w-full block border-t border-gray-100 overflow-x-auto"
-                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                className={`md:hidden bg-white px-4 pb-2 w-full text-right transition-all ${isSearchFocused ? "hidden" : "block"}`}
               >
-                <div className="flex items-center gap-1.5 whitespace-nowrap min-w-max">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery("");
-                      navigateHome();
-                    }}
-                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                      currentView === "home" && !searchQuery
-                        ? "bg-[#004387] text-white shadow-xs"
-                        : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
-                    }`}
-                  >
-                    <Home size={13} className="flex-shrink-0" />
-                    <span>כל המחירונים</span>
-                  </button>
-                  {catalogFolders.map((cat, idx) => {
-                    const isSelected = selectedCatalog === cat.name && currentView !== "home";
-                    return (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => navigateToCatalog(cat.name)}
-                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                          isSelected
-                            ? "bg-[#004387] text-white shadow-xs font-bold"
-                            : "bg-white border border-gray-200 text-gray-700 hover:border-[#004387] active:scale-95"
-                        }`}
-                      >
-                        <span>{cat.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-          {/* MOBILE ONLY DYNAMIC BREADCRUMB BAR (INTEGRATED AND COMPACT - NO DUPLICATE LOGOS) */}
-          {(currentView !== "home" || searchQuery) && (
-            <div
-              className={`md:hidden bg-white px-4 pb-2 w-full text-right transition-all border-b border-gray-100 ${isSearchFocused ? "hidden" : "block"}`}
-            >
                 <div
                   className="flex flex-row items-center justify-start gap-1.5 text-xs text-gray-600 overflow-x-auto py-1"
                   style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
@@ -8000,6 +7779,7 @@ export default function App() {
                 </div>
               </div>
             )}
+          </div>
           {/* Spacer not needed for sticky layout as browser handles flow spacing natively, preserved at 0px to maintain node structure */}
           <div
             className="w-full block"
@@ -8013,8 +7793,7 @@ export default function App() {
             currentView !== "checkout" &&
             !searchQuery && (
               <div className="container mx-auto px-4 pt-2">
-                {/* Desktop: Keep unchanged */}
-                <div className="hidden sm:flex gap-2">
+                <div className="flex gap-2">
                   <button
                     onClick={() => copyShareCategoryLink("copy")}
                     className="flex-1 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#004387] rounded-lg font-bold text-[12px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
@@ -8028,53 +7807,6 @@ export default function App() {
                     <MessageSquare size={14} /> שלח קטגוריה בוואטסאפ
                   </button>
                 </div>
-
-                {/* Mobile (< 640px): Collapse into one icon button (lucide Share2) with a small popover */}
-                <div className="sm:hidden flex justify-end">
-                  <div className="relative inline-block">
-                    <button
-                      type="button"
-                      onClick={() => setCategoryShareOpen((prev) => !prev)}
-                      aria-label="שתף קטגוריה"
-                      title="שתף קטגוריה"
-                      className="p-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#004387] rounded-lg flex items-center justify-center cursor-pointer transition-colors shadow-xs active:scale-95"
-                    >
-                      <Share2 size={16} />
-                    </button>
-                    {categoryShareOpen && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-30"
-                          onClick={() => setCategoryShareOpen(false)}
-                        />
-                        <div className="absolute top-full left-0 mt-1 z-40 bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 min-w-[210px] flex flex-col gap-1 text-right">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              copyShareCategoryLink("copy");
-                              setCategoryShareOpen(false);
-                            }}
-                            className="w-full py-2 px-3 hover:bg-blue-50 text-[#004387] rounded-lg font-bold text-[12px] flex items-center gap-2 cursor-pointer transition-colors text-right"
-                          >
-                            <Link size={14} className="flex-shrink-0" />
-                            <span>העתק קישור לקטגוריה</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              copyShareCategoryLink("whatsapp");
-                              setCategoryShareOpen(false);
-                            }}
-                            className="w-full py-2 px-3 hover:bg-green-50 text-green-700 rounded-lg font-bold text-[12px] flex items-center gap-2 cursor-pointer transition-colors text-right"
-                          >
-                            <MessageSquare size={14} className="flex-shrink-0" />
-                            <span>שלח קטגוריה בוואטסאפ</span>
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
               </div>
             )}
           <div className="container mx-auto px-4 py-2">
@@ -8085,30 +7817,27 @@ export default function App() {
                   className="fixed inset-0 bg-black/60 backdrop-blur-sm"
                   onClick={() => setMobileMenuOpen(false)}
                 ></div>
-                <div className="relative w-4/5 max-w-sm bg-white h-full shadow-xl flex flex-col">
-                  <div className="flex-shrink-0 flex items-center justify-between p-4 border-b border-gray-100">
-                    <h2
-                      onClick={() => {
-                        setMobileMenuOpen(false);
-                        if (!isAdmin) return;
-                        setAdminError("");
-                        setSyncSuccessMsg("");
-                        setShowAdminSyncModal(true);
-                      }}
-                      className="font-bold text-xl text-[#0c2d57] cursor-pointer select-none active:text-[#c2410c] transition-colors"
-                    >
-                      ניווט מהיר
-                    </h2>
-                    <button
-                      className="!p-2 !m-0 bg-[#f2f2f2] text-gray-600 hover:text-[#004387] border-none rounded-md"
-                      onClick={() => setMobileMenuOpen(false)}
-                      aria-label="סגור תפריט"
-                    >
-                      <X size={20} />
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-4">
-                    <ul className="space-y-4">
+                <div className="relative w-4/5 max-w-sm bg-white h-full shadow-xl p-4 overflow-y-auto">
+                  <button
+                    className="absolute top-4 left-4 !p-2 !m-0 bg-[#f2f2f2] text-gray-600 hover:text-[#004387] border-none"
+                    onClick={() => setMobileMenuOpen(false)}
+                    aria-label="סגור תפריט"
+                  >
+                    <X size={20} />
+                  </button>
+                  <h2
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      if (!isAdmin) return;
+                      setAdminError("");
+                      setSyncSuccessMsg("");
+                      setShowAdminSyncModal(true);
+                    }}
+                    className="font-bold text-xl mb-6 mt-2 text-[#0c2d57] cursor-pointer select-none active:text-[#c2410c] transition-colors"
+                  >
+                    ניווט מהיר
+                  </h2>
+                  <ul className="space-y-4">
                     <li>
                       <button
                         onClick={navigateHome}
@@ -8128,40 +7857,7 @@ export default function App() {
                         </button>
                       </li>
                     ))}
-                    <hr className="border-gray-100" />
-                    <li>
-                      <button
-                        onClick={() => {
-                          setMobileMenuOpen(false);
-                          window.dispatchEvent(new CustomEvent('show-install-prompt'));
-                        }}
-                        className="flex items-center gap-2.5 text-[#004387] font-bold text-sm text-right w-full bg-blue-50/70 hover:bg-blue-100/80 p-3 rounded-xl border border-blue-100 transition-colors"
-                      >
-                        <Download size={18} className="text-[#ff7a00] flex-shrink-0" />
-                        <span>התקנת אפליקציה למסך הבית (PWA)</span>
-                      </button>
-                    </li>
                   </ul>
-                  </div>
-                  {/* Distributor login button in hamburger menu */}
-                  {isGuest && (
-                    <div className="p-4 border-t border-gray-100 bg-gray-50/60 flex-shrink-0">
-                      <button
-                        onClick={() => {
-                          setMobileMenuOpen(false);
-                          try {
-                            sessionStorage.removeItem("rbs_guest");
-                          } catch {}
-                          setIsGuest(false);
-                        }}
-                        title="כניסה / רישום למפיצים מורשים בלבד"
-                        className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl active:scale-95 text-sm shadow-xs transition-colors cursor-pointer"
-                      >
-                        <Lock size={18} className="flex-shrink-0 stroke-[2.25]" />
-                        <span>כניסת מפיצים</span>
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -8689,7 +8385,7 @@ export default function App() {
                             </div>
 
                             {item.isClearance && (
-                              <div className="text-[11px] sm:text-[10px] text-teal-700 font-bold mt-1.5 flex items-center gap-1 bg-teal-50/50 p-1 w-fit rounded border border-teal-100">
+                              <div className="text-[10px] text-teal-700 font-bold mt-1.5 flex items-center gap-1 bg-teal-50/50 p-1 w-fit rounded border border-teal-100">
                                 <Tag size={12} className="text-teal-600" />{" "}
                                 מציאון:{" "}
                                 {item.clearancePrice
@@ -8698,7 +8394,7 @@ export default function App() {
                               </div>
                             )}
                             {item.isHotSale && !item.isClearance && (
-                              <div className="text-[11px] sm:text-[10px] text-red-600 font-bold mt-1.5 flex items-center gap-1 bg-red-50/50 p-1 w-fit rounded border border-red-100">
+                              <div className="text-[10px] text-red-600 font-bold mt-1.5 flex items-center gap-1 bg-red-50/50 p-1 w-fit rounded border border-red-100">
                                 <Flame size={12} className="text-red-500" />{" "}
                                 {item.saleType || "מבצע"}:{" "}
                                 {item.saleValue || "מחיר מיוחד - פנה לנציג"}
@@ -8706,53 +8402,28 @@ export default function App() {
                             )}
 
                             {item.optionals && item.optionals.length > 0 && (
-                              <div className="text-[11px] text-gray-700 mt-2 bg-slate-50 p-2 border border-slate-200 rounded">
-                                <div className="font-bold text-[#004387] mb-1 flex justify-between items-center text-[11px]">
-                                  <span>תוספות לארון ({item.optionals.reduce((s: number, o: any) => s + (Number(o.qty || o.quantity) || 1), 0)} פריטים):</span>
-                                  <span className="font-mono text-slate-600 font-semibold">
-                                    ₪{item.optionals.reduce((s: number, o: any) => s + (Number(o.lineTotal) || (Number(o.unitPrice || o.price || 0) * (Number(o.qty || o.quantity) || 1))), 0).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </span>
-                                </div>
-                                <ul className="space-y-1">
+                              <div className="text-[10px] text-gray-600 mt-2 bg-gray-50 p-1.5 border border-gray-100 rounded">
+                                <strong className="block mb-0.5">
+                                  תוספות:
+                                </strong>
+                                <ul className="pl-3 pr-1 list-disc">
                                   {item.optionals.map((opt: any, i: number) => {
-                                    const sku = opt.sku || opt.pn || '';
-                                    const name = opt.name || opt.description || sku;
-                                    const qty = Number(opt.qty || opt.quantity) || 1;
-                                    const lineTot = opt.lineTotal !== undefined && opt.lineTotal !== null
-                                      ? Number(opt.lineTotal)
-                                      : ((Number(opt.unitPrice || opt.price) || 0) * qty);
-                                    const posStr = opt.positions && opt.positions.length > 0 ? opt.positions.join(', ') : '';
+                                    const accCatalogItem = catalogData.find(
+                                      (p) => p.sku === opt.pn,
+                                    );
                                     return (
-                                      <li key={sku || i} className="flex justify-between items-center text-[11px] pt-1 border-t border-slate-100 first:border-0 first:pt-0">
-                                        <div className="flex-1 pl-2 truncate" title={`${name} (${sku})`}>
-                                          <span className="font-medium text-slate-800">{name}</span>
-                                          {sku && <span className="font-mono text-slate-400 text-[11px] sm:text-[10px] mr-1" dir="ltr">[{sku}]</span>}
-                                          {qty > 1 && (
-                                            <span className="inline-block mx-1 font-bold text-[#004387] bg-blue-50 px-1 rounded border border-blue-100">
-                                              ×{qty}
-                                            </span>
-                                          )}
-                                          {posStr && <span className="text-slate-400 text-[11px] sm:text-[10px] mr-1 font-mono">({posStr})</span>}
-                                        </div>
-                                        <span className="font-mono font-semibold text-slate-700 whitespace-nowrap">
-                                          ₪{lineTot.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </span>
+                                      <li key={i}>
+                                        {opt.pn}{" "}
+                                        {accCatalogItem
+                                          ? `(₪${accCatalogItem.price.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+                                          : ""}
                                       </li>
                                     );
                                   })}
                                 </ul>
                               </div>
                             )}
-                            <div className="mt-auto pt-2 flex items-center justify-between">
-                              <div className="text-xs font-bold text-[#004387] font-mono">
-                                סה"כ: ₪{(
-                                  ((Number(item.price) || 0) +
-                                    (item.optionals || []).reduce(
-                                      (s: number, o: any) => s + (Number(o.lineTotal) || (Number(o.unitPrice || o.price || 0) * (Number(o.qty || o.quantity) || 1))),
-                                      0
-                                    )) * (Number(item.quantity) || 1)
-                                ).toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </div>
+                            <div className="mt-auto pt-2 flex items-end justify-end">
                               <div className="flex items-center bg-[#f2f2f2] border border-gray-200 overflow-hidden">
                                 <button
                                   onClick={() => updateCartQuantity(item, -1)}
@@ -8789,16 +8460,10 @@ export default function App() {
                 </div>
                 {cart.length > 0 && (
                   <div className="border-t border-gray-200 p-5 bg-[#f2f2f2] shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.02)]">
-                    <div className="flex justify-between items-center mb-1 text-sm text-gray-600">
+                    <div className="flex justify-between items-center mb-4 text-lg font-bold text-[#0c2d57]">
                       <span>סה"כ כמות פריטים:</span>
-                      <span className="font-bold text-[#0c2d57]">
+                      <span className="text-2xl text-[#c2410c]">
                         {cart.reduce((sum, item) => sum + item.quantity, 0)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center mb-4 text-base sm:text-lg font-bold text-[#0c2d57]">
-                      <span>סה"כ לתשלום:</span>
-                      <span className="text-xl sm:text-2xl text-[#c2410c] font-mono font-black">
-                        ₪{cartTotal.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <button
@@ -8818,41 +8483,27 @@ export default function App() {
           {!advisorOpen && (
             <button
               onClick={() => setAdvisorOpen(true)}
-              className={`fixed right-4 z-[80] w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-[#004387] to-[#0c2d57] shadow-[0_8px_24px_rgba(0,67,135,0.45)] hover:scale-105 transition-all border-2 border-white shadow-lg active:scale-95 flex items-center justify-center cursor-pointer ${
-                !hasCookieConsent ? "max-sm:bottom-[136px] bottom-4" : "max-sm:bottom-[76px] bottom-4"
-              }`}
+              className="fixed bottom-4 right-4 z-[80] w-14 h-14 rounded-full bg-gradient-to-br from-[#004387] to-[#0c2d57] shadow-[0_8px_24px_rgba(0,67,135,0.45)] hover:scale-105 transition-transform border-2 border-white shadow-lg active:scale-95 flex items-center justify-center cursor-pointer"
               aria-label="פתח יועץ טכני חכם"
             >
               <img
-                src="/advisor-avatar.png"
+                src="https://lh3.googleusercontent.com/d/1ivu4rHgeaH6iiodL2WkA6i_6XS_gmmG_"
                 alt="יועץ טכני"
                 className="w-full h-full rounded-full object-cover"
                 onError={(e) => {
-                  const target = e.currentTarget as HTMLImageElement;
-                  if (!target.dataset.fallback) {
-                    target.dataset.fallback = "true";
-                    target.src = "https://lh3.googleusercontent.com/d/1ivu4rHgeaH6iiodL2WkA6i_6XS_gmmG_";
-                  } else {
-                    target.style.display = "none";
-                    const sibling = target.nextElementSibling as HTMLElement | SVGElement | null;
-                    if (sibling) {
-                      sibling.style.display = "block";
-                      sibling.classList.remove("hidden");
-                    }
-                  }
+                  (e.currentTarget as HTMLImageElement).style.display = "none";
                 }}
               />
-              <Bot size={26} className="text-white hidden" style={{ display: "none" }} />
-              <span className="flex absolute -top-0.5 -right-0.5 h-3.5 w-3.5">
+              <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500 border-2 border-white"></span>
               </span>
-              <span className="flex absolute -bottom-1 -left-1 bg-[#c2410c] rounded-full p-1 border-2 border-white items-center justify-center">
+              <span className="absolute -bottom-1 -left-1 bg-[#c2410c] rounded-full p-1 border-2 border-white flex items-center justify-center">
                 <Sparkles className="w-2.5 h-2.5 text-white" />
               </span>
             </button>
           )}
-          <InstallBanner disabled={!isHumanVerified} />
+          <InstallBanner />
           {/* SHOPPING CART ADDITION CONFIRMATION MODAL */}
           {addedItemConfirm && addedItemConfirm.isOpen && (
             <div
@@ -9064,7 +8715,7 @@ export default function App() {
                   </div>
                   {/* Content Header */}
                   <div className="text-center mb-4">
-                    <span className="inline-block bg-[#c2410c]/10 text-[#c2410c] font-black text-[11px] sm:text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1.5">
+                    <span className="inline-block bg-[#c2410c]/10 text-[#c2410c] font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1.5">
                       הזדמנות מיוחדת
                     </span>
                     <h3 className="font-extrabold text-[#0c2d57] text-lg leading-tight">
@@ -9081,7 +8732,7 @@ export default function App() {
                       <span className="text-xl font-black text-orange-600 leading-none">
                         {hotSaleCount}
                       </span>
-                      <span className="text-[11px] sm:text-[10px] text-gray-500 font-bold mt-1">
+                      <span className="text-[10px] text-gray-500 font-bold mt-1">
                         מבצעים חמים
                       </span>
                     </div>
@@ -9094,7 +8745,7 @@ export default function App() {
                       <span className="text-xl font-black text-emerald-600 leading-none">
                         {clearanceCount}
                       </span>
-                      <span className="text-[11px] sm:text-[10px] text-gray-500 font-bold mt-1">
+                      <span className="text-[10px] text-gray-500 font-bold mt-1">
                         פריטים במציאון
                       </span>
                     </div>
@@ -9135,7 +8786,7 @@ export default function App() {
               {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-[#004387] text-white flex-shrink-0 shadow-md gap-3">
                 <div className="min-w-0">
-                  <span className="text-[11px] sm:text-[10px] uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full font-bold">
+                  <span className="text-[10px] uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full font-bold">
                     הצעת מחיר סוכן ומחירון מורחב
                   </span>
                   <h2 className="font-extrabold text-base truncate mt-1">
@@ -9269,7 +8920,7 @@ export default function App() {
                                 מק״ט: {pr.sku}
                               </span>
                               {pr.description && (
-                                <span className="text-gray-400 text-[11px] sm:text-[10px] block truncate max-w-[260px]">
+                                <span className="text-gray-400 text-[10px] block truncate max-w-[260px]">
                                   {String(pr.description).slice(0, 70)}
                                 </span>
                               )}
@@ -9351,7 +9002,7 @@ export default function App() {
                     {showProfitCalculator && (
                       <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-xs animate-fade-in">
                         <div className="bg-white p-2 rounded border border-[#cdd9e8]">
-                          <span className="text-gray-400 block text-[11px] sm:text-[10px]">
+                          <span className="text-gray-400 block text-[10px]">
                             מחזור מחיר מתקין סה״כ
                           </span>
                           <span className="font-bold text-[#0c2d57] text-sm block mt-0.5">
@@ -9365,7 +9016,7 @@ export default function App() {
                           </span>
                         </div>
                         <div className="bg-white p-2 rounded border border-[#cdd9e8]">
-                          <span className="text-gray-400 block text-[11px] sm:text-[10px]">
+                          <span className="text-gray-400 block text-[10px]">
                             עלות רכש סודית
                           </span>
                           <span className="font-bold text-gray-600 text-sm block mt-0.5">
@@ -9379,7 +9030,7 @@ export default function App() {
                           </span>
                         </div>
                         <div className="bg-white p-2 rounded border border-[#cdd9e8]">
-                          <span className="text-gray-400 block text-[11px] sm:text-[10px]">
+                          <span className="text-gray-400 block text-[10px]">
                             רווח גולמי בעסקה
                           </span>
                           <span
@@ -9396,7 +9047,7 @@ export default function App() {
                           </span>
                         </div>
                         <div className="bg-white p-2 rounded border border-[#cdd9e8]">
-                          <span className="text-gray-400 block text-[11px] sm:text-[10px]">
+                          <span className="text-gray-400 block text-[10px]">
                             ממוצע רווחיות גולמי
                           </span>
                           <span
@@ -9496,7 +9147,7 @@ export default function App() {
                           </div>
                           <div className="grid grid-cols-3 gap-2 text-center">
                             <div className="bg-white/60 p-2 rounded-lg border border-emerald-100/50">
-                              <span className="text-gray-400 block text-[11px] mb-0.5">
+                              <span className="text-gray-400 block text-[9px] mb-0.5">
                                 שווי ערך מחיר מתקין מלא
                               </span>
                               <span className="font-bold line-through text-gray-500 block text-xs">
@@ -9507,7 +9158,7 @@ export default function App() {
                               </span>
                             </div>
                             <div className="bg-white/90 p-2 rounded-lg border border-emerald-100/50">
-                              <span className="text-emerald-800 block text-[11px] font-bold mb-0.5">
+                              <span className="text-emerald-800 block text-[9px] font-bold mb-0.5">
                                 סכום ההנחה (₪)
                               </span>
                               <span className="font-extrabold text-emerald-700 block text-sm">
@@ -9518,7 +9169,7 @@ export default function App() {
                               </span>
                             </div>
                             <div className="bg-emerald-600 p-2 rounded-lg text-white">
-                              <span className="text-emerald-100 block text-[11px] font-bold mb-0.5">
+                              <span className="text-emerald-100 block text-[9px] font-bold mb-0.5">
                                 אחוז חיסכון כולל
                               </span>
                               <span className="font-black block text-sm">
@@ -10369,7 +10020,7 @@ export default function App() {
                           </h3>
                         </div>
                         <span
-                          className={`text-[11px] sm:text-[10px] font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${userRole === "sales_manager" ? "bg-purple-500" : "bg-white/20"}`}
+                          className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${userRole === "sales_manager" ? "bg-purple-500" : "bg-white/20"}`}
                         >
                           {userRole === "sales_manager"
                             ? "מנהל מכירות"
@@ -10483,7 +10134,7 @@ export default function App() {
                                   )}
                                 </div>
                                 <span
-                                  className={`text-[11px] sm:text-[10px] font-bold px-2 py-1 rounded-lg flex-shrink-0 ${badge.cls}`}
+                                  className={`text-[10px] font-bold px-2 py-1 rounded-lg flex-shrink-0 ${badge.cls}`}
                                 >
                                   {badge.txt}
                                 </span>
@@ -10509,7 +10160,7 @@ export default function App() {
                                 </span>
                               </div>
                               {g.oldestPendingDays > 7 && (
-                                <div className="mt-2 text-[11px] sm:text-[10px] font-bold text-red-700 bg-red-50 border border-red-100 rounded-lg px-2 py-1 text-center">
+                                <div className="mt-2 text-[10px] font-bold text-red-700 bg-red-50 border border-red-100 rounded-lg px-2 py-1 text-center">
                                   ממתין לחתימה {g.oldestPendingDays} ימים
                                 </div>
                               )}
@@ -10536,22 +10187,22 @@ export default function App() {
                         </div>
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
                           {isAdmin && (
-                            <span className="text-[11px] sm:text-[10px] font-bold bg-[#c2410c] px-2 py-0.5 rounded-full">
+                            <span className="text-[10px] font-bold bg-[#c2410c] px-2 py-0.5 rounded-full">
                               מנהל מערכת
                             </span>
                           )}
                           {userRole === "agent" && (
-                            <span className="text-[11px] sm:text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">
+                            <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">
                               סוכן
                             </span>
                           )}
                           {userRole === "sales_manager" && (
-                            <span className="text-[11px] sm:text-[10px] font-bold bg-purple-500 px-2 py-0.5 rounded-full">
+                            <span className="text-[10px] font-bold bg-purple-500 px-2 py-0.5 rounded-full">
                               מנהל מכירות
                             </span>
                           )}
                           {userProfile?.tier && (
-                            <span className="text-[11px] sm:text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">
+                            <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">
                               {userProfile.tier}
                             </span>
                           )}
@@ -10560,7 +10211,7 @@ export default function App() {
                       <div className="flex gap-5 mt-3">
                         {userProfile?.customerNumber && (
                           <div>
-                            <span className="text-white/60 text-[11px] sm:text-[10px] block">
+                            <span className="text-white/60 text-[10px] block">
                               מספר לקוח
                             </span>
                             <span className="font-bold text-sm">
@@ -10570,7 +10221,7 @@ export default function App() {
                         )}
                         {userProfile?.agent && (
                           <div>
-                            <span className="text-white/60 text-[11px] sm:text-[10px] block">
+                            <span className="text-white/60 text-[10px] block">
                               סוכן מטפל
                             </span>
                             <span className="font-bold text-sm">
@@ -10648,7 +10299,7 @@ export default function App() {
                                 <User size={14} />
                               </div>
                               <div>
-                                <span className="text-[11px] sm:text-[10px] text-gray-400 block leading-tight">
+                                <span className="text-[10px] text-gray-400 block leading-tight">
                                   סוכן מכירות אישי
                                 </span>
                                 <span className="font-extrabold text-xs text-[#0c2d57] leading-tight">
@@ -10862,7 +10513,7 @@ export default function App() {
                                   <span className="truncate">
                                     {l.name} ×{l.qty}
                                     {l.wholesalePrice ? (
-                                      <span className="text-[11px] sm:text-[10px] text-blue-600 ml-1 block">
+                                      <span className="text-[10px] text-blue-600 ml-1 block">
                                         מחיר בסיס מפיץ: ₪{l.wholesalePrice}
                                       </span>
                                     ) : null}
@@ -10886,7 +10537,7 @@ export default function App() {
                                     <span className="font-bold text-green-800 block">
                                       ✓ אושר ונחתם דיגיטלית
                                     </span>
-                                    <span className="text-gray-500 text-[11px] sm:text-[10px]">
+                                    <span className="text-gray-500 text-[10px]">
                                       על ידי: {q.signedBy || "מורשה חתימה"}
                                     </span>
                                   </div>
@@ -11564,13 +11215,13 @@ export default function App() {
                                       q.customerName ||
                                       "לקוח כללי"}
                                   </div>
-                                  <span className="text-[11px] sm:text-[10px] text-gray-400 font-mono block">
+                                  <span className="text-[10px] text-gray-400 font-mono block">
                                     מזהה: {q.id?.slice(-6).toUpperCase()}
                                   </span>
                                 </div>
                                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                                   <span
-                                    className={`text-[11px] sm:text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                    className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
                                       q.status === "approved"
                                         ? "bg-green-100 text-green-700"
                                         : q.status === "rejected"
@@ -11597,14 +11248,14 @@ export default function App() {
                                 </div>
                               </div>
                               {/* Quick details about products in quote */}
-                              <div className="mt-2 text-[11px] sm:text-[10px] text-gray-500 leading-normal bg-white/75 p-1.5 rounded-lg border border-gray-100/50 text-right">
+                              <div className="mt-2 text-[10px] text-gray-500 leading-normal bg-white/75 p-1.5 rounded-lg border border-gray-100/50 text-right">
                                 {q.signature && (
                                   <div className="flex items-center gap-1.5 mb-1.5 bg-green-50 border border-green-200 rounded-lg px-2 py-1">
                                     <PenTool
                                       size={11}
                                       className="text-green-700 flex-shrink-0"
                                     />
-                                    <span className="text-[11px] sm:text-[10px] font-bold text-green-800">
+                                    <span className="text-[10px] font-bold text-green-800">
                                       נחתם דיגיטלית ע"י {q.signedBy || "הלקוח"}
                                     </span>
                                   </div>
@@ -11689,7 +11340,7 @@ export default function App() {
                         {/* Consolidated Stats */}
                         <div className="grid grid-cols-3 gap-2 mb-4">
                           <div className="bg-white rounded-xl p-2.5 border border-gray-100 text-center">
-                            <span className="text-[11px] sm:text-[10px] text-gray-400 block mb-0.5">
+                            <span className="text-[10px] text-gray-400 block mb-0.5">
                               סה״כ מחזור הזמנות
                             </span>
                             <span className="text-sm font-extrabold text-green-600">
@@ -11703,7 +11354,7 @@ export default function App() {
                             </span>
                           </div>
                           <div className="bg-white rounded-xl p-2.5 border border-gray-100 text-center">
-                            <span className="text-[11px] sm:text-[10px] text-gray-400 block mb-0.5">
+                            <span className="text-[10px] text-gray-400 block mb-0.5">
                               סה״כ הזמנות ברשת
                             </span>
                             <span className="text-sm font-extrabold text-[#004387]">
@@ -11714,7 +11365,7 @@ export default function App() {
                             </span>
                           </div>
                           <div className="bg-white rounded-xl p-2.5 border border-gray-100 text-center">
-                            <span className="text-[11px] sm:text-[10px] text-gray-400 block mb-0.5">
+                            <span className="text-[10px] text-gray-400 block mb-0.5">
                               לקוחות פעילים
                             </span>
                             <span className="text-sm font-extrabold text-purple-600">
@@ -11758,7 +11409,7 @@ export default function App() {
                                     style={{ width: `${percent}%` }}
                                   />
                                 </div>
-                                <div className="flex gap-2.5 text-[11px] text-gray-400 mt-1">
+                                <div className="flex gap-2.5 text-[9px] text-gray-400 mt-1">
                                   <span>📦 {ag.totalOrders} הזמנות</span>
                                   <span>
                                     • בטיפול: {ag.statusCounts.processing || 0}
@@ -11903,7 +11554,7 @@ export default function App() {
                                                       <div className="flex gap-1.5">
                                                         <a
                                                           href={`tel:${g.phone}`}
-                                                          className="px-2.5 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded-md text-[11px] sm:text-[10px] font-bold flex items-center gap-1"
+                                                          className="px-2.5 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded-md text-[10px] font-bold flex items-center gap-1"
                                                         >
                                                           📞 התקשר
                                                         </a>
@@ -11911,7 +11562,7 @@ export default function App() {
                                                           href={`https://wa.me/${formatPhoneForWhatsApp(g.phone)}`}
                                                           target="_blank"
                                                           rel="noopener noreferrer"
-                                                          className="px-2.5 py-1 bg-[#25D366] text-white hover:bg-[#20ba56] rounded-md text-[11px] sm:text-[10px] font-bold flex items-center gap-1"
+                                                          className="px-2.5 py-1 bg-[#25D366] text-white hover:bg-[#20ba56] rounded-md text-[10px] font-bold flex items-center gap-1"
                                                         >
                                                           💬 וואטסאפ
                                                         </a>
@@ -11930,7 +11581,7 @@ export default function App() {
                                                       </div>
                                                       <a
                                                         href={`mailto:${g.email}`}
-                                                        className="px-2.5 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md text-[11px] sm:text-[10px] font-bold flex items-center gap-1"
+                                                        className="px-2.5 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md text-[10px] font-bold flex items-center gap-1"
                                                       >
                                                         ✉️ שלח מייל
                                                       </a>
@@ -11951,7 +11602,7 @@ export default function App() {
                                                       <span className="text-gray-500">
                                                         סוכן מטפל:
                                                       </span>{" "}
-                                                      <span className="font-extrabold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded text-[11px] sm:text-[10px]">
+                                                      <span className="font-extrabold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded text-[10px]">
                                                         {g.agent}
                                                       </span>
                                                     </div>
@@ -11976,14 +11627,14 @@ export default function App() {
                                                         </span>
                                                         <div className="flex items-center gap-1.5 flex-shrink-0">
                                                           <span
-                                                            className={`text-[11px] sm:text-[10px] font-extrabold px-2 py-0.5 rounded-full ${orderStatusClass(o.status)}`}
+                                                            className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${orderStatusClass(o.status)}`}
                                                           >
                                                             {orderStatusLabel(
                                                               o.status,
                                                             )}
                                                           </span>
                                                           <span
-                                                            className={`text-[11px] sm:text-[10px] font-extrabold px-2 py-0.5 rounded-full ${o.method === "whatsapp" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}
+                                                            className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${o.method === "whatsapp" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}
                                                           >
                                                             {o.method ===
                                                             "whatsapp"
@@ -12009,7 +11660,7 @@ export default function App() {
                                                                     {it.name}
                                                                   </span>
                                                                   {it.sku && (
-                                                                    <span className="text-[11px] text-gray-400 font-mono">
+                                                                    <span className="text-[9px] text-gray-400 font-mono">
                                                                       מק״ט:{" "}
                                                                       {it.sku}
                                                                     </span>
@@ -12031,12 +11682,12 @@ export default function App() {
                                                       )}
                                                       {o.detailsText && (
                                                         <details className="mt-2 text-right">
-                                                          <summary className="text-[11px] sm:text-[10px] text-[#004387] cursor-pointer font-bold">
+                                                          <summary className="text-[10px] text-[#004387] cursor-pointer font-bold">
                                                             הערות ופרטי התקשרות
                                                             נוספים
                                                           </summary>
                                                           <pre
-                                                            className="text-[11px] sm:text-[10px] text-gray-600 whitespace-pre-wrap mt-1 bg-gray-50 rounded p-1.5 max-h-32 overflow-y-auto text-right"
+                                                            className="text-[10px] text-gray-600 whitespace-pre-wrap mt-1 bg-gray-50 rounded p-1.5 max-h-32 overflow-y-auto text-right"
                                                             dir="rtl"
                                                           >
                                                             {o.detailsText}
@@ -12051,7 +11702,7 @@ export default function App() {
                                                               g,
                                                             )
                                                           }
-                                                          className="flex-grow py-1.5 bg-[#004387] text-white hover:bg-[#0c2d57] rounded-lg text-[11px] sm:text-[10px] font-extrabold flex items-center justify-center gap-1 border-none cursor-pointer"
+                                                          className="flex-grow py-1.5 bg-[#004387] text-white hover:bg-[#0c2d57] rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 border-none cursor-pointer"
                                                         >
                                                           <FileText size={11} />{" "}
                                                           הפוך להצעת מחיר
@@ -12060,7 +11711,7 @@ export default function App() {
                                                           onClick={() =>
                                                             openOrderInEditor(o)
                                                           }
-                                                          className="py-1.5 px-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-[11px] sm:text-[10px] font-bold cursor-pointer"
+                                                          className="py-1.5 px-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-[10px] font-bold cursor-pointer"
                                                         >
                                                           ✏️ ערוך הזמנה
                                                         </button>
@@ -12075,7 +11726,7 @@ export default function App() {
                                                                   "processing",
                                                                 )
                                                               }
-                                                              className="py-1.5 px-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[11px] sm:text-[10px] font-bold cursor-pointer"
+                                                              className="py-1.5 px-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[10px] font-bold cursor-pointer"
                                                             >
                                                               סמן בטיפול
                                                             </button>
@@ -12089,7 +11740,7 @@ export default function App() {
                                                                 "done",
                                                               )
                                                             }
-                                                            className="py-1.5 px-2 bg-green-50 border border-green-200 text-green-700 rounded-lg text-[11px] sm:text-[10px] font-bold cursor-pointer"
+                                                            className="py-1.5 px-2 bg-green-50 border border-green-200 text-green-700 rounded-lg text-[10px] font-bold cursor-pointer"
                                                           >
                                                             סמן הושלם
                                                           </button>
@@ -12103,7 +11754,7 @@ export default function App() {
                                                                 "sent",
                                                               )
                                                             }
-                                                            className="py-1.5 px-2 bg-gray-50 border border-gray-200 text-gray-500 rounded-lg text-[11px] sm:text-[10px] font-bold cursor-pointer"
+                                                            className="py-1.5 px-2 bg-gray-50 border border-gray-200 text-gray-500 rounded-lg text-[10px] font-bold cursor-pointer"
                                                           >
                                                             החזר ל׳נשלח׳
                                                           </button>
@@ -12207,7 +11858,7 @@ export default function App() {
                                           <div className="flex gap-1.5">
                                             <a
                                               href={`tel:${g.phone}`}
-                                              className="px-2.5 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded-md text-[11px] sm:text-[10px] font-bold flex items-center gap-1"
+                                              className="px-2.5 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded-md text-[10px] font-bold flex items-center gap-1"
                                             >
                                               📞 התקשר
                                             </a>
@@ -12215,7 +11866,7 @@ export default function App() {
                                               href={`https://wa.me/${formatPhoneForWhatsApp(g.phone)}`}
                                               target="_blank"
                                               rel="noopener noreferrer"
-                                              className="px-2.5 py-1 bg-[#25D366] text-white hover:bg-[#20ba56] rounded-md text-[11px] sm:text-[10px] font-bold flex items-center gap-1"
+                                              className="px-2.5 py-1 bg-[#25D366] text-white hover:bg-[#20ba56] rounded-md text-[10px] font-bold flex items-center gap-1"
                                             >
                                               💬 וואטסאפ
                                             </a>
@@ -12234,7 +11885,7 @@ export default function App() {
                                           </div>
                                           <a
                                             href={`mailto:${g.email}`}
-                                            className="px-2.5 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md text-[11px] sm:text-[10px] font-bold flex items-center gap-1"
+                                            className="px-2.5 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md text-[10px] font-bold flex items-center gap-1"
                                           >
                                             ✉️ שלח מייל
                                           </a>
@@ -12311,12 +11962,12 @@ export default function App() {
                                             </span>
                                             <div className="flex items-center gap-1.5 flex-shrink-0">
                                               <span
-                                                className={`text-[11px] sm:text-[10px] font-extrabold px-2 py-0.5 rounded-full ${orderStatusClass(o.status)}`}
+                                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${orderStatusClass(o.status)}`}
                                               >
                                                 {orderStatusLabel(o.status)}
                                               </span>
                                               <span
-                                                className={`text-[11px] sm:text-[10px] font-extrabold px-2 py-0.5 rounded-full ${o.method === "whatsapp" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}
+                                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${o.method === "whatsapp" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}
                                               >
                                                 {o.method === "whatsapp"
                                                   ? "וואטסאפ"
@@ -12337,7 +11988,7 @@ export default function App() {
                                                         {it.name}
                                                       </span>
                                                       {it.sku && (
-                                                        <span className="text-[11px] text-gray-400 font-mono">
+                                                        <span className="text-[9px] text-gray-400 font-mono">
                                                           מק״ט: {it.sku}
                                                         </span>
                                                       )}
@@ -12356,11 +12007,11 @@ export default function App() {
                                           )}
                                           {o.detailsText && (
                                             <details className="mt-2 text-right">
-                                              <summary className="text-[11px] sm:text-[10px] text-[#004387] cursor-pointer font-bold">
+                                              <summary className="text-[10px] text-[#004387] cursor-pointer font-bold">
                                                 הערות ופרטי התקשרות נוספים
                                               </summary>
                                               <pre
-                                                className="text-[11px] sm:text-[10px] text-gray-600 whitespace-pre-wrap mt-1 bg-gray-50 rounded p-1.5 max-h-32 overflow-y-auto text-right"
+                                                className="text-[10px] text-gray-600 whitespace-pre-wrap mt-1 bg-gray-50 rounded p-1.5 max-h-32 overflow-y-auto text-right"
                                                 dir="rtl"
                                               >
                                                 {o.detailsText}
@@ -12372,7 +12023,7 @@ export default function App() {
                                               onClick={() =>
                                                 convertOrderToQuote(o, g)
                                               }
-                                              className="flex-grow py-1.5 bg-[#004387] text-white hover:bg-[#0c2d57] rounded-lg text-[11px] sm:text-[10px] font-extrabold flex items-center justify-center gap-1 border-none cursor-pointer"
+                                              className="flex-grow py-1.5 bg-[#004387] text-white hover:bg-[#0c2d57] rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 border-none cursor-pointer"
                                             >
                                               <FileText size={11} /> הפוך להצעת
                                               מחיר
@@ -12381,7 +12032,7 @@ export default function App() {
                                               onClick={() =>
                                                 openOrderInEditor(o)
                                               }
-                                              className="py-1.5 px-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-[11px] sm:text-[10px] font-bold cursor-pointer"
+                                              className="py-1.5 px-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-[10px] font-bold cursor-pointer"
                                             >
                                               ✏️ ערוך הזמנה
                                             </button>
@@ -12394,7 +12045,7 @@ export default function App() {
                                                       "processing",
                                                     )
                                                   }
-                                                  className="py-1.5 px-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[11px] sm:text-[10px] font-bold cursor-pointer"
+                                                  className="py-1.5 px-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[10px] font-bold cursor-pointer"
                                                 >
                                                   סמן בטיפול
                                                 </button>
@@ -12407,7 +12058,7 @@ export default function App() {
                                                     "done",
                                                   )
                                                 }
-                                                className="py-1.5 px-2 bg-green-50 border border-green-200 text-green-700 rounded-lg text-[11px] sm:text-[10px] font-bold cursor-pointer"
+                                                className="py-1.5 px-2 bg-green-50 border border-green-200 text-green-700 rounded-lg text-[10px] font-bold cursor-pointer"
                                               >
                                                 סמן הושלם
                                               </button>
@@ -12420,7 +12071,7 @@ export default function App() {
                                                     "sent",
                                                   )
                                                 }
-                                                className="py-1.5 px-2 bg-gray-50 border border-gray-200 text-gray-500 rounded-lg text-[11px] sm:text-[10px] font-bold cursor-pointer"
+                                                className="py-1.5 px-2 bg-gray-50 border border-gray-200 text-gray-500 rounded-lg text-[10px] font-bold cursor-pointer"
                                               >
                                                 החזר ל׳נשלח׳
                                               </button>
@@ -12729,7 +12380,7 @@ export default function App() {
                           type="button"
                           onClick={clearAdminAuth}
                           disabled={isSyncingLive}
-                          className="text-[11px] sm:text-[10px] text-red-400 hover:text-red-600 bg-transparent hover:underline py-1 mt-1 border-none outline-none"
+                          className="text-[10px] text-red-400 hover:text-red-600 bg-transparent hover:underline py-1 mt-1 border-none outline-none"
                         >
                           נקה אימות מנהל במכשיר זה (התנתק)
                         </button>
@@ -12737,7 +12388,7 @@ export default function App() {
                     </div>
                   </form>
                 )}
-                <div className="mt-5 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] sm:text-[10px] text-gray-400 font-mono">
+                <div className="mt-5 pt-3 border-t border-gray-100 flex items-center justify-between text-[10px] text-gray-400 font-mono">
                   <span>RBS Admin Manager</span>
                   <span>v1.2.6</span>
                 </div>
@@ -12752,7 +12403,7 @@ export default function App() {
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 120, opacity: 0 }}
                 transition={{ type: "spring", stiffness: 280, damping: 26 }}
-                className={`fixed ${!hasCookieConsent ? "max-sm:bottom-[76px] bottom-4" : "bottom-4"} left-3 right-3 sm:left-1/2 sm:right-auto sm:transform sm:-translate-x-1/2 z-[100] mx-auto w-[92%] sm:w-full max-w-sm sm:max-w-md bg-white border-2 border-[#004387] shadow-[0_15px_45px_rgba(0,67,135,0.25)] rounded-2xl overflow-hidden transition-all duration-300 bulk-floating-bar ${
+                className={`fixed bottom-4 left-3 right-3 sm:left-1/2 sm:right-auto sm:transform sm:-translate-x-1/2 z-[100] mx-auto w-[92%] sm:w-full max-w-sm sm:max-w-md bg-white border-2 border-[#004387] shadow-[0_15px_45px_rgba(0,67,135,0.25)] rounded-2xl overflow-hidden transition-all duration-300 bulk-floating-bar ${
                   isBulkExpanded ? "p-4 sm:p-5" : "p-3 sm:p-4"
                 }`}
               >
@@ -12780,7 +12431,7 @@ export default function App() {
                             className="text-gray-400 group-hover:translate-y-[-2px] transition-transform animate-bounce"
                           />
                         </span>
-                        <span className="text-[11px] sm:text-[10px] text-gray-400 font-bold leading-none mt-0.5">
+                        <span className="text-[10px] text-gray-400 font-bold leading-none mt-0.5">
                           לחץ כאן לצפייה בפירוט ועריכה ↴
                         </span>
                       </div>
@@ -12810,7 +12461,7 @@ export default function App() {
                         <h4 className="text-[#0c2d57] font-black text-sm sm:text-base leading-tight flex items-center gap-1.5">
                           מוצרים שסומנו ({Object.keys(bulkSelection).length})
                         </h4>
-                        <p className="text-[11px] sm:text-[10px] text-gray-400 font-bold mt-0.5">
+                        <p className="text-[10px] text-gray-400 font-bold mt-0.5">
                           ערוך כמות או הסר מוצרים לפני ההוספה
                         </p>
                       </div>
@@ -12854,7 +12505,7 @@ export default function App() {
                                     onError={handleImageError}
                                   />
                                 ) : (
-                                  <div className="w-9 h-9 rounded-lg bg-slate-200 flex items-center justify-center text-[11px] text-gray-400 font-bold flex-shrink-0">
+                                  <div className="w-9 h-9 rounded-lg bg-slate-200 flex items-center justify-center text-[9px] text-gray-400 font-bold flex-shrink-0">
                                     אין
                                   </div>
                                 )}
@@ -12904,7 +12555,7 @@ export default function App() {
                                         item.quantity - 1,
                                       )
                                     }
-                                    className="w-5 h-5 rounded hover:bg-slate-100 text-gray-500 font-extrabold border-none flex items-center justify-center cursor-pointer text-[11px] sm:text-[10px]"
+                                    className="w-5 h-5 rounded hover:bg-slate-100 text-gray-500 font-extrabold border-none flex items-center justify-center cursor-pointer text-[10px]"
                                     type="button"
                                   >
                                     <Minus size={10} />
@@ -12920,7 +12571,7 @@ export default function App() {
                                         item.quantity + 1,
                                       )
                                     }
-                                    className="w-5 h-5 rounded hover:bg-slate-100 text-gray-500 font-extrabold border-none flex items-center justify-center cursor-pointer text-[11px] sm:text-[10px]"
+                                    className="w-5 h-5 rounded hover:bg-slate-100 text-gray-500 font-extrabold border-none flex items-center justify-center cursor-pointer text-[10px]"
                                     type="button"
                                   >
                                     <Plus size={10} />
@@ -12950,7 +12601,7 @@ export default function App() {
                     {/* Footer Totals & Action Buttons */}
                     <div className="mt-3 border-t border-gray-100 pt-3 flex flex-col gap-2">
                       <div className="flex items-center justify-between px-1">
-                        <span className="text-[11px] sm:text-[10px] font-bold text-gray-400">
+                        <span className="text-[10px] font-bold text-gray-400">
                           סה"כ מוצרים:
                         </span>
                         <span className="text-xs font-black text-[#0c2d57]">
@@ -12993,12 +12644,12 @@ export default function App() {
           </AnimatePresence>
           {/* Global Style for slide-up animation if tailwind animate-in is not present */}
           <style>{`\n        @keyframes slideUpMobile {\n          from { transform: translateY(120%); opacity: 0; }\n          to { transform: translateY(0); opacity: 1; }\n        }\n        @keyframes slideUpDesktop {\n          from { transform: translate(-50%, 120%); opacity: 0; }\n          to { transform: translate(-50%, 0); opacity: 1; }\n        }\n        .bulk-floating-bar {\n          animation: slideUpMobile 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;\n        }\n        @media (min-width: 640px) {\n          .bulk-floating-bar {\n            animation: slideUpDesktop 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;\n          }\n        }\n      `}</style>
-          <LegalAndCookies onConsentChange={setHasCookieConsent} />
+          <LegalAndCookies />
         </div>
         {/* Compare floating bar */}
         {compareItems.length > 0 && !compareOpen && (
           <div
-            className={`fixed ${!hasCookieConsent ? "max-sm:bottom-[76px] bottom-4" : "bottom-4"} left-1/2 -translate-x-1/2 z-[55] flex items-center gap-2 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.18)] border border-gray-200 rounded-full px-3 py-2`}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[55] flex items-center gap-2 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.18)] border border-gray-200 rounded-full px-3 py-2"
             style={{
               paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))",
             }}
@@ -13051,7 +12702,7 @@ export default function App() {
               </div>
               <div
                 className="overflow-auto flex-grow"
-                style={{ WebkitOverflowScrolling: "touch", paddingBottom: "env(safe-area-inset-bottom)" }}
+                style={{ WebkitOverflowScrolling: "touch" }}
               >
                 <table
                   className="text-sm border-collapse"
@@ -13197,110 +12848,6 @@ export default function App() {
             </button>
           </div>
         )}
-        {/* MOBILE FIXED BOTTOM NAVIGATION BAR */}
-        <nav
-          aria-label="סרגל ניווט תחתון"
-          className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex items-center justify-around px-2 py-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]"
-        >
-          {/* 1. Home */}
-          <button
-            type="button"
-            onClick={() => {
-              setSearchQuery("");
-              navigateHome();
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            className={`flex flex-col items-center justify-center flex-1 py-1.5 transition-colors cursor-pointer ${
-              currentView === "home" && !searchQuery
-                ? "text-[#004387] font-bold"
-                : "text-gray-500 hover:text-gray-900 font-medium"
-            }`}
-          >
-            <Home size={20} className={currentView === "home" && !searchQuery ? "stroke-[2.5]" : "stroke-[1.8]"} />
-            <span className="text-[11px] mt-0.5">דף הבית</span>
-          </button>
-
-          {/* 2. Catalogs (Menu Drawer) */}
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen(true)}
-            className="flex flex-col items-center justify-center flex-1 py-1.5 text-gray-500 hover:text-gray-900 font-medium transition-colors cursor-pointer"
-          >
-            <LayoutGrid size={20} className="stroke-[1.8]" />
-            <span className="text-[11px] mt-0.5">קטלוגים</span>
-          </button>
-
-          {/* 3. Search */}
-          <button
-            type="button"
-            onClick={() => {
-              window.scrollTo({ top: 0, behavior: "smooth" });
-              const searchInputs = document.querySelectorAll('input[aria-label="חיפוש מוצרים"]');
-              const mobileInput = searchInputs[searchInputs.length - 1] as HTMLInputElement | null;
-              if (mobileInput) {
-                mobileInput.focus();
-              }
-            }}
-            className={`flex flex-col items-center justify-center flex-1 py-1.5 transition-colors cursor-pointer ${
-              searchQuery
-                ? "text-[#004387] font-bold"
-                : "text-gray-500 hover:text-gray-900 font-medium"
-            }`}
-          >
-            <Search size={20} className={searchQuery ? "stroke-[2.5]" : "stroke-[1.8]"} />
-            <span className="text-[11px] mt-0.5">חיפוש</span>
-          </button>
-
-          {/* 4. Favorites */}
-          <button
-            type="button"
-            onClick={() => setShowProfile(true)}
-            className="relative flex flex-col items-center justify-center flex-1 py-1.5 text-gray-500 hover:text-gray-900 font-medium transition-colors cursor-pointer"
-          >
-            <div className="relative">
-              <Heart size={20} className={`stroke-[1.8] ${favorites.length > 0 ? "fill-red-500 text-red-500" : ""}`} />
-              {favorites.length > 0 && (
-                <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[10px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center shadow-xs">
-                  {favorites.length}
-                </span>
-              )}
-            </div>
-            <span className="text-[11px] mt-0.5">מועדפים</span>
-          </button>
-
-          {/* 5. Distributor Login / Cart */}
-          {isGuest ? (
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  sessionStorage.removeItem("rbs_guest");
-                } catch {}
-                setIsGuest(false);
-              }}
-              className="flex flex-col items-center justify-center flex-1 py-1.5 text-[#004387] font-bold transition-colors cursor-pointer"
-            >
-              <Lock size={20} className="stroke-[2.25]" />
-              <span className="text-[11px] mt-0.5">כניסת מפיצים</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setIsCartOpen(true)}
-              className="relative flex flex-col items-center justify-center flex-1 py-1.5 text-[#004387] font-bold transition-colors cursor-pointer"
-            >
-              <div className="relative">
-                <ShoppingCart size={20} className="stroke-[2.25]" />
-                {cart.length > 0 && (
-                  <span className="absolute -top-1.5 -right-2 bg-[#c2410c] text-white text-[10px] font-bold min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center shadow-xs">
-                    {cart.reduce((sum, item) => sum + item.quantity, 0)}
-                  </span>
-                )}
-              </div>
-              <span className="text-[11px] mt-0.5">הזמנה</span>
-            </button>
-          )}
-        </nav>
       </CompareContext.Provider>
     </FavoritesContext.Provider>
   );

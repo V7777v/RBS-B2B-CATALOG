@@ -19,3 +19,7 @@ temp/
 tmp/
 debug/
 
+public/icons/
+public/logo*.png
+public/apple-touch-icon.png
+public/favicon*.png

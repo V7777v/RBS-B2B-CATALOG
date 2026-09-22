@@ -13,7 +13,7 @@ const APP_CHECK_JWKS = createRemoteJWKSet(new URL("https://firebaseappcheck.goog
 const APP_CHECK_PROJECT_NUMBER = "224025193925";
 
 async function verifyAppCheck(token: string): Promise<boolean> {
-  if (token === "DEV_PREVIEW_BYPASS") {
+  if (process.env.NODE_ENV !== "production" && token === "DEV_PREVIEW_BYPASS") {
     return true;
   }
   try {
@@ -41,126 +41,6 @@ async function verifiedEmail(idToken: string): Promise<string | null> {
   } catch { return null; }
 }
 
-
-const PRODUCTS_GID = "1506812668";
-
-function isAllowedForGuest(colName: string): boolean {
-  const clean = colName.trim().replace(/\s+/g, " ").toLowerCase();
-  
-  // Exact matches
-  const exactAllowed = [
-    "", "sku", "id", "מק״ט", "מקט", "מק'ט",
-    "name", "שם", "שם מוצר",
-    "category", "קטגוריה", 
-    "subcategory", "תת קטגוריה",
-    "nested subcategory", "niche category",
-    "images", "תמונות", "imagesjson", "imageurl",
-    "price", "מחיר", "retailprice", "מחיר צרכן",
-    "description", "תיאור",
-    "brand", "מותג",
-    "isnew", "coming soon", "cooming soon",
-    "active", "פעיל",
-    "manuallink", "videolink", "specslink",
-    "סקירת מוצרים", "סקירת מוצר", "reviewlink",
-    "אישורי מעבדה", "labcerts",
-    "נפח", "נפח בארון", "התאמה לארון", "tags"
-  ];
-  if (exactAllowed.includes(clean)) return true;
-
-  // Partial matches for sales & clearance
-  if (
-    clean.includes("מבצע חם") || clean.includes("מבצע_חם") || clean.includes("hot sale") || clean.includes("hotsale") || clean === "מבצע" || clean === "מבצעים" ||
-    clean.includes("סוג מבצע") || clean.includes("sale type") || clean.includes("saletype") || clean.includes("סוג המבצע") ||
-    clean.includes("ערך מבצע") || clean.includes("sale value") || clean.includes("salevalue") || clean.includes("ערך המבצע") || clean.includes("מחיר מבצע") ||
-    clean.includes("מציאון") || clean.includes("clearance") || clean.includes("מציאון מחיר מיוחד") || clean.includes("מחיר מיוחד מציאון") || clean.includes("מחיר מציאון")
-  ) {
-    // Make sure we don't accidentally allow "cost price" if it has these words (though unlikely)
-    if (clean.includes("עלות") || clean.includes("סיטונאות") || clean.includes("סיטונאי")) return false;
-    return true;
-  }
-
-  return false;
-}
-
-function processProductsSheet(csv: string, isAgentView: boolean, limit?: string, offset?: string): string {
-  const parsed = Papa.parse<string[]>(csv, { skipEmptyLines: false });
-  const rows = (parsed.data || []) as string[][];
-  if (rows.length < 1) return csv;
-  const header = rows[0];
-  
-  let keepIdx = new Set<number>();
-  let activeColIdx = -1;
-  
-  header.forEach((c, i) => {
-    const clean = String(c).trim().toLowerCase();
-    if (clean === "active" || clean === "פעיל") {
-      activeColIdx = i;
-    }
-    if (isAgentView) {
-      keepIdx.add(i);
-    } else {
-      if (isAllowedForGuest(clean)) {
-        keepIdx.add(i);
-      }
-    }
-  });
-
-  let dataRows = rows.slice(1).filter(r => !(r.length === 1 && r[0] === ""));
-  
-  // Filter inactive for guests
-  if (!isAgentView) {
-    dataRows = dataRows.filter(row => {
-      if (activeColIdx === -1) return true;
-      const val = String(row[activeColIdx] || "").trim().toLowerCase();
-      if (val === "false" || val === "no" || val === "0" || val === "לא" || val === "n" || val === "f" || val === "לא פעיל") {
-        return false;
-      }
-      return true;
-    });
-  }
-
-  // Apply offset and limit
-  if (offset) {
-    const off = parseInt(offset, 10);
-    if (!isNaN(off) && off > 0) dataRows = dataRows.slice(off);
-  }
-  if (limit) {
-    const lim = parseInt(limit, 10);
-    if (!isNaN(lim) && lim > 0) dataRows = dataRows.slice(0, lim);
-  }
-
-  const outRows = [header, ...dataRows].map(r => r.filter((_, i) => keepIdx.has(i)));
-  return Papa.unparse(outRows);
-}
-
-function processOtherSheet(csv: string, isAgentView: boolean, limit?: string, offset?: string): string {
-  const parsed = Papa.parse<string[]>(csv, { skipEmptyLines: false });
-  const rows = (parsed.data || []) as string[][];
-  if (rows.length < 1) return csv;
-  const header = rows[0];
-  
-  let dropIdx = new Set<number>();
-  if (!isAgentView) {
-    header.forEach((c, i) => { 
-      if (SENSITIVE_COLS.includes(String(c).trim())) dropIdx.add(i); 
-    });
-  }
-
-  let dataRows = rows.slice(1).filter(r => !(r.length === 1 && r[0] === ""));
-
-  if (offset) {
-    const off = parseInt(offset, 10);
-    if (!isNaN(off) && off > 0) dataRows = dataRows.slice(off);
-  }
-  if (limit) {
-    const lim = parseInt(limit, 10);
-    if (!isNaN(lim) && lim > 0) dataRows = dataRows.slice(0, lim);
-  }
-
-  const outRows = [header, ...dataRows].map(r => r.filter((_, i) => !dropIdx.has(i)));
-  return Papa.unparse(outRows);
-}
-
 // --- Sensitive columns removed for non-agents (cost / wholesale) ---
 const SENSITIVE_COLS = ["מחיר עלות", "מחיר סיטונאות", "מחיר סיטונאי"];
 function stripSensitiveColumns(csv: string): string {
@@ -178,47 +58,7 @@ function stripSensitiveColumns(csv: string): string {
 // --- In-memory CSV cache (per warm instance) ---
 const bypassHits = new Map<string, number[]>();
 const csvCache = new Map<string, { body: string; exp: number }>();
-const rawSheetCache = new Map<string, { csv: string; exp: number }>();
-const rawInFlightFetches = new Map<string, Promise<string>>();
 const CACHE_TTL_MS = 10 * 60 * 1000;
-const CACHE_TTL_RAW_MS = 5 * 60 * 1000;
-
-async function getRawSheetData(gid: string, bypassCache: boolean, requestId: string): Promise<string> {
-  const gidStr = String(gid);
-  
-  if (!bypassCache) {
-    const cached = rawSheetCache.get(gidStr);
-    if (cached && Date.now() < cached.exp) {
-      return cached.csv;
-    }
-    const inFlight = rawInFlightFetches.get(gidStr);
-    if (inFlight) {
-      return await inFlight;
-    }
-  }
-
-  const fetchPromise = (async () => {
-    try {
-      const csv = await fetchSheetDataV4(gidStr, undefined, undefined, requestId);
-      if (csv && csv.trim().length > 0) {
-        rawSheetCache.set(gidStr, { csv, exp: Date.now() + CACHE_TTL_RAW_MS });
-      }
-      return csv;
-    } catch (err: any) {
-      const stale = rawSheetCache.get(gidStr);
-      if (stale && stale.csv) {
-        console.warn(`[${requestId}] Upstream Google Sheets error for GID ${gidStr}, using stale raw cache.`, err?.message || err);
-        return stale.csv;
-      }
-      throw err;
-    } finally {
-      rawInFlightFetches.delete(gidStr);
-    }
-  })();
-
-  rawInFlightFetches.set(gidStr, fetchPromise);
-  return await fetchPromise;
-}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -291,14 +131,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const rawCsv = await getRawSheetData(String(gid), bypassCache, requestId);
-    let csvString = rawCsv;
-    
-    if (String(gid) === PRODUCTS_GID) {
-      csvString = processProductsSheet(rawCsv, isAgentView, limit as string, offset as string);
-    } else {
-      csvString = processOtherSheet(rawCsv, isAgentView, limit as string, offset as string);
-    }
+    let csvString = await fetchSheetDataV4(String(gid), limit as string, offset as string, requestId);
+    if (!isAgentView) csvString = stripSensitiveColumns(csvString);
 
     if (!bypassCache) csvCache.set(cacheKey, { body: csvString, exp: Date.now() + CACHE_TTL_MS });
 
@@ -311,35 +145,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (e: any) {
     console.error(`[${requestId}] [Sheets API] Error:`, e.message || e);
     
-    // Resilience: Fallback to any stale processed cache
-    if (!bypassCache) {
-      const hit = csvCache.get(cacheKey);
-      if (hit) {
-        console.warn(`[${requestId}] [sheets] Serving STALE PROCESSED CACHE due to upstream error.`);
-        res.setHeader("Content-Type", "text/csv; charset=utf-8");
-        res.setHeader("Cache-Control", "private, max-age=0, no-store");
-        res.setHeader("X-Data-Source", "stale-cache");
-        return res.status(200).send(hit.body);
-      }
-
-      const staleRaw = rawSheetCache.get(String(gid));
-      if (staleRaw && staleRaw.csv) {
-        console.warn(`[${requestId}] [sheets] Serving processed response from STALE RAW CACHE.`);
-        let fallbackCsv = staleRaw.csv;
-        if (String(gid) === PRODUCTS_GID) {
-          fallbackCsv = processProductsSheet(staleRaw.csv, isAgentView, limit as string, offset as string);
-        } else {
-          fallbackCsv = processOtherSheet(staleRaw.csv, isAgentView, limit as string, offset as string);
-        }
-        res.setHeader("Content-Type", "text/csv; charset=utf-8");
-        res.setHeader("Cache-Control", "private, max-age=0, no-store");
-        res.setHeader("X-Data-Source", "stale-raw-cache");
-        return res.status(200).send(fallbackCsv);
-      }
-    }
-
     // If it's our custom error object with a status code
     if (e.status && e.code) {
+      if (!bypassCache && e.status >= 500) {
+        const hit = csvCache.get(cacheKey);
+        if (hit) {
+          console.warn(`[${requestId}] [sheets] Serving STALE CACHE due to upstream error ${e.status}`);
+          res.setHeader("Content-Type", "text/csv; charset=utf-8");
+          res.setHeader("Cache-Control", "private, max-age=0, no-store");
+          res.setHeader("X-Data-Source", "stale-cache");
+          return res.status(200).send(hit.body);
+        }
+      }
       return res.status(e.status).json({ success: false, code: e.code, message: e.message });
     }
     

@@ -7,7 +7,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { UPSCalculator } from './UPSCalculator';
 import { getToken } from 'firebase/app-check';
-import { appCheck, auth } from '../firebase';
+import { appCheck } from '../firebase';
 
 interface TechnicalAdvisorProps {
   catalogData: any[];

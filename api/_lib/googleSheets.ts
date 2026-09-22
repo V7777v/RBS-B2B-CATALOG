@@ -159,6 +159,15 @@ export async function fetchSheetDataV4(gid: string, limit?: string, offset?: str
 
     const headersRow = rows[0] || [];
     let dataRows = rows.slice(1);
+    
+    if (offset) {
+        const off = parseInt(offset, 10);
+        if (!isNaN(off) && off > 0) dataRows = dataRows.slice(off);
+    }
+    if (limit) {
+        const lim = parseInt(limit, 10);
+        if (!isNaN(lim) && lim > 0) dataRows = dataRows.slice(0, lim);
+    }
 
     // Convert values back to CSV structure ensuring proper escaping and missing cell padding
     const fullRows = [headersRow, ...dataRows].map(row => {
@@ -177,7 +186,7 @@ export async function fetchSheetDataV4(gid: string, limit?: string, offset?: str
       newline: "\n",
       skipEmptyLines: false,
     });
-        
+    
     return csvString;
   } catch (e: any) {
     if (e.name === "AbortError") throw { status: 504, code: "GOOGLE_SHEETS_TIMEOUT", message: "Catalog source did not respond in time." };

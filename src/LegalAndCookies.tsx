@@ -257,30 +257,23 @@ const ToggleRow: React.FC<{ label: string; active: boolean; onClick: () => void 
   </button>
 );
 
-interface LegalAndCookiesProps {
-  onConsentChange?: (consent: boolean) => void;
-}
-
-const LegalAndCookies: React.FC<LegalAndCookiesProps> = ({ onConsentChange }) => {
+const LegalAndCookies: React.FC = () => {
   const [openDoc, setOpenDoc] = useState<DocKey | null>(null);
   const [consent, setConsent] = useState<boolean>(true);
   const [a11yOpen, setA11yOpen] = useState(false);
   const [a11y, setA11y] = useState<A11yState>(A11Y_DEFAULT);
 
   useEffect(() => {
-    let hasConsent = true;
     try {
-      hasConsent = localStorage.getItem('rbs_cookie_consent') === '1';
-      setConsent(hasConsent);
+      setConsent(localStorage.getItem('rbs_cookie_consent') === '1');
     } catch {
       setConsent(true);
     }
-    onConsentChange?.(hasConsent);
     try {
       const saved = JSON.parse(localStorage.getItem('rbs_a11y') || 'null');
       if (saved && typeof saved === 'object') setA11y({ ...A11Y_DEFAULT, ...saved });
     } catch {}
-  }, [onConsentChange]);
+  }, []);
 
   useEffect(() => {
     const el = document.documentElement;
@@ -294,8 +287,6 @@ const LegalAndCookies: React.FC<LegalAndCookiesProps> = ({ onConsentChange }) =>
   const acceptCookies = () => {
     try { localStorage.setItem('rbs_cookie_consent', '1'); } catch {}
     setConsent(true);
-    onConsentChange?.(true);
-    window.dispatchEvent(new Event('rbs_cookie_consent_accepted'));
   };
 
   const setFont = (delta: number) => setA11y((p) => ({ ...p, font: Math.max(0, Math.min(4, p.font + delta)) }));
@@ -380,9 +371,7 @@ const LegalAndCookies: React.FC<LegalAndCookiesProps> = ({ onConsentChange }) =>
         onClick={() => setA11yOpen((v) => !v)}
         aria-label="תפריט נגישות"
         aria-expanded={a11yOpen}
-        className={`fixed left-4 z-[80] w-12 h-12 rounded-full bg-[#004387] text-white shadow-lg flex items-center justify-center hover:bg-[#0c2d57] transition-all ${
-          !consent ? "max-sm:bottom-[136px] bottom-4" : "max-sm:bottom-[76px] bottom-4"
-        }`}
+        className="fixed bottom-4 left-4 z-[80] w-12 h-12 rounded-full bg-[#004387] text-white shadow-lg flex items-center justify-center hover:bg-[#0c2d57] transition-colors"
       >
         <A11yIcon />
       </button>
@@ -391,9 +380,7 @@ const LegalAndCookies: React.FC<LegalAndCookiesProps> = ({ onConsentChange }) =>
       {a11yOpen && (
         <div className="fixed inset-0 z-[81]" onClick={() => setA11yOpen(false)}>
           <div
-            className={`fixed left-4 w-[280px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden ${
-              !consent ? "max-sm:bottom-[196px] bottom-20" : "max-sm:bottom-[140px] bottom-20"
-            }`}
+            className="fixed bottom-20 left-4 w-[280px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
             dir="rtl"
             role="dialog"
@@ -439,26 +426,13 @@ const LegalAndCookies: React.FC<LegalAndCookiesProps> = ({ onConsentChange }) =>
 
       {/* Cookie consent banner */}
       {!consent && (
-        <div
-          className="fixed bottom-0 inset-x-0 z-[75] bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.12)] pb-[env(safe-area-inset-bottom)]"
-          dir="rtl"
-        >
-          <div className="max-w-6xl mx-auto px-3 sm:px-4 h-[56px] sm:h-auto py-1 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
-            <div className="flex items-center gap-1.5 min-w-0 flex-1 text-xs sm:text-sm text-gray-700">
-              <span className="truncate">
-                אתר זה עושה שימוש בעוגיות לצורך תפעול, אבטחה ושיפור חוויית המשתמש.
-              </span>
-              <button
-                onClick={() => setOpenDoc('cookies')}
-                className="text-[#004387] underline font-medium whitespace-nowrap flex-shrink-0 text-xs sm:text-sm"
-              >
-                למידע נוסף
-              </button>
-            </div>
-            <button
-              onClick={acceptCookies}
-              className="bg-[#004387] hover:bg-[#0c2d57] text-white text-xs sm:text-sm font-bold px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-lg whitespace-nowrap transition-colors flex-shrink-0"
-            >
+        <div className="fixed bottom-0 inset-x-0 z-[75] bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.12)]" dir="rtl" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+            <p className="text-xs sm:text-sm text-gray-700 flex-grow leading-relaxed">
+              אתר זה עושה שימוש בעוגיות לצורך תפעול, אבטחה ושיפור חוויית המשתמש.{' '}
+              <button onClick={() => setOpenDoc('cookies')} className="text-[#004387] underline font-medium">למידע נוסף</button>
+            </p>
+            <button onClick={acceptCookies} className="bg-[#004387] hover:bg-[#0c2d57] text-white text-sm font-bold px-5 py-2 rounded-lg whitespace-nowrap transition-colors flex-shrink-0">
               אני מסכים/ה
             </button>
           </div>
