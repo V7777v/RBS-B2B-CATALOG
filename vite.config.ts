@@ -12,7 +12,7 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',
-        includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icons/*.png', 'og-image.png', 'advisor-avatar.png'],
+        includeAssets: ['favicon.png', 'apple-touch-icon.png', 'apple-touch-icon-v2.png', 'icons/*.png', 'og-image.png', 'advisor-avatar.png'],
         manifest: {
           name: 'קטלוג RBS Telecom',
           short_name: 'קטלוג RBS',
@@ -26,9 +26,9 @@ export default defineConfig(() => {
           lang: 'he',
           dir: 'rtl',
           icons: [
-            { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-            { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-            { src: '/icons/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+            { src: '/icons/icon-192-v2.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: '/icons/icon-512-v2.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+            { src: '/icons/icon-512-maskable-v2.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
           ]
         },
         workbox: {

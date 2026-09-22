@@ -230,12 +230,17 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
             <div className="flex items-center gap-3">
               <div className="relative flex-shrink-0">
                 <img
-                  src="/icons/icon-192.png"
+                  src="/icons/icon-192-v2.png"
                   alt="קטלוג RBS"
                   className="w-12 h-12 rounded-xl object-cover shadow-md border border-gray-100"
                   onError={(e) => {
                     const img = e.currentTarget as HTMLImageElement;
-                    img.src = '/apple-touch-icon.png';
+                    if (!img.dataset.fallbackApplied) {
+                      img.dataset.fallbackApplied = 'true';
+                      img.src = '/apple-touch-icon-v2.png';
+                    } else {
+                      img.onerror = null;
+                    }
                   }}
                 />
                 <span className="absolute -top-1 -right-1 bg-green-500 text-white rounded-full p-0.5 shadow-xs">
