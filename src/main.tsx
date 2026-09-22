@@ -40,8 +40,26 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       });
   };
 
+  // Verify icon fetch status (distinguish image/png 200 OK vs HTML homepage / fallback)
+  const verifyPwaIconFetch = async () => {
+    try {
+      const res = await fetch('/apple-touch-icon.png', { cache: 'no-cache' });
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('image')) {
+        console.log(`[PWA Icon Check] /apple-touch-icon.png fetched successfully: ${res.status} OK (${contentType})`);
+      } else {
+        console.warn(`[PWA Icon Check] Warning: /apple-touch-icon.png returned status ${res.status} with content-type "${contentType}" instead of image/png (HTML homepage or challenge received).`);
+      }
+    } catch (err) {
+      console.error('[PWA Icon Check] Failed to fetch /apple-touch-icon.png:', err);
+    }
+  };
+
   // 2. Schedule update queries on page load and periodically every 2 minutes
   window.addEventListener('load', () => {
+    // Check if apple-touch-icon returns an image or HTML fallback
+    verifyPwaIconFetch();
+
     // Wait briefly after load to not block important primary render network calls
     setTimeout(checkForUpdates, 3000);
 
