@@ -355,9 +355,22 @@ function isAllowedForGuest(colName: string): boolean {
     "manuallink", "videolink", "specslink",
     "סקירת מוצרים", "סקירת מוצר", "reviewlink",
     "אישורי מעבדה", "labcerts",
-    "נפח", "נפח בארון", "התאמה לארון", "tags"
+    "נפח", "נפח בארון", "התאמה לארון", "tags",
+    "compatibility", "תאימות",
+    "onvif", "hik connect", "hik-connect", "hikconnect", "hik_connect",
+    "nvr", "תמיכה ב nvr", "תמיכה ב-nvr", "תמיכה בnvr", "nvr hikvision", "חיבור ל nvr", "חיבור ל-nvr"
   ];
   if (exactAllowed.includes(clean)) return true;
+
+  // Compatibility columns
+  if (
+    clean === "onvif" || clean.includes("onvif") ||
+    clean.includes("hik connect") || clean.includes("hik-connect") || clean.includes("hikconnect") ||
+    clean.includes("תמיכה ב nvr") || clean.includes("תמיכה ב-nvr") || clean.includes("תמיכה בnvr") ||
+    clean.includes("חיבור ל nvr") || clean.includes("חיבור ל-nvr") || clean === "nvr"
+  ) {
+    return true;
+  }
 
   // Partial matches for sales & clearance
   if (

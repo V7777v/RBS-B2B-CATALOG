@@ -669,19 +669,57 @@ const parseProductRow = (row: any) => {
       .map((s: string) => s.trim())
       .filter((s: string) => s.startsWith("http") || s.startsWith("www."));
   }
-  // Parse Compatibility
+  // Parse Compatibility directly from Google Sheets columns
+  const isValueTruthy = (val: any) => {
+    if (val === true) return true;
+    if (!val) return false;
+    const str = String(val).trim().toLowerCase();
+    if (!str || str === "false" || str === "0" || str === "לא" || str === "-" || str === "אין" || str === "none") return false;
+    return true; // "true", "v", "כן", "1", "yes", etc.
+  };
+
+  // Flexible column finder to match headers even with line-breaks (e.g. HIK\nCONNECT or תמיכה ב\nNVR)
+  const getColValue = (pattern: RegExp) => {
+    for (const key of Object.keys(row)) {
+      const normalizedKey = key.trim().replace(/\s+/g, " ").toLowerCase();
+      if (pattern.test(normalizedKey)) {
+        return row[key];
+      }
+    }
+    return undefined;
+  };
+
+  let compatibility: string[] = [];
+
+  // 1. Column ONVIF
+  const onvifVal = getColValue(/^(\s*תומך\s*)?onvif$/) ?? row.ONVIF ?? row.onvif;
+  if (isValueTruthy(onvifVal)) {
+    compatibility.push("ONVIF");
+  }
+
+  // 2. Column HIK CONNECT
+  const hikVal = getColValue(/hik[\s-_]*connect/) ?? row["HIK CONNECT"] ?? row["HIK-CONNECT"];
+  if (isValueTruthy(hikVal)) {
+    compatibility.push("HIK-CONNECT");
+  }
+
+  // 3. Column תמיכה ב NVR
+  const nvrVal = getColValue(/(תמיכה\s*ב[\s-_]*nvr|חיבור\s*ל[\s-_]*nvr|^nvr$)/) ?? row["תמיכה ב NVR"] ?? row["NVR"];
+  if (isValueTruthy(nvrVal)) {
+    compatibility.push("NVR");
+  }
+
+  // 4. Also support single comma-separated compatibility column if present in sheet
   const rawCompatibility =
     row.compatibility || row.Compatibility || row.COMPATIBILITY || row["תאימות"] || "";
-  let compatibility: string[] = [];
   if (typeof rawCompatibility === "string" && rawCompatibility.trim()) {
-    compatibility = rawCompatibility
-      .split(",")
+    rawCompatibility
+      .split(/[,;\n]+/)
       .map((s: string) => s.trim().toUpperCase())
-      .filter(Boolean);
-  } else if (Array.isArray(rawCompatibility)) {
-    compatibility = rawCompatibility
-      .map((s: any) => String(s || "").trim().toUpperCase())
-      .filter(Boolean);
+      .filter(Boolean)
+      .forEach((item: string) => {
+        if (!compatibility.includes(item)) compatibility.push(item);
+      });
   }
   return {
     ...row,
