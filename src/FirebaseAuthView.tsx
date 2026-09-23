@@ -352,6 +352,7 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest 
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (mode === 'login' ? 'כניסה' : 'הרשמה')}
           </button>
+          <p className="text-xs text-gray-600 mt-2">השימוש בפרטים כפוף ל<button type="button" onClick={() => window.dispatchEvent(new CustomEvent('open-legal-doc',{detail:'privacy'}))} className="underline text-[#004387]">מדיניות הפרטיות</button>.</p>
 
           <div className="flex items-center gap-3 py-1">
             <div className="flex-1 h-px bg-gray-200" />

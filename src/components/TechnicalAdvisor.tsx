@@ -700,7 +700,7 @@ export const TechnicalAdvisor: React.FC<TechnicalAdvisorProps> = ({
                   )}
                 </form>
                 <p className="text-[9px] text-gray-400 text-center mt-1 select-none">
-                  תשובות מבוססות על שילוב של קטלוג RBSTelecom וחיפוש Google Search זמני.
+                  תשובות מבוססות על שילוב של קטלוג RBSTelecom וחיפוש Google Search זמני. אין להזין מידע אישי או פרטי לקוחות.
                 </p>
               </div>
 

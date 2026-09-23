@@ -7,6 +7,41 @@ declare global {
 
 const MEASUREMENT_ID = 'G-NZLQG68M22';
 
+export function loadGoogleAnalytics() {
+  if (typeof window === 'undefined') return;
+  if (typeof window.gtag === 'function') return;
+
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function () {
+    window.dataLayer.push(arguments);
+  };
+  window.gtag('js', new Date());
+  window.gtag('config', MEASUREMENT_ID, { anonymize_ip: true });
+
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${MEASUREMENT_ID}`;
+  document.head.appendChild(script);
+}
+
+if (typeof window !== 'undefined') {
+  try {
+    if (localStorage.getItem('rbs_cookie_consent') === '1') {
+      loadGoogleAnalytics();
+    }
+  } catch {}
+
+  window.addEventListener('rbs_cookie_consent_accepted', () => {
+    try {
+      if (localStorage.getItem('rbs_cookie_consent') === '1') {
+        loadGoogleAnalytics();
+      }
+    } catch {
+      loadGoogleAnalytics();
+    }
+  });
+}
+
 export const isAnalyticsReady = (): boolean => {
   return typeof window !== 'undefined' && typeof window.gtag === 'function';
 };

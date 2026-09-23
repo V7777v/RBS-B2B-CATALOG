@@ -1,9 +1,54 @@
-import {StrictMode} from 'react';
-import {createRoot} from 'react-dom/client';
+import { StrictMode, useState, useEffect } from 'react';
+import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import AppErrorBoundary from './AppErrorBoundary.tsx';
 import { Analytics } from '@vercel/analytics/react';
+import { loadGoogleAnalytics } from './lib/analytics.ts';
 import './index.css';
+
+// Call loadGoogleAnalytics() only when localStorage 'rbs_cookie_consent' === '1' — on app start and on the 'rbs_cookie_consent_accepted' event.
+if (typeof window !== 'undefined') {
+  try {
+    if (localStorage.getItem('rbs_cookie_consent') === '1') {
+      loadGoogleAnalytics();
+    }
+  } catch {}
+
+  window.addEventListener('rbs_cookie_consent_accepted', () => {
+    try {
+      if (localStorage.getItem('rbs_cookie_consent') === '1') {
+        loadGoogleAnalytics();
+      }
+    } catch {
+      loadGoogleAnalytics();
+    }
+  });
+}
+
+function ConsentAnalytics() {
+  const [hasConsent, setHasConsent] = useState(() => {
+    try {
+      return localStorage.getItem('rbs_cookie_consent') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const handleConsent = () => {
+      try {
+        setHasConsent(localStorage.getItem('rbs_cookie_consent') === '1');
+      } catch {
+        setHasConsent(true);
+      }
+    };
+    window.addEventListener('rbs_cookie_consent_accepted', handleConsent);
+    return () => window.removeEventListener('rbs_cookie_consent_accepted', handleConsent);
+  }, []);
+
+  if (!hasConsent) return null;
+  return <Analytics />;
+}
 
 // Automated PWA Update & Hot-Reload Orchestrator
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
@@ -74,7 +119,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppErrorBoundary>
       <App />
-      <Analytics />
+      <ConsentAnalytics />
     </AppErrorBoundary>
   </StrictMode>,
 );

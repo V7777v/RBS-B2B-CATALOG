@@ -64,6 +64,7 @@ import {
   Bot,
   LayoutGrid,
   QrCode,
+  ExternalLink,
 } from "lucide-react";
 import Papa from "papaparse";
 import { motion, AnimatePresence } from "motion/react";
@@ -288,24 +289,37 @@ const getVideoEmbedUrl = (url: string) => {
 const getPdfPreviewUrl = (url: string) => {
   if (!url) return null;
   try {
-    if (url.includes("drive.google.com/file/d/")) {
-      const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    const trimmed = url.trim();
+    if (trimmed.includes("drive.google.com/file/d/")) {
+      const match = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
       if (match && match[1]) {
         return `https://drive.google.com/file/d/${match[1]}/preview`;
       }
-    } else if (url.includes("drive.google.com/open?id=")) {
-      const match = url.match(/id=([a-zA-Z0-9_-]+)/);
+    } else if (trimmed.includes("drive.google.com/open?id=")) {
+      const match = trimmed.match(/id=([a-zA-Z0-9_-]+)/);
       if (match && match[1]) {
         return `https://drive.google.com/file/d/${match[1]}/preview`;
       }
     }
+    if (
+      trimmed.includes("docs.google.com/document/") ||
+      trimmed.includes("/spreadsheets/") ||
+      trimmed.includes("/presentation/")
+    ) {
+      return trimmed.replace(/\/edit.*$/, "/preview");
+    }
+    if (trimmed.includes("docs.google.com/viewer")) {
+      return trimmed;
+    }
+    if (
+      trimmed.toLowerCase().includes(".pdf") ||
+      trimmed.toLowerCase().includes("/pdf") ||
+      trimmed.startsWith("http://") ||
+      trimmed.startsWith("https://")
+    ) {
+      return `https://docs.google.com/viewer?url=${encodeURIComponent(trimmed)}&embedded=true`;
+    }
   } catch (e) {}
-  if (
-    url.toLowerCase().split("?")[0].endsWith(".pdf") ||
-    url.toLowerCase().includes(".pdf")
-  ) {
-    return `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
-  }
   return null;
 };
 const SUBCATEGORIES_ORDER: Record<string, string[]> = {
@@ -935,7 +949,7 @@ const MakatBadge = ({
     <button
       onClick={handleCopy}
       title="העתק מק״ט"
-      className={`group/makat inline-flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 bg-gray-50 hover:bg-blue-50 active:bg-blue-100/80 border border-gray-200 hover:border-[#004387] active:border-[#002f5e] transition-all rounded-xl py-3.5 px-5 sm:py-2 sm:px-4 w-full sm:w-auto cursor-pointer focus:outline-none select-none touch-manipulation min-h-[48px] sm:min-h-[auto] ${className}`}
+      className={`group/makat inline-flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 bg-gray-50 hover:bg-blue-50 active:bg-blue-100/80 border border-gray-200 hover:border-[#004387] active:border-[#002f5e] transition-all rounded-xl py-3.5 px-5 sm:py-2 sm:px-4 w-full sm:w-auto cursor-pointer focus:outline-none select-none touch-manipulation min-h-[48px] sm:min-h-[auto] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f7941d] ${className}`}
     >
       <span className="text-gray-600 group-hover/makat:text-[#0c2d57] transition-colors text-sm sm:text-sm font-bold flex flex-wrap items-center justify-center text-center">
         מק״ט:{" "}
@@ -980,11 +994,24 @@ const CatalogCard: React.FC<CatalogCardProps> = ({
         }
       }}
       onClick={() => navigateToCatalog(catalog.name)}
-      className="group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative"
+      className="group flex flex-col h-full rounded-none bg-white shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative"
     >
+      {catalog.isComingSoon ? (
+        <img
+          src="/coming-soon.svg"
+          alt="בקרוב"
+          className="absolute -top-3 -left-3 w-[72px] h-[72px] sm:w-20 sm:h-20 -rotate-6 z-10 pointer-events-none"
+        />
+      ) : isNew ? (
+        <img
+          src="/in-stock.svg"
+          alt="במלאי"
+          className="absolute -top-3 -left-3 w-[72px] h-[72px] sm:w-20 sm:h-20 -rotate-12 z-10 pointer-events-none"
+        />
+      ) : null}
       <div className={`aspect-square w-full relative border-b border-gray-100 flex items-center justify-center overflow-hidden ${!catalog.image || imgError ? "bg-slate-100" : "bg-white p-3 sm:p-6"}`}>
         {catalog.brand && (
-          <div className={`absolute ${isNew ? "top-9" : "top-2"} right-2 z-10`}>
+          <div className="absolute top-2 right-2 z-10">
             <BrandBadge brand={catalog.brand} />
           </div>
         )}
@@ -1001,15 +1028,6 @@ const CatalogCard: React.FC<CatalogCardProps> = ({
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-slate-100">
             <Image className="text-slate-400 w-10 h-10 sm:w-12 sm:h-12" />
-          </div>
-        )}
-        {isNew && (
-          <div className="absolute top-2 right-2 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[11px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(16,185,129,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-            </span>
-            <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
           </div>
         )}
       </div>
@@ -1053,11 +1071,24 @@ const SubcategoryCard: React.FC<SubcategoryCardProps> = ({
         onClick ||
         (() => navigateToSubcategory && navigateToSubcategory(sub.name))
       }
-      className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 relative border border-gray-100"
+      className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 relative border border-gray-100"
     >
+      {sub.isComingSoon ? (
+        <img
+          src="/coming-soon.svg"
+          alt="בקרוב"
+          className="absolute -top-3 -left-3 w-[72px] h-[72px] sm:w-20 sm:h-20 -rotate-6 z-10 pointer-events-none"
+        />
+      ) : sub.isNew ? (
+        <img
+          src="/in-stock.svg"
+          alt="במלאי"
+          className="absolute -top-3 -left-3 w-[72px] h-[72px] sm:w-20 sm:h-20 -rotate-12 z-10 pointer-events-none"
+        />
+      ) : null}
       <div className={`relative aspect-square w-full flex items-center justify-center transition-colors border-b border-gray-100 overflow-hidden ${!sub.image || imgError ? "bg-slate-100" : "bg-white group-hover:bg-gray-50/50 p-3 sm:p-6"}`}>
         {sub.brand && (
-          <div className={`absolute ${sub.isComingSoon || (sub.isNew && !sub.isComingSoon) ? "top-9" : "top-2"} right-2 z-10`}>
+          <div className="absolute top-2 right-2 z-10">
             <BrandBadge brand={sub.brand} />
           </div>
         )}
@@ -1074,21 +1105,6 @@ const SubcategoryCard: React.FC<SubcategoryCardProps> = ({
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-slate-100">
             <Image className="text-slate-400 w-10 h-10 sm:w-12 sm:h-12" />
-          </div>
-        )}
-        {sub.isComingSoon && (
-          <div className="absolute top-2 right-2 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[2px] border-white text-[11px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(220,38,38,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
-            <Fingerprint size={12} className="text-red-100 animate-pulse" />
-            <span className="drop-shadow-md tracking-wide">בקרוב!</span>
-          </div>
-        )}
-        {sub.isNew && !sub.isComingSoon && (
-          <div className="absolute top-2 right-2 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[11px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(16,185,129,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-            </span>
-            <span className="drop-shadow-md tracking-wide">מוצרים חדשים!</span>
           </div>
         )}
       </div>
@@ -1274,43 +1290,22 @@ const ProductCard = React.memo(
 
     return (
       <div
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            navigateToProduct(product);
-          }
-        }}
         onClick={() => navigateToProduct(product)}
-        className={`group flex flex-col h-full rounded-none bg-white overflow-hidden shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}
+        className={`group flex flex-col h-full rounded-none bg-white shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}
       >
-        {onBulkSelectionChange && !isGuest && !product.isComingSoon && (
-          <div
-            className="absolute top-2 left-2 z-30 flex items-center justify-center p-1 cursor-pointer"
-            onClick={handleCheckboxClick}
-            title={isSelectedForBulk ? "הסר מהוספה מרובה" : "סמן להוספה מרובה"}
-          >
-            <div
-              className={`w-[24px] h-[24px] sm:w-[28px] sm:h-[28px] rounded-md border-[2.5px] flex items-center justify-center transition-all duration-200 transform active:scale-95 ${
-                isSelectedForBulk
-                  ? "bg-gradient-to-b from-[#005fb8] via-[#004387] to-[#002f5e] border-[#001c3c] shadow-[0_3px_6px_rgba(0,67,135,0.35),_inset_0_1.5px_1px_rgba(255,255,255,0.6),_inset_0_-2.5px_0_rgba(0,0,0,0.3)]"
-                  : "bg-gradient-to-b from-white via-slate-50 to-slate-100 border-slate-800 hover:border-[#004387] shadow-[0_3px_6px_rgba(0,0,0,0.2),_inset_0_-2px_0_rgba(0,0,0,0.15),_inset_0_1.5px_1px_rgba(255,255,255,0.95)]"
-              }`}
-            >
-              {isSelectedForBulk && (
-                <motion.div
-                  initial={{ scale: 0, rotate: -20 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 15 }}
-                  className="flex items-center justify-center"
-                >
-                  <Check className="text-white stroke-[4.5] w-[14px] h-[14px] sm:w-[16px] sm:h-[16px]" />
-                </motion.div>
-              )}
-            </div>
-          </div>
-        )}
+        {product.isComingSoon ? (
+          <img
+            src="/coming-soon.svg"
+            alt="בקרוב"
+            className="absolute -top-3 -left-3 w-[72px] h-[72px] sm:w-20 sm:h-20 -rotate-6 z-10 pointer-events-none"
+          />
+        ) : product.isNew ? (
+          <img
+            src="/in-stock.svg"
+            alt="במלאי"
+            className="absolute -top-3 -left-3 w-[72px] h-[72px] sm:w-20 sm:h-20 -rotate-12 z-10 pointer-events-none"
+          />
+        ) : null}
         {/* Dynamic Premium Badges (Slanted and Animated) positioned cleanly under the checkbox */}
         {product.isClearance && (
           <motion.div
@@ -1359,77 +1354,92 @@ const ProductCard = React.memo(
             className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105 ${product.isComingSoon ? "opacity-70" : ""}`}
           />
 
-          {/* Visual disclaimer overlay - Positioned at bottom-left so it never overlaps with brand badge or top badges */}
-          <div className="absolute bottom-2 left-2 z-10 bg-white/90 border border-gray-200/80 rounded px-1.5 py-0.5 text-[11px] sm:text-[11px] text-gray-500 font-semibold shadow-2xs select-none pointer-events-none">
+          {/* Visual disclaimer overlay - Positioned at bottom-right */}
+          <div className="absolute bottom-2 right-2 z-10 bg-white/90 border border-gray-200/80 rounded px-1.5 py-0.5 text-[10px] text-gray-600 font-semibold shadow-2xs select-none pointer-events-none">
             תמונות להמחשה בלבד
           </div>
           {/* BrandBadge stays peaceful and elegant on the top right */}
-          <div className={`absolute ${product.isComingSoon || (product.isNew && !product.isComingSoon) ? "top-9" : "top-2"} right-2 z-10 transition-all duration-200`}>
+          <div className="absolute top-2 right-2 z-10 transition-all duration-200">
             <BrandBadge brand={product.brand} />
           </div>
-          {product.isComingSoon && (
-            <div className="absolute top-2 right-2 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[2px] border-white text-[11px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(220,38,38,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
-              <Fingerprint size={12} className="text-red-100 animate-pulse" />
-              <span className="drop-shadow-md tracking-wide">בקרוב!</span>
-            </div>
-          )}
-          {product.isNew && !product.isComingSoon && (
-            <div className="absolute top-2 right-2 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[2px] border-white text-[11px] sm:text-[11px] font-black px-3 py-1 rounded-full shadow-[0_2px_8px_rgba(16,185,129,0.4)] flex items-center gap-1.5 select-none hover:scale-105 transition-all">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-              </span>
-              <span className="drop-shadow-md tracking-wide">חדש!</span>
-            </div>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleFavorite(product);
-            }}
-            aria-label="מועדפים"
-            className="absolute bottom-2 right-2 z-20 w-8 h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform"
-          >
-            <Heart
-              size={16}
-              className={
-                favoriteIds.has(product.id)
-                  ? "text-red-500 fill-red-500"
-                  : "text-gray-400"
-              }
-            />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleCompare(product);
-            }}
-            aria-label="השוואה"
-            title="הוסף להשוואה"
-            className={`absolute bottom-2 right-11 z-20 h-8 rounded-full border shadow-sm flex items-center justify-center transition-all duration-300 group/compare ${
-              compareIds.has(product.id)
-                ? "bg-[#004387] border-[#004387] text-white px-2.5 w-auto gap-1"
-                : "bg-white/95 border-gray-200 text-gray-500 hover:text-[#004387] hover:border-[#004387] w-8 hover:w-[86px] hover:px-2 gap-0 hover:gap-1"
-            }`}
-          >
-            <Scale
-              size={16}
-              className={
+
+          {/* Bottom-left actions flex row: Checkbox, Favorite, Compare */}
+          <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1.5" dir="ltr">
+            {onBulkSelectionChange && !isGuest && !product.isComingSoon && (
+              <div
+                className="flex items-center justify-center p-0.5 cursor-pointer"
+                onClick={handleCheckboxClick}
+                title={isSelectedForBulk ? "הסר מהוספה מרובה" : "סמן להוספה מרובה"}
+              >
+                <div
+                  className={`w-[24px] h-[24px] sm:w-[28px] sm:h-[28px] rounded-md border-[2.5px] flex items-center justify-center transition-all duration-200 transform active:scale-95 ${
+                    isSelectedForBulk
+                      ? "bg-gradient-to-b from-[#005fb8] via-[#004387] to-[#002f5e] border-[#001c3c] shadow-[0_3px_6px_rgba(0,67,135,0.35),_inset_0_1.5px_1px_rgba(255,255,255,0.6),_inset_0_-2.5px_0_rgba(0,0,0,0.3)]"
+                      : "bg-gradient-to-b from-white via-slate-50 to-slate-100 border-slate-800 hover:border-[#004387] shadow-[0_3px_6px_rgba(0,0,0,0.2),_inset_0_-2px_0_rgba(0,0,0,0.15),_inset_0_1.5px_1px_rgba(255,255,255,0.95)]"
+                  }`}
+                >
+                  {isSelectedForBulk && (
+                    <motion.div
+                      initial={{ scale: 0, rotate: -20 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 15 }}
+                      className="flex items-center justify-center"
+                    >
+                      <Check className="text-white stroke-[4.5] w-[14px] h-[14px] sm:w-[16px] sm:h-[16px]" />
+                    </motion.div>
+                  )}
+                </div>
+              </div>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFavorite(product);
+              }}
+              aria-label="מועדפים"
+              className="w-8 h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform shrink-0"
+            >
+              <Heart
+                size={16}
+                className={
+                  favoriteIds.has(product.id)
+                    ? "text-red-500 fill-red-500"
+                    : "text-gray-400"
+                }
+              />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleCompare(product);
+              }}
+              aria-label="השוואה"
+              title="הוסף להשוואה"
+              className={`h-8 rounded-full border shadow-sm flex items-center justify-center transition-all duration-300 group/compare shrink-0 ${
                 compareIds.has(product.id)
-                  ? "text-white"
-                  : "text-gray-600 group-hover/compare:text-[#004387]"
-              }
-            />
-            <span
-              className={`text-[11px] sm:text-[10px] font-bold whitespace-nowrap overflow-hidden transition-all duration-300 ${
-                compareIds.has(product.id)
-                  ? "w-auto opacity-100"
-                  : "w-0 group-hover/compare:w-auto opacity-0 group-hover/compare:opacity-100"
+                  ? "bg-[#004387] border-[#004387] text-white px-2.5 w-auto gap-1"
+                  : "bg-white/95 border-gray-200 text-gray-500 hover:text-[#004387] hover:border-[#004387] w-8 hover:w-[86px] hover:px-2 gap-0 hover:gap-1"
               }`}
             >
-              {compareIds.has(product.id) ? "בהשוואה" : "השוואה"}
-            </span>
-          </button>
+              <Scale
+                size={16}
+                className={
+                  compareIds.has(product.id)
+                    ? "text-white"
+                    : "text-gray-600 group-hover/compare:text-[#004387]"
+                }
+              />
+              <span
+                className={`text-[11px] sm:text-[10px] font-bold whitespace-nowrap overflow-hidden transition-all duration-300 ${
+                  compareIds.has(product.id)
+                    ? "w-auto opacity-100"
+                    : "w-0 group-hover/compare:w-auto opacity-0 group-hover/compare:opacity-100"
+                }`}
+              >
+                {compareIds.has(product.id) ? "בהשוואה" : "השוואה"}
+              </span>
+            </button>
+          </div>
         </div>
 
         <div className="p-3 sm:p-4 flex flex-col flex-grow text-center relative">
@@ -1438,7 +1448,13 @@ const ProductCard = React.memo(
           </div>
           <div className="min-h-[4.5rem] flex items-start justify-center mb-2">
             <h3 className="text-[#0c2d57] text-base sm:text-lg font-bold line-clamp-3 leading-snug text-center w-full">
-              {product.name}
+              <button
+                type="button"
+                onClick={() => navigateToProduct(product)}
+                className="text-inherit text-right w-full"
+              >
+                {product.name}
+              </button>
             </h3>
           </div>
 
@@ -1452,7 +1468,7 @@ const ProductCard = React.memo(
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
-                    <span className="text-[11px] sm:text-[11px] text-gray-400 font-normal inline-block mr-1">
+                    <span className="text-[11px] sm:text-[11px] text-gray-600 font-normal inline-block mr-1">
                       (כולל מע"מ)
                     </span>
                   </span>
@@ -1473,12 +1489,12 @@ const ProductCard = React.memo(
                         </span>
                       )}
                     </span>
-                    <span className="block text-[11px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
+                    <span className="block text-[11px] sm:text-[10px] text-gray-600 font-normal mt-1 leading-[1.1]">
                       מחיר מתקין (ללא מע"מ)
                     </span>
                   </>
                 ) : (
-                  <div className="text-[11px] sm:text-xs font-bold text-gray-400 mt-1">
+                  <div className="text-[11px] sm:text-xs font-bold text-gray-600 mt-1">
                     צור קשר למחירים
                   </div>
                 )}
@@ -1497,18 +1513,18 @@ const ProductCard = React.memo(
                 {Number(product.price) > 0 ? (
                   <div className="flex flex-col items-center leading-tight w-full text-center opacity-70">
                     {Number(product.retailPrice) > 0 && (
-                      <span className="text-[11px] sm:text-[10px] text-gray-500 font-semibold leading-[1.2] w-full block">
+                      <span className="text-[11px] sm:text-[10px] text-gray-600 font-semibold leading-[1.2] w-full block">
                         צרכן: ₪
                         {product.retailPrice.toLocaleString("he-IL", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
-                        <span className="text-[11px] sm:text-[11px] text-gray-400 font-normal inline-block mr-1">
+                        <span className="text-[11px] sm:text-[11px] text-gray-600 font-normal inline-block mr-1">
                           (כולל מע"מ)
                         </span>
                       </span>
                     )}
-                    <span className="text-xs sm:text-sm font-bold text-gray-500 leading-none block mt-0.5">
+                    <span className="text-xs sm:text-sm font-bold text-gray-600 leading-none block mt-0.5">
                       מתקין: ₪
                       {product.price.toLocaleString("he-IL", {
                         minimumFractionDigits: 2,
@@ -1519,19 +1535,19 @@ const ProductCard = React.memo(
                           מחיר למטר
                         </span>
                       )}
-                      <span className="text-[11px] text-gray-400 font-normal inline-block mr-1">
+                      <span className="text-[11px] text-gray-600 font-normal inline-block mr-1">
                         (ללא מע"מ)
                       </span>
                     </span>
                   </div>
                 ) : (
-                  <div className="text-[11px] sm:text-xs font-bold text-gray-400">
+                  <div className="text-[11px] sm:text-xs font-bold text-gray-600">
                     צור קשר למחירים
                   </div>
                 )}
               </div>
             ) : !(Number(product.price) > 0) ? (
-              <div className="text-[11px] sm:text-xs font-bold text-gray-400 mb-2 mt-auto">
+              <div className="text-[11px] sm:text-xs font-bold text-gray-600 mb-2 mt-auto">
                 צור קשר למחירים
               </div>
             ) : Number(product.retailPrice) > 0 || Number(product.oldPrice) > 0 ? (
@@ -1543,7 +1559,7 @@ const ProductCard = React.memo(
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
-                    <span className="text-[11px] sm:text-[11px] text-gray-400 font-normal inline-block mr-1">
+                    <span className="text-[11px] sm:text-[11px] text-gray-600 font-normal inline-block mr-1">
                       (כולל מע"מ)
                     </span>
                   </span>
@@ -1570,7 +1586,7 @@ const ProductCard = React.memo(
                       מחיר למטר
                     </span>
                   )}
-                  <span className="block text-[11px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
+                  <span className="block text-[11px] sm:text-[10px] text-gray-600 font-normal mt-1 leading-[1.1]">
                     {product.isClearance
                       ? 'מבצע מציאון (ללא מע"מ)'
                       : 'מחיר מומלץ למתקין (ללא מע"מ)'}
@@ -1593,7 +1609,7 @@ const ProductCard = React.memo(
                     </span>
                   )}
                 </span>
-                <span className="block text-[11px] sm:text-[10px] text-gray-500 font-normal mt-1 leading-[1.1]">
+                <span className="block text-[11px] sm:text-[10px] text-gray-600 font-normal mt-1 leading-[1.1]">
                   {product.isClearance
                     ? 'מבצע מציאון (ללא מע"מ)'
                     : 'מחיר מומלץ למתקין (ללא מע"מ)'}
@@ -1824,53 +1840,47 @@ const ProductDetailsView = (props: any) => {
         <div className="p-4 sm:p-6 md:p-8 flex flex-col lg:flex-row gap-6 sm:gap-8">
           <div className="w-full lg:w-5/12 flex flex-col gap-3 sm:gap-4">
             {/* ZOOMABLE IMAGE CONTAINER */}
-            <div
-              className={`aspect-square rounded-none border border-gray-100 ${theme.bg} p-2 sm:p-4 flex items-center justify-center relative overflow-hidden group cursor-crosshair`}
-              onMouseEnter={() => setIsZoomed(true)}
-              onMouseMove={handleMouseMove}
-              onMouseLeave={handleMouseLeave}
-              onTouchStart={() => setIsZoomed(true)}
-              onTouchMove={handleMouseMove}
-              onTouchEnd={handleMouseLeave}
-            >
-              <img
-                referrerPolicy="no-referrer"
-                src={transformImageLink(mainImage, 800)}
-                alt={selectedProduct.name}
-                onError={handleImageError}
-                className="w-full h-full object-contain mix-blend-multiply pointer-events-none"
-                style={{
-                  transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
-                  transform: isZoomed ? "scale(2.5)" : "scale(1)",
-                  transition: isZoomed
-                    ? "transform 0.05s ease-out"
-                    : "transform 0.2s ease-out",
-                }}
-              />
-              {selectedProduct.isComingSoon && (
-                <div className="absolute top-4 left-4 z-20 bg-gradient-to-br from-red-500 to-rose-700 text-white border-[3px] border-white text-[12px] sm:text-[14px] font-black px-4 py-2 rounded-full shadow-[0_4px_12px_rgba(220,38,38,0.45)] flex items-center gap-2.5 select-none transform rotate-2 pointer-events-none">
-                  <Fingerprint
-                    size={16}
-                    className="text-red-100 animate-pulse"
-                  />
-                  <span className="drop-shadow-md tracking-wide">בקרוב!</span>
+            <div className="relative">
+              {selectedProduct.isComingSoon ? (
+                <img
+                  src="/coming-soon.svg"
+                  alt="בקרוב"
+                  className="absolute -top-3 -left-3 w-24 h-24 -rotate-6 z-20 pointer-events-none"
+                />
+              ) : selectedProduct.isNew ? (
+                <img
+                  src="/in-stock.svg"
+                  alt="במלאי"
+                  className="absolute -top-3 -left-3 w-24 h-24 -rotate-12 z-20 pointer-events-none"
+                />
+              ) : null}
+              <div
+                className={`aspect-square rounded-none border border-gray-100 ${theme.bg} p-2 sm:p-4 flex items-center justify-center relative overflow-hidden group cursor-crosshair`}
+                onMouseEnter={() => setIsZoomed(true)}
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+                onTouchStart={() => setIsZoomed(true)}
+                onTouchMove={handleMouseMove}
+                onTouchEnd={handleMouseLeave}
+              >
+                <img
+                  referrerPolicy="no-referrer"
+                  src={transformImageLink(mainImage, 800)}
+                  alt={selectedProduct.name}
+                  onError={handleImageError}
+                  className="w-full h-full object-contain mix-blend-multiply pointer-events-none"
+                  style={{
+                    transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
+                    transform: isZoomed ? "scale(2.5)" : "scale(1)",
+                    transition: isZoomed
+                      ? "transform 0.05s ease-out"
+                      : "transform 0.2s ease-out",
+                  }}
+                />
+                {/* Visual disclaimer overlay */}
+                <div className="absolute bottom-3 left-3 bg-white/95 border border-slate-200/90 rounded-md px-2 py-1 text-[11px] sm:text-xs text-slate-500 font-extrabold shadow-sm select-none pointer-events-none z-10">
+                  התמונות להמחשה בלבד
                 </div>
-              )}
-              {selectedProduct.isNew && !selectedProduct.isComingSoon && (
-                <div className="absolute top-4 left-4 z-20 bg-gradient-to-br from-emerald-400 to-green-600 text-white border-[3px] border-white text-[12px] sm:text-[14px] font-black px-4 py-2 rounded-full shadow-[0_4px_12px_rgba(16,185,129,0.45)] flex items-center gap-2.5 select-none transform rotate-2 animate-pulse pointer-events-none">
-                  <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
-                  </span>
-                  <span className="drop-shadow-md tracking-wide">
-                    מוצר חדש!
-                  </span>
-                </div>
-              )}
-              {/* Visual disclaimer overlay */}
-              <div className="absolute bottom-3 left-3 bg-white/95 border border-slate-200/90 rounded-md px-2 py-1 text-[11px] sm:text-xs text-slate-500 font-extrabold shadow-sm select-none pointer-events-none z-10">
-                התמונות להמחשה בלבד
-              </div>
               {/* Left & Right Chevrons overlaid on main image */}
               {imagesList.length > 1 && (
                 <>
@@ -1913,6 +1923,7 @@ const ProductDetailsView = (props: any) => {
                   <ZoomIn size={18} />
                 </button>
               )}
+            </div>
             </div>
             {imagesList.length > 1 && (
               <div className="relative group/carousel mt-1 px-1">
@@ -2135,6 +2146,14 @@ const ProductDetailsView = (props: any) => {
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
+                              if (!getPdfPreviewUrl(selectedProduct.specsLink)) {
+                                window.open(
+                                  selectedProduct.specsLink,
+                                  "_blank",
+                                  "noopener",
+                                );
+                                return;
+                              }
                               setActivePreview(
                                 activePreview === "specs" ? null : "specs",
                               );
@@ -2200,6 +2219,16 @@ const ProductDetailsView = (props: any) => {
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
+                              if (
+                                !getPdfPreviewUrl(selectedProduct.manualLink)
+                              ) {
+                                window.open(
+                                  selectedProduct.manualLink,
+                                  "_blank",
+                                  "noopener",
+                                );
+                                return;
+                              }
                               setActivePreview(
                                 activePreview === "manual" ? null : "manual",
                               );
@@ -2310,13 +2339,43 @@ const ProductDetailsView = (props: any) => {
                 {activePreview && (
                   <div className="mb-6 border border-gray-200/80 rounded-2xl bg-slate-50/50 p-3 sm:p-4 shadow-xs animate-in fade-in slide-in-from-top-3 duration-300 relative text-right">
                     <div className="flex items-center justify-between mb-3 flex-row-reverse">
-                      <button
-                        onClick={() => setActivePreview(null)}
-                        className="text-gray-500 hover:text-gray-800 bg-white hover:bg-gray-100 p-1 px-2.5 rounded-lg text-xs font-bold transition-all border border-gray-200 cursor-pointer flex items-center gap-1 active:scale-95"
-                      >
-                        <X size={12} />
-                        <span>סגור תצוגה מקדימה</span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const rawLink =
+                            activePreview === "specs"
+                              ? selectedProduct.specsLink
+                              : activePreview === "manual"
+                                ? selectedProduct.manualLink
+                                : activePreview === "video"
+                                  ? selectedProduct.videoLink
+                                  : activePreview.startsWith("labCert_")
+                                    ? selectedProduct.labCerts?.[
+                                        parseInt(activePreview.split("_")[1], 10)
+                                      ]
+                                    : null;
+                          return (
+                            rawLink && (
+                              <a
+                                href={rawLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#004387] hover:text-[#f7941d] bg-white hover:bg-blue-50 px-2.5 py-1 rounded-lg text-xs font-bold transition-all border border-blue-200 flex items-center gap-1 shadow-xs"
+                                title="פתח קובץ מקורי בלשונית חדשה"
+                              >
+                                <ExternalLink size={13} />
+                                <span>פתח בלשונית חדשה</span>
+                              </a>
+                            )
+                          );
+                        })()}
+                        <button
+                          onClick={() => setActivePreview(null)}
+                          className="text-gray-500 hover:text-gray-800 bg-white hover:bg-gray-100 p-1 px-2.5 rounded-lg text-xs font-bold transition-all border border-gray-200 cursor-pointer flex items-center gap-1 active:scale-95"
+                        >
+                          <X size={12} />
+                          <span>סגור תצוגה מקדימה</span>
+                        </button>
+                      </div>
                       <span className="text-xs sm:text-sm font-bold text-[#0c2d57] flex items-center gap-1.5">
                         <Eye size={14} className="text-[#c2410c]" />
                         <span>
@@ -2334,25 +2393,21 @@ const ProductDetailsView = (props: any) => {
 
                     <div className="w-full aspect-[16/10] min-h-[320px] sm:min-h-[480px] bg-white rounded-xl overflow-hidden border border-gray-200 shadow-inner flex flex-col items-center justify-center relative">
                       {activePreview === "specs" &&
-                        selectedProduct.specsLink && (
+                        selectedProduct.specsLink &&
+                        getPdfPreviewUrl(selectedProduct.specsLink) && (
                           <iframe
                             title="Specs Preview"
-                            src={
-                              getPdfPreviewUrl(selectedProduct.specsLink) ||
-                              selectedProduct.specsLink
-                            }
+                            src={getPdfPreviewUrl(selectedProduct.specsLink)!}
                             className="w-full h-full border-none"
                             loading="lazy"
                           />
                         )}
                       {activePreview === "manual" &&
-                        selectedProduct.manualLink && (
+                        selectedProduct.manualLink &&
+                        getPdfPreviewUrl(selectedProduct.manualLink) && (
                           <iframe
                             title="Manual Preview"
-                            src={
-                              getPdfPreviewUrl(selectedProduct.manualLink) ||
-                              selectedProduct.manualLink
-                            }
+                            src={getPdfPreviewUrl(selectedProduct.manualLink)!}
                             className="w-full h-full border-none"
                             loading="lazy"
                           />
@@ -2378,10 +2433,13 @@ const ProductDetailsView = (props: any) => {
                             10,
                           );
                           const certUrl = selectedProduct.labCerts?.[certIdx];
-                          return certUrl ? (
+                          const previewUrl = certUrl
+                            ? getPdfPreviewUrl(certUrl)
+                            : null;
+                          return previewUrl ? (
                             <iframe
                               title={`Lab Cert ${certIdx + 1} Preview`}
-                              src={getPdfPreviewUrl(certUrl) || certUrl}
+                              src={previewUrl}
                               className="w-full h-full border-none"
                               loading="lazy"
                             />
@@ -2448,6 +2506,14 @@ const ProductDetailsView = (props: any) => {
                                     onClick={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
+                                      if (!getPdfPreviewUrl(certLink)) {
+                                        window.open(
+                                          certLink,
+                                          "_blank",
+                                          "noopener",
+                                        );
+                                        return;
+                                      }
                                       setActivePreview(
                                         activePreview === `labCert_${idx}`
                                           ? null
@@ -2524,7 +2590,7 @@ const ProductDetailsView = (props: any) => {
                           })}
                         </>
                       ) : (
-                        <span className="text-gray-400 font-bold text-xs">
+                        <span className="text-gray-600 font-bold text-xs">
                           צור קשר למחירים
                         </span>
                       )}
@@ -2549,7 +2615,7 @@ const ProductDetailsView = (props: any) => {
                           + {name}
                           {sku && <span className="font-mono text-xs text-gray-500 mr-1" dir="ltr">[{sku}]</span>}
                           {qty > 1 && <span className="font-bold mr-1">×{qty}</span>}
-                          {posStr && <span className="text-gray-400 text-xs mr-1">({posStr})</span>}
+                          {posStr && <span className="text-gray-600 text-xs mr-1">({posStr})</span>}
                         </span>
                         <span className="font-semibold whitespace-nowrap font-mono">
                           {Number(lineTot) > 0 ? (
@@ -2561,7 +2627,7 @@ const ProductDetailsView = (props: any) => {
                               })}
                             </>
                           ) : (
-                            <span className="text-gray-400 font-normal text-xs">
+                            <span className="text-gray-600 font-normal text-xs">
                               צור קשר למחירים
                             </span>
                           )}
@@ -2598,7 +2664,7 @@ const ProductDetailsView = (props: any) => {
                           })}
                         </>
                       ) : (
-                        <span className="text-base font-bold text-gray-400">
+                        <span className="text-base font-bold text-gray-600">
                           צור קשר למחירים
                         </span>
                       )}
@@ -2681,7 +2747,7 @@ const ProductDetailsView = (props: any) => {
                           </span>
                         </div>
                       ) : (
-                        <div className="text-xl sm:text-2xl font-bold text-gray-400 py-1">
+                        <div className="text-xl sm:text-2xl font-bold text-gray-600 py-1">
                           צור קשר למחירים
                         </div>
                       )
@@ -2899,8 +2965,8 @@ const ProductDetailsView = (props: any) => {
             <div
               className={
                 similar.length === 1
-                  ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-4 md:gap-6"
-                  : "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6"
+                  ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-4 md:gap-6 gap-y-10 pt-9"
+                  : "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6 gap-y-10 pt-9"
               }
             >
               {similar.map((product) => (
@@ -7400,7 +7466,7 @@ export default function App() {
           >
             <div className="container mx-auto px-2.5 sm:px-4 h-16 sm:h-[60px] flex flex-row items-center justify-between gap-1 sm:gap-4">
               {/* RIGHT SIDE: Menu & Back (Mobile optimized browser controls & Desktop standard) */}
-              <div className="flex flex-row items-center gap-2 md:gap-4 flex-shrink-0">
+              <div className="flex flex-row items-center gap-2 md:gap-4 min-w-0 flex-shrink">
                 {/* MOBILE ONLY: Hamburger (primary bg-[#0c2d57] text-white) + Logo (enlarged by 50%) */}
                 <div className="flex md:hidden items-center gap-2.5 flex-shrink-0">
                   {/* 1. Hamburger button: primary (bg-[#0c2d57] text-white) */}
@@ -7458,7 +7524,7 @@ export default function App() {
                 </div>
 
                 {/* Breadcrumb style path indicator with inline breadcrumbs on desktop */}
-                <div className="hidden md:flex items-center text-sm text-[#0c2d57] opacity-85 whitespace-nowrap gap-2">
+                <div className="hidden md:flex items-center text-sm text-[#0c2d57] opacity-85 whitespace-nowrap gap-2 min-w-0 overflow-hidden">
                   <img
                     referrerPolicy="no-referrer"
                     src="/new-logo.png"
@@ -7585,7 +7651,7 @@ export default function App() {
                                 className="text-[#0c2d57] opacity-80 flex-shrink-0"
                               />
                               <span
-                                className="text-[#004387] font-bold text-sm sm:text-[15px] max-w-[400px] lg:max-w-none break-words"
+                                className="text-[#004387] font-bold text-sm sm:text-[15px] truncate max-w-[220px]"
                                 title={selectedProduct.name}
                               >
                                 {selectedProduct.name}
@@ -7764,13 +7830,13 @@ export default function App() {
                     onClick={() => setShowProfile(true)}
                     aria-label="מועדפים"
                     title="מועדפים"
-                    className="relative flex items-center justify-center gap-1 h-9 sm:h-11 px-2 sm:px-3 bg-white border border-gray-200 hover:border-gray-300 text-red-500 font-bold rounded-xl active:scale-95 text-xs sm:text-sm whitespace-nowrap cursor-pointer"
+                    className="relative flex items-center justify-center gap-1 h-9 sm:h-11 px-2 sm:px-3 bg-white border border-gray-200 hover:border-gray-300 text-gray-600 font-bold rounded-xl active:scale-95 text-xs sm:text-sm whitespace-nowrap cursor-pointer"
                   >
                     <Heart
                       size={18}
-                      className="flex-shrink-0 fill-red-500 stroke-[2.25]"
+                      className="flex-shrink-0 fill-red-500 text-red-500 stroke-[2.25]"
                     />
-                    <span className="hidden sm:inline">מועדפים</span>
+                    <span className="hidden sm:inline text-gray-600">מועדפים</span>
                     {favorites.length > 0 && (
                       <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[11px] sm:text-[10px] font-bold min-w-[18px] sm:min-w-[20px] h-[18px] sm:h-5 px-1 rounded-full flex items-center justify-center shadow-sm ring-2 ring-white">
                         {favorites.length}
@@ -7856,7 +7922,7 @@ export default function App() {
                         document.activeElement.blur();
                       }
                     }}
-                    className="text-xs font-bold text-[#004387] px-2 py-1.5 focus:outline-none shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                    className="text-xs font-bold text-[#004387] px-2 py-1.5 focus:outline-none shrink-0 cursor-pointer hover:opacity-80 transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f7941d]"
                   >
                     ביטול
                   </button>
@@ -8345,8 +8411,8 @@ export default function App() {
                           <div
                             className={
                               filteredProducts.length === 1
-                                ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6"
-                                : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6"
+                                ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6 gap-y-10 pt-9"
+                                : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6 gap-y-10 pt-9"
                             }
                           >
                             {filteredProducts
@@ -8426,8 +8492,8 @@ export default function App() {
                       <div
                         className={
                           catalogFolders.length === 1
-                            ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6"
-                            : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6"
+                            ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6 gap-y-10 pt-9"
+                            : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6 gap-y-10 pt-9"
                         }
                       >
                         {catalogFolders.map((catalog) => (
@@ -8463,8 +8529,8 @@ export default function App() {
                         <div
                           className={
                             activeSubcategories.length === 1
-                              ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6"
-                              : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6"
+                              ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6 gap-y-10 pt-9"
+                              : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6 gap-y-10 pt-9"
                           }
                         >
                           {activeSubcategories.length === 0 ? (
@@ -8504,8 +8570,8 @@ export default function App() {
                         <div
                           className={
                             nestedSubcategoriesData.length === 1
-                              ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6"
-                              : "grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-6 max-w-4xl mx-auto"
+                              ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6 gap-y-10 pt-9"
+                              : "grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-6 max-w-4xl mx-auto gap-y-10 pt-9"
                           }
                         >
                           {nestedSubcategoriesData.map((sub) => (
@@ -8541,8 +8607,8 @@ export default function App() {
                         <div
                           className={
                             nicheSubcategoriesData.length === 1
-                              ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6"
-                              : "grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-6 max-w-4xl mx-auto"
+                              ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6 gap-y-10 pt-9"
+                              : "grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-6 max-w-4xl mx-auto gap-y-10 pt-9"
                           }
                         >
                           {nicheSubcategoriesData.map((sub) => (
@@ -8599,8 +8665,8 @@ export default function App() {
                           <div
                             className={
                               filteredProducts.length === 1
-                                ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6"
-                                : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6"
+                                ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-6 gap-y-10 pt-9"
+                                : "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-6 gap-y-10 pt-9"
                             }
                           >
                             {filteredProducts
@@ -10877,6 +10943,7 @@ export default function App() {
                       >
                         {billingSaved ? "✓ נשמר" : "שמור פרטים"}
                       </button>
+                      <p className="text-xs text-gray-600 mt-2">השימוש בפרטים כפוף ל<button type="button" onClick={() => window.dispatchEvent(new CustomEvent('open-legal-doc',{detail:'privacy'}))} className="underline text-[#004387]">מדיניות הפרטיות</button>.</p>
                       <p className="text-[11px] text-gray-400">
                         הפרטים ימולאו אוטומטית בטופס ההזמנה הבא.
                       </p>
@@ -13338,7 +13405,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setShowProfile(true)}
-            className="relative flex flex-col items-center justify-center flex-1 py-1.5 text-gray-500 hover:text-gray-900 font-medium transition-colors cursor-pointer"
+            className="relative flex flex-col items-center justify-center flex-1 py-1.5 text-gray-600 hover:text-gray-900 font-medium transition-colors cursor-pointer"
           >
             <div className="relative">
               <Heart size={20} className={`stroke-[1.8] ${favorites.length > 0 ? "fill-red-500 text-red-500" : ""}`} />
@@ -13348,7 +13415,7 @@ export default function App() {
                 </span>
               )}
             </div>
-            <span className="text-[11px] mt-0.5">מועדפים</span>
+            <span className="text-[11px] mt-0.5 text-gray-600">מועדפים</span>
           </button>
 
           {/* 5. Distributor Login / Cart */}

@@ -76,7 +76,7 @@ const PrivacyDoc: React.FC = () => (
       <P><strong>1.1.</strong> מסירת המידע תלויה ברצונך ובהסכמתך. מובהר בזאת, כי לא חלה עליך כל חובה שבדין למסור את המידע, אלא אם צוין אחרת. עם זאת, מסירת חלק מהמידע האמור מהווה תנאי הכרחי לצורך שימוש בשירותים שונים המוצעים באתר האינטרנט, וללא הסכמתך לא ניתן יהיה להעניק לך שרות בהתאם.</P>
       <P><strong>1.2.</strong> מובהר בזאת, כי חברת רבס טלקום בע"מ ח.פ 514373679 הינה בעלת השליטה במאגר המידע.<br/>
       כתובתה ופרטי קשר:<br/>
-      רחוב טום לנטוס 10, נתניה ; טל' 054-8312360 ; דוא"ל info@rbs-tecom.com</P>
+      רחוב טום לנטוס 10, נתניה ; טל' 054-8312360 ; דוא"ל info@rbs-telecom.com</P>
       <P><strong>1.3.</strong> מאגרי המידע של החברה מנוהלים כדין ומאובטחים בהתאם להוראות חוק הגנת הפרטיות התשמ"א – 1981 ותקנות הגנת הפרטיות (אבטחת מידע) תשע"ז- 2017 (להלן יחד: "החוק").</P>
       <P><strong>1.4.</strong> החברה רואה חשיבות רבה בשמירה על פרטיותך, ולכן עושה את המתחייב על פי חוק על מנת לשמור כיאות על המידע שנמסר לה.</P>
       <P><strong>1.5.</strong> המשמעות היא, בין היתר, כי כל המידע שיועלה על ידך לשירותים המקוונים, נשמר במאגרי המידע של החברה, כפי שיפורט להלן בהמשך המדיניות, ומוגן באמצעים שנועדו לשמור על המידע, על שלמותו, על זמינותו ועל סודיותו של המידע. ההגנה והשמירה על המידע וסודיותו, נחוצים על מנת שנוכל להעניק לך את השירות.</P>
@@ -142,7 +142,7 @@ const PrivacyDoc: React.FC = () => (
     <H2>8. זכויות העיון והתיקון</H2>
     <div className="pr-2 space-y-2">
       <P><strong>8.1.</strong> על פי החוק הנך רשאי לעיין במידע אודותיך השמור בידי החברה ואם המידע שברשות החברה אינו נכון, זכותך לבקש את תיקונו או מחיקתו. החברה דואגת לטפל בפניותיך כדי לממש את תהליכי הפרטיות, וניתן לפנות אליה בכל עניין הקשור להגנת הפרטיות, לרבות: הסרה ממאגר מידע, מימוש זכות העיון, מימוש זכות תיקון המידע כאמור לעיל וכל נושא הנוגע להגנת הפרטיות.</P>
-      <P><strong>8.2.</strong> בכל פניה בנושא האמורים, יש לכלול פרטים מלאים ליצירת קשר ומענה. פניות בנושאים הנ"ל יש לבצע ישירות לחברה בכתובת הדוא"ל: info@rbs-tecom.com. מענה יינתן בהתאם להוראות ולמועדים הקבועים בחוק. ייתכן שבקשות מסוימות יהיו כפופות לתשלום אגרה בהתאם להוראות החוק.</P>
+      <P><strong>8.2.</strong> בכל פניה בנושא האמורים, יש לכלול פרטים מלאים ליצירת קשר ומענה. פניות בנושאים הנ"ל יש לבצע ישירות לחברה בכתובת הדוא"ל: info@rbs-telecom.com. מענה יינתן בהתאם להוראות ולמועדים הקבועים בחוק. ייתכן שבקשות מסוימות יהיו כפופות לתשלום אגרה בהתאם להוראות החוק.</P>
     </div>
 
     <H2>9. דין ומקום השיפוט</H2>
@@ -159,7 +159,7 @@ const PrivacyDoc: React.FC = () => (
 
     <H2>12. צור קשר</H2>
     <P>הנך מוזמן ליצור עמנו קשר, בלשונית "צרו קשר" באתר האינטרנט של החברה ואנו נשיב לפנייתך באמצעות אמצעי ההתקשרות שהזנת.</P>
-    <P>החברה מינתה ממונה הגנת הפרטיות וניתן ליצור עמו קשר, בכתובת הדוא"ל info@rbs-tecom.com או במספר הטלפון 054-8312360.</P>
+    <P>החברה מינתה ממונה הגנת הפרטיות וניתן ליצור עמו קשר, בכתובת הדוא"ל info@rbs-telecom.com או במספר הטלפון 054-8312360.</P>
   </div>
 );
 
@@ -263,19 +263,31 @@ interface LegalAndCookiesProps {
 
 const LegalAndCookies: React.FC<LegalAndCookiesProps> = ({ onConsentChange }) => {
   const [openDoc, setOpenDoc] = useState<DocKey | null>(null);
-  const [consent, setConsent] = useState<boolean>(true);
+  const [showBanner, setShowBanner] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('rbs_cookie_consent') === null;
+    } catch {
+      return false;
+    }
+  });
   const [a11yOpen, setA11yOpen] = useState(false);
   const [a11y, setA11y] = useState<A11yState>(A11Y_DEFAULT);
 
   useEffect(() => {
-    let hasConsent = true;
+    const handleOpenDoc = (e: any) => {
+      if (e?.detail) setOpenDoc(e.detail);
+    };
+    window.addEventListener('open-legal-doc', handleOpenDoc);
+    return () => window.removeEventListener('open-legal-doc', handleOpenDoc);
+  }, []);
+
+  useEffect(() => {
+    let stored: string | null = null;
     try {
-      hasConsent = localStorage.getItem('rbs_cookie_consent') === '1';
-      setConsent(hasConsent);
-    } catch {
-      setConsent(true);
-    }
-    onConsentChange?.(hasConsent);
+      stored = localStorage.getItem('rbs_cookie_consent');
+    } catch {}
+    setShowBanner(stored === null);
+    onConsentChange?.(stored === '1');
     try {
       const saved = JSON.parse(localStorage.getItem('rbs_a11y') || 'null');
       if (saved && typeof saved === 'object') setA11y({ ...A11Y_DEFAULT, ...saved });
@@ -293,9 +305,21 @@ const LegalAndCookies: React.FC<LegalAndCookiesProps> = ({ onConsentChange }) =>
 
   const acceptCookies = () => {
     try { localStorage.setItem('rbs_cookie_consent', '1'); } catch {}
-    setConsent(true);
+    setShowBanner(false);
     onConsentChange?.(true);
     window.dispatchEvent(new Event('rbs_cookie_consent_accepted'));
+  };
+
+  const declineCookies = () => {
+    try { localStorage.setItem('rbs_cookie_consent', '0'); } catch {}
+    setShowBanner(false);
+    onConsentChange?.(false);
+  };
+
+  const reopenCookieSettings = () => {
+    try { localStorage.removeItem('rbs_cookie_consent'); } catch {}
+    setShowBanner(true);
+    onConsentChange?.(false);
   };
 
   const setFont = (delta: number) => setA11y((p) => ({ ...p, font: Math.max(0, Math.min(4, p.font + delta)) }));
@@ -364,13 +388,16 @@ const LegalAndCookies: React.FC<LegalAndCookiesProps> = ({ onConsentChange }) =>
                   <button onClick={() => setOpenDoc('privacy')} className="text-white/80 hover:text-white transition-colors text-right">מדיניות פרטיות</button>
                   <button onClick={() => setOpenDoc('cookies')} className="text-white/80 hover:text-white transition-colors text-right">מדיניות עוגיות</button>
                   <button onClick={() => setOpenDoc('terms')} className="text-white/80 hover:text-white transition-colors text-right">תקנון ותנאי שימוש</button>
+                  <button onClick={reopenCookieSettings} className="text-white/80 hover:text-white transition-colors text-right">הגדרות עוגיות</button>
                 </nav>
               </div>
             </div>
           </div>
 
-          <div className="border-t border-white/10 mt-8 pt-4 text-xs text-white/50 text-center">
-            © {new Date().getFullYear()} {COMPANY.name}. כל הזכויות שמורות.
+          <div className="border-t border-white/10 mt-8 pt-4 text-xs text-white/50 text-center flex flex-wrap items-center justify-center gap-3">
+            <span>© {new Date().getFullYear()} {COMPANY.name}. כל הזכויות שמורות.</span>
+            <span className="text-white/20">|</span>
+            <button onClick={reopenCookieSettings} className="hover:text-white underline transition-colors cursor-pointer">הגדרות עוגיות</button>
           </div>
         </div>
       </footer>
@@ -439,12 +466,12 @@ const LegalAndCookies: React.FC<LegalAndCookiesProps> = ({ onConsentChange }) =>
       )}
 
       {/* Cookie consent banner */}
-      {!consent && (
+      {showBanner && (
         <div
           className="fixed bottom-0 inset-x-0 z-[75] bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.12)] pb-[env(safe-area-inset-bottom)]"
           dir="rtl"
         >
-          <div className="max-w-6xl mx-auto px-3 sm:px-4 h-[56px] sm:h-auto py-1 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="max-w-6xl mx-auto px-3 sm:px-4 min-h-[56px] py-2 sm:py-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-4">
             <div className="flex items-center gap-1.5 min-w-0 flex-1 text-xs sm:text-sm text-gray-700">
               <span className="truncate">
                 אתר זה עושה שימוש בעוגיות לצורך תפעול, אבטחה ושיפור חוויית המשתמש.
@@ -456,12 +483,20 @@ const LegalAndCookies: React.FC<LegalAndCookiesProps> = ({ onConsentChange }) =>
                 למידע נוסף
               </button>
             </div>
-            <button
-              onClick={acceptCookies}
-              className="bg-[#004387] hover:bg-[#0c2d57] text-white text-xs sm:text-sm font-bold px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-lg whitespace-nowrap transition-colors flex-shrink-0"
-            >
-              אני מסכים/ה
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={acceptCookies}
+                className="bg-[#004387] hover:bg-[#0c2d57] text-white text-xs sm:text-sm font-bold px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-lg whitespace-nowrap transition-colors flex-shrink-0 cursor-pointer"
+              >
+                אני מסכים/ה
+              </button>
+              <button
+                onClick={declineCookies}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 text-xs sm:text-sm font-medium px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-lg whitespace-nowrap transition-colors flex-shrink-0 cursor-pointer"
+              >
+                דחה
+              </button>
+            </div>
           </div>
         </div>
       )}
