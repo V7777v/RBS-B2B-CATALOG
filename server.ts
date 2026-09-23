@@ -541,6 +541,7 @@ async function startServer() {
     const vite = await createViteServer({
       server: { 
         middlewareMode: true,
+        hmr: false,
         host: "0.0.0.0",
         port: 3000
       },
@@ -560,6 +561,11 @@ async function startServer() {
       try {
         let template = fs.readFileSync(path.resolve(process.cwd(), "index.html"), "utf-8");
         template = await vite.transformIndexHtml(url, template);
+        const scriptMatch = template.match(/<script>[\s\S]*?\/\/ 1\. Mock WebSocket[\s\S]*?<\/script>/);
+        if (scriptMatch) {
+          template = template.replace(scriptMatch[0], "");
+          template = template.replace("<head>", "<head>\n    " + scriptMatch[0]);
+        }
         res.status(200).set({ "Content-Type": "text/html" }).end(template);
       } catch (e: any) {
         vite.ssrFixStacktrace(e);

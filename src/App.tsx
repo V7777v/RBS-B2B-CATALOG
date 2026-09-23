@@ -63,10 +63,12 @@ import {
   Share2,
   Bot,
   LayoutGrid,
+  QrCode,
 } from "lucide-react";
 import Papa from "papaparse";
 import { motion, AnimatePresence } from "motion/react";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
+import { ProductQrModal } from "./components/ProductQrModal";
 import { HumanVerification } from "./components/HumanVerification";
 import { AddressAutocomplete } from "./components/AddressAutocomplete";
 import InstallBanner from "./components/InstallBanner";
@@ -1357,8 +1359,8 @@ const ProductCard = React.memo(
             className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105 ${product.isComingSoon ? "opacity-70" : ""}`}
           />
 
-          {/* Visual disclaimer overlay - Moved to top left to avoid overlap with action buttons */}
-          <div className="absolute top-2 left-2 z-10 bg-white/90 border border-gray-200/80 rounded px-1.5 py-0.5 text-[11px] sm:text-[11px] text-gray-500 font-semibold shadow-2xs select-none pointer-events-none">
+          {/* Visual disclaimer overlay - Positioned at bottom-left so it never overlaps with brand badge or top badges */}
+          <div className="absolute bottom-2 left-2 z-10 bg-white/90 border border-gray-200/80 rounded px-1.5 py-0.5 text-[11px] sm:text-[11px] text-gray-500 font-semibold shadow-2xs select-none pointer-events-none">
             תמונות להמחשה בלבד
           </div>
           {/* BrandBadge stays peaceful and elegant on the top right */}
@@ -1443,7 +1445,7 @@ const ProductCard = React.memo(
           <div className="mt-auto pt-2 sm:pt-2 flex flex-col items-center w-full">
             {isGuest ? (
               <div className="flex flex-col items-center leading-tight mb-2 w-full text-center">
-                {product.retailPrice && (
+                {Number(product.retailPrice) > 0 && (
                   <span className="text-[11px] sm:text-xs text-gray-600 font-semibold leading-[1.2] mb-1 w-full block">
                     צרכן: ₪
                     {product.retailPrice.toLocaleString("he-IL", {
@@ -1455,7 +1457,7 @@ const ProductCard = React.memo(
                     </span>
                   </span>
                 )}
-                {product.price > 0 ? (
+                {Number(product.price) > 0 ? (
                   <>
                     <span
                       className={`text-base sm:text-lg font-bold text-[#c2410c] leading-none block`}
@@ -1492,9 +1494,9 @@ const ProductCard = React.memo(
                     {product.saleValue || "פרטים בעגלה"}
                   </div>
                 </div>
-                {product.price > 0 ? (
+                {Number(product.price) > 0 ? (
                   <div className="flex flex-col items-center leading-tight w-full text-center opacity-70">
-                    {product.retailPrice && (
+                    {Number(product.retailPrice) > 0 && (
                       <span className="text-[11px] sm:text-[10px] text-gray-500 font-semibold leading-[1.2] w-full block">
                         צרכן: ₪
                         {product.retailPrice.toLocaleString("he-IL", {
@@ -1528,13 +1530,13 @@ const ProductCard = React.memo(
                   </div>
                 )}
               </div>
-            ) : product.price === 0 ? (
-              <div className="text-xs sm:text-sm font-bold text-gray-600 mb-2 mt-auto">
-                צור קשר
+            ) : !(Number(product.price) > 0) ? (
+              <div className="text-[11px] sm:text-xs font-bold text-gray-400 mb-2 mt-auto">
+                צור קשר למחירים
               </div>
-            ) : product.retailPrice || product.oldPrice ? (
+            ) : Number(product.retailPrice) > 0 || Number(product.oldPrice) > 0 ? (
               <div className="flex flex-col items-center leading-tight mb-2 w-full text-center">
-                {product.retailPrice && (
+                {Number(product.retailPrice) > 0 && (
                   <span className="text-[11px] sm:text-xs text-gray-600 font-semibold leading-[1.2] mb-1 w-full block">
                     צרכן: ₪
                     {product.retailPrice.toLocaleString("he-IL", {
@@ -1546,7 +1548,7 @@ const ProductCard = React.memo(
                     </span>
                   </span>
                 )}
-                {product.oldPrice && (
+                {Number(product.oldPrice) > 0 && (
                   <span className="text-[11px] sm:text-xs text-red-500 font-medium leading-[1.2] mb-1 w-full block line-through">
                     מחירון מתקין מקורי (ללא מע"מ): ₪
                     {product.oldPrice.toLocaleString("he-IL", {
@@ -1755,6 +1757,7 @@ const ProductDetailsView = (props: any) => {
   const [isSpecsHovered, setIsSpecsHovered] = useState(false);
   const [isManualHovered, setIsManualHovered] = useState(false);
   const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
+  const [showQrModal, setShowQrModal] = useState<boolean>(false);
   const [activePreview, setActivePreview] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const hoverTimeoutRef = useRef<any>(null);
@@ -1887,6 +1890,19 @@ const ProductDetailsView = (props: any) => {
                   </button>
                 </>
               )}
+              {/* Quick QR code button on product image */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowQrModal(true);
+                }}
+                className="absolute top-3 right-3 bg-white/90 hover:bg-white text-gray-700 hover:text-[#004387] border border-gray-200 rounded-full p-2 shadow-sm active:scale-95 z-20 flex items-center justify-center cursor-pointer transition-all"
+                title="הצג קוד QR לסריקה מהירה בנייד"
+                aria-label="קוד QR"
+              >
+                <QrCode size={18} />
+              </button>
               {/* Zoom icon for mobile */}
               {isMobileDevice && (
                 <button
@@ -1977,8 +1993,9 @@ const ProductDetailsView = (props: any) => {
                 className="!w-full sm:!w-auto sm:!text-[17px] !py-3 sm:!py-2"
               />
             </div>
-            <div className="grid grid-cols-2 gap-2 mb-4 sm:mb-6">
+            <div className="grid grid-cols-3 gap-2 mb-4 sm:mb-6">
               <button
+                type="button"
                 onClick={() =>
                   copyShareLink &&
                   copyShareLink(
@@ -1986,11 +2003,13 @@ const ProductDetailsView = (props: any) => {
                     selectedProduct.sku || selectedProduct.id,
                   )
                 }
-                className="py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#004387] rounded-md font-bold text-[13px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                className="py-2 px-1 sm:px-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#004387] rounded-md font-bold text-[12px] sm:text-[13px] flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer transition-colors"
+                title="העתק קישור למוצר"
               >
                 <Link size={14} /> העתק קישור
               </button>
               <button
+                type="button"
                 onClick={() => {
                   const key = selectedProduct.sku || selectedProduct.id || "";
                   const link =
@@ -2007,9 +2026,18 @@ const ProductDetailsView = (props: any) => {
                     "_blank",
                   );
                 }}
-                className="py-2 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 rounded-md font-bold text-[13px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                className="py-2 px-1 sm:px-2 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 rounded-md font-bold text-[12px] sm:text-[13px] flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer transition-colors"
+                title="שלח קישור בוואטסאפ"
               >
                 <MessageSquare size={14} /> שלח בוואטסאפ
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowQrModal(true)}
+                className="py-2 px-1 sm:px-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-md font-bold text-[12px] sm:text-[13px] flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer transition-colors"
+                title="הצג קוד QR לסריקה ושיתוף בנייד"
+              >
+                <QrCode size={14} /> קוד QR
               </button>
             </div>
 
@@ -2090,6 +2118,10 @@ const ProductDetailsView = (props: any) => {
                               "https://drive.google.com/file/d/1n3f9nEnEOj6CycKjFzuH7XRCTNN55Hl7/view?usp=drive_link",
                               120,
                             )}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).onerror = null;
+                              (e.currentTarget as HTMLImageElement).src = "/pdf-icon.png";
+                            }}
                             alt="PDF"
                             className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110"
                           />
@@ -2151,6 +2183,10 @@ const ProductDetailsView = (props: any) => {
                               "https://drive.google.com/file/d/1n3f9nEnEOj6CycKjFzuH7XRCTNN55Hl7/view?usp=drive_link",
                               120,
                             )}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).onerror = null;
+                              (e.currentTarget as HTMLImageElement).src = "/pdf-icon.png";
+                            }}
                             alt="PDF"
                             className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110"
                           />
@@ -2395,6 +2431,10 @@ const ProductDetailsView = (props: any) => {
                                       "https://drive.google.com/file/d/1n3f9nEnEOj6CycKjFzuH7XRCTNN55Hl7/view?usp=drive_link",
                                       120,
                                     )}
+                                    onError={(e) => {
+                                      (e.currentTarget as HTMLImageElement).onerror = null;
+                                      (e.currentTarget as HTMLImageElement).src = "/pdf-icon.png";
+                                    }}
                                     alt="PDF"
                                     className="w-11 h-11 object-contain transition-transform duration-200 group-hover:scale-110"
                                   />
@@ -2475,11 +2515,19 @@ const ProductDetailsView = (props: any) => {
                       {selectedProduct.name}
                     </span>
                     <span className="font-bold whitespace-nowrap text-gray-900">
-                      ₪
-                      {selectedProduct.price.toLocaleString("he-IL", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {Number(selectedProduct.price) > 0 ? (
+                        <>
+                          ₪
+                          {selectedProduct.price.toLocaleString("he-IL", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </>
+                      ) : (
+                        <span className="text-gray-400 font-bold text-xs">
+                          צור קשר למחירים
+                        </span>
+                      )}
                     </span>
                   </div>
 
@@ -2504,11 +2552,19 @@ const ProductDetailsView = (props: any) => {
                           {posStr && <span className="text-gray-400 text-xs mr-1">({posStr})</span>}
                         </span>
                         <span className="font-semibold whitespace-nowrap font-mono">
-                          ₪
-                          {lineTot.toLocaleString("he-IL", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
+                          {Number(lineTot) > 0 ? (
+                            <>
+                              ₪
+                              {lineTot.toLocaleString("he-IL", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </>
+                          ) : (
+                            <span className="text-gray-400 font-normal text-xs">
+                              צור קשר למחירים
+                            </span>
+                          )}
                         </span>
                       </div>
                     );
@@ -2517,20 +2573,35 @@ const ProductDetailsView = (props: any) => {
                   <div className="flex justify-between items-center text-lg lg:text-xl font-bold text-[#c2410c] pt-3 mt-2 border-t border-gray-200/60 bg-white -mx-4 -mb-4 p-4 rounded-b">
                     <span>סה"כ:</span>
                     <span className="font-mono">
-                      ₪
-                      {(
-                        (Number(selectedProduct.price) || 0) +
+                      {((Number(selectedProduct.price) || 0) +
                         currentOptionals.reduce((acc, opt) => {
                           const lineTot =
                             opt.lineTotal !== undefined && opt.lineTotal !== null
                               ? Number(opt.lineTotal)
                               : (Number(opt.unitPrice || opt.price || 0) * (Number(opt.qty || opt.quantity) || 1));
                           return acc + lineTot;
-                        }, 0)
-                      ).toLocaleString("he-IL", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                        }, 0)) > 0 ? (
+                        <>
+                          ₪
+                          {(
+                            (Number(selectedProduct.price) || 0) +
+                            currentOptionals.reduce((acc, opt) => {
+                              const lineTot =
+                                opt.lineTotal !== undefined && opt.lineTotal !== null
+                                  ? Number(opt.lineTotal)
+                                  : (Number(opt.unitPrice || opt.price || 0) * (Number(opt.qty || opt.quantity) || 1));
+                              return acc + lineTot;
+                            }, 0)
+                          ).toLocaleString("he-IL", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </>
+                      ) : (
+                        <span className="text-base font-bold text-gray-400">
+                          צור קשר למחירים
+                        </span>
+                      )}
                     </span>
                   </div>
                 </div>
@@ -2561,7 +2632,7 @@ const ProductDetailsView = (props: any) => {
 
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
                   <div className="flex flex-col w-full sm:w-auto text-center sm:text-right">
-                    {selectedProduct.retailPrice &&
+                    {Number(selectedProduct.retailPrice) > 0 &&
                       currentOptionals.length === 0 && (
                         <span className="text-sm sm:text-base text-gray-800 font-bold mb-1 block">
                           מחיר מומלץ לצרכן ₪
@@ -2575,7 +2646,7 @@ const ProductDetailsView = (props: any) => {
                         </span>
                       )}
                     {!isGuest &&
-                      selectedProduct.oldPrice &&
+                      Number(selectedProduct.oldPrice) > 0 &&
                       currentOptionals.length === 0 && (
                         <span className="text-sm sm:text-base text-red-500 font-medium mb-1 line-through block">
                           מחירון מתקין מקורי (ללא מע"מ): ₪
@@ -2586,28 +2657,34 @@ const ProductDetailsView = (props: any) => {
                         </span>
                       )}
                     {currentOptionals.length === 0 && (
-                      <div
-                        className={`text-2xl sm:text-3xl font-bold ${selectedProduct.isClearance ? "text-teal-600" : "text-[#c2410c]"} flex items-center gap-2 flex-wrap justify-center sm:justify-start`}
-                      >
-                        <span>
-                          ₪
-                          {selectedProduct.price.toLocaleString("he-IL", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </span>
-                        {isNetworkCableRoll(selectedProduct) && (
-                          <span className="text-xs sm:text-sm font-black text-[#004387] bg-blue-50 border border-blue-100 rounded px-2 py-0.5 select-none">
-                            מחיר למטר
+                      Number(selectedProduct.price) > 0 ? (
+                        <div
+                          className={`text-2xl sm:text-3xl font-bold ${selectedProduct.isClearance ? "text-teal-600" : "text-[#c2410c]"} flex items-center gap-2 flex-wrap justify-center sm:justify-start`}
+                        >
+                          <span>
+                            ₪
+                            {selectedProduct.price.toLocaleString("he-IL", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
                           </span>
-                        )}
-                        <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">
-                          {selectedProduct.isClearance
-                            ? "מחיר מבצע מציאון"
-                            : "מחיר מומלץ למתקין"}{" "}
-                          <span className="hidden sm:inline">(ללא מע"מ)</span>
-                        </span>
-                      </div>
+                          {isNetworkCableRoll(selectedProduct) && (
+                            <span className="text-xs sm:text-sm font-black text-[#004387] bg-blue-50 border border-blue-100 rounded px-2 py-0.5 select-none">
+                              מחיר למטר
+                            </span>
+                          )}
+                          <span className="text-xs sm:text-sm text-[#0c2d57] font-normal mr-1 sm:mr-2">
+                            {selectedProduct.isClearance
+                              ? "מחיר מבצע מציאון"
+                              : "מחיר מומלץ למתקין"}{" "}
+                            <span className="hidden sm:inline">(ללא מע"מ)</span>
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-xl sm:text-2xl font-bold text-gray-400 py-1">
+                          צור קשר למחירים
+                        </div>
+                      )
                     )}
                   </div>
                   {isGuest ? (
@@ -2842,6 +2919,13 @@ const ProductDetailsView = (props: any) => {
           </div>
         );
       })()}
+
+      {/* Product QR Code Modal */}
+      <ProductQrModal
+        isOpen={showQrModal}
+        onClose={() => setShowQrModal(false)}
+        product={selectedProduct}
+      />
     </div>
   );
 };
@@ -7571,7 +7655,7 @@ export default function App() {
               </div>
 
               {/* CENTER SIDE: Search (Protected from collapsing) */}
-              <div className="flex-grow min-w-0 max-w-xl mx-2 hidden md:flex items-center bg-[#f2f2f2] px-4 py-2 border border-transparent focus-within:border-[#004387] focus-within:bg-white transition-all relative">
+              <div className="min-w-0 flex-1 max-w-xl mx-2 hidden md:flex items-center bg-[#f2f2f2] px-4 py-2 border border-transparent focus-within:border-[#004387] focus-within:bg-white transition-all relative">
                 <Search
                   size={18}
                   className="text-gray-400 ml-2 flex-shrink-0"
@@ -7662,7 +7746,7 @@ export default function App() {
                 </>
               )}
               {isGuest && (
-                <div className="flex-shrink-0 flex items-center gap-1.5 sm:gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                   <button
                     onClick={() => {
                       try {
@@ -7782,17 +7866,17 @@ export default function App() {
             {/* ROW 3: Mobile Category Chips Bar (One-touch navigation between all catalogs) */}
             {catalogFolders.length > 0 && !isSearchFocused && (
               <div
-                className="md:hidden bg-slate-50/90 px-2.5 py-1.5 w-full block border-t border-gray-100 overflow-x-auto"
+                className="md:hidden bg-slate-50/90 py-1.5 w-full block border-t border-gray-100 overflow-x-auto scroll-px-3 snap-x"
                 style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
               >
-                <div className="flex items-center gap-1.5 whitespace-nowrap min-w-max">
+                <div className="flex items-center gap-2 px-3 whitespace-nowrap min-w-max">
                   <button
                     type="button"
                     onClick={() => {
                       setSearchQuery("");
                       navigateHome();
                     }}
-                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex-shrink-0 snap-start ${
                       currentView === "home" && !searchQuery
                         ? "bg-[#004387] text-white shadow-xs"
                         : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
@@ -7808,7 +7892,7 @@ export default function App() {
                         key={idx}
                         type="button"
                         onClick={() => navigateToCatalog(cat.name)}
-                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer flex-shrink-0 snap-start ${
                           isSelected
                             ? "bg-[#004387] text-white shadow-xs font-bold"
                             : "bg-white border border-gray-200 text-gray-700 hover:border-[#004387] active:scale-95"
@@ -8166,7 +8250,7 @@ export default function App() {
               </div>
             )}
             {/* MAIN CONTENT AREA */}
-            <main id="main-content" className="w-full pb-32 md:pb-20">
+            <main id="main-content" className="w-full pb-28 md:pb-20">
               {advisorOpen ? (
                 <React.Suspense fallback={null}>
                   <TechnicalAdvisor
@@ -8818,15 +8902,14 @@ export default function App() {
           {!advisorOpen && (
             <button
               onClick={() => setAdvisorOpen(true)}
-              className={`fixed right-4 z-[80] w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-[#004387] to-[#0c2d57] shadow-[0_8px_24px_rgba(0,67,135,0.45)] hover:scale-105 transition-all border-2 border-white shadow-lg active:scale-95 flex items-center justify-center cursor-pointer ${
-                !hasCookieConsent ? "max-sm:bottom-[136px] bottom-4" : "max-sm:bottom-[76px] bottom-4"
-              }`}
+              className="fixed bottom-[88px] right-3 sm:bottom-4 sm:right-4 z-[80] w-[44px] h-[44px] sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-[#004387] to-[#0c2d57] shadow-[0_8px_24px_rgba(0,67,135,0.45)] hover:scale-105 transition-all border-2 border-white shadow-lg active:scale-95 flex items-center justify-center cursor-pointer"
               aria-label="פתח יועץ טכני חכם"
             >
+              <MessageCircle size={22} className="text-white block sm:hidden stroke-[2.25]" />
               <img
                 src="/advisor-avatar.png"
                 alt="יועץ טכני"
-                className="w-full h-full rounded-full object-cover"
+                className="hidden sm:block w-full h-full rounded-full object-cover"
                 onError={(e) => {
                   const target = e.currentTarget as HTMLImageElement;
                   if (!target.dataset.fallback) {
@@ -8843,11 +8926,11 @@ export default function App() {
                 }}
               />
               <Bot size={26} className="text-white hidden" style={{ display: "none" }} />
-              <span className="flex absolute -top-0.5 -right-0.5 h-3.5 w-3.5">
+              <span className="hidden sm:flex absolute -top-0.5 -right-0.5 h-3.5 w-3.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500 border-2 border-white"></span>
               </span>
-              <span className="flex absolute -bottom-1 -left-1 bg-[#c2410c] rounded-full p-1 border-2 border-white items-center justify-center">
+              <span className="hidden sm:flex absolute -bottom-1 -left-1 bg-[#c2410c] rounded-full p-1 border-2 border-white items-center justify-center">
                 <Sparkles className="w-2.5 h-2.5 text-white" />
               </span>
             </button>
@@ -10107,10 +10190,10 @@ export default function App() {
                           let priceStr = "";
                           if (p) {
                             const price =
-                              p.price > 0
+                              Number(p.price) > 0
                                 ? `₪${p.price.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                : "צור קשר";
-                            const retail = p.retailPrice
+                                : "צור קשר למחירים";
+                            const retail = Number(p.retailPrice) > 0
                               ? ` (צרכן: ₪${p.retailPrice.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
                               : "";
                             priceStr = ` | מחיר מתקין: ${price}${retail}`;
@@ -10150,10 +10233,10 @@ export default function App() {
                           let priceStr = "";
                           if (p) {
                             const price =
-                              p.price > 0
+                              Number(p.price) > 0
                                 ? `₪${p.price.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                : "צור קשר";
-                            const retail = p.retailPrice
+                                : "צור קשר למחירים";
+                            const retail = Number(p.retailPrice) > 0
                               ? ` (צרכן: ₪${p.retailPrice.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
                               : "";
                             priceStr = ` | מחיר מתקין: ${price}${retail}`;
@@ -12507,9 +12590,9 @@ export default function App() {
                                 let priceStr = "";
                                 if (p) {
                                   const price =
-                                    p.price > 0
+                                    Number(p.price) > 0
                                       ? `₪${p.price.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                      : "צור קשר";
+                                      : "צור קשר למחירים";
                                   priceStr = ` | מחיר מתקין: ${price}`;
                                 }
                                 const favKey = f.sku || f.id || "";
@@ -12752,7 +12835,7 @@ export default function App() {
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 120, opacity: 0 }}
                 transition={{ type: "spring", stiffness: 280, damping: 26 }}
-                className={`fixed ${!hasCookieConsent ? "max-sm:bottom-[76px] bottom-4" : "bottom-4"} left-3 right-3 sm:left-1/2 sm:right-auto sm:transform sm:-translate-x-1/2 z-[100] mx-auto w-[92%] sm:w-full max-w-sm sm:max-w-md bg-white border-2 border-[#004387] shadow-[0_15px_45px_rgba(0,67,135,0.25)] rounded-2xl overflow-hidden transition-all duration-300 bulk-floating-bar ${
+                className={`fixed ${!hasCookieConsent ? "max-sm:bottom-[88px] bottom-4" : "bottom-4"} left-3 right-3 sm:left-1/2 sm:right-auto sm:transform sm:-translate-x-1/2 z-[100] mx-auto w-[92%] sm:w-full max-w-sm sm:max-w-md bg-white border-2 border-[#004387] shadow-[0_15px_45px_rgba(0,67,135,0.25)] rounded-2xl overflow-hidden transition-all duration-300 bulk-floating-bar ${
                   isBulkExpanded ? "p-4 sm:p-5" : "p-3 sm:p-4"
                 }`}
               >
@@ -12998,7 +13081,7 @@ export default function App() {
         {/* Compare floating bar */}
         {compareItems.length > 0 && !compareOpen && (
           <div
-            className={`fixed ${!hasCookieConsent ? "max-sm:bottom-[76px] bottom-4" : "bottom-4"} left-1/2 -translate-x-1/2 z-[55] flex items-center gap-2 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.18)] border border-gray-200 rounded-full px-3 py-2`}
+            className={`fixed ${!hasCookieConsent ? "max-sm:bottom-[88px] bottom-4" : "bottom-4"} left-1/2 -translate-x-1/2 z-[55] flex items-center gap-2 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.18)] border border-gray-200 rounded-full px-3 py-2`}
             style={{
               paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))",
             }}
@@ -13106,9 +13189,9 @@ export default function App() {
                       {
                         label: "מחיר",
                         get: (p: any) =>
-                          p.price
+                          Number(p.price) > 0
                             ? "₪" + Math.round(p.price).toLocaleString()
-                            : "—",
+                            : "צור קשר למחירים",
                       },
                       {
                         label: "תיאור",

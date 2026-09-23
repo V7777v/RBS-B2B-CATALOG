@@ -126,13 +126,13 @@ export default defineConfig(() => {
               if (id.includes('xlsx') || id.includes('jszip')) {
                 return 'vendor-xlsx';
               }
-              if (id.includes('react') || id.includes('scheduler') || id.includes('react-dom') || id.includes('react-zoom-pan-pinch') || id.includes('motion') || id.includes('framer-motion')) {
-                return 'vendor-react-core';
-              }
-              if (id.includes('lucide-react')) {
-                return 'vendor-icons';
-              }
               if (
+                id.includes('react') ||
+                id.includes('scheduler') ||
+                id.includes('react-dom') ||
+                id.includes('react-zoom-pan-pinch') ||
+                id.includes('motion') ||
+                id.includes('framer-motion') ||
                 id.includes('react-markdown') ||
                 id.includes('remark') ||
                 id.includes('micromark') ||
@@ -140,7 +140,10 @@ export default defineConfig(() => {
                 id.includes('vfile') ||
                 id.includes('mdast')
               ) {
-                return 'vendor-markdown';
+                return 'vendor-react-core';
+              }
+              if (id.includes('lucide-react')) {
+                return 'vendor-icons';
               }
               if (id.includes('papaparse')) {
                 return 'vendor-papaparse';
