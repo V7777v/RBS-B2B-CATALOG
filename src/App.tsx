@@ -669,8 +669,23 @@ const parseProductRow = (row: any) => {
       .map((s: string) => s.trim())
       .filter((s: string) => s.startsWith("http") || s.startsWith("www."));
   }
+  // Parse Compatibility
+  const rawCompatibility =
+    row.compatibility || row.Compatibility || row.COMPATIBILITY || row["תאימות"] || "";
+  let compatibility: string[] = [];
+  if (typeof rawCompatibility === "string" && rawCompatibility.trim()) {
+    compatibility = rawCompatibility
+      .split(",")
+      .map((s: string) => s.trim().toUpperCase())
+      .filter(Boolean);
+  } else if (Array.isArray(rawCompatibility)) {
+    compatibility = rawCompatibility
+      .map((s: any) => String(s || "").trim().toUpperCase())
+      .filter(Boolean);
+  }
   return {
     ...row,
+    compatibility,
     reviewLink: reviewLink,
     category: categoryName,
     subcategory: subcategoryName,
@@ -1457,6 +1472,59 @@ const ProductCard = React.memo(
               </button>
             </h3>
           </div>
+          {(() => {
+            const compat = product.compatibility || [];
+            const hasCompat = (key: string) =>
+              compat.some(
+                (c: string) =>
+                  c === key || c.replace(/[\s_]/g, "-") === key,
+              );
+            const items = ["HIK-CONNECT", "NVR", "ONVIF"].filter(hasCompat);
+            if (items.length === 0) return null;
+            return (
+              <div className="flex justify-center items-center gap-2 mt-2">
+                {items.map((item) => {
+                  if (item === "HIK-CONNECT") {
+                    return (
+                      <img
+                        key={item}
+                        src="/hik-connect.png"
+                        className="h-5 w-5 rounded"
+                        title="תומך Hik-Connect"
+                      />
+                    );
+                  }
+                  if (item === "NVR") {
+                    return (
+                      <span
+                        key={item}
+                        className="flex items-center gap-1 text-[11px] font-bold text-[#0c2d57] border border-slate-300 rounded px-1 py-0.5"
+                        title="מתחברת ל-NVR של HIKVISION"
+                      >
+                        <img
+                          src="/nvr-hikvision.png"
+                          className="w-7 h-auto"
+                          alt=""
+                        />
+                        NVR
+                      </span>
+                    );
+                  }
+                  if (item === "ONVIF") {
+                    return (
+                      <img
+                        key={item}
+                        src="/onvif.png"
+                        className="h-3 w-auto"
+                        title="תואם ONVIF"
+                      />
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+            );
+          })()}
 
           <div className="mt-auto pt-2 sm:pt-2 flex flex-col items-center w-full">
             {isGuest ? (
@@ -2004,6 +2072,83 @@ const ProductDetailsView = (props: any) => {
                 className="!w-full sm:!w-auto sm:!text-[17px] !py-3 sm:!py-2"
               />
             </div>
+
+            {/* Compatibility Block */}
+            {(() => {
+              const compat = selectedProduct.compatibility || [];
+              const hasCompat = (key: string) =>
+                compat.some(
+                  (c: string) =>
+                    c === key || c.replace(/[\s_]/g, "-") === key,
+                );
+              const items = ["HIK-CONNECT", "NVR", "ONVIF"].filter(hasCompat);
+              if (items.length === 0) return null;
+              return (
+                <div className="mb-4 w-full">
+                  <div className="flex items-center gap-2 font-bold text-[#0c2d57] mb-2">
+                    <span>תאימות למערכות</span>
+                    <img
+                      src="/hikvision-logo.png"
+                      alt="HIKVISION"
+                      className="h-4 w-auto"
+                    />
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    {items.map((item, idx) => (
+                      <div
+                        key={item}
+                        className={`flex items-center gap-3 py-2 text-sm text-slate-700 ${idx > 0 ? "border-t border-slate-200" : ""}`}
+                      >
+                        <div className="w-16 flex justify-center shrink-0">
+                          {item === "HIK-CONNECT" && (
+                            <img
+                              src="/hik-connect.png"
+                              alt="Hik-Connect"
+                              className="h-8 w-8 rounded-lg"
+                            />
+                          )}
+                          {item === "NVR" && (
+                            <img
+                              src="/nvr-hikvision.png"
+                              alt="NVR"
+                              className="w-14 h-auto"
+                            />
+                          )}
+                          {item === "ONVIF" && (
+                            <img
+                              src="/onvif.png"
+                              alt="ONVIF"
+                              className="h-5 w-auto"
+                            />
+                          )}
+                        </div>
+                        {item === "HIK-CONNECT" && (
+                          <span>ניהול גם דרך אפליקציית Hik-Connect</span>
+                        )}
+                        {item === "NVR" && (
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-1.5">
+                              <span>מתחברת ל-NVR של</span>
+                              <img
+                                src="/hikvision-logo.png"
+                                alt="HIKVISION"
+                                className="h-3 w-auto"
+                              />
+                            </div>
+                            <span className="text-xs text-slate-500">
+                              ניתן להקליט את המצלמה במקליט
+                            </span>
+                          </div>
+                        )}
+                        {item === "ONVIF" && (
+                          <span>תואמת פרוטוקול ONVIF</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             <div className="grid grid-cols-3 gap-2 mb-4 sm:mb-6">
               <button
                 type="button"

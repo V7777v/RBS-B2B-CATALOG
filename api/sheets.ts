@@ -63,7 +63,8 @@ function isAllowedForGuest(colName: string): boolean {
     "manuallink", "videolink", "specslink",
     "סקירת מוצרים", "סקירת מוצר", "reviewlink",
     "אישורי מעבדה", "labcerts",
-    "נפח", "נפח בארון", "התאמה לארון", "tags"
+    "נפח", "נפח בארון", "התאמה לארון", "tags",
+    "compatibility", "תאימות"
   ];
   if (exactAllowed.includes(clean)) return true;
 
