@@ -107,6 +107,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import QuoteDocument from "./QuoteDocument";
 import LegalAndCookies from "./LegalAndCookies";
 import { trackPageView, trackEvent } from "./lib/analytics";
+import { isConfiguratorExcludedCabinet } from "./utils/cabinetData";
 // Safari-safe lazy loading: if a chunk fails to load (stale Service Worker after a
 // redeploy points to an old chunk name), reload the page ONCE to fetch fresh assets.
 const lazyWithRetry = (factory: () => Promise<any>) =>
@@ -3051,6 +3052,7 @@ const ProductDetailsView = (props: any) => {
         {/* FULL-WIDTH CABINET CONFIGURATOR (Spans 100% of the product content wrapper) */}
         {selectedProduct.subcategory === "ארונות תקשורת ואביזרים" &&
           !selectedProduct["Nested subcategory"]?.includes("אביזרים") &&
+          !isConfiguratorExcludedCabinet(selectedProduct) &&
           /ארון|מסד|מארז/i.test(selectedProduct.name) && (
             <div className="border-t-2 border-[#004387]/20 bg-slate-50/50 p-3 sm:p-5 lg:p-6">
               <React.Suspense

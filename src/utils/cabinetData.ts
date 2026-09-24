@@ -651,8 +651,43 @@ export const parseCabinetDepthFromName = (name: string): number => {
   return 0;
 };
 
+export const isConfiguratorExcludedCabinet = (pp: any): boolean => {
+  if (!pp) return false;
+  const name = String(pp?.name || pp?.['שם פריט'] || pp?.['שם'] || '').toLowerCase();
+  const desc = String(pp?.description || pp?.['תיאור'] || '').toLowerCase();
+  const sub = String(pp?.subcategory || pp?.['תת קטגוריה'] || '').toLowerCase();
+  const cat = String(pp?.category || pp?.['קטגוריה'] || '').toLowerCase();
+  const nested = String(pp?.nestedSubcategory || pp?.['Nested subcategory'] || '').toLowerCase();
+  const niche = String(pp?.nicheCategory || pp?.['Niche Category'] || '').toLowerCase();
+
+  const allCategoryFields = `${cat} ${sub} ${nested} ${niche}`;
+
+  // Exclude outdoor polyester and outdoor metal cabinets from configurator
+  if (
+    allCategoryFields.includes('פוליאסטר') ||
+    allCategoryFields.includes('מתכת חיצוני') ||
+    allCategoryFields.includes('מתכת חיצונית') ||
+    allCategoryFields.includes('מתכתי חיצוני') ||
+    allCategoryFields.includes('ארונות תקשורת פוליאסטר') ||
+    allCategoryFields.includes('ארונות תקשורת מתכת חיצוני')
+  ) {
+    return true;
+  }
+
+  if (
+    name.includes('פוליאסטר') ||
+    (name.includes('מתכת') && name.includes('חיצוני')) ||
+    (name.includes('מתכתי') && name.includes('חיצוני'))
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
 export const isCabinetProduct = (pp: any): boolean => {
   if (!pp) return false;
+  if (isConfiguratorExcludedCabinet(pp)) return false;
   const name = String(pp?.name || pp?.['שם פריט'] || '').trim();
   const desc = String(pp?.description || pp?.['תיאור'] || '').trim();
   const sub = String(pp?.subcategory || pp?.['תת קטגוריה'] || pp?.['קטגוריה'] || '').trim();
