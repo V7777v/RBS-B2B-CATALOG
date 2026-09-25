@@ -669,7 +669,8 @@ export const isConfiguratorExcludedCabinet = (pp: any): boolean => {
     allCategoryFields.includes('מתכת חיצונית') ||
     allCategoryFields.includes('מתכתי חיצוני') ||
     allCategoryFields.includes('ארונות תקשורת פוליאסטר') ||
-    allCategoryFields.includes('ארונות תקשורת מתכת חיצוני')
+    allCategoryFields.includes('ארונות תקשורת מתכת חיצוני') ||
+    allCategoryFields.includes('ארונות מתכת')
   ) {
     return true;
   }

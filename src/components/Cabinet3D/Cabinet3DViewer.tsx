@@ -765,6 +765,21 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     requestAnimationFrame(animateRestore);
   }, [fitCameraToCabinet]);
 
+  // Zoom camera in / out smoothly
+  const handleZoom = useCallback((direction: number) => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+    const dir = new THREE.Vector3().subVectors(camera.position, controls.target);
+    const dist = dir.length();
+    const factor = direction > 0 ? 0.75 : 1.33;
+    const newDist = Math.max(controls.minDistance || 2, Math.min(controls.maxDistance || 200, dist * factor));
+    dir.normalize().multiplyScalar(newDist);
+    camera.position.copy(controls.target).add(dir);
+    controls.update();
+    needsRenderRef.current = true;
+  }, []);
+
   // Helper to cleanly dispose all meshes, geometries, and textures inside a group
   const disposeHierarchy = (group: THREE.Group) => {
     const sharedMats = materialsRef.current ? Object.values(materialsRef.current) : [];
@@ -1078,6 +1093,8 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       const rect = canvas.getBoundingClientRect();
       mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      scene.updateMatrixWorld(true);
+      camera.updateMatrixWorld();
       raycaster.setFromCamera(mouse, camera);
       return raycaster.intersectObjects(scene.children, true);
     };
@@ -2222,28 +2239,48 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           )}
         </div>
 
-        {/* Right Side: Essential Actions (Focus and Widescreen) */}
-        <div className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md border border-slate-700 p-1 pointer-events-auto shadow-md rounded-md relative flex-wrap max-w-full">
+        {/* Right Side: Essential Actions (Zoom, Focus and Widescreen) */}
+        <div className="flex items-center gap-1 bg-slate-900/90 backdrop-blur-md border border-slate-700 p-1 pointer-events-auto shadow-md rounded-md relative flex-wrap max-w-full">
+          {/* Zoom In */}
+          <button
+            type="button"
+            onClick={() => handleZoom(1)}
+            className="w-11 h-11 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors cursor-pointer shrink-0"
+            title="התקרב (זום אין)"
+            aria-label="התקרב"
+          >
+            <ZoomIn size={16} />
+          </button>
+
+          {/* Zoom Out */}
+          <button
+            type="button"
+            onClick={() => handleZoom(-1)}
+            className="w-11 h-11 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors cursor-pointer shrink-0"
+            title="התרחק (זום אאוט)"
+            aria-label="התרחק"
+          >
+            <ZoomOut size={16} />
+          </button>
+
           {/* Focus on Product / Restore Framing Toggle */}
           {isFocusedOnProduct ? (
             <button
               type="button"
               onClick={restorePreviousFraming}
-              className="px-2 py-1 text-[11px] font-semibold bg-blue-800 text-white hover:bg-blue-700 rounded transition-colors cursor-pointer flex items-center gap-1"
+              className="w-11 h-11 flex items-center justify-center text-[11px] font-semibold bg-blue-800 text-white hover:bg-blue-700 rounded-md transition-colors cursor-pointer shrink-0"
               title="חזור למבט הקודם"
             >
-              <CornerUpLeft size={13} />
-              <span className="hidden sm:inline">חזור למבט</span>
+              <CornerUpLeft size={16} />
             </button>
           ) : (
             <button
               type="button"
               onClick={() => focusOnSelectedProduct()}
-              className="px-2 py-1 text-[11px] font-semibold hover:bg-slate-800 text-slate-200 hover:text-white rounded transition-colors cursor-pointer flex items-center gap-1"
+              className="w-11 h-11 flex items-center justify-center text-[11px] font-semibold hover:bg-slate-800 text-slate-300 hover:text-white rounded-md transition-colors cursor-pointer shrink-0"
               title="התמקדות בציוד הנבחר"
             >
-              <ZoomIn size={13} />
-              <span className="hidden sm:inline">התמקדות</span>
+              <Eye size={16} />
             </button>
           )}
 
@@ -2251,10 +2288,10 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           <button
             type="button"
             onClick={() => setIsWidescreen(w => !w)}
-            className="p-1 hover:bg-slate-800 text-slate-300 hover:text-white rounded transition-colors cursor-pointer"
+            className="w-11 h-11 flex items-center justify-center hover:bg-slate-800 text-slate-300 hover:text-white rounded-md transition-colors cursor-pointer shrink-0"
             title={isWidescreen ? 'תצוגה רגילה' : 'תצוגה מוגדלת'}
           >
-            {isWidescreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            {isWidescreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
         </div>
       </div>
@@ -2550,9 +2587,9 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       </nav>
 
       {/* Bottom HUD */}
-      <div className="absolute bottom-2.5 right-2.5 left-2.5 flex items-center justify-between gap-2 pointer-events-none z-20">
+      <div className="absolute bottom-2.5 right-2.5 left-2.5 flex flex-wrap justify-center sm:justify-between sm:flex-nowrap items-center gap-2 px-2 sm:px-0 pointer-events-none z-20">
         {/* Included Items Details */}
-        <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 text-slate-200 text-[10.5px] px-2.5 py-1.5 flex items-center gap-2 pointer-events-auto shadow-md max-w-md overflow-x-auto rounded-md">
+        <div className="min-h-11 bg-slate-900/90 backdrop-blur-md border border-slate-700 text-slate-200 text-[10.5px] px-2.5 py-1.5 flex items-center gap-2 pointer-events-auto shadow-md max-w-full sm:max-w-md overflow-x-auto rounded-md shrink-0">
           <ShieldCheck size={14} className="text-emerald-400 shrink-0" />
           <span className="font-semibold text-slate-300 shrink-0">כלול בארון:</span>
           {includedSummary.length > 0 ? (
@@ -2562,17 +2599,18 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-2 pointer-events-auto shrink-0">
+        <div className="flex items-center gap-2 pointer-events-auto shrink-0 flex-wrap justify-center">
           {/* 0U PDU Button */}
           {onOpenPduModal && (
             <button
               type="button"
               onClick={onOpenPduModal}
-              className="bg-amber-600/90 hover:bg-amber-500 backdrop-blur-md border border-amber-300 text-slate-950 text-[11px] font-black px-3 py-1.5 flex items-center gap-1.5 transition-colors shadow-lg cursor-pointer shrink-0 rounded-md"
+              className="min-h-11 bg-amber-600/90 hover:bg-amber-500 backdrop-blur-md border border-amber-300 text-slate-950 text-xs font-black px-3 py-1.5 flex items-center justify-center gap-1.5 transition-colors shadow-lg cursor-pointer shrink-0 rounded-md"
               title="הוסף פסי שקעים PDU מותקנים ברלס אחורי עליון ללא תפיסת מקום חזיתי (0U)"
             >
-              <Zap size={13} className="fill-slate-950" />
-              <span>פס שקעים PDU (0U)</span>
+              <Zap size={14} className="fill-slate-950 shrink-0" />
+              <span className="hidden sm:inline">פס שקעים PDU (0U)</span>
+              <span className="sm:hidden font-black">PDU</span>
             </button>
           )}
 
@@ -2581,11 +2619,12 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
             <button
               type="button"
               onClick={onOpenAuxiliaryModal}
-              className="bg-indigo-900/90 hover:bg-indigo-800 backdrop-blur-md border border-indigo-400 text-indigo-100 text-[11px] font-bold px-3 py-1.5 flex items-center gap-1.5 transition-colors shadow-lg cursor-pointer shrink-0 rounded-md"
+              className="min-h-11 bg-indigo-900/90 hover:bg-indigo-800 backdrop-blur-md border border-indigo-400 text-indigo-100 text-xs font-bold px-3 py-1.5 flex items-center justify-center gap-1.5 transition-colors shadow-lg cursor-pointer shrink-0 rounded-md"
               title="הוסף אביזרי גג, בסיס, דפנות או ציוד חומרה ללא תפיסת יחידות U"
             >
-              <Layers size={13} className="text-indigo-300" />
-              <span>הוסף ציוד נלווה (0U)</span>
+              <Layers size={14} className="text-indigo-300 shrink-0" />
+              <span className="hidden sm:inline">הוסף ציוד נלווה (0U)</span>
+              <span className="sm:hidden">נלווה</span>
             </button>
           )}
         </div>

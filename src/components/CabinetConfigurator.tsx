@@ -1301,6 +1301,15 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     message: string;
   } | null>(null);
 
+  // Auto-hide undo toast after 4 seconds
+  useEffect(() => {
+    if (!undoState) return;
+    const timer = setTimeout(() => {
+      setUndoState(null);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [undoState]);
+
   const handleConfirmRearrangement = () => {
     if (!pendingRearrangementPlan) return;
     const { plan, item, stateSignature } = pendingRearrangementPlan;
@@ -4449,17 +4458,17 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[260] bg-slate-900 text-white px-5 py-3 rounded-lg shadow-2xl flex items-center gap-4 border border-slate-700"
+            className="fixed left-3 right-3 bottom-[calc(16px+env(safe-area-inset-bottom))] z-[260] max-w-md mx-auto bg-slate-900 text-white px-4 py-2.5 rounded-lg shadow-2xl flex items-center gap-3 border border-slate-700"
             dir="rtl"
           >
-            <div className="flex items-center gap-2">
-              <CheckCircle2 size={18} className="text-emerald-400" />
-              <span className="text-sm font-medium">{undoState.message}</span>
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
+              <span className="text-sm font-medium truncate">{undoState.message}</span>
             </div>
             <button
               type="button"
               onClick={handleUndoLastAction}
-              className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded transition-colors flex items-center gap-1.5 shadow cursor-pointer"
+              className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded transition-colors flex items-center gap-1.5 shadow shrink-0 cursor-pointer"
             >
               <RotateCcw size={13} />
               <span>בטל שינויים</span>
@@ -4467,7 +4476,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             <button
               type="button"
               onClick={() => setUndoState(null)}
-              className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+              className="text-slate-400 hover:text-white transition-colors cursor-pointer shrink-0"
             >
               <X size={16} />
             </button>

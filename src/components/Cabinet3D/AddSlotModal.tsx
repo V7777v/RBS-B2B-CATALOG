@@ -65,6 +65,18 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
   const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
   const [pendingPduItem, setPendingPduItem] = useState<any | null>(initialPendingPduItem || null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const openedAtRef = useRef(0);
+
+  useEffect(() => {
+    if (isOpen) {
+      openedAtRef.current = Date.now();
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [isOpen]);
 
   // Sync subView and reset open sections to closed by default
   useEffect(() => {
@@ -477,7 +489,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
             <button
               type="button"
               onClick={() => setIsDrawerExpanded(!isDrawerExpanded)}
-              className="p-1.5 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-md cursor-pointer transition-colors"
+              className="w-11 h-11 flex items-center justify-center text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-md cursor-pointer transition-colors"
               title={isDrawerExpanded ? 'צמצם תצוגה' : 'הרחב תצוגה'}
             >
               {isDrawerExpanded ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
@@ -489,7 +501,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
               handleProductHover(null);
               onClose();
             }}
-            className="p-1.5 text-white/80 hover:text-white bg-white/10 hover:bg-rose-600 rounded-md cursor-pointer transition-colors"
+            className="w-11 h-11 flex items-center justify-center text-white/80 hover:text-white bg-white/10 hover:bg-rose-600 rounded-md cursor-pointer transition-colors"
             title="סגור חלון (Escape)"
           >
             <X size={17} />
@@ -824,8 +836,9 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs pointer-events-auto"
+        className="absolute inset-0 bg-slate-900/20 pointer-events-auto"
         onClick={() => {
+          if (Date.now() - openedAtRef.current < 450) return;
           handleProductHover(null);
           onClose();
         }}
@@ -834,7 +847,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
       {/* Animated Drawer */}
       <motion.div
         initial={{ y: '100%' }}
-        animate={{ y: 0, height: isDrawerExpanded ? '88dvh' : '55dvh' }}
+        animate={{ y: 0, height: isDrawerExpanded ? '88dvh' : '70dvh' }}
         transition={{ type: 'spring', damping: 28, stiffness: 240 }}
         className="w-full bg-white rounded-t-2xl shadow-2xl overflow-hidden pointer-events-auto flex flex-col relative z-10 max-h-[92dvh] pb-[env(safe-area-inset-bottom)]"
       >
