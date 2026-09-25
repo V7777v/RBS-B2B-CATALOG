@@ -189,39 +189,42 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                   </td>
 
                   {/* כמות */}
-                  <td className="py-2 px-3 text-center">
+                  <td className="py-2 px-2 sm:px-3 text-center whitespace-nowrap">
                     {readOnly ? (
                       <span className="font-mono font-bold text-xs text-slate-800">
                         {line.qty}
                       </span>
                     ) : (
-                      <div className="flex items-center justify-center bg-slate-50 border border-slate-200 rounded-none overflow-hidden h-7 w-fit mx-auto" dir="ltr">
+                      <div className="flex items-center justify-center gap-2 lg:gap-0 bg-transparent lg:bg-slate-50 lg:border lg:border-slate-200 lg:rounded-none lg:overflow-hidden lg:h-7 w-fit mx-auto" dir="ltr">
                         <button
                           type="button"
                           title="הוסף 1"
                           onClick={() => onIncrement?.(line.sku)}
-                          className="px-2 hover:bg-slate-200 text-[#004387] transition-colors cursor-pointer"
+                          className="w-10 h-10 min-w-10 min-h-10 flex items-center justify-center bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded border border-slate-300 lg:border-0 lg:rounded-none lg:w-auto lg:h-full lg:min-w-0 lg:min-h-0 lg:px-2 lg:bg-transparent text-[#004387] transition-colors cursor-pointer shrink-0"
+                          aria-label={`הוסף 1 עבור ${line.sku}`}
                         >
-                          <Plus size={12} />
+                          <Plus size={15} className="lg:w-3 lg:h-3" />
                         </button>
-                        <span className="w-7 flex items-center justify-center border-x border-slate-200 text-xs font-bold bg-white text-slate-800 font-mono">
+                        <span className="w-9 h-10 min-w-9 min-h-10 flex items-center justify-center text-xs sm:text-sm font-bold bg-white text-slate-800 font-mono border border-slate-200 rounded lg:border-0 lg:border-x lg:border-slate-200 lg:rounded-none lg:w-7 lg:h-full lg:min-w-0 lg:min-h-0 shrink-0">
                           {line.qty}
                         </span>
                         <button
                           type="button"
                           title="הפחת 1"
                           onClick={() => onDecrement?.(line.sku)}
-                          className="px-2 hover:bg-slate-200 text-red-500 transition-colors cursor-pointer"
+                          className="w-10 h-10 min-w-10 min-h-10 flex items-center justify-center bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded border border-slate-300 lg:border-0 lg:rounded-none lg:w-auto lg:h-full lg:min-w-0 lg:min-h-0 lg:px-2 lg:bg-transparent text-red-500 transition-colors cursor-pointer shrink-0"
+                          aria-label={`הפחת 1 עבור ${line.sku}`}
                         >
-                          <Minus size={12} />
+                          <Minus size={15} className="lg:w-3 lg:h-3" />
                         </button>
                         <button
                           type="button"
                           title="הסר לחלוטין"
                           onClick={() => onRemove?.(line.sku)}
-                          className="px-2 border-l border-slate-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                          className="w-10 h-10 min-w-10 min-h-10 flex items-center justify-center bg-rose-50 hover:bg-rose-100 active:bg-rose-200 rounded border border-rose-300 lg:border-0 lg:border-l lg:border-slate-200 lg:rounded-none lg:w-auto lg:h-full lg:min-w-0 lg:min-h-0 lg:px-2 lg:bg-transparent text-slate-400 hover:text-rose-600 transition-colors cursor-pointer shrink-0"
+                          aria-label={`הסר לחלוטין עבור ${line.sku}`}
                         >
-                          <X size={12} />
+                          <X size={15} className="lg:w-3 lg:h-3" />
                         </button>
                       </div>
                     )}

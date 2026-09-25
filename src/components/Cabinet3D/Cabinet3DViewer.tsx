@@ -533,6 +533,55 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       targetPos.y = targetCenterY + heightUnits * 0.15;
     }
 
+    // For compact cabinets (<= 15U), bring camera closer step-by-step while corners remain within frame limits
+    if (totalU <= 15) {
+      const { box } = getCabinetBounds();
+      const corners = [
+        new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+        new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+        new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+        new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+        new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+        new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+        new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+        new THREE.Vector3(box.max.x, box.max.y, box.max.z),
+      ];
+
+      const testCamera = camera.clone();
+      const container = containerRef.current;
+      if (container && container.clientWidth > 0 && container.clientHeight > 0) {
+        testCamera.aspect = container.clientWidth / container.clientHeight;
+      }
+      testCamera.up.set(0, 1, 0);
+
+      const camOffset = targetPos.clone().sub(targetCenter);
+
+      for (let step = 0; step < 12; step++) {
+        const nextOffset = camOffset.clone().multiplyScalar(0.94);
+        const testPos = targetCenter.clone().add(nextOffset);
+        testCamera.position.copy(testPos);
+        testCamera.lookAt(targetCenter);
+        testCamera.updateMatrixWorld(true);
+        testCamera.updateProjectionMatrix();
+
+        const allInside = corners.every(corner => {
+          const p = corner.clone().project(testCamera);
+          return Math.abs(p.x) <= 0.80 && p.y >= -0.85 && p.y <= 0.65;
+        });
+
+        if (allInside) {
+          camOffset.copy(nextOffset);
+          targetPos.copy(testPos);
+          targetDist = camOffset.length();
+        } else {
+          break;
+        }
+      }
+      lastFitDistanceRef.current = targetDist;
+      controls.minDistance = Math.max(1.5, targetDist * 0.2);
+      controls.maxDistance = Math.max(50, targetDist * 4.0);
+    }
+
     // Hard NaN/Infinite check before assignment
     if (
       isNaN(targetPos.x) || isNaN(targetPos.y) || isNaN(targetPos.z) ||
@@ -1515,6 +1564,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       setSceneReady(false);
 
       renderer.dispose();
+      renderer.forceContextLoss();
       scene.clear();
     };
   }, []);

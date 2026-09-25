@@ -35,7 +35,8 @@ import {
   PanelLeftOpen,
   Check,
   Undo2,
-  GripVertical
+  GripVertical,
+  Printer
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { CabinetMatrixData, GroupedRubric, KNOWN_MATRIX_SHELF_SKUS, GENERIC_SHELF_IMAGE, checkAccessoryFitsCabinet, deriveBrand, extractAllMatrixShelfSkus, fetchCabinetMatrix, fetchCompatMap, groupAccessoriesForDisplay, isAccessoryAShelf, isCabinetProduct, isConfiguratorExcludedCabinet, isProductShelf, normalizeSku, parseAccessoryCount, parseCabinetDepthFromName, parseCompatRange, parseCompatibleSkus, parseDepthMmLocal } from '../utils/cabinetData';
@@ -3832,39 +3833,50 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           }
         ` }} />
         <div className="bg-white w-full max-w-[794px] mx-auto shadow-2xl print:shadow-none print:max-w-none" onClick={(e) => e.stopPropagation()}>
-          <div className="no-print flex items-center justify-between gap-2 p-3 bg-[#0c2d57] text-white print:hidden sticky top-0 z-10">
-            <button type="button" onClick={() => setShowPdfPreview(false)} className="no-print flex items-center gap-1 px-3 py-2 bg-white/15 hover:bg-white/25 rounded font-bold text-sm active:scale-95">
-              <X size={17} /> סגור
-            </button>
-            <span className="font-bold text-xs sm:text-sm">תצוגה מקדימה {pdfWithPrice ? '(עם מחירים)' : '(ללא מחירים)'}</span>
+          <div className="no-print flex flex-wrap items-center justify-between gap-2 p-2.5 sm:p-3 bg-[#0c2d57] text-white print:hidden sticky top-0 z-10">
             <div className="flex items-center gap-2">
+              <button 
+                type="button" 
+                onClick={() => setShowPdfPreview(false)} 
+                className="no-print flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 bg-white/15 hover:bg-white/25 rounded font-bold text-xs sm:text-sm active:scale-95 cursor-pointer shrink-0"
+              >
+                <X size={16} /> <span>סגור</span>
+              </button>
+              <span className="font-bold text-xs sm:text-sm">תצוגה מקדימה {pdfWithPrice ? '(עם מחירים)' : '(ללא מחירים)'}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <button 
                 type="button" 
                 onClick={handleShareWhatsApp} 
                 disabled={isSharingWhatsApp || isGeneratingPdf}
-                className="no-print flex items-center gap-1.5 px-3 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white disabled:opacity-50 disabled:cursor-not-allowed rounded font-bold text-sm active:scale-95 transition-all shadow-sm"
+                className="no-print flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white disabled:opacity-50 disabled:cursor-not-allowed rounded font-bold text-xs sm:text-sm active:scale-95 transition-all shadow-sm cursor-pointer shrink-0"
               >
-                <MessageCircle size={17} /> {isSharingWhatsApp ? 'משתף...' : 'שלח בוואטסאפ'}
+                <MessageCircle size={16} />
+                <span className="hidden sm:inline">{isSharingWhatsApp ? 'משתף...' : 'שלח בוואטסאפ'}</span>
+                <span className="sm:hidden">{isSharingWhatsApp ? 'משתף...' : 'וואטסאפ'}</span>
               </button>
               <button 
                 type="button" 
                 onClick={handleDownloadPdfFile} 
                 disabled={isGeneratingPdf || isSharingWhatsApp}
-                className="no-print flex items-center gap-1 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed rounded font-bold text-sm active:scale-95 transition-all shadow-sm"
+                className="no-print flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed rounded font-bold text-xs sm:text-sm active:scale-95 transition-all shadow-sm cursor-pointer shrink-0"
               >
-                <Download size={17} /> {isGeneratingPdf ? 'מייצר PDF...' : 'הורד PDF'}
+                <Download size={16} />
+                <span className="hidden sm:inline">{isGeneratingPdf ? 'מייצר PDF...' : 'הורד PDF'}</span>
+                <span className="sm:hidden">{isGeneratingPdf ? 'מייצר...' : 'הורד'}</span>
               </button>
               <button 
                 type="button" 
                 onClick={() => { try { window.print(); } catch {} }} 
-                className="no-print flex items-center gap-1 px-2.5 py-2 bg-white/15 hover:bg-white/25 rounded font-semibold text-xs active:scale-95 transition-all"
+                className="no-print flex items-center gap-1 px-2 sm:px-2.5 py-1.5 sm:py-2 bg-white/15 hover:bg-white/25 rounded font-semibold text-xs active:scale-95 transition-all cursor-pointer shrink-0"
                 title="הדפסה ישירה דרך הדפדפן"
               >
-                הדפס
+                <Printer size={15} />
+                <span>הדפס</span>
               </button>
             </div>
           </div>
-          <div id="cabinet-pdf-doc" dir="rtl" className="bg-white text-slate-900 font-sans p-8 max-w-[794px] mx-auto [direction:rtl]">
+          <div id="cabinet-pdf-doc" dir="rtl" className="bg-white text-slate-900 font-sans p-4 sm:p-8 max-w-[794px] mx-auto [direction:rtl] print:p-8">
             {/* 1. Header: RBS Telecom logo (left), title "הצעת תצורה — ארון תקשורת", today's date (he-IL), cabinet name + SKU */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #004387', paddingBottom: '12px', marginBottom: '16px', gap: '16px' }}>
               <div>
@@ -3876,21 +3888,21 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 </div>
               </div>
               <img 
-                src="https://rbs-telecom.com/wp-content/uploads/2021/01/LOGO-RBS_FINAL.png" 
+                src="/new-logo.png" 
                 alt="RBS Telecom" 
                 style={{ height: '42px', objectFit: 'contain' }} 
               />
             </div>
 
-            {/* 2. Cabinet section, two columns */}
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', alignItems: 'start' }}>
-              {/* Right: the 3D snapshot <img src={pdfSnapshot}> (max-height 300px, object-contain). If pdfSnapshot is null, show the existing 2D U-map instead */}
-              <div style={{ flex: '1 1 50%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 0 }}>
+            {/* 2. Cabinet section: 3D image above spec list on < 640px, side-by-side on desktop/print */}
+            <div className="flex flex-col sm:flex-row print:flex-row gap-4 mb-4 items-start">
+              {/* 3D snapshot: full width on mobile, half width on desktop */}
+              <div className="w-full sm:w-1/2 sm:flex-[1_1_50%] print:w-1/2 print:flex-[1_1_50%] flex flex-col items-center justify-center min-w-0">
                 {pdfSnapshot ? (
                   <img
                     src={pdfSnapshot}
                     alt="3D Cabinet Snapshot"
-                    style={{ maxHeight: '300px', maxWidth: '100%', objectFit: 'contain', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#f8fafc', padding: '4px' }}
+                    className="w-full max-h-[300px] object-contain border border-slate-300 rounded bg-slate-50 p-1"
                   />
                 ) : (
                   slots.length > 0 && (
@@ -3942,39 +3954,39 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 )}
               </div>
 
-              {/* Left: spec card with rows: U, מידות (רוחב×עומק), דלת קדמית, דלת אחורית, מאווררים, גלגלים/רגליות, and the "כלול בארון" items as a compact checklist (✓ per item) */}
-              <div style={{ flex: '1 1 50%', display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
+              {/* Spec card: stacked list on < 640px, two-column table on desktop/print */}
+              <div className="w-full sm:w-1/2 sm:flex-[1_1_50%] print:w-1/2 print:flex-[1_1_50%] flex flex-col gap-2 min-w-0">
                 <div className="border border-slate-300 rounded-md bg-slate-50 text-[12px] p-2.5">
                   <div className="text-sm font-bold uppercase tracking-wide text-[#0c2d57] border-b-2 border-[#c2410c] pb-1 mb-2">
                     מפרט ארון
                   </div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                    <tbody>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '4px 6px', fontWeight: 700, width: '35%', color: '#334155' }}>U</td>
-                        <td style={{ padding: '4px 6px', color: '#0f172a' }}>{totalU}U</td>
+                  <table className="w-full text-[12px] border-collapse block sm:table print:table">
+                    <tbody className="block sm:table-row-group print:table-row-group">
+                      <tr className="flex flex-col py-1 border-b border-slate-200 sm:table-row sm:py-0 print:table-row">
+                        <td className="font-bold text-slate-700 text-[11px] sm:text-[12px] px-1 sm:px-1.5 sm:py-1 sm:w-[35%] sm:table-cell print:table-cell">U</td>
+                        <td className="text-slate-900 text-xs px-1 sm:px-1.5 sm:py-1 sm:table-cell print:table-cell">{totalU}U</td>
                       </tr>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '4px 6px', fontWeight: 700, color: '#334155' }}>מידות (רוחב×עומק)</td>
-                        <td style={{ padding: '4px 6px', color: '#0f172a' }}>
+                      <tr className="flex flex-col py-1 border-b border-slate-200 sm:table-row sm:py-0 print:table-row">
+                        <td className="font-bold text-slate-700 text-[11px] sm:text-[12px] px-1 sm:px-1.5 sm:py-1 sm:table-cell print:table-cell">מידות (רוחב×עומק)</td>
+                        <td className="text-slate-900 text-xs px-1 sm:px-1.5 sm:py-1 sm:table-cell print:table-cell">
                           {cabinetData?.width && cabinetData?.depth ? `${cabinetData.width} × ${cabinetData.depth} מ״מ` : '—'}
                         </td>
                       </tr>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '4px 6px', fontWeight: 700, color: '#334155' }}>דלת קדמית</td>
-                        <td style={{ padding: '4px 6px', color: '#0f172a' }}>{cabinetData?.frontDoor || 'דלת זכוכית מחוסמת / פלדה'}</td>
+                      <tr className="flex flex-col py-1 border-b border-slate-200 sm:table-row sm:py-0 print:table-row">
+                        <td className="font-bold text-slate-700 text-[11px] sm:text-[12px] px-1 sm:px-1.5 sm:py-1 sm:table-cell print:table-cell">דלת קדמית</td>
+                        <td className="text-slate-900 text-xs px-1 sm:px-1.5 sm:py-1 sm:table-cell print:table-cell">{cabinetData?.frontDoor || 'דלת זכוכית מחוסמת / פלדה'}</td>
                       </tr>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '4px 6px', fontWeight: 700, color: '#334155' }}>דלת אחורית</td>
-                        <td style={{ padding: '4px 6px', color: '#0f172a' }}>{cabinetData?.rearDoor || 'דלת פלדה / גב תלייה'}</td>
+                      <tr className="flex flex-col py-1 border-b border-slate-200 sm:table-row sm:py-0 print:table-row">
+                        <td className="font-bold text-slate-700 text-[11px] sm:text-[12px] px-1 sm:px-1.5 sm:py-1 sm:table-cell print:table-cell">דלת אחורית</td>
+                        <td className="text-slate-900 text-xs px-1 sm:px-1.5 sm:py-1 sm:table-cell print:table-cell">{cabinetData?.rearDoor || 'דלת פלדה / גב תלייה'}</td>
                       </tr>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '4px 6px', fontWeight: 700, color: '#334155' }}>מאווררים</td>
-                        <td style={{ padding: '4px 6px', color: '#0f172a' }}>{cabinetData?.fans || 'יחידת אוורור בגג הארון'}</td>
+                      <tr className="flex flex-col py-1 border-b border-slate-200 sm:table-row sm:py-0 print:table-row">
+                        <td className="font-bold text-slate-700 text-[11px] sm:text-[12px] px-1 sm:px-1.5 sm:py-1 sm:table-cell print:table-cell">מאווררים</td>
+                        <td className="text-slate-900 text-xs px-1 sm:px-1.5 sm:py-1 sm:table-cell print:table-cell">{cabinetData?.fans || 'יחידת אוורור בגג הארון'}</td>
                       </tr>
-                      <tr>
-                        <td style={{ padding: '4px 6px', fontWeight: 700, color: '#334155' }}>גלגלים/רגליות</td>
-                        <td style={{ padding: '4px 6px', color: '#0f172a' }}>
+                      <tr className="flex flex-col py-1 sm:table-row sm:py-0 print:table-row">
+                        <td className="font-bold text-slate-700 text-[11px] sm:text-[12px] px-1 sm:px-1.5 sm:py-1 sm:table-cell print:table-cell">גלגלים/רגליות</td>
+                        <td className="text-slate-900 text-xs px-1 sm:px-1.5 sm:py-1 sm:table-cell print:table-cell">
                           {[
                             cabinetData?.wheels && `גלגלים: ${cabinetData.wheels}`,
                             cabinetData?.levelingFeet && `רגליות: ${cabinetData.levelingFeet}`
