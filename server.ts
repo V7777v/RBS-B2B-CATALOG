@@ -6,10 +6,10 @@ import { GoogleGenAI } from "@google/genai";
 import Papa from "papaparse";
 import fs from "fs";
 import { jwtVerify, createRemoteJWKSet } from "jose";
-import { fetchSheetDataV4, fetchSheetCSVDataV4 } from "./api/_lib/googleSheets.js";
+import { fetchSheetDataV4, fetchSheetCSVDataV4 } from "./api/_lib/googleSheets.ts";
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
@@ -233,7 +233,7 @@ const LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS = 30; // 30 queries per hour
 
 // API endpoint to serve chat requests safely
-import advisorHandler from "./api/advisor/chat.js";
+import advisorHandler from "./api/advisor/chat.ts";
 
 // API endpoint to serve chat requests safely
 app.post("/api/advisor/chat", async (req, res) => {
@@ -586,7 +586,9 @@ async function startServer() {
       }
     });
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    const distPath = fs.existsSync(path.join(process.cwd(), "dist", "index.html"))
+      ? path.join(process.cwd(), "dist")
+      : path.join(process.cwd(), "build");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));

@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import {
   ArrowLeft,
+  ArrowRight,
   Star,
   ShoppingCart,
   Search,
@@ -69,7 +70,7 @@ import {
 import Papa from "papaparse";
 import { motion, AnimatePresence } from "motion/react";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import { ProductQrModal } from "./components/ProductQrModal";
+import { ProductQrModal, ShareModal } from "./components/ProductQrModal";
 import { HumanVerification } from "./components/HumanVerification";
 import { AddressAutocomplete } from "./components/AddressAutocomplete";
 import InstallBanner from "./components/InstallBanner";
@@ -107,7 +108,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import QuoteDocument from "./QuoteDocument";
 import LegalAndCookies from "./LegalAndCookies";
 import { trackPageView, trackEvent } from "./lib/analytics";
-import { isConfiguratorExcludedCabinet } from "./utils/cabinetData";
+import { isConfigurableCabinet } from "./utils/cabinetData";
 // Safari-safe lazy loading: if a chunk fails to load (stale Service Worker after a
 // redeploy points to an old chunk name), reload the page ONCE to fetch fresh assets.
 const lazyWithRetry = (factory: () => Promise<any>) =>
@@ -999,23 +1000,24 @@ const MakatBadge = ({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+  const isCard = className.includes("text-[12px]");
   return (
     <button
       onClick={handleCopy}
       title="העתק מק״ט"
-      className={`group/makat inline-flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5 bg-gray-50 hover:bg-blue-50 active:bg-blue-100/80 border border-gray-200 hover:border-[#004387] active:border-[#002f5e] transition-all rounded-xl py-3.5 px-5 sm:py-2 sm:px-4 w-full sm:w-auto cursor-pointer focus:outline-none select-none touch-manipulation min-h-[48px] sm:min-h-[auto] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f7941d] ${className}`}
+      className={`group/makat inline-flex items-center justify-center gap-1.5 sm:gap-2.5 bg-gray-50 hover:bg-blue-50 active:bg-blue-100/80 border border-gray-200 hover:border-[#004387] active:border-[#002f5e] transition-all rounded-xl ${isCard ? "py-1 px-2.5 min-h-0 sm:min-h-0" : "py-3.5 px-5 sm:py-2 sm:px-4 min-h-[48px] sm:min-h-[auto]"} w-full sm:w-auto cursor-pointer focus:outline-none select-none touch-manipulation focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f7941d] ${className}`}
     >
-      <span className="text-gray-600 group-hover/makat:text-[#0c2d57] transition-colors text-sm sm:text-sm font-bold flex flex-wrap items-center justify-center text-center">
+      <span className={`text-gray-600 group-hover/makat:text-[#0c2d57] transition-colors font-bold flex items-center justify-center text-center ${isCard ? "whitespace-nowrap text-[12px] tracking-tight" : "text-sm sm:text-sm"}`}>
         מק״ט:{" "}
-        <span dir="ltr" className="font-mono mx-1 tracking-wide text-gray-800 group-hover/makat:text-[#004387] break-all">
+        <span dir="ltr" className={`font-mono mx-1 text-gray-800 group-hover/makat:text-[#004387] ${isCard ? "whitespace-nowrap text-[12px] tracking-tight" : "tracking-wide break-all"}`}>
           {sku}
         </span>
       </span>
-      <span className="text-gray-400 group-hover/makat:text-[#004387] transition-colors flex items-center justify-center p-0.5">
+      <span className="text-gray-400 group-hover/makat:text-[#004387] transition-colors flex items-center justify-center p-0.5 shrink-0">
         {copied ? (
-          <Check size={18} className="text-green-500" />
+          <Check size={isCard ? 13 : 18} className="text-green-500" />
         ) : (
-          <Copy size={18} />
+          <Copy size={isCard ? 13 : 18} />
         )}
       </span>
     </button>
@@ -1290,6 +1292,9 @@ const CompareContext = React.createContext<{
   compareIds: Set<string>;
   toggleCompare: (p: any) => void;
 }>({ compareIds: new Set(), toggleCompare: () => {} });
+const ShareContext = React.createContext<{
+  openShareForProduct: (p: any) => void;
+}>({ openShareForProduct: () => {} });
 interface ProductCardProps {
   product: any;
   navigateToProduct: (product: any) => void;
@@ -1315,6 +1320,7 @@ const ProductCard = React.memo(
   }: ProductCardProps) => {
     const { favoriteIds, toggleFavorite } = React.useContext(FavoritesContext);
     const { compareIds, toggleCompare } = React.useContext(CompareContext);
+    const { openShareForProduct } = React.useContext(ShareContext);
     const theme = getBrandTheme(product.brand);
     const [isAdded, setIsAdded] = useState(false);
 
@@ -1417,7 +1423,7 @@ const ProductCard = React.memo(
             <BrandBadge brand={product.brand} />
           </div>
 
-          {/* Bottom-left actions flex row: Checkbox, Favorite, Compare */}
+          {/* Bottom-left actions flex row: Checkbox, Favorite, Compare, Share */}
           <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1.5" dir="ltr">
             {onBulkSelectionChange && !isGuest && !product.isComingSoon && (
               <div
@@ -1426,7 +1432,7 @@ const ProductCard = React.memo(
                 title={isSelectedForBulk ? "הסר מהוספה מרובה" : "סמן להוספה מרובה"}
               >
                 <div
-                  className={`w-[24px] h-[24px] sm:w-[28px] sm:h-[28px] rounded-md border-[2.5px] flex items-center justify-center transition-all duration-200 transform active:scale-95 ${
+                  className={`w-10 h-10 sm:w-[28px] sm:h-[28px] rounded-md border-[2.5px] flex items-center justify-center transition-all duration-200 transform active:scale-95 ${
                     isSelectedForBulk
                       ? "bg-gradient-to-b from-[#005fb8] via-[#004387] to-[#002f5e] border-[#001c3c] shadow-[0_3px_6px_rgba(0,67,135,0.35),_inset_0_1.5px_1px_rgba(255,255,255,0.6),_inset_0_-2.5px_0_rgba(0,0,0,0.3)]"
                       : "bg-gradient-to-b from-white via-slate-50 to-slate-100 border-slate-800 hover:border-[#004387] shadow-[0_3px_6px_rgba(0,0,0,0.2),_inset_0_-2px_0_rgba(0,0,0,0.15),_inset_0_1.5px_1px_rgba(255,255,255,0.95)]"
@@ -1446,12 +1452,13 @@ const ProductCard = React.memo(
               </div>
             )}
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 toggleFavorite(product);
               }}
               aria-label="מועדפים"
-              className="w-8 h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform shrink-0"
+              className="w-10 h-10 sm:w-8 sm:h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform shrink-0"
             >
               <Heart
                 size={16}
@@ -1463,16 +1470,17 @@ const ProductCard = React.memo(
               />
             </button>
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 toggleCompare(product);
               }}
               aria-label="השוואה"
               title="הוסף להשוואה"
-              className={`h-8 rounded-full border shadow-sm flex items-center justify-center transition-all duration-300 group/compare shrink-0 ${
+              className={`h-10 sm:h-8 rounded-full border shadow-sm flex items-center justify-center transition-all duration-300 group/compare shrink-0 ${
                 compareIds.has(product.id)
                   ? "bg-[#004387] border-[#004387] text-white px-2.5 w-auto gap-1"
-                  : "bg-white/95 border-gray-200 text-gray-500 hover:text-[#004387] hover:border-[#004387] w-8 hover:w-[86px] hover:px-2 gap-0 hover:gap-1"
+                  : "bg-white/95 border-gray-200 text-gray-500 hover:text-[#004387] hover:border-[#004387] w-10 sm:w-8 hover:w-[86px] hover:px-2 gap-0 hover:gap-1"
               }`}
             >
               <Scale
@@ -1493,12 +1501,25 @@ const ProductCard = React.memo(
                 {compareIds.has(product.id) ? "בהשוואה" : "השוואה"}
               </span>
             </button>
+            <button
+              type="button"
+              aria-label="שיתוף המוצר"
+              title="שיתוף המוצר (QR, קישור, וואטסאפ)"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                openShareForProduct(product);
+              }}
+              className="w-10 h-10 sm:w-8 sm:h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform shrink-0 text-gray-600 hover:text-[#004387]"
+            >
+              <QrCode size={16} />
+            </button>
           </div>
         </div>
 
         <div className="p-3 sm:p-4 flex flex-col flex-grow text-center relative">
           <div className="mb-2.5 flex flex-row items-center justify-center w-full">
-            <MakatBadge sku={product.sku} />
+            <MakatBadge sku={product.sku} className="whitespace-nowrap text-[12px] tracking-tight" />
           </div>
           <div className="min-h-[4.5rem] flex items-start justify-center mb-2">
             <h3 className="text-[#0c2d57] text-base sm:text-lg font-bold line-clamp-3 leading-snug text-center w-full">
@@ -1521,7 +1542,7 @@ const ProductCard = React.memo(
             const items = ["HIK-CONNECT", "NVR", "ONVIF"].filter(hasCompat);
             if (items.length === 0) return null;
             return (
-              <div className="flex justify-center items-center gap-2 mt-2">
+              <div className="flex flex-wrap justify-center items-center gap-x-2 gap-y-1 mt-2">
                 {items.map((item) => {
                   if (item === "HIK-CONNECT") {
                     return (
@@ -1537,7 +1558,7 @@ const ProductCard = React.memo(
                     return (
                       <span
                         key={item}
-                        className="flex items-center gap-1 text-[11px] font-bold text-[#0c2d57] border border-slate-300 rounded px-1 py-0.5"
+                        className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold text-[#0c2d57] border border-slate-300 rounded px-1 py-0.5"
                         title="מתחברת ל-NVR של HIKVISION"
                       >
                         <img
@@ -1554,7 +1575,7 @@ const ProductCard = React.memo(
                       <img
                         key={item}
                         src="/onvif.png"
-                        className="h-3 w-auto"
+                        className="h-2.5 sm:h-3 w-auto"
                         title="תואם ONVIF"
                       />
                     );
@@ -1724,20 +1745,7 @@ const ProductCard = React.memo(
               </div>
             )}
 
-            {isGuest ? (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  window.dispatchEvent(new Event("rbs_trigger_login"));
-                }}
-                className="w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold transition-all duration-300"
-              >
-                <Lock size={15} className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="text-xs sm:text-sm font-bold whitespace-nowrap">
-                  כניסת מפיצים להזמנה
-                </span>
-              </button>
-            ) : product.isComingSoon ? (
+            {isGuest ? null : product.isComingSoon ? (
               <div className="w-full flex justify-center items-center gap-1.5 py-2.5 px-2 sm:px-4 bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200">
                 <span className="text-xs sm:text-sm font-bold">בקרוב</span>
               </div>
@@ -2188,53 +2196,6 @@ const ProductDetailsView = (props: any) => {
                 </div>
               );
             })()}
-            <div className="grid grid-cols-3 gap-2 mb-4 sm:mb-6">
-              <button
-                type="button"
-                onClick={() =>
-                  copyShareLink &&
-                  copyShareLink(
-                    "product",
-                    selectedProduct.sku || selectedProduct.id,
-                  )
-                }
-                className="py-2 px-1 sm:px-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#004387] rounded-md font-bold text-[12px] sm:text-[13px] flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer transition-colors"
-                title="העתק קישור למוצר"
-              >
-                <Link size={14} /> העתק קישור
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const key = selectedProduct.sku || selectedProduct.id || "";
-                  const link =
-                    window.location.origin +
-                    "/?product=" +
-                    encodeURIComponent(String(key));
-                  const priceStr =
-                    !isGuest && selectedProduct.price > 0
-                      ? `\nמחיר מתקין: ₪${Number(selectedProduct.price).toLocaleString("he-IL")}`
-                      : "";
-                  const msg = `${selectedProduct.name}\nמק״ט: ${selectedProduct.sku || ""}${priceStr}\nקישור למוצר:\n${link}`;
-                  window.open(
-                    "https://wa.me/?text=" + encodeURIComponent(msg),
-                    "_blank",
-                  );
-                }}
-                className="py-2 px-1 sm:px-2 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 rounded-md font-bold text-[12px] sm:text-[13px] flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer transition-colors"
-                title="שלח קישור בוואטסאפ"
-              >
-                <MessageSquare size={14} /> שלח בוואטסאפ
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowQrModal(true)}
-                className="py-2 px-1 sm:px-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-md font-bold text-[12px] sm:text-[13px] flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer transition-colors"
-                title="הצג קוד QR לסריקה ושיתוף בנייד"
-              >
-                <QrCode size={14} /> קוד QR
-              </button>
-            </div>
 
             <div className="mb-6 sm:mb-8 bg-white border-2 border-slate-100 p-5 sm:p-6 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_25px_rgba(0,0,0,0.06)] hover:border-[#004387]/25 transition-all duration-300 relative overflow-hidden text-right">
               {/* Brand colored vertical accent bar on the right (RTL start) */}
@@ -3052,7 +3013,7 @@ const ProductDetailsView = (props: any) => {
         {/* FULL-WIDTH CABINET CONFIGURATOR (Spans 100% of the product content wrapper) */}
         {selectedProduct.subcategory === "ארונות תקשורת ואביזרים" &&
           !selectedProduct["Nested subcategory"]?.includes("אביזרים") &&
-          !isConfiguratorExcludedCabinet(selectedProduct) &&
+          isConfigurableCabinet(selectedProduct) &&
           /ארון|מסד|מארז/i.test(selectedProduct.name) && (
             <div className="border-t-2 border-[#004387]/20 bg-slate-50/50 p-3 sm:p-5 lg:p-6">
               <React.Suspense
@@ -5613,7 +5574,13 @@ export default function App() {
     category?: string;
   } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [categoryShareOpen, setCategoryShareOpen] = useState(false);
+  const [shareModalState, setShareModalState] = useState<{
+    isOpen: boolean;
+    url?: string;
+    title?: string;
+    imageUrl?: string;
+    product?: any;
+  } | null>(null);
   const [visibleCount, setVisibleCount] = useState(50);
   // Promo Banner State for Hot Sales & Clearance/Metsian items
   const [showPromoBanner, setShowPromoBanner] = useState(false);
@@ -7186,57 +7153,72 @@ export default function App() {
     return q ? window.location.pathname + "?" + q : window.location.pathname;
   };
   const deepLinkDoneRef = useRef(false);
-  const buildCategoryShareUrl = useCallback((): string => {
+  const handleOpenShare = useCallback(() => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    if (currentView === "home") {
+      setShareModalState({
+        isOpen: true,
+        url: `${origin}/`,
+        title: "קטלוג RBS Telecom",
+        product: null,
+      });
+      return;
+    }
+
+    if (currentView === "product" && selectedProduct) {
+      const key = selectedProduct.sku || selectedProduct.id || "";
+      setShareModalState({
+        isOpen: true,
+        url: `${origin}/?product=${encodeURIComponent(String(key))}`,
+        title: selectedProduct.name || "מוצר בקטלוג RBS Telecom",
+        imageUrl: selectedProduct.images?.[0],
+        product: selectedProduct,
+      });
+      return;
+    }
+
     const p = new URLSearchParams();
     if (selectedCatalog) p.set("cat", String(selectedCatalog));
     if (selectedSubcategory) p.set("sub", String(selectedSubcategory));
     if (selectedNestedSubcategory)
       p.set("nested", String(selectedNestedSubcategory));
     if (selectedNicheCategory) p.set("niche", String(selectedNicheCategory));
-    return window.location.origin + "/?" + p.toString();
+    const queryString = p.toString();
+    const url = queryString ? `${origin}/?${queryString}` : `${origin}/`;
+    const title =
+      selectedNicheCategory ||
+      selectedNestedSubcategory ||
+      selectedSubcategory ||
+      selectedCatalog ||
+      "קטלוג RBS Telecom";
+
+    setShareModalState({
+      isOpen: true,
+      url,
+      title,
+      product: null,
+    });
   }, [
+    currentView,
+    selectedProduct,
     selectedCatalog,
     selectedSubcategory,
     selectedNestedSubcategory,
     selectedNicheCategory,
   ]);
-  const copyShareCategoryLink = useCallback(
-    (mode: "copy" | "whatsapp") => {
-      const url = buildCategoryShareUrl();
-      const label =
-        selectedNicheCategory ||
-        selectedNestedSubcategory ||
-        selectedSubcategory ||
-        selectedCatalog ||
-        "";
-      if (mode === "whatsapp") {
-        const msg = `קטגוריה: ${label}\nצפה בקטלוג:\n${url}`;
-        window.open("https://wa.me/?text=" + encodeURIComponent(msg), "_blank");
-        return;
-      }
-      const done = () => {
-        setCopyToast("הקישור לקטגוריה הועתק");
-        window.setTimeout(() => setCopyToast(""), 2500);
-      };
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard
-          .writeText(url)
-          .then(done)
-          .catch(() => {
-            window.prompt("העתק את הקישור:", url);
-          });
-      } else {
-        window.prompt("העתק את הקישור:", url);
-      }
-    },
-    [
-      buildCategoryShareUrl,
-      selectedCatalog,
-      selectedSubcategory,
-      selectedNestedSubcategory,
-      selectedNicheCategory,
-    ],
-  );
+
+  const openShareForProduct = useCallback((prod: any) => {
+    if (!prod) return;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const key = prod.sku || prod.id || "";
+    setShareModalState({
+      isOpen: true,
+      url: `${origin}/?product=${encodeURIComponent(String(key))}`,
+      title: prod.name || "מוצר בקטלוג RBS Telecom",
+      imageUrl: prod.images?.[0],
+      product: prod,
+    });
+  }, []);
   const [deepLinkError, setDeepLinkError] = useState<string>("");
   const [copyToast, setCopyToast] = useState<string>("");
   const copyShareLink = useCallback(
@@ -7467,6 +7449,108 @@ export default function App() {
     },
     [navigateForward],
   );
+
+  const parentInfo = useMemo(() => {
+    if (currentView === "home") return null;
+
+    if (currentView === "product") {
+      if (selectedNicheCategory) {
+        return {
+          name: selectedNicheCategory,
+          onClick: () => navigateToNicheCategory(selectedNicheCategory),
+        };
+      }
+      if (selectedNestedSubcategory) {
+        return {
+          name: selectedNestedSubcategory,
+          onClick: () => navigateToNestedSubcategory(selectedNestedSubcategory),
+        };
+      }
+      if (selectedSubcategory) {
+        return {
+          name: selectedSubcategory,
+          onClick: () => navigateToSubcategory(selectedSubcategory),
+        };
+      }
+      if (selectedCatalog) {
+        return {
+          name: selectedCatalog,
+          onClick: () => navigateToCatalog(selectedCatalog),
+        };
+      }
+      if (selectedProduct?.category) {
+        return {
+          name: selectedProduct.category,
+          onClick: () => navigateToCatalog(selectedProduct.category),
+        };
+      }
+      return {
+        name: "כל המחירונים",
+        onClick: navigateHome,
+      };
+    }
+
+    if (selectedNicheCategory) {
+      if (selectedNestedSubcategory) {
+        return {
+          name: selectedNestedSubcategory,
+          onClick: () => navigateToNestedSubcategory(selectedNestedSubcategory),
+        };
+      }
+      if (selectedSubcategory) {
+        return {
+          name: selectedSubcategory,
+          onClick: () => navigateToSubcategory(selectedSubcategory),
+        };
+      }
+    }
+
+    if (selectedNestedSubcategory) {
+      if (selectedSubcategory) {
+        return {
+          name: selectedSubcategory,
+          onClick: () => navigateToSubcategory(selectedSubcategory),
+        };
+      }
+    }
+
+    if (selectedSubcategory) {
+      if (selectedCatalog) {
+        return {
+          name: selectedCatalog,
+          onClick: () => navigateToCatalog(selectedCatalog),
+        };
+      }
+      return {
+        name: "כל המחירונים",
+        onClick: navigateHome,
+      };
+    }
+
+    if (selectedCatalog || currentView === "catalog_subs") {
+      return {
+        name: "כל המחירונים",
+        onClick: navigateHome,
+      };
+    }
+
+    return {
+      name: "כל המחירונים",
+      onClick: navigateHome,
+    };
+  }, [
+    currentView,
+    selectedCatalog,
+    selectedSubcategory,
+    selectedNestedSubcategory,
+    selectedNicheCategory,
+    selectedProduct,
+    navigateToCatalog,
+    navigateToSubcategory,
+    navigateToNestedSubcategory,
+    navigateToNicheCategory,
+    navigateHome,
+  ]);
   // --- DEEP LINKS: restore view from the URL, once the catalog has actually loaded ---
   useEffect(() => {
     if (deepLinkDoneRef.current) return;
@@ -7619,11 +7703,12 @@ export default function App() {
   return (
     <FavoritesContext.Provider value={{ favoriteIds, toggleFavorite }}>
       <CompareContext.Provider value={{ compareIds, toggleCompare }}>
-        <div
-          id="rbs-b2b-app"
-          className="min-h-screen bg-slate-50 flex flex-col font-sans"
-          dir="rtl"
-        >
+        <ShareContext.Provider value={{ openShareForProduct }}>
+          <div
+            id="rbs-b2b-app"
+            className="min-h-screen bg-slate-50 flex flex-col font-sans"
+            dir="rtl"
+          >
           <a href="#main-content" className="skip-to-content">
             דלג לתוכן הראשי
           </a>
@@ -8069,8 +8154,8 @@ export default function App() {
                     </button>
                   )}
                 </div>
-                {/* the back/forward arrows as one small ghost button pair (h-9) left of the search field */}
-                <div className="flex items-center h-9 bg-gray-50 border border-gray-200/80 rounded-lg overflow-hidden divide-x divide-gray-200/80 flex-shrink-0">
+                {/* the back/forward arrows next to the search box are hidden on mobile */}
+                <div className="hidden items-center h-9 bg-gray-50 border border-gray-200/80 rounded-lg overflow-hidden divide-x divide-gray-200/80 flex-shrink-0">
                   <button
                     type="button"
                     onClick={() => {
@@ -8114,227 +8199,7 @@ export default function App() {
                 )}
               </div>
             </div>
-            {/* ROW 3: Mobile Category Chips Bar (One-touch navigation between all catalogs) */}
-            {catalogFolders.length > 0 && !isSearchFocused && (
-              <div
-                className="md:hidden bg-slate-50/90 py-1.5 w-full block border-t border-gray-100 overflow-x-auto scroll-px-3 snap-x"
-                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-              >
-                <div className="flex items-center gap-2 px-3 whitespace-nowrap min-w-max">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery("");
-                      navigateHome();
-                    }}
-                    className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex-shrink-0 snap-start ${
-                      currentView === "home" && !searchQuery
-                        ? "bg-[#004387] text-white shadow-xs"
-                        : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
-                    }`}
-                  >
-                    <Home size={13} className="flex-shrink-0" />
-                    <span>כל המחירונים</span>
-                  </button>
-                  {catalogFolders.map((cat, idx) => {
-                    const isSelected = selectedCatalog === cat.name && currentView !== "home";
-                    return (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => navigateToCatalog(cat.name)}
-                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer flex-shrink-0 snap-start ${
-                          isSelected
-                            ? "bg-[#004387] text-white shadow-xs font-bold"
-                            : "bg-white border border-gray-200 text-gray-700 hover:border-[#004387] active:scale-95"
-                        }`}
-                      >
-                        <span>{cat.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
-          {/* MOBILE ONLY DYNAMIC BREADCRUMB BAR (INTEGRATED AND COMPACT - NO DUPLICATE LOGOS) */}
-          {(currentView !== "home" || searchQuery) && (
-            <div
-              className={`md:hidden bg-white px-4 pb-2 w-full text-right transition-all border-b border-gray-100 ${isSearchFocused ? "hidden" : "block"}`}
-            >
-                <div
-                  className="flex flex-row items-center justify-start gap-1.5 text-xs text-gray-600 overflow-x-auto py-1"
-                  style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-                >
-                  {/* Clean Home Icon instead of duplicate Logo */}
-                  <button
-                    onClick={() => {
-                      setSearchQuery("");
-                      navigateHome();
-                    }}
-                    className="hover:opacity-85 text-gray-700 p-1 flex items-center gap-1 font-bold cursor-pointer flex-shrink-0 transition-all hover:scale-105 active:scale-95"
-                    title="ראשי - חזור לדף הבית"
-                  >
-                    <Home size={15} className="text-[#004387]" />
-                    <span className="text-xs font-bold text-[#004387]">
-                      ראשי
-                    </span>
-                  </button>
-                  {searchQuery ? (
-                    <>
-                      <ChevronLeft
-                        size={13}
-                        className="text-gray-400 flex-shrink-0"
-                      />
-                      <span className="font-bold text-gray-800 bg-gray-100 px-1.5 py-0.5 rounded-sm">
-                        חיפוש:{" "}
-                        <strong className="text-[#004387]">
-                          {searchQuery}
-                        </strong>
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      {/* Catalog Link */}
-                      {selectedCatalog && (
-                        <>
-                          <ChevronLeft
-                            size={13}
-                            className="text-gray-400 flex-shrink-0"
-                          />
-                          <button
-                            onClick={() => navigateToCatalog(selectedCatalog)}
-                            className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-800 text-xs"
-                          >
-                            {selectedCatalog}
-                          </button>
-                        </>
-                      )}
-                      {/* Subcategory Link */}
-                      {selectedSubcategory &&
-                        (currentView === "nested_subs" ||
-                          currentView === "products" ||
-                          currentView === "product") && (
-                          <>
-                            <ChevronLeft
-                              size={13}
-                              className="text-gray-400 flex-shrink-0"
-                            />
-                            <button
-                              onClick={() =>
-                                navigateToSubcategory(selectedSubcategory)
-                              }
-                              className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-800 text-xs"
-                            >
-                              {selectedSubcategory}
-                            </button>
-                          </>
-                        )}
-                      {/* Nested Subcategory Link */}
-                      {selectedNestedSubcategory &&
-                        (currentView === "niche_subs" ||
-                          currentView === "products" ||
-                          currentView === "product") && (
-                          <>
-                            <ChevronLeft
-                              size={13}
-                              className="text-gray-400 flex-shrink-0"
-                            />
-                            <button
-                              onClick={() =>
-                                navigateToNestedSubcategory(
-                                  selectedNestedSubcategory,
-                                )
-                              }
-                              className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-800 text-xs"
-                            >
-                              {selectedNestedSubcategory}
-                            </button>
-                          </>
-                        )}
-                      {/* Niche Category Link */}
-                      {selectedNicheCategory &&
-                        (currentView === "products" ||
-                          currentView === "product") && (
-                          <>
-                            <ChevronLeft
-                              size={13}
-                              className="text-gray-400 flex-shrink-0"
-                            />
-                            <button
-                              onClick={() =>
-                                navigateToNicheCategory(selectedNicheCategory)
-                              }
-                              className="hover:text-[#004387] hover:underline font-bold bg-transparent border-none p-0 cursor-pointer flex-shrink-0 transition-opacity text-gray-800 text-xs"
-                            >
-                              {selectedNicheCategory}
-                            </button>
-                          </>
-                        )}
-                      {/* Product Name (Active Leaf) */}
-                      {currentView === "product" && selectedProduct && (
-                        <>
-                          <ChevronLeft
-                            size={13}
-                            className="text-gray-400 flex-shrink-0"
-                          />
-                          <span className="font-bold text-[#004387] whitespace-nowrap">
-                            {selectedProduct.name}
-                          </span>
-                        </>
-                      )}
-                      {/* Subcategories (Active Leaf) */}
-                      {currentView === "catalog_subs" && (
-                        <>
-                          <ChevronLeft
-                            size={13}
-                            className="text-gray-400 flex-shrink-0"
-                          />
-                          <span className="font-bold text-gray-800">
-                            קטגוריות
-                          </span>
-                        </>
-                      )}
-                      {/* Nested Subcategories (Active Leaf) */}
-                      {currentView === "nested_subs" && (
-                        <>
-                          <ChevronLeft
-                            size={13}
-                            className="text-gray-400 flex-shrink-0"
-                          />
-                          <span className="font-bold text-gray-800">
-                            תתי קטגוריה
-                          </span>
-                        </>
-                      )}
-                      {/* Products View (Active Leaf) */}
-                      {currentView === "products" &&
-                        !selectedNestedSubcategory && (
-                          <>
-                            <ChevronLeft
-                              size={13}
-                              className="text-gray-400 flex-shrink-0"
-                            />
-                            <span className="font-bold text-gray-800">
-                              מוצרים
-                            </span>
-                          </>
-                        )}
-                      {/* Checkout (Active Leaf) */}
-                      {currentView === "checkout" && (
-                        <>
-                          <ChevronLeft
-                            size={13}
-                            className="text-gray-400 flex-shrink-0"
-                          />
-                          <span className="font-bold text-gray-800">קופה</span>
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
           {/* Spacer not needed for sticky layout as browser handles flow spacing natively, preserved at 0px to maintain node structure */}
           <div
             className="w-full block"
@@ -8343,75 +8208,6 @@ export default function App() {
             }}
             aria-hidden="true"
           />
-          {selectedCatalog &&
-            currentView !== "product" &&
-            currentView !== "checkout" &&
-            !searchQuery && (
-              <div className="container mx-auto px-4 pt-2">
-                {/* Desktop: Keep unchanged */}
-                <div className="hidden sm:flex gap-2">
-                  <button
-                    onClick={() => copyShareCategoryLink("copy")}
-                    className="flex-1 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#004387] rounded-lg font-bold text-[12px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                  >
-                    <Link size={14} /> העתק קישור לקטגוריה
-                  </button>
-                  <button
-                    onClick={() => copyShareCategoryLink("whatsapp")}
-                    className="flex-1 py-2 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 rounded-lg font-bold text-[12px] flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                  >
-                    <MessageSquare size={14} /> שלח קטגוריה בוואטסאפ
-                  </button>
-                </div>
-
-                {/* Mobile (< 640px): Collapse into one icon button (lucide Share2) with a small popover */}
-                <div className="sm:hidden flex justify-end">
-                  <div className="relative inline-block">
-                    <button
-                      type="button"
-                      onClick={() => setCategoryShareOpen((prev) => !prev)}
-                      aria-label="שתף קטגוריה"
-                      title="שתף קטגוריה"
-                      className="p-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#004387] rounded-lg flex items-center justify-center cursor-pointer transition-colors shadow-xs active:scale-95"
-                    >
-                      <Share2 size={16} />
-                    </button>
-                    {categoryShareOpen && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-30"
-                          onClick={() => setCategoryShareOpen(false)}
-                        />
-                        <div className="absolute top-full left-0 mt-1 z-40 bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 min-w-[210px] flex flex-col gap-1 text-right">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              copyShareCategoryLink("copy");
-                              setCategoryShareOpen(false);
-                            }}
-                            className="w-full py-2 px-3 hover:bg-blue-50 text-[#004387] rounded-lg font-bold text-[12px] flex items-center gap-2 cursor-pointer transition-colors text-right"
-                          >
-                            <Link size={14} className="flex-shrink-0" />
-                            <span>העתק קישור לקטגוריה</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              copyShareCategoryLink("whatsapp");
-                              setCategoryShareOpen(false);
-                            }}
-                            className="w-full py-2 px-3 hover:bg-green-50 text-green-700 rounded-lg font-bold text-[12px] flex items-center gap-2 cursor-pointer transition-colors text-right"
-                          >
-                            <MessageSquare size={14} className="flex-shrink-0" />
-                            <span>שלח קטגוריה בוואטסאפ</span>
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
           <div className="container mx-auto px-4 py-2">
             {/* MOBILE DRAWER */}
             {mobileMenuOpen && (
@@ -8696,9 +8492,37 @@ export default function App() {
                   ) : currentView === "catalog_subs" ? (
                     // SUBCATEGORIES (SHEETS) VIEW
                     <>
-                      <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-4 sm:mb-6 text-center w-full block">
-                        בחר קטגוריה
-                      </h2>
+                      <div dir="rtl" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-4 sm:mb-6">
+                        <div className="justify-self-start">
+                          {parentInfo && (
+                            <button
+                              type="button"
+                              onClick={parentInfo.onClick}
+                              className="inline-flex items-center gap-1 text-sm font-semibold text-[#0c2d57] min-h-11 cursor-pointer hover:underline"
+                            >
+                              <ChevronRight size={18} className="flex-shrink-0" />
+                              <span className="hidden sm:inline">{parentInfo.name}</span>
+                              <span className="sm:hidden">חזרה</span>
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-center gap-3">
+                          <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] text-center">
+                            {selectedCatalog || "בחר קטגוריה"}
+                          </h2>
+                          <button
+                            type="button"
+                            onClick={handleOpenShare}
+                            aria-label="שיתוף"
+                            title="שיתוף"
+                            className="inline-flex items-center gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-3.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
+                          >
+                            <Share2 size={22} className="flex-shrink-0" />
+                            <QrCode size={22} className="flex-shrink-0" />
+                          </button>
+                        </div>
+                        <div className="justify-self-end" />
+                      </div>
 
                       {isProductsLoading ? (
                         <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
@@ -8737,9 +8561,37 @@ export default function App() {
                   ) : currentView === "nested_subs" ? (
                     // NESTED SUBCATEGORIES VIEW
                     <>
-                      <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-4 sm:mb-6 text-center w-full">
-                        בחר תת-קטגוריה
-                      </h2>
+                      <div dir="rtl" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-4 sm:mb-6">
+                        <div className="justify-self-start">
+                          {parentInfo && (
+                            <button
+                              type="button"
+                              onClick={parentInfo.onClick}
+                              className="inline-flex items-center gap-1 text-sm font-semibold text-[#0c2d57] min-h-11 cursor-pointer hover:underline"
+                            >
+                              <ChevronRight size={18} className="flex-shrink-0" />
+                              <span className="hidden sm:inline">{parentInfo.name}</span>
+                              <span className="sm:hidden">חזרה</span>
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-center gap-3">
+                          <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] text-center">
+                            {selectedSubcategory || "בחר תת-קטגוריה"}
+                          </h2>
+                          <button
+                            type="button"
+                            onClick={handleOpenShare}
+                            aria-label="שיתוף"
+                            title="שיתוף"
+                            className="inline-flex items-center gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-3.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
+                          >
+                            <Share2 size={22} className="flex-shrink-0" />
+                            <QrCode size={22} className="flex-shrink-0" />
+                          </button>
+                        </div>
+                        <div className="justify-self-end" />
+                      </div>
 
                       {isProductsLoading ? (
                         <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
@@ -8774,9 +8626,37 @@ export default function App() {
                   ) : currentView === "niche_subs" ? (
                     // NICHE SUBCATEGORIES VIEW
                     <>
-                      <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] mb-4 sm:mb-6 text-center w-full">
-                        קטגוריית משנה מורחבת
-                      </h2>
+                      <div dir="rtl" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-4 sm:mb-6">
+                        <div className="justify-self-start">
+                          {parentInfo && (
+                            <button
+                              type="button"
+                              onClick={parentInfo.onClick}
+                              className="inline-flex items-center gap-1 text-sm font-semibold text-[#0c2d57] min-h-11 cursor-pointer hover:underline"
+                            >
+                              <ChevronRight size={18} className="flex-shrink-0" />
+                              <span className="hidden sm:inline">{parentInfo.name}</span>
+                              <span className="sm:hidden">חזרה</span>
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-center gap-3">
+                          <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] text-center">
+                            {selectedNestedSubcategory || "קטגוריית משנה מורחבת"}
+                          </h2>
+                          <button
+                            type="button"
+                            onClick={handleOpenShare}
+                            aria-label="שיתוף"
+                            title="שיתוף"
+                            className="inline-flex items-center gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-3.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
+                          >
+                            <Share2 size={22} className="flex-shrink-0" />
+                            <QrCode size={22} className="flex-shrink-0" />
+                          </button>
+                        </div>
+                        <div className="justify-self-end" />
+                      </div>
 
                       {isProductsLoading ? (
                         <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
@@ -8809,14 +8689,42 @@ export default function App() {
                   ) : currentView === "products" ? (
                     // PRODUCTS VIEW
                     <>
-                      <div className="mb-6 sm:mb-8 text-center relative">
-                        <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] inline-block w-full sm:w-auto px-4">
-                          {selectedNicheCategory ||
-                            selectedNestedSubcategory ||
-                            selectedSubcategory}
-                        </h2>
+                      <div className="mb-6 sm:mb-8">
+                        <div dir="rtl" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                          <div className="justify-self-start">
+                            {parentInfo && (
+                              <button
+                                type="button"
+                                onClick={parentInfo.onClick}
+                                className="inline-flex items-center gap-1 text-sm font-semibold text-[#0c2d57] min-h-11 cursor-pointer hover:underline"
+                              >
+                                <ChevronRight size={18} className="flex-shrink-0" />
+                                <span className="hidden sm:inline">{parentInfo.name}</span>
+                                <span className="sm:hidden">חזרה</span>
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-center gap-3">
+                            <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] text-center px-2">
+                              {selectedNicheCategory ||
+                                selectedNestedSubcategory ||
+                                selectedSubcategory}
+                            </h2>
+                            <button
+                              type="button"
+                              onClick={handleOpenShare}
+                              aria-label="שיתוף"
+                              title="שיתוף"
+                              className="inline-flex items-center gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-3.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
+                            >
+                              <Share2 size={22} className="flex-shrink-0" />
+                              <QrCode size={22} className="flex-shrink-0" />
+                            </button>
+                          </div>
+                          <div className="justify-self-end" />
+                        </div>
                         {!isProductsLoading && (
-                          <div className="mt-3 sm:mt-0 sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2 flex items-center justify-center">
+                          <div className="flex items-center justify-center mt-2">
                             <span className="text-gray-600 bg-[#f2f2f2] px-3 py-1 rounded-none text-xs sm:text-sm font-medium whitespace-nowrap border border-gray-100 shadow-sm">
                               {filteredProducts.length} מוצרים
                             </span>
@@ -8867,7 +8775,7 @@ export default function App() {
                                     addToCart={addToCart}
                                     bulkSelection={bulkSelection}
                                     onBulkSelectionChange={
-                                      handleBulkSelectionChange
+                                       handleBulkSelectionChange
                                     }
                                     isGuest={isGuest}
                                   />
@@ -8889,39 +8797,73 @@ export default function App() {
                       )}
                     </>
                   ) : currentView === "product" && selectedProduct ? (
-                    isProductsLoading ? (
-                      <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
-                        <Loader2
-                          size={40}
-                          className="animate-spin text-[#c2410c] mb-4"
-                        />
-                        <h3 className="text-xl font-bold text-[#0c2d57]">
-                          טוען את פרטי המוצר...
-                        </h3>
+                    <>
+                      <div dir="rtl" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-4 sm:mb-6">
+                        <div className="justify-self-start">
+                          {parentInfo && (
+                            <button
+                              type="button"
+                              onClick={parentInfo.onClick}
+                              className="inline-flex items-center gap-1 text-sm font-semibold text-[#0c2d57] min-h-11 cursor-pointer hover:underline"
+                            >
+                              <ChevronRight size={18} className="flex-shrink-0" />
+                              <span className="hidden sm:inline">{parentInfo.name}</span>
+                              <span className="sm:hidden">חזרה</span>
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-center gap-3">
+                          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-2 line-clamp-1">
+                            {selectedProduct.name}
+                          </h1>
+                          <button
+                            type="button"
+                            onClick={handleOpenShare}
+                            aria-label="שיתוף"
+                            title="שיתוף"
+                            className="inline-flex items-center gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-3.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
+                          >
+                            <Share2 size={22} className="flex-shrink-0" />
+                            <QrCode size={22} className="flex-shrink-0" />
+                          </button>
+                        </div>
+                        <div className="justify-self-end" />
                       </div>
-                    ) : (
-                      <ProductDetailsView
-                        {...{
-                          addToCart,
-                          bulkSelection,
-                          cart,
-                          catalogData,
-                          currentOptionals,
-                          handleBulkSelectionChange,
-                          handleOptionalsChange,
-                          navigateHome,
-                          navigateToCategoryAndSub,
-                          navigateToProduct,
-                          removeFromCart,
-                          selectedProduct,
-                          setCart,
-                          setIsAuthenticated,
-                          updateCartQuantity,
-                          isGuest,
-                          copyShareLink,
-                        }}
-                      />
-                    )
+
+                      {isProductsLoading ? (
+                        <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 shadow-sm max-w-lg mx-auto p-6 text-center duration-300">
+                          <Loader2
+                            size={40}
+                            className="animate-spin text-[#c2410c] mb-4"
+                          />
+                          <h3 className="text-xl font-bold text-[#0c2d57]">
+                            טוען את פרטי המוצר...
+                          </h3>
+                        </div>
+                      ) : (
+                        <ProductDetailsView
+                          {...{
+                            addToCart,
+                            bulkSelection,
+                            cart,
+                            catalogData,
+                            currentOptionals,
+                            handleBulkSelectionChange,
+                            handleOptionalsChange,
+                            navigateHome,
+                            navigateToCategoryAndSub,
+                            navigateToProduct,
+                            removeFromCart,
+                            selectedProduct,
+                            setCart,
+                            setIsAuthenticated,
+                            updateCartQuantity,
+                            isGuest,
+                            copyShareLink,
+                          }}
+                        />
+                      )}
+                    </>
                   ) : currentView === "checkout" ? (
                     <CheckoutView
                       {...{
@@ -9156,11 +9098,10 @@ export default function App() {
               className="fixed bottom-[88px] right-3 sm:bottom-4 sm:right-4 z-[80] w-[44px] h-[44px] sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-[#004387] to-[#0c2d57] shadow-[0_8px_24px_rgba(0,67,135,0.45)] hover:scale-105 transition-all border-2 border-white shadow-lg active:scale-95 flex items-center justify-center cursor-pointer"
               aria-label="פתח יועץ טכני חכם"
             >
-              <MessageCircle size={22} className="text-white block sm:hidden stroke-[2.25]" />
               <img
                 src="/advisor-avatar.png"
                 alt="יועץ טכני"
-                className="hidden sm:block w-full h-full rounded-full object-cover"
+                className="block w-full h-full rounded-full object-cover"
                 onError={(e) => {
                   const target = e.currentTarget as HTMLImageElement;
                   if (!target.dataset.fallback) {
@@ -9187,6 +9128,17 @@ export default function App() {
             </button>
           )}
           <InstallBanner disabled={!isHumanVerified} />
+          {/* GLOBAL SHARE MODAL */}
+          {shareModalState?.isOpen && (
+            <ShareModal
+              isOpen={shareModalState.isOpen}
+              onClose={() => setShareModalState(null)}
+              url={shareModalState.url}
+              title={shareModalState.title}
+              imageUrl={shareModalState.imageUrl}
+              product={shareModalState.product}
+            />
+          )}
           {/* SHOPPING CART ADDITION CONFIRMATION MODAL */}
           {addedItemConfirm && addedItemConfirm.isOpen && (
             <div
@@ -13636,6 +13588,7 @@ export default function App() {
             </button>
           )}
         </nav>
+        </ShareContext.Provider>
       </CompareContext.Provider>
     </FavoritesContext.Provider>
   );

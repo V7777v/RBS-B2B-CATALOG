@@ -81,6 +81,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
   // Sync subView and reset open sections to closed by default
   useEffect(() => {
     if (isOpen) {
+      setIsDrawerExpanded(false);
       setSearchFilter('');
       setPendingPduItem(initialPendingPduItem || null);
       if (initialSubView) {
@@ -836,7 +837,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-slate-900/20 pointer-events-auto"
+        className="absolute inset-0 bg-transparent pointer-events-auto"
         onClick={() => {
           if (Date.now() - openedAtRef.current < 450) return;
           handleProductHover(null);
@@ -847,7 +848,7 @@ export const AddSlotModal: React.FC<AddSlotModalProps> = ({
       {/* Animated Drawer */}
       <motion.div
         initial={{ y: '100%' }}
-        animate={{ y: 0, height: isDrawerExpanded ? '88dvh' : '70dvh' }}
+        animate={{ y: 0, height: isDrawerExpanded ? '85dvh' : '45dvh' }}
         transition={{ type: 'spring', damping: 28, stiffness: 240 }}
         className="w-full bg-white rounded-t-2xl shadow-2xl overflow-hidden pointer-events-auto flex flex-col relative z-10 max-h-[92dvh] pb-[env(safe-area-inset-bottom)]"
       >

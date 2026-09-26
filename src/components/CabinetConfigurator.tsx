@@ -39,7 +39,7 @@ import {
   Printer
 } from 'lucide-react';
 import Papa from 'papaparse';
-import { CabinetMatrixData, GroupedRubric, KNOWN_MATRIX_SHELF_SKUS, GENERIC_SHELF_IMAGE, checkAccessoryFitsCabinet, deriveBrand, extractAllMatrixShelfSkus, fetchCabinetMatrix, fetchCompatMap, groupAccessoriesForDisplay, isAccessoryAShelf, isCabinetProduct, isConfiguratorExcludedCabinet, isProductShelf, normalizeSku, parseAccessoryCount, parseCabinetDepthFromName, parseCompatRange, parseCompatibleSkus, parseDepthMmLocal } from '../utils/cabinetData';
+import { CabinetMatrixData, GroupedRubric, KNOWN_MATRIX_SHELF_SKUS, GENERIC_SHELF_IMAGE, checkAccessoryFitsCabinet, deriveBrand, extractAllMatrixShelfSkus, fetchCabinetMatrix, fetchCompatMap, groupAccessoriesForDisplay, isAccessoryAShelf, isCabinetProduct, isConfigurableCabinet, isConfiguratorExcludedCabinet, isProductShelf, normalizeSku, parseAccessoryCount, parseCabinetDepthFromName, parseCompatRange, parseCompatibleSkus, parseDepthMmLocal } from '../utils/cabinetData';
 import { 
   analyzeCabinetSpace,
   classifyItemPlacement,
@@ -2408,20 +2408,41 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   // --- Accessory grouping: unified single candidate list divided into disjoint display rubrics ---
   const _q = accSearch.trim().toLowerCase();
   const _qTokens = _q.split(/[\s\-/,]+/).filter(Boolean);
-  
+
+  const largestFreeBlock = useMemo(() => {
+    const spaceAnalysis = analyzeCabinetSpace(totalSlotsU, slots, null);
+    return spaceAnalysis.freeSegments.length > 0
+      ? Math.max(0, ...spaceAnalysis.freeSegments.map(s => s.span))
+      : 0;
+  }, [totalSlotsU, slots]);
+
+  const mainListAccessories = useMemo(() => {
+    return compatibleAccessories.filter(acc => {
+      const u = acc.uSize ?? 0;
+      if (u === 0) return true;
+      if (u >= 1 && u > largestFreeBlock) return false;
+      return true;
+    });
+  }, [compatibleAccessories, largestFreeBlock]);
+
   const _illusPairs = ILLUSTRATION_ACCESSORIES
     .map((acc, i) => ({ acc, idx: 100000 + i }))
     .filter(({ acc }: any) => {
+      const u = acc.uSize ?? 0;
+      if (u === 0) return true;
+      if (u >= 1 && u > largestFreeBlock) return false;
       if (!_qTokens.length) return true;
       const hay = `${acc.pn} ${acc.name} ${acc.description}`.toLowerCase();
       return _qTokens.every((tok: string) => hay.includes(tok));
     });
 
   const groupedRubrics = useMemo(() => {
-    return groupAccessoriesForDisplay(compatibleAccessories, accSearch, availableU);
-  }, [compatibleAccessories, accSearch, availableU]);
+    return groupAccessoriesForDisplay(mainListAccessories, accSearch, availableU);
+  }, [mainListAccessories, accSearch, availableU]);
 
   const renderAccCard = (acc: any, idx: number) => {
+    const u = acc.uSize ?? 0;
+    if (u >= 1 && u > largestFreeBlock) return null;
     const catalogMatch = catalogData.find(pp => pp && pp.sku && (pp.sku === acc.pn || pp.sku === acc.sku));
     const showPrice = catalogMatch ? catalogMatch.price : (acc.price || 0);
     const fitsRemaining = acc.uSize === 0 || acc.uSize <= availableU;
@@ -2697,7 +2718,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     }
   };
 
-  if (!product || isConfiguratorExcludedCabinet(product)) return null;
+  if (!product || !isConfigurableCabinet(product)) return null;
 
   if (loading) return <div className="p-8 mt-8 bg-gray-50 text-center text-gray-500 border border-gray-200">טוען קונפיגורטור ארון מותאם אישית...</div>;
   if (errorMsg) return <div className="p-8 mt-8 bg-red-50 text-center text-red-700 border border-red-200" dir="rtl">{errorMsg}</div>;
@@ -2717,7 +2738,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         includedItems={includedItems}
         nonUAccessories={nonUAccessories}
         unallocatedItems={unallocatedItems}
-        compatibleAccessories={compatibleAccessories}
+        compatibleAccessories={mainListAccessories}
         groupedRubrics={groupedRubrics}
         illustrationAccessories={_illusPairs}
         catalogData={catalogData}
@@ -2909,19 +2930,52 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                   onProductInspect={(slot) => setInspectedProduct(buildPreviewFromSlot(slot))}
                   onSlotClickToAdd={handleSlotAction}
                   onProductMoveRequested={(instanceId, newU) => {
+                    if (newU === null) return;
                     const itemToMoveIndex = selectedOptionals.findIndex(o => o.instanceId === instanceId || o.id === instanceId);
                     if (itemToMoveIndex !== -1) {
                       let item = selectedOptionals[itemToMoveIndex];
                       // If it's a 0U PDU being dragged to a front U slot, convert it back to a 1U front item
-                      if (item.uSize === 0 && newU !== null && item.zone?.startsWith('rear')) {
-                         item = { ...item, uSize: 1, zone: undefined };
+                      if (item.uSize === 0 && item.zone?.startsWith('rear')) {
+                        item = { ...item, uSize: 1, zone: undefined };
                       }
-                      const newOptionals = [...selectedOptionals];
-                      newOptionals.splice(itemToMoveIndex, 1);
-                      setSelectedOptionals(newOptionals);
-                      setTimeout(() => {
-                        validateAndProcessAdd(item, newU, -1);
-                      }, 100);
+
+                      const slotsWithoutItem = slots.filter(s => s.instanceId !== instanceId);
+                      const analysis = analyzeCabinetSpace(totalSlotsU, slotsWithoutItem, newU);
+                      const placement = classifyItemPlacement(item, analysis, newU, slotsWithoutItem);
+
+                      if (placement.category === 'direct') {
+                        setSelectedOptionals(prev =>
+                          prev.map(o =>
+                            (o.instanceId === instanceId || o.id === instanceId)
+                              ? {
+                                  ...o,
+                                  targetU: newU,
+                                  ...(o.uSize === 0 && o.zone?.startsWith('rear')
+                                    ? { uSize: 1, zone: undefined }
+                                    : {})
+                                }
+                              : o
+                          )
+                        );
+                      } else {
+                        setWarningModalMessage(
+                          `המיקום שנבחר ב-U${newU} תפוס ואין מספיק מקום פנוי עבור פריט זה.`
+                        );
+                        setPendingAccessory(item);
+                        setWarningModalOpen(true);
+                      }
+                    } else if (instanceId.startsWith('builtin-shelf-')) {
+                      const slotsWithoutItem = slots.filter(s => s.instanceId !== instanceId);
+                      const shelfItem = { uSize: 1, name: 'מדף' };
+                      const analysis = analyzeCabinetSpace(totalSlotsU, slotsWithoutItem, newU);
+                      const placement = classifyItemPlacement(shelfItem, analysis, newU, slotsWithoutItem);
+
+                      if (placement.category === 'direct') {
+                        setPresetOverrides(prev => ({ ...prev, [instanceId]: newU }));
+                      } else {
+                        setWarningModalMessage(`המיקום שנבחר ב-U${newU} תפוס ואין מספיק מקום פנוי עבור פריט זה.`);
+                        setWarningModalOpen(true);
+                      }
                     }
                   }}
                   onOpenAuxiliaryModal={() => {
@@ -3725,7 +3779,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             </p>
           </div>
 
-          {compatibleAccessories.length > 0 ? (
+          {mainListAccessories.length > 0 ? (
             <div>
               <div className="relative mb-3">
                 <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />

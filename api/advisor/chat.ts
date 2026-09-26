@@ -3,7 +3,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI } from "@google/genai";
 import crypto from "crypto";
 import { jwtVerify, createRemoteJWKSet } from "jose";
-import { fetchSheetCSVDataV4 } from "../_lib/googleSheets.js";
+import { fetchSheetCSVDataV4, getGoogleToken } from "../_lib/googleSheets.ts";
 
 
 // --- Firebase Auth & Quota ---
@@ -35,7 +35,6 @@ async function getUserRole(email: string, saTok: string): Promise<string | null>
 }
 
 // Quota Management
-import { getGoogleToken } from "../_lib/googleSheets.js";
 
 async function getQuotaUsage(quotaId: string, saTok: string): Promise<number> {
   try {

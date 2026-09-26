@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Server, Loader2, ExternalLink, ShoppingCart, CheckCircle2, BadgePercent, ArrowUpRight, HelpCircle, AlertCircle, Sparkles } from 'lucide-react';
 import { CabinetConfigurator } from './CabinetConfigurator';
 import Papa from 'papaparse';
-import { fetchCabinetMatrix, fetchCompatMap, checkAccessoryFitsCabinet, isAccessoryAShelf, isProductShelf, extractAllMatrixShelfSkus, normalizeSku } from '../utils/cabinetData';
+import { fetchCabinetMatrix, fetchCompatMap, checkAccessoryFitsCabinet, isAccessoryAShelf, isProductShelf, extractAllMatrixShelfSkus, normalizeSku, isConfigurableCabinet } from '../utils/cabinetData';
 import { getToken as getAppCheckToken } from 'firebase/app-check';
 import { appCheck } from '../firebase';
 
@@ -131,7 +131,7 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
         }
 
         const matchedCabinets = catalogData
-          .filter(p => p && p.sku && compatibleSkus.has(normalizeSku(p.sku)))
+          .filter(p => p && p.sku && compatibleSkus.has(normalizeSku(p.sku)) && isConfigurableCabinet(p))
           .map(cab => {
              const key = normalizeSku(cab.sku);
              return {

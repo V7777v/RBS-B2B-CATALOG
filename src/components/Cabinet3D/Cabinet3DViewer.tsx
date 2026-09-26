@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { Cabinet3DViewerProps, Product3DInstance, DoorLeafState, DoorState } from './Cabinet3DTypes';
 import { resolveCabinetDimensions, buildCabinetFrameGroup, resolveCabinetDoorsInfo, createCabinetMaterials, SCALE_MM_TO_UNITS, U_HEIGHT_UNITS, RACK_19_WIDTH_UNITS } from './CabinetModelBuilder';
-import { parseAccessoryCount, isProductShelf } from '../../utils/cabinetData';
+import { parseAccessoryCount, isProductShelf, parseSwitchPorts } from '../../utils/cabinetData';
 import {
   buildProduct3DMesh,
   buildEmptySlotHitbox,
@@ -35,7 +36,30 @@ import {
   X,
   Eye,
   Zap,
+  Tag,
 } from 'lucide-react';
+
+// Safeguard Three.js WebGLCapabilities:
+// WebGL specification states getShaderPrecisionFormat returns null if the context is lost or unsupported.
+// Three.js WebGLCapabilities assumes non-null and accesses .precision directly, causing
+// "Cannot read properties of null (reading 'precision')".
+if (typeof window !== 'undefined') {
+  const patchPrecision = (proto: any) => {
+    if (proto && typeof proto.getShaderPrecisionFormat === 'function') {
+      const orig = proto.getShaderPrecisionFormat;
+      proto.getShaderPrecisionFormat = function (...args: any[]) {
+        try {
+          const res = orig.apply(this, args);
+          return res || { rangeMin: 1, rangeMax: 1, precision: 1 };
+        } catch {
+          return { rangeMin: 1, rangeMax: 1, precision: 1 };
+        }
+      };
+    }
+  };
+  if (typeof WebGLRenderingContext !== 'undefined') patchPrecision(WebGLRenderingContext.prototype);
+  if (typeof WebGL2RenderingContext !== 'undefined') patchPrecision(WebGL2RenderingContext.prototype);
+}
 
 interface MeshCacheEntry {
   mesh: THREE.Group;
@@ -45,7 +69,29 @@ interface MeshCacheEntry {
   depthUnits?: number;
   cancelTexture?: () => void;
   item: Product3DInstance;
+  labelObj?: CSS2DObject;
+  labelDiv?: HTMLDivElement;
+  isImageFallback?: boolean;
 }
+
+const getShortProductName = (item: Product3DInstance): string => {
+  const name = item.name || (item.accessoryRef && item.accessoryRef.name) || item.description || item.sku || 'ציוד';
+  const clean = name.trim();
+  if (clean.length > 25) {
+    return clean.slice(0, 23) + '...';
+  }
+  return clean;
+};
+
+const getKeySpec = (item: Product3DInstance): string => {
+  const desc = item.description || (item.accessoryRef && item.accessoryRef.description) || (item.accessoryRef && item.accessoryRef['תיאור']) || '';
+  const clean = desc.replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  if (clean.length > 40) {
+    return clean.slice(0, 40);
+  }
+  return clean;
+};
 
 export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   product,
@@ -84,6 +130,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const labelRendererRef = useRef<CSS2DRenderer | null>(null);
   const animFrameIdRef = useRef<number | null>(null);
   const needsRenderRef = useRef<boolean>(true);
   const isAnimatingRef = useRef<boolean>(false);
@@ -206,9 +253,11 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
   const [sceneReady, setSceneReady] = useState(false);
   const [isWidescreen, setIsWidescreen] = useState(false);
+  const [canvasKey, setCanvasKey] = useState(0);
   const [hoveredSlotU, setHoveredSlotU] = useState<number | null>(null);
   const [hoveredDoorPrompt, setHoveredDoorPrompt] = useState<string | null>(null);
   const [activeInstanceId, setActiveInstanceId] = useState<string | null>(null);
+  const [showAllLabels, setShowAllLabels] = useState(false);
   const [mobileTouchMode, setMobileTouchMode] = useState<'orbit' | 'scroll'>('orbit');
 
   // Derive verified dimensions
@@ -908,9 +957,9 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         metalness: 0.75,
       }),
       pduMat: new THREE.MeshStandardMaterial({
-        color: 0x7f1d1d,
-        roughness: 0.32,
-        metalness: 0.65,
+        color: 0xc9ced4,
+        metalness: 0.6,
+        roughness: 0.4,
       }),
       earMat: new THREE.MeshStandardMaterial({
         color: 0x94a3b8,
@@ -929,26 +978,61 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
 
-    // 1. Renderer
-    const renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      alpha: true,
-      powerPreference: 'high-performance',
-      preserveDrawingBuffer: true,
-    });
+    // 1. Renderer initialization with safety check & fallback
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+    if (!gl || (typeof gl.isContextLost === 'function' && gl.isContextLost())) {
+      console.warn('[Cabinet3DViewer] WebGL context unavailable or lost, resetting canvas.');
+      setCanvasKey(k => k + 1);
+      if (onFallbackTo2DRef.current) {
+        onFallbackTo2DRef.current();
+      }
+      return;
+    }
+
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas,
+        context: gl,
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance',
+        preserveDrawingBuffer: true,
+      });
+    } catch (err) {
+      console.warn('[Cabinet3DViewer] WebGLRenderer failed to instantiate, falling back to 2D:', err);
+      if (onFallbackTo2DRef.current) {
+        onFallbackTo2DRef.current();
+      }
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     rendererRef.current = renderer;
+
+    const width = container.clientWidth || 400;
+    const height = container.clientHeight || 500;
+
+    // CSS2D Label Renderer
+    const labelRenderer = new CSS2DRenderer();
+    labelRenderer.setSize(width, height);
+    labelRenderer.domElement.style.position = 'absolute';
+    labelRenderer.domElement.style.top = '0px';
+    labelRenderer.domElement.style.left = '0px';
+    labelRenderer.domElement.style.width = '100%';
+    labelRenderer.domElement.style.height = '100%';
+    labelRenderer.domElement.style.pointerEvents = 'none';
+    labelRenderer.domElement.style.overflow = 'hidden';
+    labelRenderer.domElement.style.zIndex = '10';
+    container.appendChild(labelRenderer.domElement);
+    labelRendererRef.current = labelRenderer;
 
     // 2. Scene
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
     // 3. Camera
-    const width = container.clientWidth || 400;
-    const height = container.clientHeight || 500;
     const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 100);
     cameraRef.current = camera;
 
@@ -960,8 +1044,13 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     camera.lookAt(0, initTargetY, 0);
 
     onSnapshotReady?.(() => {
-      renderer.render(scene, camera);
-      return canvas.toDataURL('image/png');
+      try {
+        renderer.render(scene, camera);
+        labelRenderer.render(scene, camera);
+        return canvas.toDataURL('image/png');
+      } catch {
+        return '';
+      }
     });
 
     // 4. OrbitControls
@@ -990,7 +1079,12 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       if (!isRunning) return;
       if (needsRenderRef.current || isAnimatingRef.current) {
         controls.update();
-        renderer.render(scene, camera);
+        try {
+          renderer.render(scene, camera);
+          labelRenderer.render(scene, camera);
+        } catch (err) {
+          console.warn('[Cabinet3DViewer] Render frame caught error:', err);
+        }
         if (!isAnimatingRef.current) {
           needsRenderRef.current = false;
         }
@@ -1070,6 +1164,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h, false);
+      labelRenderer.setSize(w, h);
       if (!isUserInteractedRef.current) {
         fitCameraToCabinet(true);
       }
@@ -1511,6 +1606,8 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
     const handleContextLost = (event: Event) => {
       event.preventDefault();
+      console.warn('[Cabinet3DViewer] WebGL context lost.');
+      setCanvasKey(k => k + 1);
       if (onFallbackTo2DRef.current) {
         onFallbackTo2DRef.current();
       }
@@ -1540,6 +1637,9 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       controls.dispose();
 
       meshMapRef.current.forEach(entry => {
+        if (entry.labelDiv && entry.labelDiv.parentNode) {
+          entry.labelDiv.parentNode.removeChild(entry.labelDiv);
+        }
         if (entry.cancelTexture) entry.cancelTexture();
         disposeHierarchy(entry.mesh);
       });
@@ -1563,11 +1663,15 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       }
       setSceneReady(false);
 
+      if (labelRenderer.domElement && labelRenderer.domElement.parentNode) {
+        labelRenderer.domElement.parentNode.removeChild(labelRenderer.domElement);
+      }
+      labelRendererRef.current = null;
+
       renderer.dispose();
-      renderer.forceContextLoss();
       scene.clear();
     };
-  }, []);
+  }, [canvasKey]);
 
   // Compute optional counts for frame integrated accessories
   const optionalFansCount = useMemo(() => {
@@ -1804,6 +1908,12 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           cancelAnimationFrame(activeAnimationsRef.current.get(id)!);
           activeAnimationsRef.current.delete(id);
         }
+        if (entry.labelDiv && entry.labelDiv.parentNode) {
+          entry.labelDiv.parentNode.removeChild(entry.labelDiv);
+        }
+        if (entry.labelObj && entry.mesh) {
+          entry.mesh.remove(entry.labelObj);
+        }
         if (entry.cancelTexture) entry.cancelTexture();
         disposeHierarchy(entry.mesh);
         productsGroupRef.current.remove(entry.mesh);
@@ -1836,6 +1946,10 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           existing.uStart = item.uStart;
           existing.uSpan = item.uSpan;
           existing.lastY = targetCenterY;
+          existing.item = item;
+          if (existing.labelDiv) {
+            existing.labelDiv.textContent = `U${item.uStart} · ${getShortProductName(item)}`;
+          }
 
           if (!prefersReducedMotion && Math.abs(fromY - toY) > 0.001) {
             let progress = 0;
@@ -1875,6 +1989,12 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
             cancelAnimationFrame(activeAnimationsRef.current.get(item.instanceId)!);
             activeAnimationsRef.current.delete(item.instanceId);
           }
+          if (existing.labelDiv && existing.labelDiv.parentNode) {
+            existing.labelDiv.parentNode.removeChild(existing.labelDiv);
+          }
+          if (existing.labelObj && existing.mesh) {
+            existing.mesh.remove(existing.labelObj);
+          }
           if (existing.cancelTexture) existing.cancelTexture();
           disposeHierarchy(existing.mesh);
           productsGroupRef.current.remove(existing.mesh);
@@ -1885,6 +2005,47 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         });
         productMesh.rotation.y = targetRotY;
 
+        // Check if product is rendered with image fallback (not a procedural model)
+        const isImageFallback = Boolean(
+          (productMesh as any).userData?.isImageFallback ??
+          (!isProductShelf(item.sku || (item as any).pn) && !(item as any)._pdu && !parseSwitchPorts(item.accessoryRef || item))
+        );
+
+        // Create CSS2D label at right front edge
+        const labelDiv = document.createElement('div');
+        labelDiv.dir = 'rtl';
+        labelDiv.className = 'text-[11px] bg-slate-900/90 text-white rounded px-2 py-1 shadow-md border border-slate-700/60 pointer-events-none text-right max-w-[220px] select-none';
+
+        const shortName = getShortProductName(item);
+        const keySpec = getKeySpec(item);
+
+        if (isImageFallback && keySpec) {
+          labelDiv.innerHTML = `
+            <div class="font-bold text-white text-[11px] leading-tight truncate">${item.uStart ? `U${item.uStart} · ` : ''}${shortName}</div>
+            <div class="text-[10px] text-slate-300 leading-tight truncate mt-0.5">${keySpec}</div>
+          `;
+        } else if (isImageFallback) {
+          labelDiv.innerHTML = `
+            <div class="font-bold text-white text-[11px] leading-tight truncate">${item.uStart ? `U${item.uStart} · ` : ''}${shortName}</div>
+          `;
+        } else {
+          labelDiv.textContent = item.uStart ? `U${item.uStart} · ${shortName}` : shortName;
+        }
+
+        const labelObj = new CSS2DObject(labelDiv);
+        labelObj.position.set(RACK_19_WIDTH_UNITS / 2, 0, 0.06);
+
+        const isTarget = Boolean(
+          (activeInstanceId && item.instanceId === activeInstanceId) ||
+          (selectedInstanceId && (item.instanceId === selectedInstanceId || item.sku === selectedInstanceId)) ||
+          (inspectedProduct && (item.instanceId === inspectedProduct.instanceId || item.sku === inspectedProduct.sku)) ||
+          (hoveredProduct && (item.instanceId === hoveredProduct.instanceId || item.sku === hoveredProduct.sku))
+        );
+        const isVisible = isImageFallback || showAllLabels || isTarget;
+        labelObj.visible = isVisible;
+        labelDiv.style.display = isVisible ? '' : 'none';
+        productMesh.add(labelObj);
+
         const cancelFn = (productMesh as any)._cancelTexture;
         cachedMeshMap.set(item.instanceId, {
           mesh: productMesh,
@@ -1894,6 +2055,9 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           depthUnits: innerDepthUnits,
           cancelTexture: cancelFn,
           item,
+          labelObj,
+          labelDiv,
+          isImageFallback,
         });
 
         const isNew = item.instanceId === lastAddedInstanceId && !animatedInstanceIdsRef.current.has(item.instanceId);
@@ -2133,6 +2297,29 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     needsRenderRef.current = true;
   }, [sceneReady, productInstances, slots, nonUAccessories, unallocatedItems, selectedSlotU, previewSpanU, lastAddedInstanceId, dims.depthMm, dims.totalU, dims.widthMm]);
 
+  // Update CSS2D label visibility based on hovered/selected item, showAllLabels toggle, or image fallback items
+  useEffect(() => {
+    const cachedMeshMap = meshMapRef.current;
+    cachedMeshMap.forEach(entry => {
+      const item = entry.item;
+      const isTarget = Boolean(
+        (activeInstanceId && item.instanceId === activeInstanceId) ||
+        (selectedInstanceId && (item.instanceId === selectedInstanceId || item.sku === selectedInstanceId)) ||
+        (inspectedProduct && (item.instanceId === inspectedProduct.instanceId || item.sku === inspectedProduct.sku)) ||
+        (hoveredProduct && (item.instanceId === hoveredProduct.instanceId || item.sku === hoveredProduct.sku))
+      );
+      const isImageFallback = Boolean(entry.isImageFallback || entry.mesh?.userData?.isImageFallback);
+      const isVisible = isImageFallback || showAllLabels || isTarget;
+      if (entry.labelObj) {
+        entry.labelObj.visible = isVisible;
+      }
+      if (entry.labelDiv) {
+        entry.labelDiv.style.display = isVisible ? '' : 'none';
+      }
+    });
+    needsRenderRef.current = true;
+  }, [showAllLabels, activeInstanceId, selectedInstanceId, inspectedProduct, hoveredProduct]);
+
   // Mobile Touch Mode Effect
   useEffect(() => {
     const controls = controlsRef.current;
@@ -2177,6 +2364,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     >
       {/* 3D Canvas */}
       <canvas
+        key={canvasKey}
         ref={canvasRef}
         className="w-full h-full block touch-pan-y focus:outline-none"
         tabIndex={0}
@@ -2334,6 +2522,22 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
             </button>
           )}
 
+          {/* Labels Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowAllLabels(prev => !prev)}
+            className={`min-h-11 px-2.5 flex items-center justify-center gap-1.5 text-[11px] font-bold rounded-md transition-colors cursor-pointer shrink-0 ${
+              showAllLabels
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+            title={showAllLabels ? 'הסתר תוויות קבועות' : 'הצג את כל התוויות'}
+            aria-label="תוויות"
+          >
+            <Tag size={15} />
+            <span>תוויות</span>
+          </button>
+
           {/* Widescreen Toggle */}
           <button
             type="button"
@@ -2488,6 +2692,21 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
         <div className="w-6 h-px bg-slate-700/80 my-0.5" />
 
+        {/* Toggle Labels */}
+        <button
+          type="button"
+          onClick={() => setShowAllLabels(prev => !prev)}
+          className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
+            showAllLabels
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/90'
+          }`}
+          title="תוויות"
+          aria-label="תוויות"
+        >
+          <Tag size={15} />
+        </button>
+
         {/* Reset Camera */}
         <button
           type="button"
@@ -2624,6 +2843,21 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         )}
 
         <div className="w-px h-5 bg-slate-700/80 shrink-0 mx-0.5" />
+
+        {/* Toggle Labels */}
+        <button
+          type="button"
+          onClick={() => setShowAllLabels(prev => !prev)}
+          className={`w-8 h-8 shrink-0 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
+            showAllLabels
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/90'
+          }`}
+          title="תוויות"
+          aria-label="תוויות"
+        >
+          <Tag size={16} />
+        </button>
 
         {/* Reset Camera */}
         <button

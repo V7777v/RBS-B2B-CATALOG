@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Product3DInstance, NonU3DItem } from './Cabinet3DTypes';
 import { U_HEIGHT_UNITS, RACK_19_WIDTH_UNITS, USABLE_OPENING_WIDTH } from './CabinetModelBuilder';
 import { lookup3DAsset, Product3DAssetDef } from './Product3DAssets';
-import { transformImageLink, isProductShelf } from '../../utils/cabinetData';
+import { transformImageLink, isProductShelf, parseSwitchPorts } from '../../utils/cabinetData';
 import { createDiagonalVentSlotTexture } from './CabinetModel447510T';
 import { createPolmanFaceTexture, createHikvisionFaceTexture } from './BrandTextures';
 
@@ -74,6 +74,22 @@ export function buildProduct3DMesh(
     isProductShelf(item.accessoryRef || item) ||
     /מדף|shelf/i.test(nameLower) ||
     /מדף|shelf/i.test(skuLower)
+  );
+
+  const switchPorts = parseSwitchPorts(item.accessoryRef || item);
+  const totalAccess = switchPorts ? (switchPorts.access + switchPorts.poe) : 0;
+  const uplinkCount = switchPorts ? switchPorts.uplinkRj45 : 0;
+  const sfpCount = switchPorts ? (switchPorts.sfp + switchPorts.sfpPlus) : 0;
+  const totalPortCount = totalAccess + uplinkCount + sfpCount;
+
+  const isDesktopSwitch = Boolean(
+    switchPorts && (
+      item.uSpan === 0 ||
+      (item as any).isDesktop ||
+      (item as any).onShelf ||
+      /desktop|שולחני|1510/i.test(`${skuLower} ${nameLower} ${descLower}`) ||
+      (totalPortCount <= 10 && !nameLower.includes('19') && !nameLower.includes('rack') && item.uSpan <= 1 && /desktop|שולחני|1510|1505|105|108/i.test(`${skuLower} ${nameLower}`))
+    )
   );
 
   // 1. PHYSICAL CHASSIS & MOUNTING EARS (Body & Depth)
@@ -155,20 +171,26 @@ export function buildProduct3DMesh(
     });
 
   } else if (isPdu) {
+    const silverPduMat = new THREE.MeshStandardMaterial({
+      color: 0xc9ced4,
+      metalness: 0.6,
+      roughness: 0.4,
+    });
     const pduDepth = 0.65;
     const pduChassisGeom = new THREE.BoxGeometry(RACK_19_WIDTH_UNITS, spanHeight, pduDepth);
-    const pduMesh = new THREE.Mesh(pduChassisGeom, materials.pduMat);
+    const pduMesh = new THREE.Mesh(pduChassisGeom, silverPduMat);
     pduMesh.position.set(0, 0, -pduDepth / 2);
     pduMesh.castShadow = true;
     group.add(pduMesh);
 
     // Sturdy 19" mounting ears
     const earGeom = new THREE.BoxGeometry(0.20, spanHeight, 0.05);
-    const leftEar = new THREE.Mesh(earGeom, materials.earMat);
+    const earMat = materials.earMat;
+    const leftEar = new THREE.Mesh(earGeom, earMat);
     leftEar.position.set(-RACK_19_WIDTH_UNITS / 2 + 0.10, 0, 0.025);
     group.add(leftEar);
 
-    const rightEar = new THREE.Mesh(earGeom, materials.earMat);
+    const rightEar = new THREE.Mesh(earGeom, earMat);
     rightEar.position.set(RACK_19_WIDTH_UNITS / 2 - 0.10, 0, 0.025);
     group.add(rightEar);
 
@@ -184,22 +206,21 @@ export function buildProduct3DMesh(
       });
     });
 
-    // High-visibility front face bezel with 8 realistic power sockets
-    const socketCount = 8;
-    const socketOuterGeom = new THREE.CylinderGeometry(0.14, 0.14, 0.03, 20);
+    // N sockets along the body (N from the product name digits, default 8): dark rounded insets (0x23282e) each with 3 small pin cylinders
+    const rawName = `${item.name || ''} ${item.description || ''}`;
+    const digitMatch = rawName.match(/(\d+)\s*(?:שקע|שקעים|outlet|outlets|port|ports|way)/i) || rawName.match(/\b(\d+)\b/);
+    const socketCount = digitMatch ? Math.max(2, Math.min(24, parseInt(digitMatch[1], 10))) : 8;
+
+    const socketOuterGeom = new THREE.CylinderGeometry(0.13, 0.13, 0.025, 20);
     socketOuterGeom.rotateX(Math.PI / 2);
-    const socketOuterMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.7, metalness: 0.2 });
+    const socketOuterMat = new THREE.MeshStandardMaterial({ color: 0x23282e, roughness: 0.6, metalness: 0.2 });
 
-    const socketInnerGeom = new THREE.CylinderGeometry(0.11, 0.11, 0.035, 20);
-    socketInnerGeom.rotateX(Math.PI / 2);
-    const socketInnerMat = new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.9 });
-
-    const pinHoleGeom = new THREE.CylinderGeometry(0.018, 0.018, 0.04, 8);
-    pinHoleGeom.rotateX(Math.PI / 2);
-    const pinHoleMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const pinGeom = new THREE.CylinderGeometry(0.015, 0.015, 0.035, 10);
+    pinGeom.rotateX(Math.PI / 2);
+    const pinMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.7 });
 
     const socketStartX = -RACK_19_WIDTH_UNITS / 2 + 0.75;
-    const socketSpacing = (RACK_19_WIDTH_UNITS - 1.8) / (socketCount - 1);
+    const socketSpacing = (RACK_19_WIDTH_UNITS - 1.8) / Math.max(1, socketCount - 1);
     for (let si = 0; si < socketCount; si++) {
       const sx = socketStartX + si * socketSpacing;
       // Outer socket ring
@@ -207,41 +228,35 @@ export function buildProduct3DMesh(
       outerRing.position.set(sx, 0, 0.015);
       group.add(outerRing);
 
-      // Inner socket recess
-      const innerRecess = new THREE.Mesh(socketInnerGeom, socketInnerMat);
-      innerRecess.position.set(sx, 0, 0.02);
-      group.add(innerRecess);
-
-      // Live & Neutral pin holes
-      const pinL = new THREE.Mesh(pinHoleGeom, pinHoleMat);
-      pinL.position.set(sx - 0.045, 0, 0.03);
+      // 3 small pin cylinders
+      const pinL = new THREE.Mesh(pinGeom, pinMat);
+      pinL.position.set(sx - 0.04, 0, 0.025);
       group.add(pinL);
-      const pinR = new THREE.Mesh(pinHoleGeom, pinHoleMat);
-      pinR.position.set(sx + 0.045, 0, 0.03);
+
+      const pinR = new THREE.Mesh(pinGeom, pinMat);
+      pinR.position.set(sx + 0.04, 0, 0.025);
       group.add(pinR);
 
-      // Ground pin hole
-      const pinG = new THREE.Mesh(pinHoleGeom, pinHoleMat);
-      pinG.position.set(sx, 0.04, 0.03);
+      const pinG = new THREE.Mesh(pinGeom, pinMat);
+      pinG.position.set(sx, 0.04, 0.025);
       group.add(pinG);
     }
 
-    // Illuminated Red Rocker Power Switch with bezel
-    const switchHousingGeom = new THREE.BoxGeometry(0.20, 0.26, 0.05);
-    const switchHousingMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.5 });
-    const switchHousing = new THREE.Mesh(switchHousingGeom, switchHousingMat);
-    switchHousing.position.set(RACK_19_WIDTH_UNITS / 2 - 0.50, 0, 0.025);
+    // Small red power switch
+    const switchHousingGeom = new THREE.BoxGeometry(0.18, 0.24, 0.04);
+    const switchHousing = new THREE.Mesh(switchHousingGeom, socketOuterMat);
+    switchHousing.position.set(RACK_19_WIDTH_UNITS / 2 - 0.50, 0, 0.02);
     group.add(switchHousing);
 
-    const switchRockerGeom = new THREE.BoxGeometry(0.12, 0.18, 0.04);
+    const switchRockerGeom = new THREE.BoxGeometry(0.10, 0.16, 0.03);
     const switchRockerMat = new THREE.MeshStandardMaterial({
       color: 0xef4444,
       emissive: 0xdc2626,
-      emissiveIntensity: 0.75,
+      emissiveIntensity: 0.7,
       roughness: 0.2
     });
     const switchRocker = new THREE.Mesh(switchRockerGeom, switchRockerMat);
-    switchRocker.position.set(RACK_19_WIDTH_UNITS / 2 - 0.50, 0, 0.045);
+    switchRocker.position.set(RACK_19_WIDTH_UNITS / 2 - 0.50, 0, 0.035);
     group.add(switchRocker);
 
     // Green surge protection LED indicator with chrome bezel
@@ -261,13 +276,17 @@ export function buildProduct3DMesh(
     ledMesh.position.set(RACK_19_WIDTH_UNITS / 2 - 0.28, 0, 0.038);
     group.add(ledMesh);
 
-    // Heavy-duty molded black power cord exiting from rear/side
-    const cordGeom = new THREE.CylinderGeometry(0.06, 0.06, 0.35, 12);
-    cordGeom.rotateX(Math.PI / 2);
-    const cordMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.8 });
-    const cordMesh = new THREE.Mesh(cordGeom, cordMat);
-    cordMesh.position.set(-RACK_19_WIDTH_UNITS / 2 + 0.35, 0, -pduDepth - 0.15);
-    group.add(cordMesh);
+    // Black power cable (TubeGeometry on a short curve)
+    const cableCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-RACK_19_WIDTH_UNITS / 2 + 0.35, 0, -pduDepth),
+      new THREE.Vector3(-RACK_19_WIDTH_UNITS / 2 + 0.35, -0.10, -pduDepth - 0.15),
+      new THREE.Vector3(-RACK_19_WIDTH_UNITS / 2 + 0.30, -0.22, -pduDepth - 0.30),
+      new THREE.Vector3(-RACK_19_WIDTH_UNITS / 2 + 0.22, -0.35, -pduDepth - 0.45),
+    ]);
+    const cableGeom = new THREE.TubeGeometry(cableCurve, 20, 0.045, 12, false);
+    const cableMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.8, metalness: 0.1 });
+    const cableMesh = new THREE.Mesh(cableGeom, cableMat);
+    group.add(cableMesh);
 
   } else if (isPanel) {
     const isPatch = /patch|24|rj45|ניתוב|פאץ/i.test(nameLower) || /patch|24|rj45|ניתוב/i.test(skuLower);
@@ -387,8 +406,27 @@ export function buildProduct3DMesh(
       });
     }
 
+  } else if (switchPorts && isDesktopSwitch) {
+    // Desktop Switch: a box on the shelf whose width = 0.12 * (access + uplinkRj45 + sfp) + 0.4
+    const desktopWidth = 0.12 * (totalAccess + uplinkCount + sfpCount) + 0.4;
+    const desktopHeight = Math.min(spanHeight * 0.75, 0.42);
+    const desktopDepth = 1.3;
+    const desktopY = -spanHeight / 2 + desktopHeight / 2 + 0.04;
+
+    const desktopChassisGeom = new THREE.BoxGeometry(desktopWidth, desktopHeight, desktopDepth);
+    const desktopChassisMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.35,
+      metalness: 0.65,
+    });
+    const desktopChassis = new THREE.Mesh(desktopChassisGeom, desktopChassisMat);
+    desktopChassis.position.set(0, desktopY, -desktopDepth / 2);
+    desktopChassis.castShadow = true;
+    desktopChassis.receiveShadow = true;
+    group.add(desktopChassis);
+
   } else {
-    // Active Equipment (Switches, Routers, UPS, Amplifiers, Servers)
+    // Active Equipment (Rack Switches, Routers, UPS, Amplifiers, Servers)
     const activeDepth = Math.max(1.8, Math.min(innerDepthUnits * 0.8, item.uSpan > 1 ? 4.5 : 2.8));
     const chassisWidth = USABLE_OPENING_WIDTH;
     const chassisGeom = new THREE.BoxGeometry(chassisWidth, spanHeight, activeDepth);
@@ -412,7 +450,7 @@ export function buildProduct3DMesh(
     chassisMesh.receiveShadow = true;
     group.add(chassisMesh);
 
-    // Front bezel faceplate
+    // Front bezel faceplate (full 19" faceplate in its U height)
     const faceplateGeom = new THREE.BoxGeometry(RACK_19_WIDTH_UNITS, spanHeight, 0.05);
     const faceplateMesh = new THREE.Mesh(faceplateGeom, activeMat);
     faceplateMesh.position.set(0, 0, 0);
@@ -515,6 +553,155 @@ export function buildProduct3DMesh(
       frontMesh.userData = { item, isProductMesh: true };
       frontFaceGroup.add(frontMesh);
 
+    } else if (switchPorts) {
+      // Procedural Switch Faceplate with exact parsed ports
+      const isDesktop = isDesktopSwitch;
+      const targetFaceWidth = isDesktop ? (0.12 * (totalAccess + uplinkCount + sfpCount) + 0.4) : USABLE_OPENING_WIDTH;
+      const centerY = isDesktop ? (-spanHeight / 2 + Math.min(spanHeight * 0.75, 0.42) / 2 + 0.04) : 0;
+      const frontZ = 0.035;
+
+      // Power LED & Brand plate on left
+      const pwrX = -targetFaceWidth / 2 + (isDesktop ? 0.12 : 0.45);
+      const pwrY = centerY + (isDesktop ? 0.07 : 0.06);
+
+      // Power LED (green)
+      const pwrLedGeom = new THREE.SphereGeometry(0.016, 8, 8);
+      const greenLedMat = new THREE.MeshStandardMaterial({
+        color: 0x22c55e,
+        emissive: 0x16a34a,
+        emissiveIntensity: 0.95,
+      });
+      const pwrLed = new THREE.Mesh(pwrLedGeom, greenLedMat);
+      pwrLed.position.set(pwrX, pwrY, frontZ);
+      frontFaceGroup.add(pwrLed);
+
+      const pwrTagGeom = new THREE.BoxGeometry(0.065, 0.022, 0.005);
+      const pwrTagMat = new THREE.MeshBasicMaterial({ color: 0x475569 });
+      const pwrTag = new THREE.Mesh(pwrTagGeom, pwrTagMat);
+      pwrTag.position.set(pwrX, pwrY - 0.032, frontZ);
+      frontFaceGroup.add(pwrTag);
+
+      // Port layout configuration
+      const useTwoRows = totalAccess >= 16 && !isDesktop;
+      const portPitch = isDesktop ? 0.11 : 0.115;
+      const sfpPitch = isDesktop ? 0.13 : 0.15;
+      const gapW = 0.18;
+
+      const accessCols = useTwoRows ? Math.ceil(totalAccess / 2) : totalAccess;
+      const uplinkCols = (useTwoRows && uplinkCount >= 2) ? Math.ceil(uplinkCount / 2) : uplinkCount;
+      const totalGridW = accessCols * portPitch + (uplinkCount > 0 ? gapW + uplinkCols * portPitch : 0) + (sfpCount > 0 ? gapW + sfpCount * sfpPitch : 0);
+
+      const startX = isDesktop
+        ? (-targetFaceWidth / 2 + 0.28)
+        : Math.max(-USABLE_OPENING_WIDTH / 2 + 0.90, -totalGridW / 2 + 0.3);
+
+      // Common materials
+      const rj45InsetMat = new THREE.MeshStandardMaterial({ color: 0x0c0f12, roughness: 0.9 });
+      const goldPinMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+      const orangePoeMat = new THREE.MeshBasicMaterial({ color: 0xf97316 });
+      const sfpSilverMat = new THREE.MeshStandardMaterial({ color: 0xc4cbd4, metalness: 0.85, roughness: 0.25 });
+      const sfpInnerMat = new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.95 });
+
+      const rj45Geom = new THREE.BoxGeometry(0.076, 0.076, 0.02);
+      const pinGeom = new THREE.BoxGeometry(0.045, 0.012, 0.005);
+      const poeStripGeom = new THREE.BoxGeometry(0.065, 0.012, 0.005);
+      const portLedGeom = new THREE.SphereGeometry(0.012, 8, 8);
+      const sfpCageGeom = new THREE.BoxGeometry(0.115, 0.095, 0.022);
+      const sfpInnerGeom = new THREE.BoxGeometry(0.088, 0.068, 0.028);
+
+      // 1. Draw Access Ports
+      for (let i = 0; i < totalAccess; i++) {
+        const isPoe = i < switchPorts.poe;
+        let px = 0;
+        let py = centerY;
+
+        if (useTwoRows) {
+          const col = Math.floor(i / 2);
+          const row = i % 2; // 0 = upper, 1 = lower
+          px = startX + col * portPitch;
+          py = centerY + (row === 0 ? 0.052 : -0.052);
+        } else {
+          px = startX + i * portPitch;
+        }
+
+        // Dark RJ45 opening
+        const rj45 = new THREE.Mesh(rj45Geom, rj45InsetMat);
+        rj45.position.set(px, py, frontZ);
+        frontFaceGroup.add(rj45);
+
+        // Gold contact pins
+        const pin = new THREE.Mesh(pinGeom, goldPinMat);
+        const pinYOffset = useTwoRows ? (i % 2 === 1 ? -0.022 : 0.022) : 0.022;
+        pin.position.set(px, py + pinYOffset, frontZ + 0.01);
+        frontFaceGroup.add(pin);
+
+        // PoE thin orange strip above
+        if (isPoe) {
+          const poeStrip = new THREE.Mesh(poeStripGeom, orangePoeMat);
+          const poeYOffset = useTwoRows ? (i % 2 === 1 ? -0.048 : 0.048) : 0.048;
+          poeStrip.position.set(px, py + poeYOffset, frontZ + 0.01);
+          frontFaceGroup.add(poeStrip);
+        }
+
+        // Green LED per port
+        const portLed = new THREE.Mesh(portLedGeom, greenLedMat);
+        const ledYOffset = useTwoRows
+          ? (i % 2 === 1 ? (isPoe ? -0.066 : -0.052) : (isPoe ? 0.066 : 0.052))
+          : (isPoe ? 0.066 : 0.052);
+        portLed.position.set(px, py + ledYOffset, frontZ + 0.01);
+        frontFaceGroup.add(portLed);
+      }
+
+      // 2. Draw Uplink RJ45 Ports (after gap)
+      const uplinkStartX = startX + accessCols * portPitch + gapW;
+      for (let u = 0; u < uplinkCount; u++) {
+        let upx = 0;
+        let upy = centerY;
+
+        if (useTwoRows && uplinkCount >= 2) {
+          const col = Math.floor(u / 2);
+          const row = u % 2;
+          upx = uplinkStartX + col * portPitch;
+          upy = centerY + (row === 0 ? 0.052 : -0.052);
+        } else {
+          upx = uplinkStartX + u * portPitch;
+        }
+
+        const rj45 = new THREE.Mesh(rj45Geom, rj45InsetMat);
+        rj45.position.set(upx, upy, frontZ);
+        frontFaceGroup.add(rj45);
+
+        const pin = new THREE.Mesh(pinGeom, goldPinMat);
+        pin.position.set(upx, upy + 0.022, frontZ + 0.01);
+        frontFaceGroup.add(pin);
+
+        const portLed = new THREE.Mesh(portLedGeom, greenLedMat);
+        portLed.position.set(upx, upy + 0.052, frontZ + 0.01);
+        frontFaceGroup.add(portLed);
+      }
+
+      // 3. Draw SFP Cages (wider silver insets)
+      const sfpStartX = uplinkCount > 0
+        ? (uplinkStartX + uplinkCols * portPitch + gapW)
+        : (startX + accessCols * portPitch + gapW);
+
+      for (let s = 0; s < sfpCount; s++) {
+        const sx = sfpStartX + s * sfpPitch;
+        const sy = centerY;
+
+        const sfpCage = new THREE.Mesh(sfpCageGeom, sfpSilverMat);
+        sfpCage.position.set(sx, sy, frontZ);
+        frontFaceGroup.add(sfpCage);
+
+        const sfpInner = new THREE.Mesh(sfpInnerGeom, sfpInnerMat);
+        sfpInner.position.set(sx, sy, frontZ + 0.005);
+        frontFaceGroup.add(sfpInner);
+
+        const sfpLed = new THREE.Mesh(portLedGeom, greenLedMat);
+        sfpLed.position.set(sx, sy + 0.060, frontZ + 0.01);
+        frontFaceGroup.add(sfpLed);
+      }
+
     } else if (
       isUps ||
       isSwitchOrRouter ||
@@ -567,7 +754,10 @@ export function buildProduct3DMesh(
   // 3. IMAGE LOADING & PRESENTATION PIPELINE
   // For shelves, the physical 3D horizontal tray with venting and mounting ears is rendered directly.
   // For front-panel equipment (switches, servers, blank panels, PDUs), front textures or orthographic catalog images are mapped onto the 19" faceplate.
-  const rawImage = assetDef?.frontTextureUrl || extractSafeProductImage(item.image);
+  // When parseSwitchPorts returns a value, we render the procedural 3D model directly and only use image loading as fallback when parse is null.
+  const rawImage = !switchPorts ? (assetDef?.frontTextureUrl || extractSafeProductImage(item.image)) : '';
+  group.userData.isImageFallback = Boolean(rawImage);
+  group.userData.isProcedural = !rawImage;
 
   if (rawImage) {
     const imageUrl = transformImageLink(rawImage, 800);
@@ -672,74 +862,6 @@ export function buildProduct3DMesh(
             const photoBorder = new THREE.LineSegments(photoBorderGeom, photoBorderMat);
             photoMesh.add(photoBorder);
             frontFaceGroup.add(photoMesh);
-
-            // Product identification label canvas
-            const infoLeft = photoX + photoW / 2 + 0.10;
-            const infoW = Math.max(0.6, faceplateW / 2 - infoLeft - 0.10);
-            const infoH = faceplateH * 0.88;
-
-            const labelCanvas = document.createElement('canvas');
-            labelCanvas.width = 1024;
-            labelCanvas.height = Math.max(256, Math.min(1024, Math.round(1024 * (infoH / Math.max(0.5, infoW)))));
-            const ctx = labelCanvas.getContext('2d');
-            if (ctx) {
-              const cw = labelCanvas.width;
-              const ch = labelCanvas.height;
-              ctx.clearRect(0, 0, cw, ch);
-
-              // Background plate
-              ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-              if (typeof ctx.roundRect === 'function') {
-                ctx.roundRect(8, 8, cw - 16, ch - 16, 16);
-              } else {
-                ctx.rect(8, 8, cw - 16, ch - 16);
-              }
-              ctx.fill();
-              ctx.strokeStyle = 'rgba(51, 65, 85, 0.8)';
-              ctx.lineWidth = 4;
-              ctx.stroke();
-
-              // Status indicator dot (green active)
-              ctx.fillStyle = '#22c55e';
-              ctx.beginPath();
-              ctx.arc(36, 42, 10, 0, Math.PI * 2);
-              ctx.fill();
-
-              // SKU / Part Number (bold high-contrast white)
-              ctx.fillStyle = '#ffffff';
-              ctx.font = 'bold 36px sans-serif';
-              ctx.textAlign = 'left';
-              ctx.textBaseline = 'middle';
-              const skuText = (item.sku || 'ITEM').substring(0, 24);
-              ctx.fillText(skuText, 58, 42);
-
-              // Hebrew Name / Model Description
-              ctx.fillStyle = '#94a3b8';
-              ctx.font = '28px sans-serif';
-              const nameText = (item.name || item.description || '').substring(0, 36);
-              ctx.fillText(nameText, 36, 96);
-
-              // Height and type badge
-              ctx.fillStyle = '#38bdf8';
-              ctx.font = 'bold 24px sans-serif';
-              const badgeText = `${item.uSpan}U Rackmount • ${item.type === 'shelf' ? 'מדף' : 'פעיל'}`;
-              ctx.fillText(badgeText, 36, 146);
-            }
-
-            const labelTexture = new THREE.CanvasTexture(labelCanvas);
-            labelTexture.colorSpace = THREE.SRGBColorSpace;
-            const labelGeom = new THREE.PlaneGeometry(infoW, infoH);
-            const labelMat = new THREE.MeshStandardMaterial({
-              map: labelTexture,
-              roughness: 0.35,
-              metalness: 0.2,
-              transparent: true,
-              side: THREE.FrontSide,
-            });
-            const labelMesh = new THREE.Mesh(labelGeom, labelMat);
-            labelMesh.position.set(infoLeft + infoW / 2, 0, 0.041);
-            labelMesh.userData = { item, isProductMesh: true };
-            frontFaceGroup.add(labelMesh);
           }
 
           // Traverse frontFaceGroup so all new meshes have raycast metadata
@@ -847,46 +969,70 @@ export function buildVerticalAccessoryMesh(
   const barHeight = Math.max(2.0, heightUnits * 0.85);
 
   if (isVerticalPdu) {
-    // Robust vertical PDU aluminum chassis
+    // Silver metal body material: color 0xc9ced4, metalness 0.6, roughness 0.4
+    const silverPduMat = new THREE.MeshStandardMaterial({
+      color: 0xc9ced4,
+      metalness: 0.6,
+      roughness: 0.4,
+    });
+
+    // Body: BoxGeometry, same size and position as today
     const chassisGeom = new THREE.BoxGeometry(0.42, barHeight, 0.38);
-    const chassisMesh = new THREE.Mesh(chassisGeom, materials.pduMat);
+    const chassisMesh = new THREE.Mesh(chassisGeom, silverPduMat);
     chassisMesh.castShadow = true;
+    chassisMesh.receiveShadow = true;
     group.add(chassisMesh);
 
-    // Vertical row of Israeli/Universal power sockets with pin holes
-    const socketOuterGeom = new THREE.CylinderGeometry(0.11, 0.11, 0.025, 16);
-    socketOuterGeom.rotateX(Math.PI / 2);
-    const socketOuterMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.7 });
-    const pinHoleGeom = new THREE.CylinderGeometry(0.015, 0.015, 0.03, 8);
-    pinHoleGeom.rotateX(Math.PI / 2);
-    const pinHoleMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    // N sockets along the body (N from the product name digits, default 8)
+    const rawName = `${item.name || ''} ${item.description || ''}`;
+    const digitMatch = rawName.match(/(\d+)\s*(?:שקע|שקעים|outlet|outlets|port|ports|way)/i) || rawName.match(/\b(\d+)\b/);
+    const nSockets = digitMatch ? Math.max(2, Math.min(36, parseInt(digitMatch[1], 10))) : 8;
 
-    const socketCount = Math.min(16, Math.max(6, Math.floor(barHeight / 0.40)));
-    const spacing = (barHeight - 0.9) / (socketCount - 1);
+    // Dark rounded insets (0x23282e) each with 3 small pin cylinders
+    const insetGeom = new THREE.CylinderGeometry(0.12, 0.12, 0.025, 24);
+    insetGeom.rotateX(Math.PI / 2);
+    const insetMat = new THREE.MeshStandardMaterial({
+      color: 0x23282e,
+      roughness: 0.6,
+      metalness: 0.2,
+    });
 
-    for (let s = 0; s < socketCount; s++) {
-      const sy = -barHeight / 2 + 0.45 + s * spacing;
-      const sMesh = new THREE.Mesh(socketOuterGeom, socketOuterMat);
-      sMesh.position.set(0, sy, 0.20);
-      group.add(sMesh);
+    const pinGeom = new THREE.CylinderGeometry(0.015, 0.015, 0.035, 12);
+    pinGeom.rotateX(Math.PI / 2);
+    const pinMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      roughness: 0.4,
+      metalness: 0.7,
+    });
 
-      const pinL = new THREE.Mesh(pinHoleGeom, pinHoleMat);
-      pinL.position.set(-0.035, sy, 0.215);
-      group.add(pinL);
+    const socketAvailableH = barHeight - 0.9;
+    const spacing = socketAvailableH / Math.max(1, nSockets - 1);
+    const startY = -barHeight / 2 + 0.45;
 
-      const pinR = new THREE.Mesh(pinHoleGeom, pinHoleMat);
-      pinR.position.set(0.035, sy, 0.215);
-      group.add(pinR);
+    for (let s = 0; s < nSockets; s++) {
+      const sy = startY + s * spacing;
+      const insetMesh = new THREE.Mesh(insetGeom, insetMat);
+      insetMesh.position.set(0, sy, 0.195);
+      group.add(insetMesh);
 
-      const pinG = new THREE.Mesh(pinHoleGeom, pinHoleMat);
-      pinG.position.set(0, sy + 0.035, 0.215);
-      group.add(pinG);
+      // 3 small pin cylinders
+      const pin1 = new THREE.Mesh(pinGeom, pinMat);
+      pin1.position.set(-0.04, sy, 0.205);
+      group.add(pin1);
+
+      const pin2 = new THREE.Mesh(pinGeom, pinMat);
+      pin2.position.set(0.04, sy, 0.205);
+      group.add(pin2);
+
+      const pin3 = new THREE.Mesh(pinGeom, pinMat);
+      pin3.position.set(0, sy + 0.04, 0.205);
+      group.add(pin3);
     }
 
-    // Top illuminated red master power switch
+    // A small red power switch at the top end
     const swHousingGeom = new THREE.BoxGeometry(0.18, 0.22, 0.04);
-    const swHousing = new THREE.Mesh(swHousingGeom, socketOuterMat);
-    swHousing.position.set(0, barHeight / 2 - 0.22, 0.20);
+    const swHousing = new THREE.Mesh(swHousingGeom, insetMat);
+    swHousing.position.set(0, barHeight / 2 - 0.22, 0.195);
     group.add(swHousing);
 
     const swRockerGeom = new THREE.BoxGeometry(0.10, 0.14, 0.03);
@@ -894,25 +1040,34 @@ export function buildVerticalAccessoryMesh(
       color: 0xef4444,
       emissive: 0xdc2626,
       emissiveIntensity: 0.8,
-      roughness: 0.2
+      roughness: 0.2,
     });
     const swRocker = new THREE.Mesh(swRockerGeom, swRockerMat);
-    swRocker.position.set(0, barHeight / 2 - 0.22, 0.22);
+    swRocker.position.set(0, barHeight / 2 - 0.22, 0.215);
     group.add(swRocker);
 
     // Green surge LED
     const ledGeom = new THREE.SphereGeometry(0.025, 8, 8);
     const ledMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: 0.9 });
     const ledMesh = new THREE.Mesh(ledGeom, ledMat);
-    ledMesh.position.set(0, barHeight / 2 - 0.38, 0.20);
+    ledMesh.position.set(0, barHeight / 2 - 0.38, 0.195);
     group.add(ledMesh);
 
-    // Bottom molded black power supply cable
-    const cableGeom = new THREE.CylinderGeometry(0.06, 0.06, 0.40, 12);
-    const cableMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.8 });
-    const cable = new THREE.Mesh(cableGeom, cableMat);
-    cable.position.set(0, -barHeight / 2 - 0.20, 0);
-    group.add(cable);
+    // A black power cable (TubeGeometry on a short curve) leaving the bottom end
+    const cableCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, -barHeight / 2, 0),
+      new THREE.Vector3(0, -barHeight / 2 - 0.15, -0.05),
+      new THREE.Vector3(0.06, -barHeight / 2 - 0.32, -0.14),
+      new THREE.Vector3(0.09, -barHeight / 2 - 0.48, -0.22),
+    ]);
+    const cableGeom = new THREE.TubeGeometry(cableCurve, 20, 0.05, 12, false);
+    const cableMat = new THREE.MeshStandardMaterial({
+      color: 0x111827,
+      roughness: 0.8,
+      metalness: 0.1,
+    });
+    const cableMesh = new THREE.Mesh(cableGeom, cableMat);
+    group.add(cableMesh);
   } else {
     // Vertical Cable Management Finger Duct
     const ductGeom = new THREE.BoxGeometry(0.40, barHeight, 0.30);

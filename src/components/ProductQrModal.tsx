@@ -3,10 +3,10 @@ import QRCode from "qrcode";
 import { X, QrCode, Download, Copy, Check, Share2, ExternalLink, Smartphone } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-interface ProductQrModalProps {
+export interface ProductQrModalProps {
   isOpen: boolean;
   onClose: () => void;
-  product: {
+  product?: {
     id?: string;
     sku?: string;
     name?: string;
@@ -15,28 +15,45 @@ interface ProductQrModalProps {
     subcategory?: string;
     images?: string[];
   } | null;
+  url?: string;
+  title?: string;
+  subtitle?: string;
+  imageUrl?: string;
 }
+
+export type ShareModalProps = ProductQrModalProps;
 
 export const ProductQrModal: React.FC<ProductQrModalProps> = ({
   isOpen,
   onClose,
   product,
+  url,
+  title,
+  subtitle,
+  imageUrl,
 }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [copied, setCopied] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(true);
 
-  const productUrl = typeof window !== "undefined" && product
+  const defaultProductUrl = typeof window !== "undefined" && product
     ? `${window.location.origin}/?product=${encodeURIComponent(String(product.sku || product.id || ""))}`
-    : "";
+    : typeof window !== "undefined" ? window.location.href : "";
+
+  const targetUrl = url || defaultProductUrl;
+  const resolvedTitle = title || product?.name || "מוצר בקטלוג";
+  const resolvedSubtitle = subtitle || "סרקו במכשיר נייד כדי לפתוח או לשתף";
+  const resolvedImage = imageUrl || (product?.images && product.images.length > 0 ? product.images[0] : null);
+  const resolvedSku = product?.sku;
+  const resolvedBrand = product?.brand;
 
   useEffect(() => {
-    if (!isOpen || !productUrl) return;
+    if (!isOpen || !targetUrl) return;
 
     let isMounted = true;
     setIsGenerating(true);
 
-    QRCode.toDataURL(productUrl, {
+    QRCode.toDataURL(targetUrl, {
       width: 480,
       margin: 2,
       errorCorrectionLevel: "M",
@@ -45,9 +62,9 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
         light: "#ffffff",
       },
     })
-      .then((url) => {
+      .then((qrUrl) => {
         if (isMounted) {
-          setQrDataUrl(url);
+          setQrDataUrl(qrUrl);
           setIsGenerating(false);
         }
       })
@@ -59,7 +76,7 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, productUrl]);
+  }, [isOpen, targetUrl]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -72,17 +89,17 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen || !product) return null;
+  if (!isOpen || (!product && !url && !title)) return null;
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(productUrl);
+      await navigator.clipboard.writeText(targetUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Fallback
       const input = document.createElement("input");
-      input.value = productUrl;
+      input.value = targetUrl;
       document.body.appendChild(input);
       input.select();
       document.execCommand("copy");
@@ -96,7 +113,8 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
     if (!qrDataUrl) return;
     const a = document.createElement("a");
     a.href = qrDataUrl;
-    const safeSku = (product.sku || product.id || "product").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const rawName = resolvedSku || product?.id || title || "share";
+    const safeSku = rawName.replace(/[^a-zA-Z0-9_\u0590-\u05FF-]/g, "_");
     a.download = `rbs-qr-${safeSku}.png`;
     document.body.appendChild(a);
     a.click();
@@ -106,10 +124,13 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
   const handleNativeShare = async () => {
     if (navigator.share) {
       try {
+        const textBody = resolvedSku
+          ? `צפו במוצר ${resolvedTitle} (מק״ט: ${resolvedSku}) בקטלוג RBS Telecom:`
+          : `צפו ב-${resolvedTitle} בקטלוג RBS Telecom:`;
         await navigator.share({
-          title: product.name || "מוצר בקטלוג RBS Telecom",
-          text: `צפו במוצר ${product.name} (מק״ט: ${product.sku || ""}) בקטלוג RBS Telecom:`,
-          url: productUrl,
+          title: resolvedTitle,
+          text: textBody,
+          url: targetUrl,
         });
       } catch {
         // User cancelled or share failed
@@ -119,7 +140,9 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
     }
   };
 
-  const mainThumb = product.images && product.images.length > 0 ? product.images[0] : null;
+  const waText = resolvedSku
+    ? `${resolvedTitle}\nמק״ט: ${resolvedSku}\n${targetUrl}`
+    : `${resolvedTitle}\n${targetUrl}`;
 
   return (
     <AnimatePresence>
@@ -159,7 +182,7 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
                   קוד QR לסריקה מהירה
                 </h3>
                 <p className="text-xs text-blue-100 mt-0.5">
-                  סרקו במכשיר נייד כדי לפתוח או לשתף
+                  {resolvedSubtitle}
                 </p>
               </div>
             </div>
@@ -175,34 +198,36 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
 
           {/* Modal Body */}
           <div className="p-4 sm:p-6 flex flex-col items-center">
-            {/* Product Snapshot */}
-            <div className="w-full bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex items-center gap-3 mb-4 text-right">
-              {mainThumb && (
-                <img
-                  referrerPolicy="no-referrer"
-                  src={mainThumb}
-                  alt={product.name || "מוצר"}
-                  className="w-12 h-12 object-contain rounded-lg bg-white border border-gray-100 p-1 flex-shrink-0"
-                />
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold text-[#0c2d57] truncate">
-                  {product.name}
-                </div>
-                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  {product.sku && (
-                    <span className="text-[11px] font-mono font-semibold text-gray-600 bg-gray-200/70 px-1.5 py-0.5 rounded">
-                      מק״ט: {product.sku}
-                    </span>
-                  )}
-                  {product.brand && (
-                    <span className="text-[11px] font-bold text-[#004387]">
-                      {product.brand}
-                    </span>
-                  )}
+            {/* Target Snapshot */}
+            {(resolvedTitle || resolvedImage || resolvedSku || resolvedBrand) && (
+              <div className="w-full bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex items-center gap-3 mb-4 text-right">
+                {resolvedImage && (
+                  <img
+                    referrerPolicy="no-referrer"
+                    src={resolvedImage}
+                    alt={resolvedTitle}
+                    className="w-12 h-12 object-contain rounded-lg bg-white border border-gray-100 p-1 flex-shrink-0"
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold text-[#0c2d57] truncate">
+                    {resolvedTitle}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    {resolvedSku && (
+                      <span className="text-[11px] font-mono font-semibold text-gray-600 bg-gray-200/70 px-1.5 py-0.5 rounded">
+                        מק״ט: {resolvedSku}
+                      </span>
+                    )}
+                    {resolvedBrand && (
+                      <span className="text-[11px] font-bold text-[#004387]">
+                        {resolvedBrand}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* QR Code Presentation Box */}
             <div className="relative p-3 bg-white rounded-2xl border-2 border-dashed border-blue-200 shadow-inner flex flex-col items-center justify-center">
@@ -221,7 +246,7 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
                 <div className="relative group">
                   <img
                     src={qrDataUrl}
-                    alt={`קוד QR עבור ${product.name}`}
+                    alt={`קוד QR עבור ${resolvedTitle}`}
                     className="w-52 h-52 sm:w-60 sm:h-60 object-contain rounded-lg"
                   />
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -246,7 +271,7 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
             {/* URL Display */}
             <div className="w-full mt-3 flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs font-mono text-gray-600 truncate">
               <span className="truncate flex-1 text-left select-all" dir="ltr">
-                {productUrl}
+                {targetUrl}
               </span>
               <button
                 type="button"
@@ -297,9 +322,7 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
                 </button>
               )}
               <a
-                href={`https://wa.me/?text=${encodeURIComponent(
-                  `${product.name}\nמק״ט: ${product.sku || ""}\n${productUrl}`
-                )}`}
+                href={`https://wa.me/?text=${encodeURIComponent(waText)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 py-2 px-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
@@ -314,3 +337,6 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
     </AnimatePresence>
   );
 };
+
+export const ShareModal = ProductQrModal;
+export default ProductQrModal;

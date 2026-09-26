@@ -688,7 +688,7 @@ export const isConfiguratorExcludedCabinet = (pp: any): boolean => {
 
 export const isCabinetProduct = (pp: any): boolean => {
   if (!pp) return false;
-  if (isConfiguratorExcludedCabinet(pp)) return false;
+  if (isConfiguratorExcludedCabinet(pp)) return true;
   const name = String(pp?.name || pp?.['שם פריט'] || '').trim();
   const desc = String(pp?.description || pp?.['תיאור'] || '').trim();
   const sub = String(pp?.subcategory || pp?.['תת קטגוריה'] || pp?.['קטגוריה'] || '').trim();
@@ -738,3 +738,66 @@ export const isCabinetProduct = (pp: any): boolean => {
 
   return false;
 };
+
+export const isConfigurableCabinet = (pp: any): boolean => isCabinetProduct(pp) && !isConfiguratorExcludedCabinet(pp);
+
+export function parseSwitchPorts(
+  p: any
+): { poe: number; access: number; uplinkRj45: number; sfp: number; sfpPlus: number } | null {
+  if (!p) return null;
+  let rawVal = p.ports ?? p['ports'] ?? p?.accessoryRef?.ports ?? p?.accessoryRef?.['ports'];
+  if (rawVal === undefined || rawVal === null || String(rawVal).trim() === '') {
+    // If not found in ports column, check SKU or name for model port patterns like 16P2T2F or 16P+2T+2F or 8P-2T
+    const skuStr = String(p.sku || p.pn || p?.accessoryRef?.sku || p?.accessoryRef?.pn || '');
+    const nameStr = String(p.name || p?.accessoryRef?.name || '');
+    const combined = `${skuStr} ${nameStr}`;
+    const patternMatch = combined.match(/\b(?:\d+\s*[PATFXpatfx]\s*[-+]?\s*)+\b/);
+    if (patternMatch) {
+      rawVal = patternMatch[0];
+    } else {
+      return null;
+    }
+  }
+
+  const raw = String(rawVal).trim();
+  if (!raw) return null;
+
+  const result = {
+    poe: 0,
+    access: 0,
+    uplinkRj45: 0,
+    sfp: 0,
+    sfpPlus: 0,
+  };
+
+  let hasMatch = false;
+  // Match all individual port tokens like 16P, 2T, 2F, 8A, 4X etc.
+  const tokenMatches = raw.match(/\d+\s*[a-zA-Z]/g) || raw.split(/[-+]/);
+  for (const token of tokenMatches) {
+    const trimmed = String(token).trim();
+    if (!trimmed) continue;
+    const match = trimmed.match(/^(\d+)\s*([a-zA-Z])$/);
+    if (match) {
+      const count = parseInt(match[1], 10);
+      const letter = match[2].toUpperCase();
+      if (letter === 'P') {
+        result.poe += count;
+        hasMatch = true;
+      } else if (letter === 'A') {
+        result.access += count;
+        hasMatch = true;
+      } else if (letter === 'T') {
+        result.uplinkRj45 += count;
+        hasMatch = true;
+      } else if (letter === 'F') {
+        result.sfp += count;
+        hasMatch = true;
+      } else if (letter === 'X') {
+        result.sfpPlus += count;
+        hasMatch = true;
+      }
+    }
+  }
+
+  return hasMatch ? result : null;
+}
