@@ -1414,10 +1414,6 @@ const ProductCard = React.memo(
             className={`max-w-[85%] max-h-[85%] w-auto h-auto object-contain mix-blend-multiply drop-shadow-sm transition-transform duration-300 group-hover:scale-105 ${product.isComingSoon ? "opacity-70" : ""}`}
           />
 
-          {/* Visual disclaimer overlay - Positioned at bottom-right */}
-          <div className="absolute bottom-2 right-2 z-10 bg-white/90 border border-gray-200/80 rounded px-1.5 py-0.5 text-[10px] text-gray-600 font-semibold shadow-2xs select-none pointer-events-none">
-            תמונות להמחשה בלבד
-          </div>
           {/* BrandBadge stays peaceful and elegant on the top right */}
           <div className="absolute top-2 right-2 z-10 transition-all duration-200">
             <BrandBadge brand={product.brand} />
@@ -1518,6 +1514,7 @@ const ProductCard = React.memo(
         </div>
 
         <div className="p-3 sm:p-4 flex flex-col flex-grow text-center relative">
+          <p className="text-[11px] text-slate-400 text-center leading-none mb-1">תמונות להמחשה בלבד</p>
           <div className="mb-2.5 flex flex-row items-center justify-center w-full">
             <MakatBadge sku={product.sku} className="whitespace-nowrap text-[12px] tracking-tight" />
           </div>
