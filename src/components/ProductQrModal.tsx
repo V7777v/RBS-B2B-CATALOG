@@ -205,7 +205,10 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
                   <img
                     referrerPolicy="no-referrer"
                     src={resolvedImage}
-                    alt={resolvedTitle}
+                    alt=""
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = "none";
+                    }}
                     className="w-12 h-12 object-contain rounded-lg bg-white border border-gray-100 p-1 flex-shrink-0"
                   />
                 )}

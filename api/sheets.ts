@@ -66,7 +66,8 @@ function isAllowedForGuest(colName: string): boolean {
     "נפח", "נפח בארון", "התאמה לארון", "tags",
     "compatibility", "תאימות",
     "onvif", "hik connect", "hik-connect", "hikconnect", "hik_connect",
-    "nvr", "תמיכה ב nvr", "תמיכה ב-nvr", "תמיכה בnvr", "nvr hikvision", "חיבור ל nvr", "חיבור ל-nvr"
+    "nvr", "תמיכה ב nvr", "תמיכה ב-nvr", "תמיכה בnvr", "nvr hikvision", "חיבור ל nvr", "חיבור ל-nvr",
+    "ports"
   ];
   if (exactAllowed.includes(clean)) return true;
 

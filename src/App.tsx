@@ -7152,17 +7152,7 @@ export default function App() {
   const deepLinkDoneRef = useRef(false);
   const handleOpenShare = useCallback(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    if (currentView === "home") {
-      setShareModalState({
-        isOpen: true,
-        url: `${origin}/`,
-        title: "קטלוג RBS Telecom",
-        product: null,
-      });
-      return;
-    }
-
-    if (currentView === "product" && selectedProduct) {
+    if (selectedProduct) {
       const key = selectedProduct.sku || selectedProduct.id || "";
       setShareModalState({
         isOpen: true,
@@ -7174,35 +7164,38 @@ export default function App() {
       return;
     }
 
-    const p = new URLSearchParams();
-    if (selectedCatalog) p.set("cat", String(selectedCatalog));
-    if (selectedSubcategory) p.set("sub", String(selectedSubcategory));
-    if (selectedNestedSubcategory)
-      p.set("nested", String(selectedNestedSubcategory));
-    if (selectedNicheCategory) p.set("niche", String(selectedNicheCategory));
-    const queryString = p.toString();
-    const url = queryString ? `${origin}/?${queryString}` : `${origin}/`;
-    const title =
-      selectedNicheCategory ||
-      selectedNestedSubcategory ||
-      selectedSubcategory ||
-      selectedCatalog ||
-      "קטלוג RBS Telecom";
+    if (selectedSubcategory) {
+      const p = new URLSearchParams();
+      if (selectedCatalog) p.set("cat", String(selectedCatalog));
+      p.set("sub", String(selectedSubcategory));
+      setShareModalState({
+        isOpen: true,
+        url: `${origin}/?${p.toString()}`,
+        title: selectedSubcategory,
+        product: null,
+      });
+      return;
+    }
+
+    if (selectedCatalog) {
+      const p = new URLSearchParams();
+      p.set("cat", String(selectedCatalog));
+      setShareModalState({
+        isOpen: true,
+        url: `${origin}/?${p.toString()}`,
+        title: selectedCatalog,
+        product: null,
+      });
+      return;
+    }
 
     setShareModalState({
       isOpen: true,
-      url,
-      title,
+      url: `${origin}/`,
+      title: "קטלוג RBS Telecom",
       product: null,
     });
-  }, [
-    currentView,
-    selectedProduct,
-    selectedCatalog,
-    selectedSubcategory,
-    selectedNestedSubcategory,
-    selectedNicheCategory,
-  ]);
+  }, [selectedProduct, selectedSubcategory, selectedCatalog]);
 
   const openShareForProduct = useCallback((prod: any) => {
     if (!prod) return;
@@ -8434,7 +8427,7 @@ export default function App() {
                     // HOME - CATALOGS VIEW
                     <div>
                       <div className="mb-6 sm:mb-8 bg-[#004387] p-6 sm:p-8 text-white relative overflow-hidden flex flex-col items-center justify-center text-center">
-                        <div className="relative z-10 w-full">
+                        <div className="relative z-10 w-full flex flex-col items-center justify-center text-center gap-3">
                           {/* Changed to h2 with explicit !text-white to avoid WP theme overriding color */}
                           {isGuest ? (
                             <h2
@@ -8460,6 +8453,27 @@ export default function App() {
                               </p>
                             </>
                           )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const origin =
+                                typeof window !== "undefined"
+                                  ? window.location.origin
+                                  : "";
+                              setShareModalState({
+                                isOpen: true,
+                                url: `${origin}/`,
+                                title: "קטלוג RBS Telecom",
+                                product: null,
+                              });
+                            }}
+                            className="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-white/10 border border-white/60 rounded-full px-4 min-h-10 hover:bg-white/20 transition-colors cursor-pointer"
+                          >
+                            <Share2 size={16} />
+                            <span>שתפו את הקטלוג</span>
+                            <QrCode size={16} />
+                          </button>
                         </div>
                         <Package
                           size={120}
