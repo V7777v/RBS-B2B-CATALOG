@@ -2,7 +2,7 @@ import React, { useState, useEffect, ReactNode, Component, ErrorInfo } from 'rea
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Download, 
-  Share2, 
+  Share, 
   PlusSquare, 
   X, 
   Smartphone, 
@@ -292,7 +292,7 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
                     1
                   </span>
                   <span>לחץ על כפתור השיתוף בתחתית הדפדפן</span>
-                  <Share2 size={15} className="text-[#004387] mr-auto flex-shrink-0" />
+                  <Share size={15} className="text-[#004387] mr-auto flex-shrink-0" />
                 </div>
                 <div className="flex items-center gap-2 bg-white/80 p-2 rounded-lg border border-blue-50 shadow-2xs">
                   <span className="w-5 h-5 rounded-full bg-[#004387] text-white flex items-center justify-center font-bold text-[11px] flex-shrink-0">

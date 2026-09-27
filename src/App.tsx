@@ -1418,9 +1418,11 @@ const ProductCard = React.memo(
           <div className="absolute top-2 right-2 z-10 transition-all duration-200">
             <BrandBadge brand={product.brand} />
           </div>
+        </div>
 
-          {/* Bottom-left actions flex row: Checkbox, Favorite, Compare, Share */}
-          <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1.5" dir="ltr">
+        <div dir="rtl" className="flex items-center justify-between gap-2 px-2 py-1">
+          <span className="text-[11px] text-slate-400">תמונות להמחשה בלבד</span>
+          <div className="flex items-center gap-1.5">
             {onBulkSelectionChange && !isGuest && !product.isComingSoon && (
               <div
                 className="flex items-center justify-center p-0.5 cursor-pointer"
@@ -1428,7 +1430,7 @@ const ProductCard = React.memo(
                 title={isSelectedForBulk ? "הסר מהוספה מרובה" : "סמן להוספה מרובה"}
               >
                 <div
-                  className={`w-10 h-10 sm:w-[28px] sm:h-[28px] rounded-md border-[2.5px] flex items-center justify-center transition-all duration-200 transform active:scale-95 ${
+                  className={`w-9 h-9 sm:w-[28px] sm:h-[28px] rounded-md border-[2.5px] flex items-center justify-center transition-all duration-200 transform active:scale-95 ${
                     isSelectedForBulk
                       ? "bg-gradient-to-b from-[#005fb8] via-[#004387] to-[#002f5e] border-[#001c3c] shadow-[0_3px_6px_rgba(0,67,135,0.35),_inset_0_1.5px_1px_rgba(255,255,255,0.6),_inset_0_-2.5px_0_rgba(0,0,0,0.3)]"
                       : "bg-gradient-to-b from-white via-slate-50 to-slate-100 border-slate-800 hover:border-[#004387] shadow-[0_3px_6px_rgba(0,0,0,0.2),_inset_0_-2px_0_rgba(0,0,0,0.15),_inset_0_1.5px_1px_rgba(255,255,255,0.95)]"
@@ -1454,7 +1456,7 @@ const ProductCard = React.memo(
                 toggleFavorite(product);
               }}
               aria-label="מועדפים"
-              className="w-10 h-10 sm:w-8 sm:h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform shrink-0"
+              className="w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform shrink-0"
             >
               <Heart
                 size={16}
@@ -1473,10 +1475,10 @@ const ProductCard = React.memo(
               }}
               aria-label="השוואה"
               title="הוסף להשוואה"
-              className={`h-10 sm:h-8 rounded-full border shadow-sm flex items-center justify-center transition-all duration-300 group/compare shrink-0 ${
+              className={`h-9 sm:h-8 rounded-full border shadow-sm flex items-center justify-center transition-all duration-300 group/compare shrink-0 ${
                 compareIds.has(product.id)
                   ? "bg-[#004387] border-[#004387] text-white px-2.5 w-auto gap-1"
-                  : "bg-white/95 border-gray-200 text-gray-500 hover:text-[#004387] hover:border-[#004387] w-10 sm:w-8 hover:w-[86px] hover:px-2 gap-0 hover:gap-1"
+                  : "bg-white/95 border-gray-200 text-gray-500 hover:text-[#004387] hover:border-[#004387] w-9 sm:w-8 hover:w-[86px] hover:px-2 gap-0 hover:gap-1"
               }`}
             >
               <Scale
@@ -1506,7 +1508,7 @@ const ProductCard = React.memo(
                 e.preventDefault();
                 openShareForProduct(product);
               }}
-              className="w-10 h-10 sm:w-8 sm:h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform shrink-0 text-gray-600 hover:text-[#004387]"
+              className="w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform shrink-0 text-gray-600 hover:text-[#004387]"
             >
               <QrCode size={16} />
             </button>
@@ -1514,7 +1516,6 @@ const ProductCard = React.memo(
         </div>
 
         <div className="p-3 sm:p-4 flex flex-col flex-grow text-center relative">
-          <p className="text-[11px] text-slate-400 text-center leading-none mb-1">תמונות להמחשה בלבד</p>
           <div className="mb-2.5 flex flex-row items-center justify-center w-full">
             <MakatBadge sku={product.sku} className="whitespace-nowrap text-[12px] tracking-tight" />
           </div>
@@ -2012,19 +2013,6 @@ const ProductDetailsView = (props: any) => {
                   </button>
                 </>
               )}
-              {/* Quick QR code button on product image */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowQrModal(true);
-                }}
-                className="absolute top-3 right-3 bg-white/90 hover:bg-white text-gray-700 hover:text-[#004387] border border-gray-200 rounded-full p-2 shadow-sm active:scale-95 z-20 flex items-center justify-center cursor-pointer transition-all"
-                title="הצג קוד QR לסריקה מהירה בנייד"
-                aria-label="קוד QR"
-              >
-                <QrCode size={18} />
-              </button>
               {/* Zoom icon for mobile */}
               {isMobileDevice && (
                 <button
