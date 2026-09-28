@@ -7136,6 +7136,9 @@ export default function App() {
   }, [searchQuery]);
   // --- DEEP LINKS: build a shareable query string from the current view state ---
   const buildQueryFromState = (s: any): string => {
+    if (!deepLinkDoneRef.current) {
+      return window.location.pathname + window.location.search;
+    }
     const p = new URLSearchParams();
     if (s.currentView === "product" && s.selectedProduct) {
       const key = s.selectedProduct.sku || s.selectedProduct.id || "";
@@ -7623,6 +7626,7 @@ export default function App() {
       deepLinkDoneRef.current = true;
       return;
     }
+
     if (productKey) {
       const needle = productKey.toLowerCase();
       const found = catalogData.find(
@@ -7631,13 +7635,22 @@ export default function App() {
           String(p.id || "").toLowerCase() === needle,
       );
       if (found) {
+        deepLinkDoneRef.current = true;
         setCurrentOptionals([]);
         navigateForward({ currentView: "product", selectedProduct: found });
+      } else if (hasMoreProducts) {
+        // Still loading more products, wait and retry on next batch
+        return;
+      } else {
+        // Loading finished and product not found
         deepLinkDoneRef.current = true;
-      } else if (!hasMoreProducts) {
         setDeepLinkError("המוצר לא נמצא");
-        deepLinkDoneRef.current = true;
       }
+      return;
+    }
+
+    // 1. Do not resolve c / s until catalogFolders has loaded (catalogFolders.length > 0)
+    if (!catalogFolders || catalogFolders.length === 0) {
       return;
     }
 
@@ -7694,19 +7707,24 @@ export default function App() {
           matchedCat = subOnlyCodeMatch.cat;
           matchedSub = subOnlyCodeMatch.sub;
         } else {
-          // 3. Backwards compatibility: raw sub name match (?sub= or ?s= with full name)
-          const rawMatch = pairs.find(
-            (pair) =>
-              pair.sub === subParam ||
-              pair.sub.toLowerCase() === subParam.toLowerCase(),
-          );
+          // 3. Backwards compatibility: exact raw sub name match (only if equals an existing subcategory name)
+          const rawMatch = pairs.find((pair) => pair.sub === subParam);
           if (rawMatch) {
             matchedCat = rawMatch.cat;
             matchedSub = rawMatch.sub;
-          } else {
-            matchedSub = subParam;
           }
         }
+      }
+
+      if (!matchedSub) {
+        // 2. If sub code is not found and more products are still loading, return without setting deepLinkDoneRef
+        if (hasMoreProducts) {
+          return;
+        }
+        // 4. If loading is finished and nothing matched: stay on home page with not found message
+        deepLinkDoneRef.current = true;
+        setDeepLinkError("תת-הקטגוריה לא נמצאה");
+        return;
       }
     }
 
@@ -7718,18 +7736,27 @@ export default function App() {
       if (codeMatch) {
         matchedCat = codeMatch;
       } else {
-        // 2. Backwards compatibility: raw cat name match
-        const rawMatch = allCatNames.find(
-          (name) =>
-            name === catParam ||
-            name.toLowerCase() === catParam.toLowerCase(),
-        );
-        matchedCat = rawMatch || catParam;
+        // 2. Backwards compatibility: exact raw cat name match (only if equals an existing catalog name)
+        const rawMatch = allCatNames.find((name) => name === catParam);
+        if (rawMatch) {
+          matchedCat = rawMatch;
+        }
+      }
+
+      if (!matchedCat) {
+        // 2. If c code is not found and more products are still loading, return without setting deepLinkDoneRef
+        if (hasMoreProducts) {
+          return;
+        }
+        // 4. If loading is finished and nothing matched: stay on home page with not found message
+        deepLinkDoneRef.current = true;
+        setDeepLinkError("הקטגוריה לא נמצאה");
+        return;
       }
     }
 
-    let cat: string | null = matchedCat || catParam || null;
-    let sub: string | null = matchedSub || subParam || null;
+    let cat: string | null = matchedCat;
+    let sub: string | null = matchedSub;
     let nested: string | null = nestedParam || null;
     let niche: string | null = nicheParam || null;
 
