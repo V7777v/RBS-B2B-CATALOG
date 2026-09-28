@@ -280,7 +280,7 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
           </div>
 
           {/* iOS Specific Step-by-Step Instructions */}
-          {platform === 'ios' && showIOSGuide && (
+          {platform === 'ios' && (
             <div className="mt-3 p-3 bg-gradient-to-br from-blue-50/80 to-indigo-50/50 rounded-xl border border-blue-100 text-xs text-gray-700 space-y-2">
               <p className="font-bold text-[#004387] flex items-center gap-1.5 text-xs sm:text-sm">
                 <Smartphone size={15} />
@@ -312,9 +312,16 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
           )}
 
           {/* Desktop manual tip when native prompt isn't fired */}
-          {platform === 'desktop' && !deferredPrompt && showIOSGuide && (
-            <div className="mt-3 p-2.5 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-700">
-              ניתן ללחוץ על סמל ההתקנה בשורת הכתובת של הדפדפן (סמל מסך או חץ למטה) או לפתוח את תפריט הדפדפן ולבחור <strong>"התקן אפליקציה"</strong>.
+          {(platform === 'desktop' || platform === 'unknown') && !deferredPrompt && (
+            <div className="mt-3 p-3 bg-blue-50/70 rounded-xl border border-blue-100 text-xs sm:text-sm font-medium text-[#0c2d57] leading-relaxed">
+              לחצו על סמל ההתקנה ⊕ בשורת הכתובת, או בתפריט ⋮ ← "התקנת קטלוג RBS"
+            </div>
+          )}
+
+          {/* Android manual tip when native prompt isn't fired */}
+          {platform === 'android' && !deferredPrompt && (
+            <div className="mt-3 p-3 bg-blue-50/70 rounded-xl border border-blue-100 text-xs sm:text-sm font-medium text-[#0c2d57] leading-relaxed">
+              בתפריט הדפדפן ⋮ בחרו "הוספה למסך הבית" או "התקנת אפליקציה"
             </div>
           )}
 
@@ -328,16 +335,6 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
               >
                 <Download size={17} className="stroke-[2.5]" />
                 <span>{isInstalling ? 'מתקין...' : 'התקן עכשיו'}</span>
-              </button>
-            )}
-
-            {platform === 'ios' && !showIOSGuide && (
-              <button
-                onClick={() => setShowIOSGuide(true)}
-                className="flex-1 flex items-center justify-center gap-2 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold text-sm py-2.5 px-4 rounded-xl shadow-md active:scale-98 transition-all cursor-pointer"
-              >
-                <Smartphone size={17} />
-                <span>איך מתקינים באייפון?</span>
               </button>
             )}
 

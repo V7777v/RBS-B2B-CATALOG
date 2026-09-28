@@ -13,6 +13,7 @@ export default defineConfig(() => {
       react(), 
       tailwindcss(),
       VitePWA({
+        useCredentials: true,
         registerType: 'autoUpdate',
         injectRegister: 'auto',
         includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icons/*.png', 'og-image.png', 'advisor-avatar.png'],
