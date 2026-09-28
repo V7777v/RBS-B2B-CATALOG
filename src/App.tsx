@@ -5576,21 +5576,54 @@ export default function App() {
   const [isStandalone, setIsStandalone] = useState(() => {
     return (
       typeof window !== "undefined" &&
-      !!window.matchMedia &&
-      window.matchMedia("(display-mode: standalone)").matches
+      ((window.matchMedia &&
+        window.matchMedia("(display-mode: standalone)").matches) ||
+        (window.navigator as any).standalone === true ||
+        localStorage.getItem("rbs_pwa_installed") === "1")
     );
   });
 
   useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const media = window.matchMedia("(display-mode: standalone)");
-    const listener = (e: MediaQueryListEvent) => setIsStandalone(e.matches);
-    try {
-      media.addEventListener("change", listener);
-      return () => media.removeEventListener("change", listener);
-    } catch {
-      media.addListener(listener);
-      return () => media.removeListener(listener);
+    const updateInstalled = () => {
+      const standalone =
+        (typeof window !== "undefined" &&
+          window.matchMedia &&
+          window.matchMedia("(display-mode: standalone)").matches) ||
+        (typeof window !== "undefined" &&
+          (window.navigator as any).standalone === true) ||
+        (typeof localStorage !== "undefined" &&
+          localStorage.getItem("rbs_pwa_installed") === "1");
+      setIsStandalone(!!standalone);
+    };
+
+    updateInstalled();
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("appinstalled", updateInstalled);
+      window.addEventListener("storage", updateInstalled);
+
+      if (window.matchMedia) {
+        const media = window.matchMedia("(display-mode: standalone)");
+        const listener = () => updateInstalled();
+        try {
+          media.addEventListener("change", listener);
+        } catch {
+          media.addListener(listener);
+        }
+        return () => {
+          try {
+            media.removeEventListener("change", listener);
+          } catch {
+            media.removeListener(listener);
+          }
+          window.removeEventListener("appinstalled", updateInstalled);
+          window.removeEventListener("storage", updateInstalled);
+        };
+      }
+      return () => {
+        window.removeEventListener("appinstalled", updateInstalled);
+        window.removeEventListener("storage", updateInstalled);
+      };
     }
   }, []);
   const [shareModalState, setShareModalState] = useState<{

@@ -58,6 +58,7 @@ class BannerErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySta
 }
 
 const DISMISS_KEY = 'rbs_pwa_install_dismissed_v3';
+const INSTALLED_KEY = 'rbs_pwa_installed';
 const DISMISS_DAYS = 2;
 
 type Platform = 'ios' | 'android' | 'desktop' | 'unknown';
@@ -74,22 +75,26 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
   const [platform, setPlatform] = useState<Platform>('unknown');
   const [isStandalone, setIsStandalone] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
-  const [showIOSGuide, setShowIOSGuide] = useState(false);
+  const [pendingPromptMsg, setPendingPromptMsg] = useState(false);
 
   useEffect(() => {
     try {
-      // 1. Check if already running in standalone mode (already installed)
+      // 1. Check if already running in standalone mode or previously marked as installed
+      const isInstalled = localStorage.getItem(INSTALLED_KEY) === '1';
       const isStandaloneMode =
         window.matchMedia?.('(display-mode: standalone)').matches ||
         (window.navigator as any).standalone === true ||
-        document.referrer.startsWith('android-app://');
+        document.referrer.startsWith('android-app://') ||
+        isInstalled;
 
       setIsStandalone(!!isStandaloneMode);
       if (isStandaloneMode) return;
 
       // 2. Detect Client Platform
       const ua = window.navigator.userAgent || '';
-      const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+      const isIPadOS =
+        (navigator.platform === 'MacIntel' || navigator.userAgent.includes('Macintosh')) &&
+        navigator.maxTouchPoints > 1;
       const isIOS = (/iPhone|iPad|iPod/i.test(ua) && !(window as any).MSStream) || isIPadOS;
       const isAndroid = /Android/i.test(ua);
 
@@ -99,6 +104,8 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
       // 3. Listen for browser native install prompt
       const promptHandler = (e: BeforeInstallPromptEvent) => {
         setDeferredPrompt(e);
+        window.__deferredPrompt = e;
+        setPendingPromptMsg(false);
       };
 
       if (window.__deferredPrompt) {
@@ -113,6 +120,9 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
 
       // 4. Listen for successful app installation
       const installedHandler = () => {
+        try {
+          localStorage.setItem(INSTALLED_KEY, '1');
+        } catch (_) {}
         setIsVisible(false);
         setDeferredPrompt(null);
         if (window) {
@@ -122,12 +132,14 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
       };
       window.addEventListener('appinstalled', installedHandler);
 
-      // 5. Custom event allowing other buttons in the app to trigger this prompt anytime
+      // 5. Custom event allowing menu/buttons in the app to trigger this prompt anytime (ignoring dismiss period)
       const manualShowHandler = () => {
+        const currentlyInstalled = localStorage.getItem(INSTALLED_KEY) === '1';
+        const currentlyStandalone =
+          window.matchMedia?.('(display-mode: standalone)').matches ||
+          (window.navigator as any).standalone === true;
+        if (currentlyInstalled || currentlyStandalone) return;
         setIsVisible(true);
-        if (detectedPlatform === 'ios') {
-          setShowIOSGuide(true);
-        }
       };
       window.addEventListener('show-install-prompt', manualShowHandler);
 
@@ -152,6 +164,11 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
     }
 
     try {
+      if (localStorage.getItem(INSTALLED_KEY) === '1') {
+        setIsVisible(false);
+        setIsStandalone(true);
+        return;
+      }
       const dismissedAt = localStorage.getItem(DISMISS_KEY);
       if (dismissedAt) {
         const daysSince = (Date.now() - parseInt(dismissedAt, 10)) / 86400000;
@@ -164,41 +181,36 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
     // Show banner after brief delay so user context settles
     const timer = setTimeout(() => {
       setIsVisible(true);
-      if (platform === 'ios') {
-        setShowIOSGuide(true);
-      }
     }, 1800);
 
     return () => clearTimeout(timer);
-  }, [disabled, isStandalone, platform]);
+  }, [disabled, isStandalone]);
 
   const handleInstallClick = async () => {
-    if (platform === 'ios') {
-      setShowIOSGuide(true);
-      return;
-    }
-
-    if (!deferredPrompt) {
-      setShowIOSGuide(true);
-      return;
-    }
-
-    try {
-      setIsInstalling(true);
-      await deferredPrompt.prompt();
-      const choiceResult = await deferredPrompt.userChoice;
-      if (choiceResult.outcome === 'accepted') {
-        setIsVisible(false);
-      } else {
-        localStorage.setItem(DISMISS_KEY, String(Date.now()));
-        setIsVisible(false);
+    if (deferredPrompt) {
+      try {
+        setIsInstalling(true);
+        await deferredPrompt.prompt();
+        const choiceResult = await deferredPrompt.userChoice;
+        if (choiceResult.outcome === 'accepted') {
+          try {
+            localStorage.setItem(INSTALLED_KEY, '1');
+          } catch (_) {}
+          setIsVisible(false);
+        } else {
+          try {
+            localStorage.setItem(DISMISS_KEY, String(Date.now()));
+          } catch (_) {}
+          setIsVisible(false);
+        }
+        setDeferredPrompt(null);
+      } catch (err) {
+        console.warn('[InstallBanner] prompt error:', err);
+      } finally {
+        setIsInstalling(false);
       }
-      setDeferredPrompt(null);
-    } catch (err) {
-      console.warn('[InstallBanner] prompt error:', err);
-      setShowIOSGuide(true);
-    } finally {
-      setIsInstalling(false);
+    } else {
+      setPendingPromptMsg(true);
     }
   };
 
@@ -279,7 +291,7 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
             </span>
           </div>
 
-          {/* iOS Specific Step-by-Step Instructions */}
+          {/* iOS / iPadOS Specific Step-by-Step Instructions */}
           {platform === 'ios' && (
             <div className="mt-3 p-3 bg-gradient-to-br from-blue-50/80 to-indigo-50/50 rounded-xl border border-blue-100 text-xs text-gray-700 space-y-2">
               <p className="font-bold text-[#004387] flex items-center gap-1.5 text-xs sm:text-sm">
@@ -291,43 +303,36 @@ function InstallBannerInner({ disabled = false }: InstallBannerProps) {
                   <span className="w-5 h-5 rounded-full bg-[#004387] text-white flex items-center justify-center font-bold text-[11px] flex-shrink-0">
                     1
                   </span>
-                  <span>לחץ על כפתור השיתוף בתחתית הדפדפן</span>
+                  <span>לחצו על כפתור השיתוף</span>
                   <Share size={15} className="text-[#004387] mr-auto flex-shrink-0" />
                 </div>
                 <div className="flex items-center gap-2 bg-white/80 p-2 rounded-lg border border-blue-50 shadow-2xs">
                   <span className="w-5 h-5 rounded-full bg-[#004387] text-white flex items-center justify-center font-bold text-[11px] flex-shrink-0">
                     2
                   </span>
-                  <span>גלול ובחר באפשרות <strong>״הוסף למסך הבית״</strong></span>
+                  <span>בחרו ״הוספה למסך הבית״</span>
                   <PlusSquare size={15} className="text-[#004387] mr-auto flex-shrink-0" />
                 </div>
                 <div className="flex items-center gap-2 bg-white/80 p-2 rounded-lg border border-blue-50 shadow-2xs">
                   <span className="w-5 h-5 rounded-full bg-[#004387] text-white flex items-center justify-center font-bold text-[11px] flex-shrink-0">
                     3
                   </span>
-                  <span>אשר בלחיצה על <strong>״הוסף״</strong> בצד שמאל למעלה</span>
+                  <span>לחצו ״הוסף״</span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Desktop manual tip when native prompt isn't fired */}
-          {(platform === 'desktop' || platform === 'unknown') && !deferredPrompt && (
-            <div className="mt-3 p-3 bg-blue-50/70 rounded-xl border border-blue-100 text-xs sm:text-sm font-medium text-[#0c2d57] leading-relaxed">
-              לחצו על סמל ההתקנה ⊕ בשורת הכתובת, או בתפריט ⋮ ← "התקנת קטלוג RBS"
-            </div>
-          )}
-
-          {/* Android manual tip when native prompt isn't fired */}
-          {platform === 'android' && !deferredPrompt && (
-            <div className="mt-3 p-3 bg-blue-50/70 rounded-xl border border-blue-100 text-xs sm:text-sm font-medium text-[#0c2d57] leading-relaxed">
-              בתפריט הדפדפן ⋮ בחרו "הוספה למסך הבית" או "התקנת אפליקציה"
+          {/* Pending message for android/desktop when deferredPrompt is not ready yet */}
+          {pendingPromptMsg && !deferredPrompt && platform !== 'ios' && (
+            <div className="mt-3 p-2.5 bg-blue-50 rounded-xl border border-blue-100 text-xs sm:text-sm font-medium text-[#0c2d57] leading-relaxed">
+              ההתקנה תהיה זמינה בעוד רגע — נסו שוב בעוד כמה שניות
             </div>
           )}
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 mt-4 pt-1">
-            {platform !== 'ios' && deferredPrompt && (
+            {platform !== 'ios' && (
               <button
                 onClick={handleInstallClick}
                 disabled={isInstalling}
