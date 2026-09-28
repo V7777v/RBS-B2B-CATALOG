@@ -1149,6 +1149,23 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const [chassisPulse, setChassisPulse] = useState(false);
   const [pdfWithPrice, setPdfWithPrice] = useState(false);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [quoteInfo, setQuoteInfo] = useState<{
+    customerName: string;
+    company: string;
+    phone: string;
+    email: string;
+    notes: string;
+    quoteNumber: string;
+    validUntil: string;
+  } | null>(null);
+  const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
+  const [quoteForm, setQuoteForm] = useState({
+    customerName: '',
+    company: '',
+    phone: '',
+    email: '',
+    notes: '',
+  });
   const [pdfSnapshot, setPdfSnapshot] = useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isSharingWhatsApp, setIsSharingWhatsApp] = useState(false);
@@ -2614,6 +2631,38 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   const handleDownloadPdf = (withPrice: boolean) => {
     setPdfWithPrice(withPrice);
     setPdfSnapshot(snapshot3DRef.current ? snapshot3DRef.current() : null);
+    if (withPrice) {
+      setIsQuoteModalOpen(true);
+    } else {
+      setShowPdfPreview(true);
+    }
+  };
+
+  const handleConfirmQuoteInfo = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const yyyymmdd = `${year}${month}${day}`;
+    const randomDigits = Math.floor(1000 + Math.random() * 9000);
+    const quoteNumber = `Q-${yyyymmdd}-${randomDigits}`;
+
+    const validDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+    const validUntil = validDate.toLocaleDateString('he-IL');
+
+    const info = {
+      customerName: quoteForm.customerName.trim(),
+      company: quoteForm.company.trim(),
+      phone: quoteForm.phone.trim(),
+      email: quoteForm.email.trim(),
+      notes: quoteForm.notes.trim(),
+      quoteNumber,
+      validUntil,
+    };
+
+    setQuoteInfo(info);
+    setIsQuoteModalOpen(false);
     setShowPdfPreview(true);
   };
 
@@ -2627,6 +2676,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       scale: 2,
       useCORS: true,
       backgroundColor: '#ffffff',
+      imageTimeout: 4000,
     });
 
     const imgData = canvas.toDataURL('image/jpeg', 0.95);
@@ -3867,14 +3917,142 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       )}
 
       {/* PDF export: two options — with prices / without */}
-      <div className="mt-4 print:hidden">
-        {/* With-price PDF is kept in code (handleDownloadPdf(true)) for future use; only the
-            price-free "save my cabinet plan" button is shown to customers for now. */}
-        <button type="button" onClick={() => handleDownloadPdf(false)}
-          className="w-full flex items-center justify-center gap-1.5 py-3 bg-[#004387] text-white font-bold text-sm rounded-none hover:bg-[#0c2d57] transition-colors">
-          <Download size={16} /> שמור תכנון ארון (PDF)
+      <div className="mt-4 print:hidden flex flex-col sm:flex-row gap-2 sm:gap-3">
+        <button
+          type="button"
+          onClick={() => handleDownloadPdf(false)}
+          className="w-full sm:flex-1 flex items-center justify-center gap-1.5 py-3 bg-[#004387] text-white font-bold text-sm rounded-none hover:bg-[#0c2d57] transition-colors cursor-pointer"
+        >
+          <Download size={16} />
+          <span>תכנון ארון (ללא מחירים)</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDownloadPdf(true)}
+          className="w-full sm:flex-1 flex items-center justify-center gap-1.5 py-3 bg-[#c2410c] text-white font-bold text-sm rounded-none hover:bg-[#9a3412] transition-colors cursor-pointer shadow-sm"
+        >
+          <Download size={16} />
+          <span>הצעת מחיר (עם מחירים)</span>
         </button>
       </div>
+
+      {/* Quote Info Dialog Modal */}
+      {isQuoteModalOpen && (
+        <div
+          className="fixed inset-0 z-[100000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+          onClick={() => setIsQuoteModalOpen(false)}
+          dir="rtl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="quote-modal-title"
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-md w-full p-5 sm:p-6 text-right font-sans my-auto animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <h3 id="quote-modal-title" className="text-lg font-bold text-[#0c2d57] flex items-center gap-2">
+                <span>פרטי הצעת מחיר</span>
+                <span className="text-xs font-normal text-gray-400">(אופציונלי)</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsQuoteModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                aria-label="סגור"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmQuoteInfo} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  שם הלקוח
+                </label>
+                <input
+                  type="text"
+                  value={quoteForm.customerName}
+                  onChange={(e) => setQuoteForm((prev) => ({ ...prev, customerName: e.target.value }))}
+                  placeholder="שם הלקוח / איש קשר"
+                  className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:border-[#004387] focus:ring-1 focus:ring-[#004387] outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  חברה
+                </label>
+                <input
+                  type="text"
+                  value={quoteForm.company}
+                  onChange={(e) => setQuoteForm((prev) => ({ ...prev, company: e.target.value }))}
+                  placeholder="שם החברה / ארגון"
+                  className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:border-[#004387] focus:ring-1 focus:ring-[#004387] outline-none transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    טלפון
+                  </label>
+                  <input
+                    type="tel"
+                    dir="ltr"
+                    value={quoteForm.phone}
+                    onChange={(e) => setQuoteForm((prev) => ({ ...prev, phone: e.target.value }))}
+                    placeholder="050-0000000"
+                    className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:border-[#004387] focus:ring-1 focus:ring-[#004387] outline-none transition-all text-right"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    אימייל
+                  </label>
+                  <input
+                    type="email"
+                    dir="ltr"
+                    value={quoteForm.email}
+                    onChange={(e) => setQuoteForm((prev) => ({ ...prev, email: e.target.value }))}
+                    placeholder="name@example.com"
+                    className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:border-[#004387] focus:ring-1 focus:ring-[#004387] outline-none transition-all text-right"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  הערות
+                </label>
+                <textarea
+                  rows={2}
+                  value={quoteForm.notes}
+                  onChange={(e) => setQuoteForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  placeholder="הערות או דגשים מיוחדים להצעת המחיר..."
+                  className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:border-[#004387] focus:ring-1 focus:ring-[#004387] outline-none transition-all resize-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 px-4 bg-[#c2410c] hover:bg-[#9a3412] text-white font-bold text-sm rounded-lg shadow-sm active:scale-98 transition-all cursor-pointer"
+                >
+                  המשך לתצוגה
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsQuoteModalOpen(false)}
+                  className="py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm rounded-lg transition-colors cursor-pointer"
+                >
+                  ביטול
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Printable spec sheet (hidden on screen, shown on print) */}
       {showPdfPreview && (
@@ -3931,11 +4109,25 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             </div>
           </div>
           <div id="cabinet-pdf-doc" dir="rtl" className="bg-white text-slate-900 font-sans p-4 sm:p-8 max-w-[794px] mx-auto [direction:rtl] print:p-8">
-            {/* 1. Header: RBS Telecom logo (left), title "הצעת תצורה — ארון תקשורת", today's date (he-IL), cabinet name + SKU */}
+            {/* 1. Header: RBS Telecom logo (left), title, quote number, date, validity, cabinet name + SKU */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #004387', paddingBottom: '12px', marginBottom: '16px', gap: '16px' }}>
               <div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0c2d57' }}>הצעת תצורה — ארון תקשורת</div>
-                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{new Date().toLocaleDateString('he-IL')}</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#0c2d57' }}>
+                  {pdfWithPrice ? 'הצעת מחיר — ארון תקשורת' : 'הצעת תצורה — ארון תקשורת'}
+                </div>
+                {pdfWithPrice ? (
+                  <div style={{ fontSize: '12px', color: '#475569', marginTop: '3px', display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    {quoteInfo?.quoteNumber && (
+                      <span>מספר הצעה: <strong style={{ color: '#0c2d57' }}>{quoteInfo.quoteNumber}</strong></span>
+                    )}
+                    <span>תאריך: <strong>{new Date().toLocaleDateString('he-IL')}</strong></span>
+                    {quoteInfo?.validUntil && (
+                      <span>בתוקף עד {quoteInfo.validUntil}</span>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{new Date().toLocaleDateString('he-IL')}</div>
+                )}
                 <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', marginTop: '4px' }}>
                   <span>{product?.name || cabinetData?.model || 'ארון תקשורת'}</span>
                   {product?.sku && <span style={{ marginRight: '8px', color: '#64748b', fontWeight: 500 }}>(מק״ט: {product.sku})</span>}
@@ -3947,6 +4139,29 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                 style={{ height: '42px', objectFit: 'contain' }} 
               />
             </div>
+
+            {/* לכבוד block with filled quoteInfo fields (skip empty ones) */}
+            {pdfWithPrice && quoteInfo && (quoteInfo.customerName || quoteInfo.company || quoteInfo.phone || quoteInfo.email) && (
+              <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '10px 14px', marginBottom: '14px', fontSize: '12px', color: '#334155' }}>
+                <div style={{ fontWeight: 800, color: '#0c2d57', marginBottom: '4px', fontSize: '13px' }}>
+                  לכבוד:
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center' }}>
+                  {quoteInfo.customerName && (
+                    <div><span style={{ color: '#64748b' }}>שם: </span><strong>{quoteInfo.customerName}</strong></div>
+                  )}
+                  {quoteInfo.company && (
+                    <div><span style={{ color: '#64748b' }}>חברה: </span><strong>{quoteInfo.company}</strong></div>
+                  )}
+                  {quoteInfo.phone && (
+                    <div><span style={{ color: '#64748b' }}>טלפון: </span><span dir="ltr"><strong>{quoteInfo.phone}</strong></span></div>
+                  )}
+                  {quoteInfo.email && (
+                    <div><span style={{ color: '#64748b' }}>אימייל: </span><span dir="ltr"><strong>{quoteInfo.email}</strong></span></div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* 2. Cabinet section: 3D image above spec list on < 640px, side-by-side on desktop/print */}
             <div className="flex flex-col sm:flex-row print:flex-row gap-4 mb-4 items-start">
@@ -4070,9 +4285,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             {/* 3. Section BOM, then clean styled BOM table */}
             <div style={{ marginBottom: '16px' }}>
               <div className="text-sm font-bold uppercase tracking-wide text-[#0c2d57] border-b-2 border-[#c2410c] pb-1 mb-2">
-                ציוד שנוסף (BOM)
+                {pdfWithPrice ? 'פירוט מוצרים ומחירים (BOM)' : 'ציוד שנוסף (BOM)'}
               </div>
-              {orderLines.length === 0 ? (
+              {!pdfWithPrice && orderLines.length === 0 ? (
                 <div className="py-3 text-center text-slate-500 text-[12px] italic bg-slate-50 border border-slate-300 rounded-md">
                   לא נבחרו אביזרים נוספים
                 </div>
@@ -4090,6 +4305,32 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
+                      {/* Cabinet itself as the first row of BOM table when pdfWithPrice is true */}
+                      {pdfWithPrice && (
+                        <tr className="border-b bg-blue-50/40 text-slate-900 font-medium">
+                          <td className="py-1.5 px-2.5 font-bold text-slate-900 leading-tight">
+                            <span>{product?.name || cabinetData?.model || 'ארון תקשורת'}</span>
+                            <span className="text-[10px] text-[#004387] mr-1.5 bg-blue-100/70 px-1.5 py-0.5 rounded font-normal">
+                              ארון ראשי
+                            </span>
+                          </td>
+                          <td className="py-1.5 px-2.5 font-mono text-[11px] text-slate-700 whitespace-nowrap" dir="ltr">
+                            {product?.sku || cabinetData?.sku || '—'}
+                          </td>
+                          <td className="py-1.5 px-2.5 text-center font-mono font-bold text-slate-800 tabular-nums">
+                            1
+                          </td>
+                          <td className="py-1.5 px-2.5 whitespace-nowrap font-mono text-[11px] font-medium text-slate-700">
+                            מארז ראשי ({totalU}U)
+                          </td>
+                          <td className="py-1.5 px-2.5 font-mono text-[11px] text-slate-700 whitespace-nowrap tabular-nums text-left" dir="ltr">
+                            ₪{orderTotals.cabinetPrice.toLocaleString('he-IL', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-1.5 px-2.5 font-mono text-[11px] font-bold text-[#0c2d57] whitespace-nowrap tabular-nums text-left" dir="ltr">
+                            ₪{orderTotals.cabinetPrice.toLocaleString('he-IL', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      )}
                       {orderLines.map((line, idx) => {
                         const isUnplaced = line.status === 'unplaced';
                         return (
@@ -4140,38 +4381,48 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
             {/* 4. Totals box, right-aligned, rendered only when pdfWithPrice is true */}
             {pdfWithPrice && (
-              <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-start' }}>
-                <div className="w-[280px] border border-slate-300 rounded-md bg-slate-50 p-3 text-[12px]">
-                  <div className="text-sm font-bold uppercase tracking-wide text-[#0c2d57] border-b-2 border-[#c2410c] pb-1 mb-2">
-                    סיכום עלויות
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#475569' }}>
-                    <span>ארון:</span>
-                    <span className="font-mono font-semibold tabular-nums text-left" dir="ltr">₪{orderTotals.cabinetPrice.toLocaleString('he-IL')}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#475569' }}>
-                    <span>אביזרים:</span>
-                    <span className="font-mono font-semibold tabular-nums text-left" dir="ltr">₪{orderTotals.accessoriesTotal.toLocaleString('he-IL')}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', paddingTop: '4px', borderTop: '1px solid #e2e8f0', fontWeight: 700, color: '#1e293b' }}>
-                    <span>סה"כ לפני מע"מ:</span>
-                    <span className="font-mono tabular-nums text-left" dir="ltr">₪{orderTotals.grandTotal.toLocaleString('he-IL')}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#475569' }}>
-                    <span>מע"מ 18%:</span>
-                    <span className="font-mono font-semibold tabular-nums text-left" dir="ltr">₪{Math.round(orderTotals.grandTotal * 0.18).toLocaleString('he-IL')}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', borderTop: '2px solid #004387', fontWeight: 800, fontSize: '13px', color: '#0c2d57' }}>
-                    <span>סה"כ כולל מע"מ:</span>
-                    <span className="font-mono tabular-nums text-left" dir="ltr">₪{(orderTotals.grandTotal + Math.round(orderTotals.grandTotal * 0.18)).toLocaleString('he-IL')}</span>
+              <div style={{ marginTop: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                  <div className="w-[280px] border border-slate-300 rounded-md bg-slate-50 p-3 text-[12px]">
+                    <div className="text-sm font-bold uppercase tracking-wide text-[#0c2d57] border-b-2 border-[#c2410c] pb-1 mb-2">
+                      סיכום עלויות
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#475569' }}>
+                      <span>ארון:</span>
+                      <span className="font-mono font-semibold tabular-nums text-left" dir="ltr">₪{orderTotals.cabinetPrice.toLocaleString('he-IL')}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#475569' }}>
+                      <span>אביזרים:</span>
+                      <span className="font-mono font-semibold tabular-nums text-left" dir="ltr">₪{orderTotals.accessoriesTotal.toLocaleString('he-IL')}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', paddingTop: '4px', borderTop: '1px solid #e2e8f0', fontWeight: 700, color: '#1e293b' }}>
+                      <span>סה"כ לפני מע"מ:</span>
+                      <span className="font-mono tabular-nums text-left" dir="ltr">₪{orderTotals.grandTotal.toLocaleString('he-IL')}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#475569' }}>
+                      <span>מע"מ 18%:</span>
+                      <span className="font-mono font-semibold tabular-nums text-left" dir="ltr">₪{Math.round(orderTotals.grandTotal * 0.18).toLocaleString('he-IL')}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '4px', borderTop: '2px solid #004387', fontWeight: 800, fontSize: '13px', color: '#0c2d57' }}>
+                      <span>סה"כ כולל מע"מ:</span>
+                      <span className="font-mono tabular-nums text-left" dir="ltr">₪{(orderTotals.grandTotal + Math.round(orderTotals.grandTotal * 0.18)).toLocaleString('he-IL')}</span>
+                    </div>
                   </div>
                 </div>
+
+                {/* Show quoteInfo.notes under the totals */}
+                {quoteInfo?.notes && (
+                  <div style={{ marginTop: '12px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '10px 14px', fontSize: '12px', color: '#334155' }}>
+                    <div style={{ fontWeight: 800, color: '#0c2d57', marginBottom: '4px' }}>הערות:</div>
+                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>{quoteInfo.notes}</div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* 5. Footer */}
             <div style={{ marginTop: '20px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', fontSize: '11px', color: '#64748b', textAlign: 'center' }}>
-              המחירים בש״ח לפני מע״מ, תקפים ל-14 יום · rbs-telecom.com
+              המחירים בש״ח לפני מע״מ{quoteInfo?.validUntil ? `, תקפים עד ${quoteInfo.validUntil}` : ' · תקפים ל-14 יום'} · rbs-telecom.com
             </div>
           </div>
         </div>

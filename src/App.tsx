@@ -147,6 +147,19 @@ const TechnicalAdvisor = lazyWithRetry(() =>
 const PRODUCTS_GID = "150681" + "2668";
 const CATALOGS_GID = "178108" + "3359";
 const SUBCATEGORIES_GID = "162617" + "5369";
+
+/**
+ * FNV-1a 32-bit hash of text, returned as a 6-character base36 string.
+ */
+export function shortCode(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return (hash >>> 0).toString(36).padStart(6, "0");
+}
+
 // Global Agents List and Helper Functions
 const SYSTEM_AGENTS = [
   {
@@ -3009,6 +3022,7 @@ const ProductDetailsView = (props: any) => {
                 }
               >
                 <CabinetConfigurator
+                  key={selectedProduct?.sku}
                   product={selectedProduct}
                   catalogData={catalogData}
                   onOptionalsChange={handleOptionalsChange}
@@ -7125,14 +7139,47 @@ export default function App() {
     const p = new URLSearchParams();
     if (s.currentView === "product" && s.selectedProduct) {
       const key = s.selectedProduct.sku || s.selectedProduct.id || "";
-      if (key) p.set("product", String(key));
-    } else {
-      if (s.selectedCatalog) p.set("cat", String(s.selectedCatalog));
-      if (s.selectedSubcategory) p.set("sub", String(s.selectedSubcategory));
-      if (s.selectedNestedSubcategory)
-        p.set("nested", String(s.selectedNestedSubcategory));
-      if (s.selectedNicheCategory)
-        p.set("niche", String(s.selectedNicheCategory));
+      if (key) p.set("p", String(key));
+    } else if (
+      s.currentView === "niche_subs" ||
+      (s.currentView === "products" && s.selectedNicheCategory)
+    ) {
+      if (s.selectedSubcategory) {
+        const cat = s.selectedCatalog || "";
+        p.set(
+          "s",
+          shortCode(
+            cat ? `${cat}|${s.selectedSubcategory}` : s.selectedSubcategory,
+          ),
+        );
+      } else if (s.selectedCatalog) {
+        p.set("c", shortCode(String(s.selectedCatalog)));
+      }
+    } else if (
+      s.currentView === "nested_subs" ||
+      (s.currentView === "products" && s.selectedNestedSubcategory)
+    ) {
+      if (s.selectedSubcategory) {
+        const cat = s.selectedCatalog || "";
+        p.set(
+          "s",
+          shortCode(
+            cat ? `${cat}|${s.selectedSubcategory}` : s.selectedSubcategory,
+          ),
+        );
+      } else if (s.selectedCatalog) {
+        p.set("c", shortCode(String(s.selectedCatalog)));
+      }
+    } else if (s.selectedSubcategory) {
+      const cat = s.selectedCatalog || "";
+      p.set(
+        "s",
+        shortCode(
+          cat ? `${cat}|${s.selectedSubcategory}` : s.selectedSubcategory,
+        ),
+      );
+    } else if (s.selectedCatalog) {
+      p.set("c", shortCode(String(s.selectedCatalog)));
     }
     const q = p.toString();
     return q ? window.location.pathname + "?" + q : window.location.pathname;
@@ -7144,7 +7191,7 @@ export default function App() {
       const key = selectedProduct.sku || selectedProduct.id || "";
       setShareModalState({
         isOpen: true,
-        url: `${origin}/?product=${encodeURIComponent(String(key))}`,
+        url: `${origin}/?p=${encodeURIComponent(String(key))}`,
         title: selectedProduct.name || "מוצר בקטלוג RBS Telecom",
         imageUrl: selectedProduct.images?.[0],
         product: selectedProduct,
@@ -7152,13 +7199,38 @@ export default function App() {
       return;
     }
 
-    if (selectedSubcategory) {
-      const p = new URLSearchParams();
-      if (selectedCatalog) p.set("cat", String(selectedCatalog));
-      p.set("sub", String(selectedSubcategory));
+    if (selectedNicheCategory) {
+      const cat = selectedCatalog || "";
+      const sub = selectedSubcategory || selectedNicheCategory;
+      const pair = cat ? `${cat}|${sub}` : sub;
       setShareModalState({
         isOpen: true,
-        url: `${origin}/?${p.toString()}`,
+        url: `${origin}/?s=${shortCode(pair)}`,
+        title: selectedNicheCategory,
+        product: null,
+      });
+      return;
+    }
+
+    if (selectedNestedSubcategory) {
+      const cat = selectedCatalog || "";
+      const sub = selectedSubcategory || selectedNestedSubcategory;
+      const pair = cat ? `${cat}|${sub}` : sub;
+      setShareModalState({
+        isOpen: true,
+        url: `${origin}/?s=${shortCode(pair)}`,
+        title: selectedNestedSubcategory,
+        product: null,
+      });
+      return;
+    }
+
+    if (selectedSubcategory) {
+      const cat = selectedCatalog || "";
+      const pair = cat ? `${cat}|${selectedSubcategory}` : selectedSubcategory;
+      setShareModalState({
+        isOpen: true,
+        url: `${origin}/?s=${shortCode(pair)}`,
         title: selectedSubcategory,
         product: null,
       });
@@ -7166,11 +7238,9 @@ export default function App() {
     }
 
     if (selectedCatalog) {
-      const p = new URLSearchParams();
-      p.set("cat", String(selectedCatalog));
       setShareModalState({
         isOpen: true,
-        url: `${origin}/?${p.toString()}`,
+        url: `${origin}/?c=${shortCode(selectedCatalog)}`,
         title: selectedCatalog,
         product: null,
       });
@@ -7183,7 +7253,13 @@ export default function App() {
       title: "קטלוג RBS Telecom",
       product: null,
     });
-  }, [selectedProduct, selectedSubcategory, selectedCatalog]);
+  }, [
+    selectedProduct,
+    selectedNicheCategory,
+    selectedNestedSubcategory,
+    selectedSubcategory,
+    selectedCatalog,
+  ]);
 
   const openShareForProduct = useCallback((prod: any) => {
     if (!prod) return;
@@ -7191,7 +7267,7 @@ export default function App() {
     const key = prod.sku || prod.id || "";
     setShareModalState({
       isOpen: true,
-      url: `${origin}/?product=${encodeURIComponent(String(key))}`,
+      url: `${origin}/?p=${encodeURIComponent(String(key))}`,
       title: prod.name || "מוצר בקטלוג RBS Telecom",
       imageUrl: prod.images?.[0],
       product: prod,
@@ -7200,14 +7276,17 @@ export default function App() {
   const [deepLinkError, setDeepLinkError] = useState<string>("");
   const [copyToast, setCopyToast] = useState<string>("");
   const copyShareLink = useCallback(
-    (kind: "product" | "category", value: string) => {
-      const key = kind === "product" ? "product" : "cat";
-      const url =
-        window.location.origin +
-        "/?" +
-        key +
-        "=" +
-        encodeURIComponent(String(value || ""));
+    (kind: "product" | "category", value: string, catName?: string) => {
+      let url = window.location.origin + "/";
+      if (kind === "product") {
+        url += "?p=" + encodeURIComponent(String(value || ""));
+      } else {
+        if (catName) {
+          url += "?s=" + shortCode(`${catName}|${value}`);
+        } else {
+          url += "?c=" + shortCode(value);
+        }
+      }
       const done = () => {
         setCopyToast(
           kind === "product" ? "הקישור למוצר הועתק" : "הקישור לקטגוריה הועתק",
@@ -7534,12 +7613,13 @@ export default function App() {
     if (deepLinkDoneRef.current) return;
     if (!catalogData || catalogData.length === 0) return;
     const params = new URLSearchParams(window.location.search);
-    const productKey = (params.get("product") || "").trim();
-    const cat = (params.get("cat") || "").trim();
-    const sub = (params.get("sub") || "").trim();
-    const nested = (params.get("nested") || "").trim();
-    const niche = (params.get("niche") || "").trim();
-    if (!productKey && !cat) {
+    const productKey = (params.get("p") || params.get("product") || "").trim();
+    const catParam = (params.get("c") || params.get("cat") || "").trim();
+    const subParam = (params.get("s") || params.get("sub") || "").trim();
+    const nestedParam = (params.get("n") || params.get("nested") || "").trim();
+    const nicheParam = (params.get("nc") || params.get("niche") || "").trim();
+
+    if (!productKey && !catParam && !subParam && !nestedParam && !nicheParam) {
       deepLinkDoneRef.current = true;
       return;
     }
@@ -7561,22 +7641,175 @@ export default function App() {
       return;
     }
 
+    let matchedCat: string | null = null;
+    let matchedSub: string | null = null;
+
+    // Collect all unique catalog/subcategory pairs
+    const pairs: Array<{ cat: string; sub: string }> = [];
+    const seenPairs = new Set<string>();
+
+    catalogData.forEach((p: any) => {
+      if (p.category && p.subcategory) {
+        const k = `${p.category}|${p.subcategory}`;
+        if (!seenPairs.has(k)) {
+          seenPairs.add(k);
+          pairs.push({ cat: p.category, sub: p.subcategory });
+        }
+      }
+    });
+
+    catalogFolders.forEach((f: any) => {
+      if (Array.isArray(f.sheets)) {
+        f.sheets.forEach((sh: string) => {
+          const k = `${f.name}|${sh}`;
+          if (!seenPairs.has(k)) {
+            seenPairs.add(k);
+            pairs.push({ cat: f.name, sub: sh });
+          }
+        });
+      }
+    });
+
+    const allCatNames = Array.from(
+      new Set([
+        ...catalogFolders.map((f: any) => f.name).filter(Boolean),
+        ...catalogData.map((p: any) => p.category).filter(Boolean),
+      ]),
+    );
+
+    if (subParam) {
+      // 1. Try matching shortCode(catalogName + '|' + subcategoryName)
+      const exactCodeMatch = pairs.find(
+        (pair) => shortCode(`${pair.cat}|${pair.sub}`) === subParam,
+      );
+      if (exactCodeMatch) {
+        matchedCat = exactCodeMatch.cat;
+        matchedSub = exactCodeMatch.sub;
+      } else {
+        // 2. Try matching shortCode(subcategoryName)
+        const subOnlyCodeMatch = pairs.find(
+          (pair) => shortCode(pair.sub) === subParam,
+        );
+        if (subOnlyCodeMatch) {
+          matchedCat = subOnlyCodeMatch.cat;
+          matchedSub = subOnlyCodeMatch.sub;
+        } else {
+          // 3. Backwards compatibility: raw sub name match (?sub= or ?s= with full name)
+          const rawMatch = pairs.find(
+            (pair) =>
+              pair.sub === subParam ||
+              pair.sub.toLowerCase() === subParam.toLowerCase(),
+          );
+          if (rawMatch) {
+            matchedCat = rawMatch.cat;
+            matchedSub = rawMatch.sub;
+          } else {
+            matchedSub = subParam;
+          }
+        }
+      }
+    }
+
+    if (catParam && !matchedCat) {
+      // 1. Try matching shortCode(catalogName)
+      const codeMatch = allCatNames.find(
+        (name) => shortCode(name) === catParam,
+      );
+      if (codeMatch) {
+        matchedCat = codeMatch;
+      } else {
+        // 2. Backwards compatibility: raw cat name match
+        const rawMatch = allCatNames.find(
+          (name) =>
+            name === catParam ||
+            name.toLowerCase() === catParam.toLowerCase(),
+        );
+        matchedCat = rawMatch || catParam;
+      }
+    }
+
+    let cat: string | null = matchedCat || catParam || null;
+    let sub: string | null = matchedSub || subParam || null;
+    let nested: string | null = nestedParam || null;
+    let niche: string | null = nicheParam || null;
+
+    // Auto-resolve missing parent levels from catalog data
+    if (niche && (!nested || !sub || !cat)) {
+      const match = catalogData.find((p: any) => p.nicheCategory === niche);
+      if (match) {
+        nested = nested || match.nestedSubcategory || null;
+        sub = sub || match.subcategory || null;
+        cat = cat || match.category || null;
+      }
+    }
+    if (nested && (!sub || !cat)) {
+      const match = catalogData.find((p: any) => p.nestedSubcategory === nested);
+      if (match) {
+        sub = sub || match.subcategory || null;
+        cat = cat || match.category || null;
+      }
+    }
+    if (sub && !cat) {
+      const match = catalogData.find((p: any) => p.subcategory === sub);
+      if (match) {
+        cat = match.category || null;
+      }
+    }
+
+    // Determine target view accurately
+    let targetView = "catalog_subs";
+    if (niche) {
+      targetView = "products";
+    } else if (nested) {
+      const hasNiche = catalogData.some(
+        (p: any) =>
+          (cat ? p.category === cat : true) &&
+          (sub ? p.subcategory === sub : true) &&
+          p.nestedSubcategory === nested &&
+          !!p.nicheCategory,
+      );
+      targetView = hasNiche ? "niche_subs" : "products";
+    } else if (sub) {
+      const activeCatObj = catalogFolders.find((c) => c.name === cat);
+      const isHotSaleMode =
+        activeCatObj &&
+        ((activeCatObj.brand &&
+          activeCatObj.brand.trim().toUpperCase() === "HOT SALE") ||
+          activeCatObj.name.includes("מבצע") ||
+          activeCatObj.name.toLowerCase().includes("sale"));
+      let hasNested = false;
+      if (!isHotSaleMode) {
+        hasNested = catalogData.some(
+          (p: any) =>
+            (cat ? p.category === cat : true) &&
+            p.subcategory === sub &&
+            !!p.nestedSubcategory,
+        );
+        if (
+          sub === "Inginium Full Channel" ||
+          sub === "מתגי ליבה ורשת מנוהלים" ||
+          sub === "ספקי כוח ומתח"
+        ) {
+          hasNested = true;
+        }
+      }
+      targetView = hasNested ? "nested_subs" : "products";
+    } else if (cat) {
+      targetView = "catalog_subs";
+    } else {
+      targetView = "home";
+    }
+
     deepLinkDoneRef.current = true;
     navigateForward({
-      currentView: niche
-        ? "niche_subs"
-        : nested
-          ? "nested_subs"
-          : sub
-            ? "products"
-            : "catalog_subs",
-      selectedCatalog: cat || null,
-      selectedSubcategory: sub || null,
-      selectedNestedSubcategory: nested || null,
-      selectedNicheCategory: niche || null,
+      currentView: targetView,
+      selectedCatalog: cat,
+      selectedSubcategory: sub,
+      selectedNestedSubcategory: nested,
+      selectedNicheCategory: niche,
       selectedProduct: null,
     });
-  }, [catalogData, navigateForward, hasMoreProducts]);
+  }, [catalogData, navigateForward, hasMoreProducts, catalogFolders]);
   const handleCheckout = () => {
     navigateForward({
       currentView: "checkout",
