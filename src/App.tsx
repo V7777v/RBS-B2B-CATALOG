@@ -8404,6 +8404,19 @@ export default function App() {
                       </span>
                     )}
                   </button>
+                  {!isStandalone && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        window.dispatchEvent(new Event("show-install-prompt"))
+                      }
+                      aria-label="התקנת האפליקציה"
+                      title="התקנת האפליקציה"
+                      className="w-10 h-10 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-[#004387] flex items-center justify-center shrink-0 active:scale-95 transition-all shadow-xs cursor-pointer"
+                    >
+                      <Download size={18} className="text-[#004387] stroke-[2.25]" />
+                    </button>
+                  )}
                 </div>
               )}
             </div>
