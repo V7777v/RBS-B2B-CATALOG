@@ -5843,7 +5843,9 @@ export default function App() {
     prevCartCountRef.current = cartItemCount;
   }, [cartItemCount]);
   const headerRef = useRef<HTMLDivElement | null>(null);
-  const [headerHeight, setHeaderHeight] = useState(140);
+  const [headerHeight, setHeaderHeight] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth >= 768 ? 60 : 110,
+  );
   // Dynamic header measurement to avoid content overlap on all viewport widths & browsers (including Android/iOS)
   useEffect(() => {
     const handleResize = () => {
@@ -8042,6 +8044,20 @@ export default function App() {
                     <Menu size={22} className="stroke-[2.5]" />
                   </button>
 
+                  {/* Mobile Back Button when inside a category/product or searching */}
+                  {(currentView !== "home" || searchQuery) && (
+                    <button
+                      id="mobile-nav-back"
+                      type="button"
+                      onClick={() => goBack()}
+                      className="flex items-center justify-center w-10 h-10 bg-slate-100 hover:bg-[#0c2d57] text-[#0c2d57] hover:text-white rounded-xl shadow-2xs transition-all duration-200 active:scale-95 flex-shrink-0 cursor-pointer"
+                      aria-label="חזור אחורה"
+                      title="חזור"
+                    >
+                      <ChevronRight size={20} className="flex-shrink-0 stroke-[2.5]" />
+                    </button>
+                  )}
+
                   {/* 2. Clickable RBS Logo: enlarged by 50% */}
                   <button
                     id="mobile-nav-home"
@@ -8676,26 +8692,31 @@ export default function App() {
                         </div>
                       ) : (
                         <>
-                          <div className="flex flex-col sm:flex-row items-center justify-between mb-6 bg-white p-4 border border-gray-100 shadow-xs rounded-xl gap-3 w-full">
-                            <span className="text-sm sm:text-base text-gray-700 font-bold text-center sm:text-right">
-                              נמצאו{" "}
-                              <strong className="text-[#004387]">
-                                {filteredProducts.length}
-                              </strong>{" "}
-                              מוצרים עבור החיפוש: "
-                              <strong className="text-[#c2410c]">
-                                {searchQuery}
-                              </strong>
-                              "
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setSearchQuery("")}
-                              className="flex items-center gap-1.5 bg-gray-100 hover:bg-red-50 hover:text-red-500 text-gray-700 font-bold py-2 px-4 rounded-xl text-xs sm:text-sm border border-gray-200 transition-all cursor-pointer"
-                            >
-                              <X size={14} className="stroke-[3]" />
-                              <span>נקה חיפוש וחזור</span>
-                            </button>
+                          <div
+                            className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2.5 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-4 transition-all"
+                            style={{ top: `${headerHeight}px` }}
+                          >
+                            <div className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 border border-gray-100 shadow-xs rounded-xl gap-3 w-full">
+                              <span className="text-sm sm:text-base text-gray-700 font-bold text-center sm:text-right">
+                                נמצאו{" "}
+                                <strong className="text-[#004387]">
+                                  {filteredProducts.length}
+                                </strong>{" "}
+                                מוצרים עבור החיפוש: "
+                                <strong className="text-[#c2410c]">
+                                  {searchQuery}
+                                </strong>
+                                "
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setSearchQuery("")}
+                                className="flex items-center gap-1.5 bg-gray-100 hover:bg-red-50 hover:text-red-500 text-gray-700 font-bold py-2 px-4 rounded-xl text-xs sm:text-sm border border-gray-200 transition-all cursor-pointer"
+                              >
+                                <X size={14} className="stroke-[3]" />
+                                <span>נקה חיפוש וחזור</span>
+                              </button>
+                            </div>
                           </div>
                           <div
                             className={
@@ -8821,22 +8842,26 @@ export default function App() {
                   ) : currentView === "catalog_subs" ? (
                     // SUBCATEGORIES (SHEETS) VIEW
                     <>
-                      <div dir="rtl" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-4 sm:mb-6">
+                      <div
+                        dir="rtl"
+                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2.5 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-4 transition-all grid grid-cols-[1fr_auto_1fr] items-center gap-2"
+                        style={{ top: `${headerHeight}px` }}
+                      >
                         <div className="justify-self-start">
                           {parentInfo && (
                             <button
                               type="button"
                               onClick={parentInfo.onClick}
-                              className="inline-flex items-center gap-1 text-sm font-semibold text-[#0c2d57] min-h-11 cursor-pointer hover:underline"
+                              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0c2d57] min-h-11 px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
                             >
-                              <ChevronRight size={18} className="flex-shrink-0" />
+                              <ChevronRight size={18} className="flex-shrink-0 stroke-[2.5]" />
                               <span className="hidden sm:inline">{parentInfo.name}</span>
                               <span className="sm:hidden">חזרה</span>
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center justify-center gap-3">
-                          <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] text-center">
+                        <div className="flex items-center justify-center gap-3 min-w-0">
+                          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
                             {selectedCatalog || "בחר קטגוריה"}
                           </h2>
                           <button
@@ -8890,22 +8915,26 @@ export default function App() {
                   ) : currentView === "nested_subs" ? (
                     // NESTED SUBCATEGORIES VIEW
                     <>
-                      <div dir="rtl" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-4 sm:mb-6">
+                      <div
+                        dir="rtl"
+                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2.5 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-4 transition-all grid grid-cols-[1fr_auto_1fr] items-center gap-2"
+                        style={{ top: `${headerHeight}px` }}
+                      >
                         <div className="justify-self-start">
                           {parentInfo && (
                             <button
                               type="button"
                               onClick={parentInfo.onClick}
-                              className="inline-flex items-center gap-1 text-sm font-semibold text-[#0c2d57] min-h-11 cursor-pointer hover:underline"
+                              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0c2d57] min-h-11 px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
                             >
-                              <ChevronRight size={18} className="flex-shrink-0" />
+                              <ChevronRight size={18} className="flex-shrink-0 stroke-[2.5]" />
                               <span className="hidden sm:inline">{parentInfo.name}</span>
                               <span className="sm:hidden">חזרה</span>
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center justify-center gap-3">
-                          <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] text-center">
+                        <div className="flex items-center justify-center gap-3 min-w-0">
+                          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
                             {selectedSubcategory || "בחר תת-קטגוריה"}
                           </h2>
                           <button
@@ -8955,22 +8984,26 @@ export default function App() {
                   ) : currentView === "niche_subs" ? (
                     // NICHE SUBCATEGORIES VIEW
                     <>
-                      <div dir="rtl" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-4 sm:mb-6">
+                      <div
+                        dir="rtl"
+                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2.5 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-4 transition-all grid grid-cols-[1fr_auto_1fr] items-center gap-2"
+                        style={{ top: `${headerHeight}px` }}
+                      >
                         <div className="justify-self-start">
                           {parentInfo && (
                             <button
                               type="button"
                               onClick={parentInfo.onClick}
-                              className="inline-flex items-center gap-1 text-sm font-semibold text-[#0c2d57] min-h-11 cursor-pointer hover:underline"
+                              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0c2d57] min-h-11 px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
                             >
-                              <ChevronRight size={18} className="flex-shrink-0" />
+                              <ChevronRight size={18} className="flex-shrink-0 stroke-[2.5]" />
                               <span className="hidden sm:inline">{parentInfo.name}</span>
                               <span className="sm:hidden">חזרה</span>
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center justify-center gap-3">
-                          <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] text-center">
+                        <div className="flex items-center justify-center gap-3 min-w-0">
+                          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
                             {selectedNestedSubcategory || "קטגוריית משנה מורחבת"}
                           </h2>
                           <button
@@ -9018,23 +9051,26 @@ export default function App() {
                   ) : currentView === "products" ? (
                     // PRODUCTS VIEW
                     <>
-                      <div className="mb-6 sm:mb-8">
+                      <div
+                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2.5 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-4 transition-all"
+                        style={{ top: `${headerHeight}px` }}
+                      >
                         <div dir="rtl" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                           <div className="justify-self-start">
                             {parentInfo && (
                               <button
                                 type="button"
                                 onClick={parentInfo.onClick}
-                                className="inline-flex items-center gap-1 text-sm font-semibold text-[#0c2d57] min-h-11 cursor-pointer hover:underline"
+                                className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0c2d57] min-h-11 px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
                               >
-                                <ChevronRight size={18} className="flex-shrink-0" />
+                                <ChevronRight size={18} className="flex-shrink-0 stroke-[2.5]" />
                                 <span className="hidden sm:inline">{parentInfo.name}</span>
                                 <span className="sm:hidden">חזרה</span>
                               </button>
                             )}
                           </div>
-                          <div className="flex items-center justify-center gap-3">
-                            <h2 className="text-2xl sm:text-3xl font-bold text-[#0c2d57] text-center px-2">
+                          <div className="flex items-center justify-center gap-3 min-w-0">
+                            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
                               {selectedNicheCategory ||
                                 selectedNestedSubcategory ||
                                 selectedSubcategory}
@@ -9053,8 +9089,8 @@ export default function App() {
                           <div className="justify-self-end" />
                         </div>
                         {!isProductsLoading && (
-                          <div className="flex items-center justify-center mt-2">
-                            <span className="text-gray-600 bg-[#f2f2f2] px-3 py-1 rounded-none text-xs sm:text-sm font-medium whitespace-nowrap border border-gray-100 shadow-sm">
+                          <div className="flex items-center justify-center mt-1">
+                            <span className="text-gray-600 bg-[#f2f2f2] px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap border border-gray-200 shadow-2xs">
                               {filteredProducts.length} מוצרים
                             </span>
                           </div>
@@ -9127,22 +9163,26 @@ export default function App() {
                     </>
                   ) : currentView === "product" && selectedProduct ? (
                     <>
-                      <div dir="rtl" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-4 sm:mb-6">
+                      <div
+                        dir="rtl"
+                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2.5 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-4 transition-all grid grid-cols-[1fr_auto_1fr] items-center gap-2"
+                        style={{ top: `${headerHeight}px` }}
+                      >
                         <div className="justify-self-start">
                           {parentInfo && (
                             <button
                               type="button"
                               onClick={parentInfo.onClick}
-                              className="inline-flex items-center gap-1 text-sm font-semibold text-[#0c2d57] min-h-11 cursor-pointer hover:underline"
+                              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0c2d57] min-h-11 px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
                             >
-                              <ChevronRight size={18} className="flex-shrink-0" />
+                              <ChevronRight size={18} className="flex-shrink-0 stroke-[2.5]" />
                               <span className="hidden sm:inline">{parentInfo.name}</span>
                               <span className="sm:hidden">חזרה</span>
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center justify-center gap-3">
-                          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-2 line-clamp-1">
+                        <div className="flex items-center justify-center gap-3 min-w-0">
+                          <h1 className="text-base sm:text-xl md:text-2xl font-bold text-[#0c2d57] text-center px-1 truncate max-w-[200px] sm:max-w-md md:max-w-xl">
                             {selectedProduct.name}
                           </h1>
                           <button

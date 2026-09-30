@@ -127,6 +127,7 @@ export default defineConfig(() => {
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
+              if (/[\\/]node_modules[\\/](three|jspdf|html2canvas|canvg|dompurify|core-js|qrcode|fflate|raf|rgbcolor|stackblur-canvas|svg-pathdata|performance-now)[\\/]/.test(id)) return undefined;
               if (id.includes('xlsx') || id.includes('jszip')) {
                 return 'vendor-xlsx';
               }
