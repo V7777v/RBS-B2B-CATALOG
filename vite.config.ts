@@ -14,7 +14,7 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         useCredentials: true,
-        registerType: 'autoUpdate',
+        registerType: 'prompt',
         injectRegister: 'auto',
         includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icons/*.png', 'og-image.png', 'advisor-avatar.png'],
         manifest: {
@@ -40,8 +40,6 @@ export default defineConfig(() => {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           cleanupOutdatedCaches: true,
-          skipWaiting: true,
-          clientsClaim: true,
           navigateFallbackDenylist: [
             /^\/api/,
             /sheets\.googleapis\.com/,

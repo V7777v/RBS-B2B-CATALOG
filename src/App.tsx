@@ -5533,7 +5533,20 @@ export default function App() {
       }
     }
   }, [isAuthenticated, isGuest, userUid]);
-  const [isHumanVerified, setIsHumanVerified] = useState(false);
+  const [isHumanVerified, setIsHumanVerified] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem("rbs_human_verified_at");
+      if (stored) {
+        const verifiedAt = Number(stored);
+        if (!isNaN(verifiedAt) && Date.now() - verifiedAt < 24 * 60 * 60 * 1000) {
+          return true;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return false;
+  });
   const [isCartOpen, setIsCartOpen] = useState(false);
   useEffect(() => {
     if (isCartOpen) trackEvent("checkout_start", { cart_size: cart.length });
@@ -9510,7 +9523,16 @@ export default function App() {
             </div>
           )}
           {!isHumanVerified && (
-            <HumanVerification onVerified={() => setIsHumanVerified(true)} />
+            <HumanVerification
+              onVerified={() => {
+                setIsHumanVerified(true);
+                try {
+                  localStorage.setItem("rbs_human_verified_at", String(Date.now()));
+                } catch {
+                  /* ignore */
+                }
+              }}
+            />
           )}
           {!advisorOpen && (
             <button
