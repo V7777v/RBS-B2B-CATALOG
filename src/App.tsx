@@ -496,8 +496,21 @@ const fetchCSV = async (
   console.error("Sheets proxy request failed:", lastError?.message || lastError);
   throw lastError;
 };
+
+export const cleanProductKey = (val: any): string => {
+  if (val === null || val === undefined) return "";
+  let s = String(val);
+  try { s = decodeURIComponent(s); } catch {}
+  try { s = decodeURIComponent(s); } catch {}
+  return s.replace(/%0[da]/gi, "").replace(/[\r\n\t]+/g, "").trim();
+};
+
 const parseProductRow = (row: any) => {
   let itemImages: string[] = [];
+
+  const rawId = cleanProductKey(row.id || "");
+  const rawSku = cleanProductKey(row.sku || "");
+  const rawPn = cleanProductKey(row.pn || row.PN || "");
 
   const rawImagesField =
     row.imagesJSON || row[""] || row.images || row["תמונות"] || "";
@@ -745,6 +758,9 @@ const parseProductRow = (row: any) => {
   }
   return {
     ...row,
+    id: rawId,
+    sku: rawSku,
+    pn: rawPn,
     compatibility,
     reviewLink: reviewLink,
     category: categoryName,
@@ -6230,8 +6246,14 @@ export default function App() {
             setIsProductsLoading(false);
           } else {
             setIsProductsLoading(false);
-            // Progressive background fetching with a 1.8 second delay.
-            // This ensures the browser can use 100% of its network bandwidth to download and draw initial product images first!
+            const hasDeepLinkProduct = typeof window !== "undefined" && (
+              new URLSearchParams(window.location.search).has("p") ||
+              new URLSearchParams(window.location.search).has("product") ||
+              new URLSearchParams(window.location.search).has("sku") ||
+              new URLSearchParams(window.location.search).has("id")
+            );
+            const progressiveDelay = hasDeepLinkProduct ? 0 : 1800;
+            // Progressive background fetching with zero-delay for deep linked products
             setTimeout(() => {
               fetchCSV(PRODUCTS_GID, undefined, undefined, false)
                 .then((allProductsCsv) => {
@@ -6248,7 +6270,7 @@ export default function App() {
                     err,
                   );
                 });
-            }, 1800);
+            }, progressiveDelay);
           }
         }
         lastFetchTimeRef.current = Date.now();
@@ -7260,7 +7282,7 @@ export default function App() {
     }
     const p = new URLSearchParams();
     if (s.currentView === "product" && s.selectedProduct) {
-      const key = s.selectedProduct.sku || s.selectedProduct.id || "";
+      const key = cleanProductKey(s.selectedProduct.sku || s.selectedProduct.id || "");
       if (key) p.set("p", String(key));
     } else if (
       s.currentView === "niche_subs" ||
@@ -7310,7 +7332,7 @@ export default function App() {
   const handleOpenShare = useCallback(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     if (selectedProduct) {
-      const key = selectedProduct.sku || selectedProduct.id || "";
+      const key = cleanProductKey(selectedProduct.sku || selectedProduct.id || "");
       setShareModalState({
         isOpen: true,
         url: `${origin}/?p=${encodeURIComponent(String(key))}`,
@@ -7386,7 +7408,7 @@ export default function App() {
   const openShareForProduct = useCallback((prod: any) => {
     if (!prod) return;
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const key = prod.sku || prod.id || "";
+    const key = cleanProductKey(prod.sku || prod.id || "");
     setShareModalState({
       isOpen: true,
       url: `${origin}/?p=${encodeURIComponent(String(key))}`,
@@ -7401,7 +7423,7 @@ export default function App() {
     (kind: "product" | "category", value: string, catName?: string) => {
       let url = window.location.origin + "/";
       if (kind === "product") {
-        url += "?p=" + encodeURIComponent(String(value || ""));
+        url += "?p=" + encodeURIComponent(cleanProductKey(value || ""));
       } else {
         if (catName) {
           url += "?s=" + shortCode(`${catName}|${value}`);
@@ -7735,7 +7757,13 @@ export default function App() {
     if (deepLinkDoneRef.current) return;
     if (!catalogData || catalogData.length === 0) return;
     const params = new URLSearchParams(window.location.search);
-    const productKey = (params.get("p") || params.get("product") || "").trim();
+    const rawProductParam =
+      params.get("p") ||
+      params.get("product") ||
+      params.get("sku") ||
+      params.get("id") ||
+      "";
+    const productKey = cleanProductKey(rawProductParam);
     const catParam = (params.get("c") || params.get("cat") || "").trim();
     const subParam = (params.get("s") || params.get("sub") || "").trim();
     const nestedParam = (params.get("n") || params.get("nested") || "").trim();
@@ -7747,16 +7775,49 @@ export default function App() {
     }
 
     if (productKey) {
-      const needle = productKey.toLowerCase();
-      const found = catalogData.find(
-        (p: any) =>
-          String(p.sku || "").toLowerCase() === needle ||
-          String(p.id || "").toLowerCase() === needle,
-      );
+      const needle = cleanProductKey(productKey).toLowerCase();
+      const needleLoose = needle.replace(/[\s\-_()]+/g, "");
+
+      // 1. Exact match by sku, id, or pn
+      let found = catalogData.find((p: any) => {
+        const pSku = cleanProductKey(p.sku).toLowerCase();
+        const pId = cleanProductKey(p.id).toLowerCase();
+        const pPn = cleanProductKey(p.pn).toLowerCase();
+        return pSku === needle || pId === needle || (pPn && pPn === needle);
+      });
+
+      // 2. Loose match (ignoring dashes, underscores, spaces, parentheses) if exact match fails
+      if (!found && needleLoose.length >= 3) {
+        found = catalogData.find((p: any) => {
+          const pSkuLoose = cleanProductKey(p.sku).toLowerCase().replace(/[\s\-_()]+/g, "");
+          const pIdLoose = cleanProductKey(p.id).toLowerCase().replace(/[\s\-_()]+/g, "");
+          const pPnLoose = cleanProductKey(p.pn).toLowerCase().replace(/[\s\-_()]+/g, "");
+          return (
+            (pSkuLoose && pSkuLoose === needleLoose) ||
+            (pIdLoose && pIdLoose === needleLoose) ||
+            (pPnLoose && pPnLoose === needleLoose)
+          );
+        });
+      }
+
+      // 3. Fallback: match by product name
+      if (!found) {
+        found = catalogData.find(
+          (p: any) => cleanProductKey(p.name).toLowerCase() === needle,
+        );
+      }
+
       if (found) {
         deepLinkDoneRef.current = true;
         setCurrentOptionals([]);
-        navigateForward({ currentView: "product", selectedProduct: found });
+        navigateForward({
+          currentView: "product",
+          selectedProduct: found,
+          selectedCatalog: found.category || null,
+          selectedSubcategory: found.subcategory || null,
+          selectedNestedSubcategory: found.nestedSubcategory || null,
+          selectedNicheCategory: found.nicheCategory || null,
+        });
       } else if (hasMoreProducts) {
         // Still loading more products, wait and retry on next batch
         return;

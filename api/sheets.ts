@@ -104,11 +104,19 @@ function processProductsSheet(csv: string, isAgentView: boolean, limit?: string,
   
   let keepIdx = new Set<number>();
   let activeColIdx = -1;
+  let skuColIdx = -1;
+  let idColIdx = -1;
   
   header.forEach((c, i) => {
     const clean = String(c).trim().toLowerCase();
     if (clean === "active" || clean === "פעיל") {
       activeColIdx = i;
+    }
+    if (clean === "sku" || clean === "מק״ט" || clean === "מקט" || clean === "מק'ט") {
+      skuColIdx = i;
+    }
+    if (clean === "id") {
+      idColIdx = i;
     }
     if (isAgentView) {
       keepIdx.add(i);
@@ -120,6 +128,16 @@ function processProductsSheet(csv: string, isAgentView: boolean, limit?: string,
   });
 
   let dataRows = rows.slice(1).filter(r => !(r.length === 1 && r[0] === ""));
+  
+  // Sanitize SKU and ID values by stripping trailing/leading whitespace and newlines
+  dataRows.forEach(row => {
+    if (skuColIdx !== -1 && row[skuColIdx]) {
+      row[skuColIdx] = String(row[skuColIdx]).replace(/[\r\n\t]+/g, "").trim();
+    }
+    if (idColIdx !== -1 && row[idColIdx]) {
+      row[idColIdx] = String(row[idColIdx]).replace(/[\r\n\t]+/g, "").trim();
+    }
+  });
   
   // Filter inactive for guests
   if (!isAgentView) {

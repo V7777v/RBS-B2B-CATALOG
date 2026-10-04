@@ -36,15 +36,25 @@ export const ProductQrModal: React.FC<ProductQrModalProps> = ({
   const [copied, setCopied] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(true);
 
+  const cleanProductKey = (val: any): string => {
+    if (!val) return "";
+    let s = String(val);
+    try { s = decodeURIComponent(s); } catch {}
+    try { s = decodeURIComponent(s); } catch {}
+    return s.replace(/%0[da]/gi, "").replace(/[\r\n\t]+/g, "").trim();
+  };
+
+  const rawKey = cleanProductKey(product?.sku || product?.id || "");
   const defaultProductUrl = typeof window !== "undefined" && product
-    ? `${window.location.origin}/?product=${encodeURIComponent(String(product.sku || product.id || ""))}`
+    ? `${window.location.origin}/?p=${encodeURIComponent(rawKey)}`
     : typeof window !== "undefined" ? window.location.href : "";
 
-  const targetUrl = url || defaultProductUrl;
+  // Sanitize targetUrl from any stray %0D%0A or whitespace/newlines
+  const targetUrl = (url ? url.replace(/%0[da]/gi, "").replace(/[\r\n\t]+/g, "").trim() : "") || defaultProductUrl;
   const resolvedTitle = title || product?.name || "מוצר בקטלוג";
   const resolvedSubtitle = subtitle || "סרקו במכשיר נייד כדי לפתוח או לשתף";
   const resolvedImage = imageUrl || (product?.images && product.images.length > 0 ? product.images[0] : null);
-  const resolvedSku = product?.sku;
+  const resolvedSku = product?.sku ? cleanProductKey(product.sku) : undefined;
   const resolvedBrand = product?.brand;
 
   useEffect(() => {
