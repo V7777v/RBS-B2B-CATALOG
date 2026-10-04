@@ -463,6 +463,10 @@ const fetchCSV = async (
         throw new Error(`HTTP ${res.status}: ${res.statusText || ""} ${errBody}`.trim());
       }
 
+      if (bypassCache && (res.headers.get("X-Bypass-Denied") === "1" || res.headers.get("x-bypass-denied") === "1")) {
+        throw new Error("BYPASS_DENIED");
+      }
+
       const csvText = await res.text();
       const parseResult = Papa.parse(csvText, {
         header: true,
@@ -480,6 +484,9 @@ const fetchCSV = async (
       return normalizedData;
     } catch (err: any) {
       lastError = err;
+      if (err?.message === "BYPASS_DENIED") {
+        throw err;
+      }
       if (attempt < 2) {
         await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
       }
@@ -5907,21 +5914,23 @@ export default function App() {
         setIsAdminAuth(true);
         // Trigger live sheets sync - bypassing the CDN and intermediate browser cache instantly!
         await loadData(false, true);
-        // Display green success toast animation
-        setSyncSuccessMsg(
-          "הנתונים סונכרנו בהצלחה ישירות מ-Google Sheets ורעננו את האתר!",
-        );
+        const time = new Date().toLocaleTimeString("he-IL");
+        setSyncSuccessMsg(`הנתונים עודכנו מ-Google Sheets (${time})`);
 
         // Auto close after 2.5 seconds
         setTimeout(() => {
           setShowAdminSyncModal(false);
           setSyncSuccessMsg("");
         }, 2200);
-      } catch (err) {
+      } catch (err: any) {
         console.error("Manual direct sheet sync error:", err);
-        setAdminError(
-          "סינכרון נכשל עקב בעיית תקשורת. נא ודא חיבור או נסה שוב.",
-        );
+        if (err?.message === "BYPASS_DENIED" || String(err).includes("BYPASS_DENIED")) {
+          setAdminError("הרענון נחסם — נסו שוב בעוד כמה דקות");
+        } else {
+          setAdminError(
+            "סינכרון נכשל עקב בעיית תקשורת. נא ודא חיבור או נסה שוב.",
+          );
+        }
       } finally {
         setIsSyncingLive(false);
       }
@@ -6159,17 +6168,7 @@ export default function App() {
 
         // Stop the main block immediately, allowing the system to display the Home Page INSTANTLY!
         if (!silent) setIsLoading(false);
-        // 2. Fetch the FIRST 50 products from Google Sheets, so initial render is incredibly fast!
-        if (!silent) setIsProductsLoading(true);
-        setProductsOffset(0);
-        setHasMoreProducts(true);
-        const productsCsv = await fetchCSV(
-          PRODUCTS_GID,
-          50,
-          0,
-          forceBypassCache,
-        );
-        const parsedProducts = productsCsv.map(parseProductRow);
+
         const deduplicate = (arr: any[]) => {
           const seen = new Set();
           const res = arr.filter((p) => {
@@ -6185,38 +6184,68 @@ export default function App() {
           }
           return res;
         };
-        setCatalogData(deduplicate(parsedProducts));
-        setProductsOffset(50);
-        if (productsCsv.length < 50) {
+
+        if (forceBypassCache) {
+          if (!silent) setIsProductsLoading(true);
+          const allProductsCsv = await fetchCSV(
+            PRODUCTS_GID,
+            undefined,
+            undefined,
+            true,
+          );
+          const allParsed = (allProductsCsv || []).map(parseProductRow);
+          setCatalogData(deduplicate(allParsed));
           setHasMoreProducts(false);
+          setProductsOffset(allParsed.length);
           setIsProductsLoading(false);
         } else {
-          setIsProductsLoading(false);
-          // Progressive background fetching with a 1.8 second delay.
-          // This ensures the browser can use 100% of its network bandwidth to download and draw initial product images first!
-          setTimeout(() => {
-            fetchCSV(PRODUCTS_GID, undefined, undefined, forceBypassCache)
-              .then((allProductsCsv) => {
-                if (allProductsCsv && allProductsCsv.length > 0) {
-                  const allParsed = allProductsCsv.map(parseProductRow);
-                  setCatalogData(deduplicate(allParsed));
-                  setHasMoreProducts(false);
-                  setProductsOffset(allParsed.length);
-                }
-              })
-              .catch((err) => {
-                console.error(
-                  "Progressive background fetch of full products sheet failed:",
-                  err,
-                );
-              });
-          }, 1800);
+          // 2. Fetch the FIRST 50 products from Google Sheets, so initial render is incredibly fast!
+          if (!silent) setIsProductsLoading(true);
+          setProductsOffset(0);
+          setHasMoreProducts(true);
+          const productsCsv = await fetchCSV(
+            PRODUCTS_GID,
+            50,
+            0,
+            false,
+          );
+          const parsedProducts = productsCsv.map(parseProductRow);
+          setCatalogData(deduplicate(parsedProducts));
+          setProductsOffset(50);
+          if (productsCsv.length < 50) {
+            setHasMoreProducts(false);
+            setIsProductsLoading(false);
+          } else {
+            setIsProductsLoading(false);
+            // Progressive background fetching with a 1.8 second delay.
+            // This ensures the browser can use 100% of its network bandwidth to download and draw initial product images first!
+            setTimeout(() => {
+              fetchCSV(PRODUCTS_GID, undefined, undefined, false)
+                .then((allProductsCsv) => {
+                  if (allProductsCsv && allProductsCsv.length > 0) {
+                    const allParsed = allProductsCsv.map(parseProductRow);
+                    setCatalogData(deduplicate(allParsed));
+                    setHasMoreProducts(false);
+                    setProductsOffset(allParsed.length);
+                  }
+                })
+                .catch((err) => {
+                  console.error(
+                    "Progressive background fetch of full products sheet failed:",
+                    err,
+                  );
+                });
+            }, 1800);
+          }
         }
         lastFetchTimeRef.current = Date.now();
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error loading data:", err);
         setError("שגיאה בטעינת הנתונים מהמערכת. ודא שהחיבור תקין ונסה שוב.");
         setIsProductsLoading(false);
+        if (forceBypassCache) {
+          throw err;
+        }
       } finally {
         if (!silent) setIsLoading(false);
       }
@@ -6242,17 +6271,39 @@ export default function App() {
     }
   }, [userRole, loadData]);
 
-  // Smart auto-refresh on focus
+  // Smart auto-refresh on focus, visibility change, and periodic timer
   useEffect(() => {
-    const handleFocus = () => {
+    const checkAndReload = () => {
       // If data is older than 2 minutes, refresh it smartly in background
       if (Date.now() - lastFetchTimeRef.current > 1000 * 120) {
         loadData(true);
       }
     };
 
+    const handleFocus = () => {
+      checkAndReload();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        checkAndReload();
+      }
+    };
+
+    const intervalId = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        checkAndReload();
+      }
+    }, 5 * 60 * 1000);
+
     window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearInterval(intervalId);
+    };
   }, [loadData]);
   // Scroll to top on view changes, or when search is cleared/initiated (avoiding jumps while typing on mobile)
   const prevSearchEmptyRef = useRef(true);

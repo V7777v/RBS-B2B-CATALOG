@@ -194,8 +194,8 @@ const bypassHits = new Map<string, number[]>();
 const csvCache = new Map<string, { body: string; exp: number }>();
 const rawSheetCache = new Map<string, { csv: string; exp: number }>();
 const rawInFlightFetches = new Map<string, Promise<string>>();
-const CACHE_TTL_MS = 10 * 60 * 1000;
-const CACHE_TTL_RAW_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 3 * 60 * 1000;
+const CACHE_TTL_RAW_MS = 2 * 60 * 1000;
 
 async function getRawSheetData(gid: string, bypassCache: boolean, requestId: string): Promise<string> {
   const gidStr = String(gid);
@@ -260,10 +260,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Agent/manager access: full columns only with a valid Firebase ID token + approved role.
   let isAgentView = false;
+  let isAdminRequest = false;
+  let verifiedUserEmail = "";
   const idToken = (req.headers["x-firebase-id-token"] || "") as string;
   if (idToken) {
     const email = await verifiedEmail(idToken);
     if (email) {
+      verifiedUserEmail = email;
       try {
         const saTok = await getGoogleToken(requestId);
         if (saTok) {
@@ -273,30 +276,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const doc: any = await fsRes.json();
             const role = (doc?.fields?.role?.stringValue || "").trim().toLowerCase();
             isAgentView = (role === "agent" || role === "sales_manager");
+            isAdminRequest = doc?.fields?.admin?.booleanValue === true;
           }
         }
-      } catch { isAgentView = false; }
+      } catch {
+        isAgentView = false;
+        isAdminRequest = false;
+      }
     }
   }
 
-  // bypass_cache is rate-limited per IP (max 5 / 10 min) to protect Google quota.
-  const clientIp = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || "unknown";
-  let bypassCache = req.query.bypass_cache === "true";
-  if (bypassCache) {
-    const now = Date.now();
-    const hits = (bypassHits.get(clientIp) || []).filter((ts) => now - ts < 10 * 60 * 1000);
-    if (hits.length >= 5) {
-      bypassCache = false; // quota guard: serve cached instead
+  // bypass_cache is restricted to admins and rate-limited per user email (max 40 / 10 min)
+  const requestedBypass = req.query.bypass_cache === "true";
+  let bypassCache = false;
+  let bypassDenied = false;
+
+  if (requestedBypass) {
+    if (!isAdminRequest) {
+      bypassCache = false;
+      bypassDenied = true;
     } else {
-      hits.push(now);
-      bypassHits.set(clientIp, hits);
+      const rateLimitKey = verifiedUserEmail || "admin";
+      const now = Date.now();
+      const hits = (bypassHits.get(rateLimitKey) || []).filter((ts) => now - ts < 10 * 60 * 1000);
+      if (hits.length >= 40) {
+        bypassCache = false;
+        bypassDenied = true;
+      } else {
+        hits.push(now);
+        bypassHits.set(rateLimitKey, hits);
+        bypassCache = true;
+      }
     }
   }
+
   const cacheKey = `${isAgentView ? "A" : "P"}:${gid}:${limit ?? ""}:${offset ?? ""}`;
   
   if (!bypassCache) {
     const hit = csvCache.get(cacheKey);
     if (hit && Date.now() < hit.exp) {
+      if (bypassDenied) res.setHeader("X-Bypass-Denied", "1");
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Cache-Control", "private, max-age=0, no-store");
       res.setHeader("X-Cache", "HIT");
@@ -316,10 +335,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!bypassCache) csvCache.set(cacheKey, { body: csvString, exp: Date.now() + CACHE_TTL_MS });
 
+    if (bypassDenied) res.setHeader("X-Bypass-Denied", "1");
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Cache-Control", "private, max-age=0, no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("X-Cache", "MISS");
+    res.setHeader("X-Cache", bypassCache ? "BYPASS" : "MISS");
     
     return res.status(200).send(csvString);
   } catch (e: any) {
@@ -330,6 +350,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const hit = csvCache.get(cacheKey);
       if (hit) {
         console.warn(`[${requestId}] [sheets] Serving STALE PROCESSED CACHE due to upstream error.`);
+        if (bypassDenied) res.setHeader("X-Bypass-Denied", "1");
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
         res.setHeader("Cache-Control", "private, max-age=0, no-store");
         res.setHeader("X-Data-Source", "stale-cache");
@@ -345,6 +366,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } else {
           fallbackCsv = processOtherSheet(staleRaw.csv, isAgentView, limit as string, offset as string);
         }
+        if (bypassDenied) res.setHeader("X-Bypass-Denied", "1");
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
         res.setHeader("Cache-Control", "private, max-age=0, no-store");
         res.setHeader("X-Data-Source", "stale-raw-cache");
