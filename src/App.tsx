@@ -6896,6 +6896,17 @@ export default function App() {
     catalogData,
     subcategoriesGlobalData,
   ]);
+  const isPolmanOrEzvizCat = useMemo(() => {
+    if (!selectedCatalog) return false;
+    const lower = selectedCatalog.toLowerCase();
+    return (
+      lower.includes("polman") ||
+      lower.includes("ezviz") ||
+      lower.includes("פולמן") ||
+      lower.includes("איזויז")
+    );
+  }, [selectedCatalog]);
+
   const filteredProducts = useMemo(() => {
     let filtered = catalogData.filter((item) => item.active !== "FALSE");
     // Search override - Smart Token-Based & Fuzzy Search
@@ -6903,7 +6914,7 @@ export default function App() {
       const query = searchQuery.toLowerCase();
       // מפצל את החיפוש למילים נפרדות על בסיס רווחים, מקפים או קווים נטויים
       const queryTokens = query.split(/[\s\-/,]+/).filter(Boolean);
-      const searchResults = filtered.filter((item) => {
+      return filtered.filter((item) => {
         // Filter out placeholder "category mother" products
         if (item.name === "קטגוריית אם" || item.name === "מוצר הדגמה")
           return false;
@@ -6928,28 +6939,6 @@ export default function App() {
         });
         return tokenMatch;
       });
-
-      if (sortBy === "price-asc") {
-        searchResults.sort((a, b) => {
-          const pA = Number(a.price) || 0;
-          const pB = Number(b.price) || 0;
-          if (pA <= 0 && pB <= 0) return 0;
-          if (pA <= 0) return 1;
-          if (pB <= 0) return -1;
-          return pA - pB;
-        });
-      } else if (sortBy === "price-desc") {
-        searchResults.sort((a, b) => {
-          const pA = Number(a.price) || 0;
-          const pB = Number(b.price) || 0;
-          if (pA <= 0 && pB <= 0) return 0;
-          if (pA <= 0) return 1;
-          if (pB <= 0) return -1;
-          return pB - pA;
-        });
-      }
-
-      return searchResults;
     }
     // Filter by catalog and subcategory
     if (selectedCatalog && currentView === "products") {
@@ -7023,25 +7012,27 @@ export default function App() {
       });
     }
 
-    // מיון מוצרים לפי מחיר מתקין (ברירת מחדל: מהנמוך לגבוה)
-    if (sortBy === "price-asc") {
-      filtered.sort((a, b) => {
-        const pA = Number(a.price) || 0;
-        const pB = Number(b.price) || 0;
-        if (pA <= 0 && pB <= 0) return 0;
-        if (pA <= 0) return 1;
-        if (pB <= 0) return -1;
-        return pA - pB;
-      });
-    } else if (sortBy === "price-desc") {
-      filtered.sort((a, b) => {
-        const pA = Number(a.price) || 0;
-        const pB = Number(b.price) || 0;
-        if (pA <= 0 && pB <= 0) return 0;
-        if (pA <= 0) return 1;
-        if (pB <= 0) return -1;
-        return pB - pA;
-      });
+    // מיון מוצרים לפי מחיר מתקין אך ורק ב-POLMAN וב-EZVIZ
+    if (isPolmanOrEzvizCat) {
+      if (sortBy === "price-asc") {
+        filtered.sort((a, b) => {
+          const pA = Number(a.price) || 0;
+          const pB = Number(b.price) || 0;
+          if (pA <= 0 && pB <= 0) return 0;
+          if (pA <= 0) return 1;
+          if (pB <= 0) return -1;
+          return pA - pB;
+        });
+      } else if (sortBy === "price-desc") {
+        filtered.sort((a, b) => {
+          const pA = Number(a.price) || 0;
+          const pB = Number(b.price) || 0;
+          if (pA <= 0 && pB <= 0) return 0;
+          if (pA <= 0) return 1;
+          if (pB <= 0) return -1;
+          return pB - pA;
+        });
+      }
     }
 
     return filtered;
@@ -7054,6 +7045,7 @@ export default function App() {
     searchQuery,
     catalogData,
     sortBy,
+    isPolmanOrEzvizCat,
   ]);
   const nicheSubcategoriesData = useMemo(() => {
     if (!selectedNestedSubcategory || !selectedSubcategory || !selectedCatalog)
@@ -8923,29 +8915,14 @@ export default function App() {
                                 </strong>
                                 "
                               </span>
-                              <div className="flex items-center gap-2 flex-wrap justify-center">
-                                <div className="relative inline-flex items-center">
-                                  <ArrowUpDown size={13} className="absolute right-2.5 text-gray-500 pointer-events-none" />
-                                  <select
-                                    value={sortBy}
-                                    onChange={(e) => setSortBy(e.target.value as any)}
-                                    className="appearance-none bg-white border border-gray-300 hover:border-[#004387] focus:border-[#004387] focus:ring-1 focus:ring-[#004387] rounded-lg pr-7 pl-3 py-1.5 text-xs font-semibold text-[#0c2d57] shadow-2xs cursor-pointer outline-none transition-colors"
-                                    aria-label="מיון תוצאות חיפוש"
-                                  >
-                                    <option value="price-asc">מחיר מתקין: מהנמוך לגבוה (ברירת מחדל)</option>
-                                    <option value="price-desc">מחיר מתקין: מהגבוה לנמוך</option>
-                                    <option value="catalog">סדר קטלוג מקורי</option>
-                                  </select>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setSearchQuery("")}
-                                  className="flex items-center gap-1.5 bg-gray-100 hover:bg-red-50 hover:text-red-500 text-gray-700 font-bold py-1.5 px-3 rounded-xl text-xs sm:text-sm border border-gray-200 transition-all cursor-pointer"
-                                >
-                                  <X size={14} className="stroke-[3]" />
-                                  <span>נקה חיפוש וחזור</span>
-                                </button>
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSearchQuery("")}
+                                className="flex items-center gap-1.5 bg-gray-100 hover:bg-red-50 hover:text-red-500 text-gray-700 font-bold py-2 px-4 rounded-xl text-xs sm:text-sm border border-gray-200 transition-all cursor-pointer"
+                              >
+                                <X size={14} className="stroke-[3]" />
+                                <span>נקה חיפוש וחזור</span>
+                              </button>
                             </div>
                           </div>
                           <div
@@ -9319,26 +9296,47 @@ export default function App() {
                           <div className="justify-self-end" />
                         </div>
                         {!isProductsLoading && (
-                          <div className="flex flex-wrap items-center justify-between gap-2 mt-2 pt-2 border-t border-slate-200/60">
-                            <span className="text-gray-600 bg-[#f2f2f2] px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap border border-gray-200 shadow-2xs">
+                          <div
+                            className={`flex flex-wrap items-center ${
+                              isPolmanOrEzvizCat
+                                ? "justify-between mt-2 pt-2 border-t border-slate-200/60"
+                                : "justify-center mt-1"
+                            } gap-2`}
+                          >
+                            <span className="text-gray-600 bg-[#f2f2f2] px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap border border-gray-200 shadow-2xs">
                               {filteredProducts.length} מוצרים
                             </span>
-                            <div className="flex items-center gap-1.5 text-xs text-gray-700 mr-auto">
-                              <span className="font-medium text-gray-500 hidden sm:inline">מיון:</span>
-                              <div className="relative inline-flex items-center">
-                                <ArrowUpDown size={13} className="absolute right-2.5 text-gray-500 pointer-events-none" />
-                                <select
-                                  value={sortBy}
-                                  onChange={(e) => setSortBy(e.target.value as any)}
-                                  className="appearance-none bg-white border border-gray-300 hover:border-[#004387] focus:border-[#004387] focus:ring-1 focus:ring-[#004387] rounded-lg pr-7 pl-3 py-1 text-xs font-semibold text-[#0c2d57] shadow-2xs cursor-pointer outline-none transition-colors"
-                                  aria-label="מיון מוצרים"
-                                >
-                                  <option value="price-asc">מחיר מתקין: מהנמוך לגבוה (ברירת מחדל)</option>
-                                  <option value="price-desc">מחיר מתקין: מהגבוה לנמוך</option>
-                                  <option value="catalog">סדר קטלוג מקורי</option>
-                                </select>
+                            {isPolmanOrEzvizCat && (
+                              <div className="flex items-center gap-1.5 text-xs text-gray-700 mr-auto">
+                                <span className="font-medium text-gray-500 hidden sm:inline">
+                                  מיון:
+                                </span>
+                                <div className="relative inline-flex items-center">
+                                  <ArrowUpDown
+                                    size={13}
+                                    className="absolute right-2.5 text-gray-500 pointer-events-none"
+                                  />
+                                  <select
+                                    value={sortBy}
+                                    onChange={(e) =>
+                                      setSortBy(e.target.value as any)
+                                    }
+                                    className="appearance-none bg-white border border-gray-300 hover:border-[#004387] focus:border-[#004387] focus:ring-1 focus:ring-[#004387] rounded-lg pr-7 pl-3 py-1 text-xs font-semibold text-[#0c2d57] shadow-2xs cursor-pointer outline-none transition-colors"
+                                    aria-label="מיון מוצרים"
+                                  >
+                                    <option value="price-asc">
+                                      מחיר מתקין: מהנמוך לגבוה (ברירת מחדל)
+                                    </option>
+                                    <option value="price-desc">
+                                      מחיר מתקין: מהגבוה לנמוך
+                                    </option>
+                                    <option value="catalog">
+                                      סדר קטלוג מקורי
+                                    </option>
+                                  </select>
+                                </div>
                               </div>
-                            </div>
+                            )}
                           </div>
                         )}
                       </div>
