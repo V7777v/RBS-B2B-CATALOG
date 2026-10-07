@@ -66,6 +66,7 @@ import {
   LayoutGrid,
   QrCode,
   ExternalLink,
+  ArrowUpDown,
 } from "lucide-react";
 import Papa from "papaparse";
 import { motion, AnimatePresence } from "motion/react";
@@ -4020,6 +4021,7 @@ export default function App() {
     string | null
   >(null);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [sortBy, setSortBy] = useState<"price-asc" | "price-desc" | "catalog">("price-asc");
   useEffect(() => {
     let path = window.location.pathname + window.location.search;
     let title = "RBS B2B Catalog";
@@ -6239,8 +6241,10 @@ export default function App() {
             false,
           );
           const parsedProducts = productsCsv.map(parseProductRow);
-          setCatalogData(deduplicate(parsedProducts));
+          const dedupedInitial = deduplicate(parsedProducts);
+          setCatalogData(dedupedInitial);
           setProductsOffset(50);
+          detectAndNavigateProductFromUrl(dedupedInitial);
           if (productsCsv.length < 50) {
             setHasMoreProducts(false);
             setIsProductsLoading(false);
@@ -6259,9 +6263,11 @@ export default function App() {
                 .then((allProductsCsv) => {
                   if (allProductsCsv && allProductsCsv.length > 0) {
                     const allParsed = allProductsCsv.map(parseProductRow);
-                    setCatalogData(deduplicate(allParsed));
+                    const dedupedAll = deduplicate(allParsed);
+                    setCatalogData(dedupedAll);
                     setHasMoreProducts(false);
                     setProductsOffset(allParsed.length);
+                    detectAndNavigateProductFromUrl(dedupedAll);
                   }
                 })
                 .catch((err) => {
@@ -6897,7 +6903,7 @@ export default function App() {
       const query = searchQuery.toLowerCase();
       // מפצל את החיפוש למילים נפרדות על בסיס רווחים, מקפים או קווים נטויים
       const queryTokens = query.split(/[\s\-/,]+/).filter(Boolean);
-      return filtered.filter((item) => {
+      const searchResults = filtered.filter((item) => {
         // Filter out placeholder "category mother" products
         if (item.name === "קטגוריית אם" || item.name === "מוצר הדגמה")
           return false;
@@ -6922,6 +6928,28 @@ export default function App() {
         });
         return tokenMatch;
       });
+
+      if (sortBy === "price-asc") {
+        searchResults.sort((a, b) => {
+          const pA = Number(a.price) || 0;
+          const pB = Number(b.price) || 0;
+          if (pA <= 0 && pB <= 0) return 0;
+          if (pA <= 0) return 1;
+          if (pB <= 0) return -1;
+          return pA - pB;
+        });
+      } else if (sortBy === "price-desc") {
+        searchResults.sort((a, b) => {
+          const pA = Number(a.price) || 0;
+          const pB = Number(b.price) || 0;
+          if (pA <= 0 && pB <= 0) return 0;
+          if (pA <= 0) return 1;
+          if (pB <= 0) return -1;
+          return pB - pA;
+        });
+      }
+
+      return searchResults;
     }
     // Filter by catalog and subcategory
     if (selectedCatalog && currentView === "products") {
@@ -6995,6 +7023,27 @@ export default function App() {
       });
     }
 
+    // מיון מוצרים לפי מחיר מתקין (ברירת מחדל: מהנמוך לגבוה)
+    if (sortBy === "price-asc") {
+      filtered.sort((a, b) => {
+        const pA = Number(a.price) || 0;
+        const pB = Number(b.price) || 0;
+        if (pA <= 0 && pB <= 0) return 0;
+        if (pA <= 0) return 1;
+        if (pB <= 0) return -1;
+        return pA - pB;
+      });
+    } else if (sortBy === "price-desc") {
+      filtered.sort((a, b) => {
+        const pA = Number(a.price) || 0;
+        const pB = Number(b.price) || 0;
+        if (pA <= 0 && pB <= 0) return 0;
+        if (pA <= 0) return 1;
+        if (pB <= 0) return -1;
+        return pB - pA;
+      });
+    }
+
     return filtered;
   }, [
     selectedCatalog,
@@ -7004,6 +7053,7 @@ export default function App() {
     currentView,
     searchQuery,
     catalogData,
+    sortBy,
   ]);
   const nicheSubcategoriesData = useMemo(() => {
     if (!selectedNestedSubcategory || !selectedSubcategory || !selectedCatalog)
@@ -7752,34 +7802,27 @@ export default function App() {
     navigateToNicheCategory,
     navigateHome,
   ]);
-  // --- DEEP LINKS: restore view from the URL, once the catalog has actually loaded ---
-  useEffect(() => {
-    if (deepLinkDoneRef.current) return;
-    if (!catalogData || catalogData.length === 0) return;
-    const params = new URLSearchParams(window.location.search);
-    const rawProductParam =
-      params.get("p") ||
-      params.get("product") ||
-      params.get("sku") ||
-      params.get("id") ||
-      "";
-    const productKey = cleanProductKey(rawProductParam);
-    const catParam = (params.get("c") || params.get("cat") || "").trim();
-    const subParam = (params.get("s") || params.get("sub") || "").trim();
-    const nestedParam = (params.get("n") || params.get("nested") || "").trim();
-    const nicheParam = (params.get("nc") || params.get("niche") || "").trim();
 
-    if (!productKey && !catParam && !subParam && !nestedParam && !nicheParam) {
-      deepLinkDoneRef.current = true;
-      return;
-    }
+  // פונקציה לזיהוי אוטומטי של פרמטר 'p=' ב-URL, ניקוי באמצעות cleanProductKey וניווט ישיר לדף המוצר
+  const detectAndNavigateProductFromUrl = useCallback(
+    (catalog: any[] = catalogData): boolean => {
+      if (typeof window === "undefined" || !catalog || catalog.length === 0) return false;
+      const params = new URLSearchParams(window.location.search);
+      const rawParam =
+        params.get("p") ||
+        params.get("product") ||
+        params.get("sku") ||
+        params.get("id");
+      if (!rawParam) return false;
 
-    if (productKey) {
+      const productKey = cleanProductKey(rawParam);
+      if (!productKey) return false;
+
       const needle = cleanProductKey(productKey).toLowerCase();
       const needleLoose = needle.replace(/[\s\-_()]+/g, "");
 
       // 1. Exact match by sku, id, or pn
-      let found = catalogData.find((p: any) => {
+      let found = catalog.find((p: any) => {
         const pSku = cleanProductKey(p.sku).toLowerCase();
         const pId = cleanProductKey(p.id).toLowerCase();
         const pPn = cleanProductKey(p.pn).toLowerCase();
@@ -7788,7 +7831,7 @@ export default function App() {
 
       // 2. Loose match (ignoring dashes, underscores, spaces, parentheses) if exact match fails
       if (!found && needleLoose.length >= 3) {
-        found = catalogData.find((p: any) => {
+        found = catalog.find((p: any) => {
           const pSkuLoose = cleanProductKey(p.sku).toLowerCase().replace(/[\s\-_()]+/g, "");
           const pIdLoose = cleanProductKey(p.id).toLowerCase().replace(/[\s\-_()]+/g, "");
           const pPnLoose = cleanProductKey(p.pn).toLowerCase().replace(/[\s\-_()]+/g, "");
@@ -7802,7 +7845,7 @@ export default function App() {
 
       // 3. Fallback: match by product name
       if (!found) {
-        found = catalogData.find(
+        found = catalog.find(
           (p: any) => cleanProductKey(p.name).toLowerCase() === needle,
         );
       }
@@ -7810,22 +7853,69 @@ export default function App() {
       if (found) {
         deepLinkDoneRef.current = true;
         setCurrentOptionals([]);
-        navigateForward({
-          currentView: "product",
-          selectedProduct: found,
-          selectedCatalog: found.category || null,
-          selectedSubcategory: found.subcategory || null,
-          selectedNestedSubcategory: found.nestedSubcategory || null,
-          selectedNicheCategory: found.nicheCategory || null,
-        });
-      } else if (hasMoreProducts) {
+        setCurrentView("product");
+        setSelectedProduct(found);
+        if (found.category) setSelectedCatalog(found.category);
+        if (found.subcategory) setSelectedSubcategory(found.subcategory);
+        if (found.nestedSubcategory) setSelectedNestedSubcategory(found.nestedSubcategory);
+        if (found.nicheCategory) setSelectedNicheCategory(found.nicheCategory);
+
+        if (window.history.state) {
+          window.history.replaceState(
+            {
+              ...window.history.state,
+              currentView: "product",
+              selectedProduct: found,
+              selectedCatalog: found.category || null,
+              selectedSubcategory: found.subcategory || null,
+              selectedNestedSubcategory: found.nestedSubcategory || null,
+              selectedNicheCategory: found.nicheCategory || null,
+            },
+            "",
+          );
+        }
+        return true;
+      }
+
+      return false;
+    },
+    [catalogData],
+  );
+
+  // --- DEEP LINKS: restore view from the URL, once the catalog has actually loaded ---
+  useEffect(() => {
+    if (deepLinkDoneRef.current) return;
+    if (!catalogData || catalogData.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const hasProductParam =
+      params.has("p") ||
+      params.has("product") ||
+      params.has("sku") ||
+      params.has("id");
+
+    if (hasProductParam) {
+      const foundProduct = detectAndNavigateProductFromUrl(catalogData);
+      if (foundProduct) {
+        return;
+      }
+      if (hasMoreProducts) {
         // Still loading more products, wait and retry on next batch
         return;
       } else {
         // Loading finished and product not found
         deepLinkDoneRef.current = true;
         setDeepLinkError("המוצר לא נמצא");
+        return;
       }
+    }
+
+    const catParam = (params.get("c") || params.get("cat") || "").trim();
+    const subParam = (params.get("s") || params.get("sub") || "").trim();
+    const nestedParam = (params.get("n") || params.get("nested") || "").trim();
+    const nicheParam = (params.get("nc") || params.get("niche") || "").trim();
+
+    if (!catParam && !subParam && !nestedParam && !nicheParam) {
+      deepLinkDoneRef.current = true;
       return;
     }
 
@@ -8833,14 +8923,29 @@ export default function App() {
                                 </strong>
                                 "
                               </span>
-                              <button
-                                type="button"
-                                onClick={() => setSearchQuery("")}
-                                className="flex items-center gap-1.5 bg-gray-100 hover:bg-red-50 hover:text-red-500 text-gray-700 font-bold py-2 px-4 rounded-xl text-xs sm:text-sm border border-gray-200 transition-all cursor-pointer"
-                              >
-                                <X size={14} className="stroke-[3]" />
-                                <span>נקה חיפוש וחזור</span>
-                              </button>
+                              <div className="flex items-center gap-2 flex-wrap justify-center">
+                                <div className="relative inline-flex items-center">
+                                  <ArrowUpDown size={13} className="absolute right-2.5 text-gray-500 pointer-events-none" />
+                                  <select
+                                    value={sortBy}
+                                    onChange={(e) => setSortBy(e.target.value as any)}
+                                    className="appearance-none bg-white border border-gray-300 hover:border-[#004387] focus:border-[#004387] focus:ring-1 focus:ring-[#004387] rounded-lg pr-7 pl-3 py-1.5 text-xs font-semibold text-[#0c2d57] shadow-2xs cursor-pointer outline-none transition-colors"
+                                    aria-label="מיון תוצאות חיפוש"
+                                  >
+                                    <option value="price-asc">מחיר מתקין: מהנמוך לגבוה (ברירת מחדל)</option>
+                                    <option value="price-desc">מחיר מתקין: מהגבוה לנמוך</option>
+                                    <option value="catalog">סדר קטלוג מקורי</option>
+                                  </select>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setSearchQuery("")}
+                                  className="flex items-center gap-1.5 bg-gray-100 hover:bg-red-50 hover:text-red-500 text-gray-700 font-bold py-1.5 px-3 rounded-xl text-xs sm:text-sm border border-gray-200 transition-all cursor-pointer"
+                                >
+                                  <X size={14} className="stroke-[3]" />
+                                  <span>נקה חיפוש וחזור</span>
+                                </button>
+                              </div>
                             </div>
                           </div>
                           <div
@@ -9214,10 +9319,26 @@ export default function App() {
                           <div className="justify-self-end" />
                         </div>
                         {!isProductsLoading && (
-                          <div className="flex items-center justify-center mt-1">
-                            <span className="text-gray-600 bg-[#f2f2f2] px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap border border-gray-200 shadow-2xs">
+                          <div className="flex flex-wrap items-center justify-between gap-2 mt-2 pt-2 border-t border-slate-200/60">
+                            <span className="text-gray-600 bg-[#f2f2f2] px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap border border-gray-200 shadow-2xs">
                               {filteredProducts.length} מוצרים
                             </span>
+                            <div className="flex items-center gap-1.5 text-xs text-gray-700 mr-auto">
+                              <span className="font-medium text-gray-500 hidden sm:inline">מיון:</span>
+                              <div className="relative inline-flex items-center">
+                                <ArrowUpDown size={13} className="absolute right-2.5 text-gray-500 pointer-events-none" />
+                                <select
+                                  value={sortBy}
+                                  onChange={(e) => setSortBy(e.target.value as any)}
+                                  className="appearance-none bg-white border border-gray-300 hover:border-[#004387] focus:border-[#004387] focus:ring-1 focus:ring-[#004387] rounded-lg pr-7 pl-3 py-1 text-xs font-semibold text-[#0c2d57] shadow-2xs cursor-pointer outline-none transition-colors"
+                                  aria-label="מיון מוצרים"
+                                >
+                                  <option value="price-asc">מחיר מתקין: מהנמוך לגבוה (ברירת מחדל)</option>
+                                  <option value="price-desc">מחיר מתקין: מהגבוה לנמוך</option>
+                                  <option value="catalog">סדר קטלוג מקורי</option>
+                                </select>
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
