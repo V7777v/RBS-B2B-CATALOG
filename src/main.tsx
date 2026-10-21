@@ -57,7 +57,14 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations()
       .then((registrations) => {
         for (const registration of registrations) {
-          registration.update().catch(err => {
+          if (registration.waiting) {
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+          registration.update().then(() => {
+            if (registration.waiting) {
+              registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+          }).catch(err => {
             console.debug('[PWA Manager] Error updating registration:', err);
           });
         }
@@ -69,9 +76,7 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
 
   // Schedule update queries on page load and periodically every 30 minutes
   window.addEventListener('load', () => {
-    // Wait briefly after load to not block important primary render network calls
-    setTimeout(checkForUpdates, 3000);
-
+    setTimeout(checkForUpdates, 500);
     setInterval(checkForUpdates, 1800000); // 30 minutes (1,800,000ms)
   });
 }

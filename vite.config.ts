@@ -14,7 +14,7 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         useCredentials: true,
-        registerType: 'prompt',
+        registerType: 'autoUpdate',
         injectRegister: 'auto',
         includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icons/*.png', 'og-image.png', 'advisor-avatar.png'],
         manifest: {
@@ -37,6 +37,8 @@ export default defineConfig(() => {
           ]
         },
         workbox: {
+          skipWaiting: true,
+          clientsClaim: true,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           cleanupOutdatedCaches: true,

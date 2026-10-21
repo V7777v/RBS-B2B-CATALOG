@@ -110,6 +110,7 @@ import QuoteDocument from "./QuoteDocument";
 import LegalAndCookies from "./LegalAndCookies";
 import { trackPageView, trackEvent } from "./lib/analytics";
 import { isConfigurableCabinet } from "./utils/cabinetData";
+import { getSmartRecommendations } from "./utils/recommendations";
 // Safari-safe lazy loading: if a chunk fails to load (stale Service Worker after a
 // redeploy points to an old chunk name), reload the page ONCE to fetch fresh assets.
 const lazyWithRetry = (factory: () => Promise<any>) =>
@@ -3115,40 +3116,50 @@ const ProductDetailsView = (props: any) => {
           </div>
         </div>
       )}
-      {/* SIMILAR PRODUCTS */}
+      {/* SMART COMPLEMENTARY & COMPATIBLE PRODUCTS */}
       {(() => {
-        const similar = catalogData
-          .filter(
-            (p) =>
-              p.subcategory === selectedProduct.subcategory &&
-              p.id !== selectedProduct.id &&
-              p.active !== "FALSE",
-          )
-          .slice(0, 4);
-        if (similar.length === 0) return null;
+        const smartRecs = getSmartRecommendations(selectedProduct, catalogData, 8);
+        if (smartRecs.length === 0) return null;
         return (
           <div className="mt-12 mb-8">
-            <h3 className="text-xl font-bold text-[#0c2d57] mb-6 border-b border-gray-200 pb-2">
-              מוצרים משלימים ומקבילים
-            </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6 border-b border-gray-200 pb-3">
+              <div>
+                <h3 className="text-xl font-bold text-[#0c2d57] flex items-center gap-2">
+                  <Sparkles size={20} className="text-[#c2410c]" />
+                  <span>מוצרים נלווים ומשלימים מותאמים</span>
+                </h3>
+                <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                  אביזרים, מחברים וציוד משלים המותאמים טכנית למוצר זה
+                </p>
+              </div>
+            </div>
             <div
               className={
-                similar.length === 1
-                  ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-4 md:gap-6 gap-y-10 pt-9"
-                  : "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6 gap-y-10 pt-9"
+                smartRecs.length === 1
+                  ? "grid grid-cols-1 max-w-sm mx-auto w-full gap-2 sm:gap-4 md:gap-6 gap-y-10 pt-4"
+                  : "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6 gap-y-10 pt-4"
               }
             >
-              {similar.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  navigateToProduct={navigateToProduct}
-                  addToCart={addToCart}
-                  bulkSelection={bulkSelection}
-                  onBulkSelectionChange={handleBulkSelectionChange}
-                  onNavigateToCategory={navigateToCategoryAndSub}
-                  isGuest={isGuest}
-                />
+              {smartRecs.map(({ product, reason }) => (
+                <div key={product.id} className="flex flex-col h-full">
+                  {reason && (
+                    <div className="bg-[#004387] text-white text-[11px] sm:text-xs font-bold px-2.5 py-1.5 flex items-center justify-center gap-1.5 text-center shadow-sm border border-b-0 border-[#004387]">
+                      <CheckCircle size={13} className="text-emerald-300 shrink-0" />
+                      <span className="truncate">{reason}</span>
+                    </div>
+                  )}
+                  <div className="flex-1 flex flex-col">
+                    <ProductCard
+                      product={product}
+                      navigateToProduct={navigateToProduct}
+                      addToCart={addToCart}
+                      bulkSelection={bulkSelection}
+                      onBulkSelectionChange={handleBulkSelectionChange}
+                      onNavigateToCategory={navigateToCategoryAndSub}
+                      isGuest={isGuest}
+                    />
+                  </div>
+                </div>
               ))}
             </div>
           </div>
