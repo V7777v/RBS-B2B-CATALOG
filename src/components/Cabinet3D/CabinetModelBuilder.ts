@@ -176,7 +176,7 @@ export function resolveCabinetDoorsInfo(
 }
 
 /**
- * Checks specifically for SKU 447510T (Boost 44U 75x100 Floor Standing Rack)
+ * Checks specifically for SKU 447510T (44U 75x100) and SKU 447580T (44U 75x80) Boost Double-Perforated Floor Standing Racks
  */
 export function isCabinet447510T(product: any, cabinetData?: CabinetMatrixData | null): boolean {
   const normProductSku = normalizeSku(product?.sku);
@@ -186,22 +186,28 @@ export function isCabinet447510T(product: any, cabinetData?: CabinetMatrixData |
   const nameUpper = String(product?.name || '').toUpperCase();
   const descUpper = String(product?.description || '').toUpperCase();
 
+  const validSkus = ['447510T', '447510', '447580T', '447580', 'TBH'];
   if (
-    normProductSku === '447510T' ||
-    normProductPn === '447510T' ||
-    normCabinetSku === '447510T' ||
-    normCabinetModel === '447510T'
+    validSkus.includes(normProductSku) ||
+    validSkus.includes(normProductPn) ||
+    validSkus.includes(normCabinetSku) ||
+    validSkus.includes(normCabinetModel)
   ) {
     return true;
   }
-  if (nameUpper.includes('447510T') || descUpper.includes('447510T')) {
+  if (
+    nameUpper.includes('447510') ||
+    descUpper.includes('447510') ||
+    nameUpper.includes('447580') ||
+    descUpper.includes('447580')
+  ) {
     return true;
   }
   return false;
 }
 
 /**
- * Checks specifically for Boost RackMount 42U Floor Standing Cabinet specification
+ * Checks specifically for Boost RackMount 42U Glass-Front + Solid-Rear Floor Standing Cabinet specification
  */
 export function isCabinetBoost42U(product: any, cabinetData?: CabinetMatrixData | null): boolean {
   const normProductSku = normalizeSku(product?.sku);
@@ -210,6 +216,12 @@ export function isCabinetBoost42U(product: any, cabinetData?: CabinetMatrixData 
   const normCabinetModel = normalizeSku(cabinetData?.model);
   const nameUpper = String(product?.name || '').toUpperCase();
   const descUpper = String(product?.description || '').toUpperCase();
+
+  // Do NOT route perforated-door 42U cabinets (e.g. 2177, 2066, or 206810 with perforated rear door) to the glass/solid-rear 42U model
+  const doorSummary = `${product?.name || ''} ${cabinetData?.frontDoor || ''} ${cabinetData?.rearDoor || ''}`;
+  if (/מחורר|רשת|perforated|mesh/i.test(doorSummary)) {
+    return false;
+  }
 
   const boost42Skus = ['BOOST-42U', 'BOOST42U', '42U-BOOST', '42UBOOST', '426080', '426010', '428010'];
   if (
@@ -276,12 +288,14 @@ export function resolveCabinetDimensions(
     };
   }
 
-  // Check specifically for SKU 447510T (from manufacturer technical drawing)
+  // Check specifically for SKU 447510T (750x1000) and SKU 447580T (750x800) from manufacturer technical drawing
   if (isCabinet447510T(product, cabinetData)) {
+    const skuCombined = `${normalizeSku(product?.sku)} ${normalizeSku(cabinetData?.sku)} ${String(product?.name || '')}`;
+    const is800Depth = skuCombined.includes('447580') || skuCombined.includes('TBH') || cabinetData?.depth === 800;
     return {
       totalU: totalU > 0 ? totalU : 44,
-      widthMm: 750,
-      depthMm: 1000,
+      widthMm: cabinetData?.width || 750,
+      depthMm: is800Depth ? 800 : 1000,
       heightMm: 2061, // 2060.7mm frame height, 2148.3mm with casters & feet
       isSchematicDimensions: false,
       isSchematicCapacity: false,

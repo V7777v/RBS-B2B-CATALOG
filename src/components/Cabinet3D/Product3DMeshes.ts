@@ -94,9 +94,9 @@ export function buildProduct3DMesh(
 
   // 1. PHYSICAL CHASSIS & MOUNTING EARS (Body & Depth)
   if (isShelf) {
-    const isPN117914 = skuLower.includes('117914') || skuLower.includes('117916') || nameLower.includes('117914') || nameLower.includes('117916') || descLower.includes('117914') || descLower.includes('117916');
+    const isDeepVentShelf = skuLower.includes('117916') || skuLower.includes('117914') || nameLower.includes('117916') || nameLower.includes('117914') || descLower.includes('117916') || descLower.includes('117914');
     let shelfMat = item.isIncluded ? materials.includedShelfMat : materials.shelfMat;
-    if (isPN117914) {
+    if (isDeepVentShelf) {
       const ventTexture = createDiagonalVentSlotTexture();
       shelfMat = new THREE.MeshStandardMaterial({
         map: ventTexture || null,
@@ -105,9 +105,9 @@ export function buildProduct3DMesh(
       });
     }
 
-    const shelfWidth = isPN117914 ? 4.70 : USABLE_OPENING_WIDTH * 0.98;
-    const shelfDepth = isPN117914 ? 6.50 : Math.max(2.8, Math.min(innerDepthUnits * 0.88, 6.2));
-    const shelfThick = isPN117914 ? 0.048 : 0.08;
+    const shelfWidth = isDeepVentShelf ? 4.70 : USABLE_OPENING_WIDTH * 0.98;
+    const shelfDepth = isDeepVentShelf ? 6.50 : Math.max(2.8, Math.min(innerDepthUnits * 0.88, 6.2));
+    const shelfThick = isDeepVentShelf ? 0.048 : 0.08;
 
     // Main horizontal steel tray surface
     const surfaceGeom = new THREE.BoxGeometry(shelfWidth, shelfThick, shelfDepth);

@@ -68,17 +68,17 @@ export function buildBoost42UCabinetGroup(
   group.name = 'cabinet-boost-42u-root';
 
   // EXACT DIMENSIONS FROM TECHNICAL SPECIFICATION PDF:
-  // 42U, Width: 600mm, Depth: 1000mm, Frame Height: 2000mm
-  const widthUnits = 6.00; // 600 mm standard 19" outer width
-  const depthUnits = 10.00; // 1000 mm depth
+  // 42U, Width: 600mm, Depth: 600/800/1000mm, Frame Height: 2000mm
+  const widthUnits = (dims.widthMm || 600) * SCALE_MM_TO_UNITS;
+  const depthUnits = (dims.depthMm || 1000) * SCALE_MM_TO_UNITS;
   const totalU = 42;
   const railHeightUnits = totalU * U_HEIGHT_UNITS; // 42 * 0.4445 = 18.669 units (matches 1866.9mm rail)
   const roofHeight = 0.40; // 40mm top canopy
   const baseHeight = 0.45; // 45mm base plinth
   const frameHeightUnits = 20.00; // 2000mm outer frame height
 
-  const halfW = widthUnits / 2; // 3.00
-  const halfD = depthUnits / 2; // 5.00
+  const halfW = widthUnits / 2;
+  const halfD = depthUnits / 2;
   const halfH = frameHeightUnits / 2; // 10.00
 
   // 19" Vertical Rail positions:

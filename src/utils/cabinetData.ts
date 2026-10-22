@@ -263,7 +263,7 @@ export const fetchCabinetMatrix = async (appCheckTok: string): Promise<Record<st
          removableSides = resolvedU >= 22;
        }
 
-       const entry: CabinetMatrixData = {
+       const rawEntry: CabinetMatrixData = {
          sku,
          u: resolvedU,
          width: widthVal,
@@ -280,6 +280,8 @@ export const fetchCabinetMatrix = async (appCheckTok: string): Promise<Record<st
          suitableSliding: parseCompatibleSkus(row[14]),
          removableSides,
        };
+
+       const entry = reconcileCabinetMatrixEntry(rawEntry);
 
        matrix[sku] = entry;
        const baseSku = getBaseSku(sku);
@@ -772,9 +774,109 @@ export const checkAccessoryFitsCabinet = (
 };
 
 export const parseCabinetDepthFromName = (name: string): number => {
-  const m = String(name || '').match(/בגודל\s*([0-9]{2,4})\s*[*xX×]\s*([0-9]{2,4})/);
-  if (m) { const d = parseInt(m[1], 10); return d < 150 ? d * 10 : d; }
+  const m = String(name || '').match(/(?:בגודל\s*)?([0-9]{2,4})\s*[*xX×]\s*([0-9]{2,4})/);
+  if (m) {
+    const n1 = parseInt(m[1], 10);
+    const n2 = parseInt(m[2], 10);
+    const v1 = n1 < 150 ? n1 * 10 : n1;
+    const v2 = n2 < 150 ? n2 * 10 : n2;
+    // In Hebrew catalog naming: "בגודל 600*600" or "בגודל 400*600" (Depth*Width) or "75*100" (Width*Depth)
+    if (v1 === 750 || v1 === 800) return v2;
+    return v1;
+  }
   return 0;
+};
+
+/**
+ * Reconciles a cabinet matrix row with the verified manufacturer PDF datasheets attached in Google Sheets.
+ */
+export const reconcileCabinetMatrixEntry = (entry: CabinetMatrixData, product?: any): CabinetMatrixData => {
+  const baseSku = getBaseSku(entry.sku || product?.sku);
+  const res: CabinetMatrixData = { ...entry };
+
+  // 1. SKU 114809: Official BoostRack 10U Datasheet ("ארון תקשורת 10U בגודל 500*550 דלת מחוררת שחור") -> W=550, D=500
+  if (baseSku === '114809') {
+    res.u = 10;
+    res.width = 550;
+    res.depth = 500;
+    res.frontDoor = 'דלת קדמית מחוררת עם מנעול וידית';
+    res.rearDoor = 'דלת אחורית ממתכת מחוררת';
+    res.removableSides = true;
+  }
+  // 2. SKU 1062: Official Datasheet ("Data sheet Glass door 10U 6040 wall cabinet.pdf") -> W=600, D=400
+  else if (baseSku === '1062') {
+    res.u = 10;
+    res.width = 600;
+    res.depth = 400;
+    res.removableSides = true;
+  }
+  // 3. SKU 447510T / 447510: Official BoostRack 44U 750x1000 Double Perforated Doors Datasheet
+  else if (baseSku === '447510') {
+    res.u = 44;
+    res.width = 750;
+    res.depth = 1000;
+    res.frontDoor = 'דלת קדמית כפולה מחוררת עם מנעול קפיצי';
+    res.rearDoor = 'דלת אחורית כפולה מחוררת עם מנעול קפיצי';
+    res.fans = '4';
+    res.wheels = '4';
+    res.levelingFeet = '4';
+    res.shelvesQty = '2';
+    res.removableSides = true;
+    if (!res.suitableStandard || res.suitableStandard.length === 0) {
+      res.suitableStandard = ['117916'];
+    }
+    if (!res.suitableSliding || res.suitableSliding.length === 0) {
+      res.suitableSliding = ['117909'];
+    }
+  }
+  // 4. SKU 447580T / 447580 / TBH: Official BoostRack 44U 750x800 Double Perforated Doors Datasheet
+  else if (baseSku === '447580' || normalizeSku(entry.sku) === 'TBH') {
+    res.u = 44;
+    res.width = 750;
+    res.depth = 800;
+    res.frontDoor = 'דלת קדמית כפולה מחוררת עם מנעול קפיצי';
+    res.rearDoor = 'דלת אחורית כפולה מחוררת עם מנעול קפיצי';
+    res.fans = '4';
+    res.wheels = '4';
+    res.levelingFeet = '4';
+    res.shelvesQty = '2';
+    res.removableSides = true;
+    if (!res.suitableStandard || res.suitableStandard.length === 0) {
+      res.suitableStandard = ['2234'];
+    }
+    if (!res.suitableSliding || res.suitableSliding.length === 0) {
+      res.suitableSliding = ['117909'];
+    }
+  }
+  // 5. SKU 206810: Official Datasheet (206810.pdf) -> 42U 600x1000 Front Glass Door + Rear Perforated Metal Door
+  else if (baseSku === '206810') {
+    res.u = 42;
+    res.width = 600;
+    res.depth = 1000;
+    res.frontDoor = 'דלת קדמית זכוכית מחוסמת עם מנעול וידית';
+    res.rearDoor = 'דלת אחורית ממתכת מחוררת עם מנעול';
+    res.removableSides = true;
+  }
+  // 6. SKU 217980: Official Datasheet (Data sheet Glass door 20U 6080 floor standing cabinet.pdf) -> 20U 600x800 Front Glass Door + Rear Perforated Metal Door
+  else if (baseSku === '217980') {
+    res.u = 20;
+    res.width = 600;
+    res.depth = 800;
+    res.frontDoor = 'דלת קדמית זכוכית מחוסמת עם מנעול וידית';
+    res.rearDoor = 'דלת אחורית ממתכת מחוררת עם מנעול';
+    res.removableSides = true;
+  }
+
+  // Ensure product name explicit perforated door overrides any accidental mismatch
+  const prodName = String(product?.name || '');
+  if (/דלתות\s+כפולות\s+מחוררות/i.test(prodName)) {
+    res.frontDoor = 'דלת קדמית כפולה מחוררת עם מנעול קפיצי';
+    res.rearDoor = 'דלת אחורית כפולה מחוררת עם מנעול קפיצי';
+  } else if (/דלת\s+מחוררת/i.test(prodName) && !/מחורר/i.test(res.frontDoor)) {
+    res.frontDoor = 'דלת קדמית מחוררת עם מנעול וידית';
+  }
+
+  return res;
 };
 
 export const isConfiguratorExcludedCabinet = (pp: any): boolean => {
@@ -788,7 +890,7 @@ export const isConfiguratorExcludedCabinet = (pp: any): boolean => {
 
   const allCategoryFields = `${cat} ${sub} ${nested} ${niche}`;
 
-  // Exclude outdoor polyester and outdoor metal cabinets from configurator
+  // Exclude outdoor polyester, outdoor metal, custom-order (ארונות לפי הזמנה / לפי הזמה), and optical splice boxes from configurator
   if (
     allCategoryFields.includes('פוליאסטר') ||
     allCategoryFields.includes('מתכת חיצוני') ||
@@ -796,13 +898,24 @@ export const isConfiguratorExcludedCabinet = (pp: any): boolean => {
     allCategoryFields.includes('מתכתי חיצוני') ||
     allCategoryFields.includes('ארונות תקשורת פוליאסטר') ||
     allCategoryFields.includes('ארונות תקשורת מתכת חיצוני') ||
-    allCategoryFields.includes('ארונות מתכת')
+    allCategoryFields.includes('ארונות מתכת') ||
+    allCategoryFields.includes('לפי הזמנה') ||
+    allCategoryFields.includes('לפי הזמה') ||
+    allCategoryFields.includes('ארונות לפי הזמנה') ||
+    allCategoryFields.includes('ארונות לפי הזמה') ||
+    allCategoryFields.includes('הסתעפות אופטי')
   ) {
     return true;
   }
 
   if (
     name.includes('פוליאסטר') ||
+    name.includes('לפי הזמנה') ||
+    name.includes('לפי הזמה') ||
+    name.includes('הסתעפות אופטי') ||
+    name.includes('ארון הסתעפות') ||
+    name.includes('קופסת הסתעפות') ||
+    (name.includes('ארון') && name.includes('אופטי')) ||
     (name.includes('מתכת') && name.includes('חיצוני')) ||
     (name.includes('מתכתי') && name.includes('חיצוני'))
   ) {
@@ -821,6 +934,12 @@ export const isCabinetProduct = (pp: any): boolean => {
   const cat = String(pp?.category || '').trim();
   const nested = String(pp?.nestedSubcategory || pp?.['Nested subcategory'] || '').trim();
 
+  // 0. If the product name explicitly begins with "ארון תקשורת", "ארון שרתים", "מסד תקשורת", etc.,
+  // it is a cabinet enclosure even if its name mentions features like "דלת מחוררת" or "כולל מאוורר".
+  if (/^(?:ארון|מסד)\s+(?:תקשורת|שרתים|עומד|תלוי|פתוח|19\b)/i.test(name)) {
+    return true;
+  }
+
   // 1. Explicit accessories and mounted equipment are NOT cabinet enclosures
   const isAccessoryOrEquipment = 
     /מדף|מדפים|shelf|shelves|מגירה|drawer/i.test(name) ||
@@ -830,19 +949,19 @@ export const isCabinetProduct = (pp: any): boolean => {
     /ניהול כבל|מארגן כבל|תעלת כבל|תעלה|ארגונית כבל|מברשת|brush|cable management|מסתיר/i.test(name) ||
     /בורג|ברגים|אום|אומים|screw|cage nut/i.test(name) ||
     /גלגל|גלגלים|caster|wheel|רגלי|רגלית|feet/i.test(name) ||
-    /דלת\s+חלופית|דלת\s+מתכת|דלת\s+מחוררת|דלת\s+לארון|^דלת\b|דופן צד|side panel|מנעול לארון|ידית לארון|lock|handle/i.test(name) ||
-    /תאורת|תאורה|נורת|נורה|led\b|לד\b/i.test(name) ||
+    /^(?:דלת|דופן צד|side panel|מנעול|ידית)(?:\s|$)|דלת\s+חלופית|דלת\s+לארון|מנעול לארון|ידית לארון|lock|handle/i.test(name) ||
+    /תאורת|תאורה|נורת|נורה|led\b|לד(?:\s|$)/i.test(name) ||
     /הארקה|grounding|תרמוסטט|thermostat|בסיס לארון|plinth/i.test(name) ||
     /מסיל|מסילות|rail|רלס|תומכי|פרופיל|תושבת|bracket|מתאם/i.test(name) ||
     /מתג|switch|נתב|router|מגבר|amplifier|אל פסק|ups|סולל|battery|nvr|dvr|מצלמ|camera|ספק כח|ספק כוח|power supply/i.test(name) ||
-    /ערכת|kit|כלי עבודה|כלי\b|tool|מחלץ|extractor/i.test(name);
+    /ערכת|kit|כלי עבודה|כלי(?:\s|$)|tool|מחלץ|extractor/i.test(name);
 
   if (isAccessoryOrEquipment) return false;
 
   // 2. Explicit cabinet enclosures by subcategory or nested subcategory
   const isCabinetSub = 
-    /ארונות עומדים|ארונות תלויים|ארונות שרתים|ארונות פתוחים|ארונות תקשורת עומדים|ארונות תקשורת תלויים|מסדים עומדים|מסדים תלויים|מסדים פתוחים|ארונות ומסדים|מסדים/i.test(nested) ||
-    /ארונות עומדים|ארונות תלויים|ארונות שרתים|ארונות פתוחים|ארונות תקשורת עומדים|ארונות תקשורת תלויים/i.test(sub);
+    /ארונות עומדים|ארונות תלויים|ארונות שרתים|ארונות פתוחים|ארונות תקשורת עומדים|ארונות תקשורת תלויים|ארונות תקשורת דלת|מסדים עומדים|מסדים תלויים|מסדים פתוחים|ארונות ומסדים|מסדים/i.test(nested) ||
+    /ארונות עומדים|ארונות תלויים|ארונות שרתים|ארונות פתוחים|ארונות תקשורת עומדים|ארונות תקשורת תלויים|ארונות תקשורת דלת/i.test(sub);
 
   if (isCabinetSub) return true;
 

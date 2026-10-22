@@ -21,7 +21,7 @@ import {
   CheckCircle,
   RotateCcw
 } from 'lucide-react';
-import { GroupedRubric, normalizeSku } from '../../utils/cabinetData';
+import { GroupedRubric, normalizeSku, isSameSku } from '../../utils/cabinetData';
 import { VisualSlot, EnrichedPreviewItem } from '../CabinetConfigurator';
 import { Cabinet3DErrorBoundary } from './Cabinet3DErrorBoundary';
 import { Cabinet3DViewer } from './Cabinet3DViewer';
@@ -694,13 +694,15 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
   const renderSimulation = () => (
     <div className="flex-1 min-w-0 h-full flex flex-col relative bg-slate-100 overflow-hidden">
       {/* Spec Notice Banner */}
-      {normalizeSku(product?.sku).replace(/^447510$/, '447510T') === '447510T' && (
+      {(isSameSku(product?.sku, '447510T') || isSameSku(product?.sku, '447580T')) && (
         <div className="bg-amber-50 border-b border-amber-200 px-3 py-1 flex items-center justify-between gap-2 text-amber-900 text-xs shrink-0 z-10">
           <span className="flex items-center gap-1.5 truncate">
             <Award size={13} className="text-amber-600 shrink-0" />
-            <strong className="truncate">מפרט 447510T:</strong> דלתות מחוררות כפולות, 4 מאווררים, תעלות כבילה ומדפים תואמים ({cabinetData?.suitableStandard?.join(', ') || '117916'}).
+            <strong className="truncate">מפרט {isSameSku(product?.sku, '447580T') ? '447580T' : '447510T'}:</strong> דלתות מחוררות כפולות, 4 מאווררים, תעלות כבילה ומדפים תואמים ({cabinetData?.suitableStandard?.join(', ') || (isSameSku(product?.sku, '447580T') ? '2234' : '117916')}).
           </span>
-          <span className="text-[10px] bg-amber-200/60 text-amber-900 font-mono px-1.5 py-0.2 rounded shrink-0">44U 75x100</span>
+          <span className="text-[10px] bg-amber-200/60 text-amber-900 font-mono px-1.5 py-0.2 rounded shrink-0">
+            44U {isSameSku(product?.sku, '447580T') ? '75x80' : '75x100'}
+          </span>
         </div>
       )}
 
@@ -833,13 +835,14 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
               )}
 
               {/* Frontal 19" Slots */}
-              <div className="flex-1 flex flex-col justify-between w-full h-full min-h-0 px-2 py-1 space-y-0.5 overflow-hidden select-none">
+              <div className="flex-1 flex flex-col w-full h-full min-h-0 px-2 py-1 space-y-1 overflow-y-auto custom-scrollbar select-none">
                 {slots.map((slot) => {
                   const isEmpty = slot.type === 'empty';
                   const isCont = slot.type === 'optional-accessory' && slot.isAnchor === false;
                   if (isCont) return null;
 
                   const slotPreview = !isEmpty ? buildPreviewFromSlot(slot) : null;
+                  const spanU = slot.spanU || 1;
                   return (
                     <div
                       key={slot.uIndex}
@@ -854,7 +857,8 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
                       }}
                       onMouseEnter={() => slotPreview && setHoveredProduct(slotPreview)}
                       onMouseLeave={() => setHoveredProduct(null)}
-                      className={`flex items-center justify-between px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer transition-colors ${
+                      style={{ minHeight: `${Math.max(26, spanU * 26)}px` }}
+                      className={`shrink-0 flex items-center justify-between px-2.5 py-1 rounded text-[11px] font-mono cursor-pointer transition-colors ${
                         isEmpty
                           ? 'bg-slate-900/40 hover:bg-slate-800 text-slate-400 border border-dashed border-slate-700'
                           : 'bg-indigo-950/80 hover:bg-indigo-900 text-indigo-100 border border-indigo-700'
@@ -862,7 +866,7 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
                     >
                       <span className="font-bold">U{slot.uIndex}</span>
                       <span className="truncate flex-1 mx-2">{slot.name || 'תא פנוי'}</span>
-                      <span>{slot.spanU ? `${slot.spanU}U` : '1U'}</span>
+                      <span>{spanU}U</span>
                     </div>
                   );
                 })}

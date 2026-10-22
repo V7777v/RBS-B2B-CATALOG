@@ -39,7 +39,7 @@ import {
   Printer
 } from 'lucide-react';
 import Papa from 'papaparse';
-import { CabinetMatrixData, GroupedRubric, KNOWN_MATRIX_SHELF_SKUS, GENERIC_SHELF_IMAGE, checkAccessoryFitsCabinet, deriveBrand, extractAllMatrixShelfSkus, fetchCabinetMatrix, fetchCompatMap, findInCatalogMap, getBaseSku, groupAccessoriesForDisplay, hasMatchingSku, isAccessoryAShelf, isCabinetProduct, isConfigurableCabinet, isConfiguratorExcludedCabinet, isProductShelf, isSameSku, normalizeDimensionMm, normalizeSku, parseAccessoryCount, parseCabinetDepthFromName, parseCompatRange, parseCompatibleSkus, parseDepthMmLocal, resolveCabinetMatrixRow } from '../utils/cabinetData';
+import { CabinetMatrixData, GroupedRubric, KNOWN_MATRIX_SHELF_SKUS, GENERIC_SHELF_IMAGE, checkAccessoryFitsCabinet, deriveBrand, extractAllMatrixShelfSkus, fetchCabinetMatrix, fetchCompatMap, findInCatalogMap, getBaseSku, groupAccessoriesForDisplay, hasMatchingSku, isAccessoryAShelf, isCabinetProduct, isConfigurableCabinet, isConfiguratorExcludedCabinet, isProductShelf, isSameSku, normalizeDimensionMm, normalizeSku, parseAccessoryCount, parseCabinetDepthFromName, parseCompatRange, parseCompatibleSkus, parseDepthMmLocal, reconcileCabinetMatrixEntry, resolveCabinetMatrixRow } from '../utils/cabinetData';
 import { 
   analyzeCabinetSpace,
   classifyItemPlacement,
@@ -277,8 +277,13 @@ const buildCatalogAccessories = (
     const sub = String(pp.subcategory || '');
     const nested = String(pp['Nested subcategory'] || pp.nestedSubcategory || '');
 
-    // Exclude outdoor metal/polyester enclosure accessories from indoor 19" rack cabinets
-    if (nested.includes('מתכת חיצוני') || nested.includes('פוליאסטר חיצוני')) return;
+    // Exclude outdoor metal/polyester and custom-order enclosure items from indoor 19" rack cabinets
+    if (
+      nested.includes('מתכת חיצוני') ||
+      nested.includes('פוליאסטר חיצוני') ||
+      nested.includes('לפי הזמנה') ||
+      nested.includes('לפי הזמה')
+    ) return;
 
     const isAccCategory = 
       sub.includes('ארונות תקשורת') || 
@@ -1812,7 +1817,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         const depthVal = normalizeDimensionMm(cabRow[4]);
         const desc = product.description || '';
         const rawRowSku = normalizeSku(cabRow[0]);
-        const data: CabinetMatrixData = {
+        const rawData: CabinetMatrixData = {
            sku: rawRowSku === 'TBH' ? productSkuNorm : (cabRow[0]?.toString()?.trim() || productSkuNorm),
            u: parseInt(cabRow[2]?.toString() || '0', 10),
            width: widthVal,
@@ -1828,6 +1833,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
            suitableHanging: parseCompatibleSkus(cabRow[13]?.toString()),
            suitableSliding: parseCompatibleSkus(cabRow[14]?.toString())
         };
+        const data = reconcileCabinetMatrixEntry(rawData, product);
 
         setCabinetData(data);
 
@@ -1844,7 +1850,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         setTotalU(parsedTotalU);
         
         // Calculate used U from included items
-        const shelvesQty = parseInt(data.shelvesQty) || 0;
+        const shelvesQty = parseAccessoryCount(data.shelvesQty);
         const initialUsedU = shelvesQty * 1; // Assuming each shelf is 1U
         let initialAvailableU = parsedTotalU - initialUsedU;
 
@@ -1874,46 +1880,61 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         CABINET_CFG_INIT.add(product.sku);
         setBuiltInUsedU(initialUsedU);
 
-        // Determine "What's in the Box" (Included Accessories)
+        // Determine "What's in the Box" (Included Accessories) verified against manufacturer PDF datasheets
         const included: string[] = [];
-        
-        const parseIncluded = (val: string | undefined, name: string) => {
-          if (!val) return null;
-          const str = String(val).trim();
-          const upper = str.toUpperCase();
-          if (
-            upper === 'X' ||
-            upper === '0' ||
-            upper === '-' ||
-            upper === '--' ||
-            upper.includes('לא כלול') ||
-            upper.includes('ללא') ||
-            upper.includes('אין') ||
-            upper.includes('מידע לא זמין') ||
-            upper.includes('NONE') ||
-            upper.includes('NO') ||
-            upper.includes('N/A') ||
-            upper.includes('NA')
-          ) {
-            return null;
-          }
-          const numMatch = str.match(/\d+/);
-          if (numMatch) {
-            const count = parseInt(numMatch[0], 10);
-            if (count <= 0) return null;
-            return `${name}: ${count} יחידות כלולות`;
-          }
-          return `${name}: ${str}`;
-        };
+        const baseCabSku = getBaseSku(productSkuNorm || data.sku);
 
-        const fanItem = parseIncluded(data.fans, 'מאווררים');
-        if (fanItem) included.push(fanItem);
-        const wheelItem = parseIncluded(data.wheels, 'גלגלים');
-        if (wheelItem) included.push(wheelItem);
-        const feetItem = parseIncluded(data.levelingFeet, 'רגליות פילוס');
-        if (feetItem) included.push(feetItem);
-        const shelfItem = parseIncluded(data.shelvesQty, 'מדפים');
-        if (shelfItem) included.push(shelfItem);
+        if (baseCabSku === '447510' || baseCabSku === '447580') {
+          const stdShelfSku = data.suitableStandard?.[0] || (baseCabSku === '447580' ? '2234' : '117916');
+          included.push(
+            'דלת קדמית כפולה מחוררת עם מנעול קפיצי (Perforated Double Door)',
+            'דלת אחורית כפולה מחוררת עם מנעול קפיצי (Perforated Double Door)',
+            'יחידת גג 4 מאווררים 120 מ"מ בפלטה אחידה עם כבל הזנה',
+            `מדפים קבועים: 2 יחידות כלולות (מק"ט ${stdShelfSku})`,
+            'גלגלים תעשייתיים: 4 יחידות כלולות',
+            'רגליות פילוס מתכווננות: 4 יחידות כלולות',
+            '2 תעלות כבילה אנכיות ברוחב 400 מ"מ + סט ניהול כבלים עם מנעול ומפתח',
+            '2 דפנות צד נשלפות עם מנעול + קופסת חיבור ל-PDU של 12 שקעים',
+            'מערכת הארקה עם מוט נחושת ראשי + 50 סטים של אומי כלוב וברגים'
+          );
+        } else {
+          const parseIncluded = (val: string | undefined, name: string, extraSuffix = '') => {
+            if (!val) return null;
+            const str = String(val).trim();
+            const upper = str.toUpperCase();
+            if (
+              upper === 'X' ||
+              upper === '0' ||
+              upper === '-' ||
+              upper === '--' ||
+              upper.includes('לא כלול') ||
+              upper.includes('ללא') ||
+              upper.includes('אין') ||
+              upper.includes('מידע לא זמין') ||
+              upper.includes('NONE') ||
+              upper.includes('NO') ||
+              upper.includes('N/A') ||
+              upper.includes('NA')
+            ) {
+              return null;
+            }
+            const count = parseAccessoryCount(str);
+            if (count > 0) {
+              return `${name}: ${count} יחידות כלולות${extraSuffix}`;
+            }
+            return `${name}: ${str}${extraSuffix}`;
+          };
+
+          const fanItem = parseIncluded(data.fans, 'מאווררים');
+          if (fanItem) included.push(fanItem);
+          const wheelItem = parseIncluded(data.wheels, 'גלגלים');
+          if (wheelItem) included.push(wheelItem);
+          const feetItem = parseIncluded(data.levelingFeet, 'רגליות פילוס');
+          if (feetItem) included.push(feetItem);
+          const stdShelfSku = data.suitableStandard?.[0];
+          const shelfItem = parseIncluded(data.shelvesQty, 'מדפים', stdShelfSku ? ` (מק"ט ${stdShelfSku})` : '');
+          if (shelfItem) included.push(shelfItem);
+        }
 
         setIncludedItems(included);
 
@@ -2488,32 +2509,32 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     if (!items || !items.length) return null;
     const open = openSections[id] ?? defaultOpen;
     return (
-      <div key={id} className="border border-slate-200 rounded-none mb-2.5">
+      <div key={id} className="border border-slate-200 rounded-none mb-2.5 overflow-hidden">
         <button
           type="button"
           id={`accordion-btn-${id}`}
           aria-expanded={open}
           aria-controls={`accordion-content-${id}`}
           onClick={() => setOpenSections(s => ({ ...s, [id]: !(s[id] ?? defaultOpen) }))}
-          className={`w-full flex items-center justify-between px-4 py-2 min-h-[50px] font-bold text-[15px] ${tone} active:opacity-80 transition-colors focus:outline-none focus:ring-2 focus:ring-[#004387] cursor-pointer`}
+          className={`w-full flex items-center justify-between px-4 py-2.5 min-h-[50px] font-bold text-[15px] ${tone} active:opacity-80 transition-colors focus:outline-none focus:ring-2 focus:ring-[#004387] cursor-pointer`}
         >
-          <span className="flex items-center gap-4">
+          <span className="flex items-center gap-3 min-w-0">
             {logoUrl ? (
               <img
                 src={logoUrl}
                 alt=""
-                className="h-20 max-w-[220px] -my-6 object-contain mix-blend-multiply"
+                className="h-7 max-w-[110px] object-contain mix-blend-multiply shrink-0"
                 referrerPolicy="no-referrer"
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
               />
             ) : null}
-            <span>
+            <span className="truncate">
               {title}{title ? ' ' : ''}
               <span className="opacity-70 font-mono">({items.length})</span>
             </span>
           </span>
           <ChevronDown
-            size={22}
+            size={20}
             className={`transition-transform duration-200 flex-shrink-0 ${open ? 'rotate-180' : ''}`}
           />
         </button>
@@ -2789,16 +2810,16 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         </div>
       </div>
 
-      {isSameSku(product?.sku, '447510T') && (
+      {(isSameSku(product?.sku, '447510T') || isSameSku(product?.sku, '447580T')) && (
         <div className="bg-amber-500/10 border-b border-amber-500/40 p-3 px-4 flex items-center justify-between gap-3 text-amber-950 flex-wrap">
           <div className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold">
             <Award size={18} className="text-amber-600 shrink-0" />
             <span>
-              <strong>הדמיית תלת-ממד ייעודית לפי מפרט יצרן רשמי (מק״ט 447510T Boost):</strong> שוחזרו דלתות כפולות מחוררות (Spring Lock), 4 מאווררי גג, תעלות כבילה אנכיות 400 מ״מ, גלגלים, רגליות ומדפים תואמים ({cabinetData?.suitableStandard?.join(', ') || '117916'}).
+              <strong>הדמיית תלת-ממד ייעודית לפי מפרט יצרן רשמי (מק״ט {product?.sku} Boost):</strong> שוחזרו דלתות כפולות מחוררות (Spring Lock), 4 מאווררי גג, תעלות כבילה אנכיות 400 מ״מ, גלגלים, רגליות, מוט הארקה ומדפים תואמים ({cabinetData?.suitableStandard?.join(', ') || (isSameSku(product?.sku, '447580T') ? '2234' : '117916')}).
             </span>
           </div>
           <span className="text-[11px] bg-amber-600 text-white font-bold px-2 py-0.5 shadow-xs">
-            מפרט רשמי 44U 75x100
+            מפרט רשמי 44U {isSameSku(product?.sku, '447580T') ? '75x80' : '75x100'}
           </span>
         </div>
       )}
@@ -2814,6 +2835,63 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           <span className="text-[11px] bg-emerald-600 text-white font-bold px-2 py-0.5 shadow-xs">
             מפרט רשמי Boost 42U
           </span>
+        </div>
+      )}
+
+      {/* Technical Specification & Official Datasheet Summary Bar */}
+      {cabinetData && (
+        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-700">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            <span className="inline-flex items-center gap-1 font-bold text-[#0c2d57]">
+              <Info size={14} className="text-[#004387] shrink-0" />
+              <span>מפרט טכני רשמי:</span>
+            </span>
+            <span className="bg-white border border-slate-200 px-2 py-0.5 font-mono font-semibold text-slate-800">
+              {totalSlotsU}U · {cabinetData.width || 600}×{cabinetData.depth || 600} מ"מ
+            </span>
+            {cabinetData.frontDoor && (
+              <span>
+                <strong className="text-slate-900">דלת קדמית:</strong> {cabinetData.frontDoor}
+              </span>
+            )}
+            {cabinetData.rearDoor && (
+              <span>
+                <strong className="text-slate-900">דלת אחורית:</strong> {cabinetData.rearDoor}
+              </span>
+            )}
+            {(cabinetData.suitableStandard?.length > 0 || cabinetData.suitableHanging?.length > 0 || cabinetData.suitableSliding?.length > 0) && (
+              <span className="inline-flex items-center gap-1.5 flex-wrap">
+                <strong className="text-slate-900">מדפים תואמים:</strong>
+                {cabinetData.suitableStandard?.length > 0 && (
+                  <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 font-mono text-[11px]">
+                    קבוע: {cabinetData.suitableStandard.join(', ')}
+                  </span>
+                )}
+                {cabinetData.suitableHanging?.length > 0 && (
+                  <span className="bg-blue-50 text-blue-800 border border-blue-200 px-1.5 py-0.5 font-mono text-[11px]">
+                    תלוי: {cabinetData.suitableHanging.join(', ')}
+                  </span>
+                )}
+                {cabinetData.suitableSliding?.length > 0 && (
+                  <span className="bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 font-mono text-[11px]">
+                    נשלף: {cabinetData.suitableSliding.join(', ')}
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+          {product?.specsLink && (
+            <a
+              href={product.specsLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold text-xs transition-colors shadow-2xs shrink-0"
+              title="פתיחת מפרט יצרן רשמי (PDF)"
+            >
+              <Download size={13} />
+              <span>מפרט יצרן רשמי (PDF)</span>
+            </a>
+          )}
         </div>
       )}
 
@@ -3118,8 +3196,8 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             ) : (
               <div 
                 onClick={() => {
-                  setActiveMediumTab('catalog');
-                  setMobileDrawerOpen('catalog');
+                  setAddSlotTargetU(null);
+                  setIsPduModalOpen(true);
                 }}
                 className="mx-3 mb-1.5 rounded border border-dashed border-slate-700 bg-slate-950/40 hover:bg-slate-900/60 px-2.5 py-1 flex items-center justify-between text-slate-400 text-[10px] cursor-pointer transition-colors group flex-shrink-0"
                 title="לחץ לבחירת פס שקעים מהקטלוג"
@@ -3832,7 +3910,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       )}
 
       {/* PDF export: two options — with prices / without */}
-      <div className="mt-4 print:hidden flex flex-col sm:flex-row gap-2 sm:gap-3">
+      <div className="px-4 sm:px-6 pb-5 pt-2 print:hidden flex flex-col sm:flex-row gap-2 sm:gap-3">
         <button
           type="button"
           onClick={() => handleDownloadPdf(false)}

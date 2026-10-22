@@ -23,7 +23,7 @@ import { createPerforationTexture } from './BrandTextures';
  * - Rear Door: Perforated double door (French doors) with Spring lock
  * - 4 Fans unit in one plate with one cable on top canopy
  * - 4 Heavy-duty casters + 4 leveling feet (bottom view)
- * - 2pcs Fixed Shelf 470*650*48 (PN 117914) with diagonal ventilation slots (Page 8)
+ * - 2pcs Fixed Shelf 470*650*48 (PN 117916) with diagonal ventilation slots (Page 8)
  * - 2x 400mm width cable trays (400.2 x 1958.9 x 10.6 mm, Page 4)
  * - Horizontal depth struts 1860 x 67.5 mm (Page 5)
  * - 19" vertical rails 1948.9 x 69 x 51.5 mm L-angle with EIA-310 cage holes & U numbers (Page 6)
@@ -35,7 +35,7 @@ import { createPerforationTexture } from './BrandTextures';
 
 let cachedVentSlotTexture: THREE.CanvasTexture | null = null;
 
-// Page 8: Diagonal ventilation slots texture for Fixed Shelf PN 117914
+// Page 8: Diagonal ventilation slots texture for Fixed Shelf PN 117916 / 117914
 export function createDiagonalVentSlotTexture(): THREE.CanvasTexture | null {
   if (cachedVentSlotTexture) return cachedVentSlotTexture;
   if (typeof document === 'undefined') return null;
@@ -160,17 +160,17 @@ export function build447510TCabinetGroup(
   group.name = 'cabinet-447510T-root';
 
   // EXACT DIMENSIONS FROM TECHNICAL SPECIFICATION PDF (Pages 1 & 3):
-  // 44U, Width: 750mm, Depth: 1000mm, Frame Height: 2060.7mm, Total Height: 2148.3mm
-  const widthUnits = 7.50; // 750 mm (Wider than standard 600mm rack)
-  const depthUnits = 10.00; // 1000 mm
+  // 44U, Width: 750mm, Depth: 1000mm (447510T) or 800mm (447580T), Frame Height: 2060.7mm
+  const widthUnits = (dims.widthMm || 750) * SCALE_MM_TO_UNITS;
+  const depthUnits = (dims.depthMm || 1000) * SCALE_MM_TO_UNITS;
   const totalU = 44;
   const railHeightUnits = totalU * U_HEIGHT_UNITS; // 44 * 0.4445 = 19.558 units (matches 1948.9mm rail)
   const roofHeight = 0.45; // 45mm top canopy
   const baseHeight = 0.45; // 45mm base plinth
   const frameHeightUnits = 20.607; // 2060.7mm frame height
 
-  const halfW = widthUnits / 2; // 3.75
-  const halfD = depthUnits / 2; // 5.00
+  const halfW = widthUnits / 2;
+  const halfD = depthUnits / 2;
   const halfH = frameHeightUnits / 2; // 10.3035
 
   // 19" Rail positions (centered within 750mm chassis):

@@ -100,12 +100,12 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
         <table className="w-full text-right border-collapse text-xs sm:text-sm" dir="rtl">
           <thead>
             <tr className="bg-[#f0f6fc] border-b border-[#b3d4f5] text-[#004387] font-bold text-xs print:bg-slate-100">
-              <th className="py-2.5 px-3 text-center w-16 whitespace-nowrap">תמונה</th>
-              <th className="py-2.5 px-3 text-right whitespace-nowrap">מק"ט</th>
-              <th className="py-2.5 px-3 text-center whitespace-nowrap">כמות</th>
-              <th className="py-2.5 px-3 text-right whitespace-nowrap">מיקום</th>
-              {withPrice && <th className="py-2.5 px-3 text-right whitespace-nowrap">מחיר יח'</th>}
-              {withPrice && <th className="py-2.5 px-3 text-right whitespace-nowrap">סה"כ</th>}
+              <th className="py-2 px-2 text-center w-12 whitespace-nowrap">תמונה</th>
+              <th className="py-2 px-2 text-right whitespace-nowrap">פריט / מק"ט</th>
+              <th className="py-2 px-2 text-center whitespace-nowrap">כמות</th>
+              <th className="py-2 px-2 text-right whitespace-nowrap">מיקום</th>
+              {withPrice && <th className="py-2 px-2 text-right whitespace-nowrap">מחיר יח'</th>}
+              {withPrice && <th className="py-2 px-2 text-right whitespace-nowrap">סה"כ</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
@@ -121,10 +121,10 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                   }`}
                 >
                   {/* תמונה של המוצר */}
-                  <td className="py-2 px-2.5 text-center w-16">
+                  <td className="py-1.5 px-1.5 text-center w-12">
                     <button
                       type="button"
-                      className="relative w-11 h-11 mx-auto bg-white border border-slate-200 rounded-md overflow-hidden flex items-center justify-center p-1 shadow-2xs hover:border-[#004387] hover:ring-2 hover:ring-blue-100 hover:shadow-md transition-all cursor-pointer group/thumb"
+                      className="relative w-10 h-10 mx-auto bg-white border border-slate-200 rounded-md overflow-hidden flex items-center justify-center p-1 shadow-2xs hover:border-[#004387] hover:ring-2 hover:ring-blue-100 hover:shadow-md transition-all cursor-pointer group/thumb"
                       title="הצבע לצפייה בפרטי מוצר או לחץ להגדלה"
                       aria-label={`פרטי מוצר עבור ${line.sku}`}
                       onMouseEnter={(e) => {
@@ -152,7 +152,7 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                         />
                       ) : (
                         <div className="flex flex-col items-center justify-center text-slate-400 group-hover/thumb:text-[#004387] transition-colors">
-                          <Box size={18} />
+                          <Box size={16} />
                           <span className="text-[8px] font-mono leading-none mt-0.5">{line.uSize > 0 ? `${line.uSize}U` : '0U'}</span>
                         </div>
                       )}
@@ -164,13 +164,12 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                     </button>
                   </td>
 
-                  {/* מק"ט בלבד */}
-                  <td className="py-2.5 px-3 whitespace-nowrap">
+                  {/* שם מוצר + מק"ט */}
+                  <td className="py-2 px-2 max-w-[140px] sm:max-w-[180px]">
                     <button
                       type="button"
-                      className="text-right hover:text-[#004387] hover:underline cursor-pointer transition-colors font-mono font-bold text-xs sm:text-sm text-slate-800 block"
-                      dir="ltr"
-                      title="הצבע לצפייה בפרטי מוצר או לחץ להגדלה"
+                      className="text-right hover:text-[#004387] cursor-pointer transition-colors block w-full"
+                      title={line.name ? `${line.name} (${line.sku})` : line.sku}
                       onMouseEnter={(e) => {
                         const item = getItemPreview(line);
                         onProductHover?.(item, e);
@@ -184,60 +183,67 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
                       }}
                       onClick={() => handleItemClick(line)}
                     >
-                      {line.sku}
+                      {line.name && (
+                        <span className="block text-[11px] font-semibold text-slate-800 truncate leading-tight">
+                          {line.name}
+                        </span>
+                      )}
+                      <span className="font-mono font-bold text-[11px] text-[#004387] hover:underline inline-block" dir="ltr">
+                        {line.sku}
+                      </span>
                     </button>
                   </td>
 
                   {/* כמות */}
-                  <td className="py-2 px-2 sm:px-3 text-center whitespace-nowrap">
+                  <td className="py-1.5 px-1.5 text-center whitespace-nowrap">
                     {readOnly ? (
                       <span className="font-mono font-bold text-xs text-slate-800">
                         {line.qty}
                       </span>
                     ) : (
-                      <div className="flex items-center justify-center gap-2 lg:gap-0 bg-transparent lg:bg-slate-50 lg:border lg:border-slate-200 lg:rounded-none lg:overflow-hidden lg:h-7 w-fit mx-auto" dir="ltr">
+                      <div className="flex items-center justify-center gap-1 sm:gap-0 bg-transparent sm:bg-slate-50 sm:border sm:border-slate-200 sm:rounded-none sm:overflow-hidden sm:h-7 w-fit mx-auto" dir="ltr">
                         <button
                           type="button"
                           title="הוסף 1"
                           onClick={() => onIncrement?.(line.sku)}
-                          className="w-10 h-10 min-w-10 min-h-10 flex items-center justify-center bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded border border-slate-300 lg:border-0 lg:rounded-none lg:w-auto lg:h-full lg:min-w-0 lg:min-h-0 lg:px-2 lg:bg-transparent text-[#004387] transition-colors cursor-pointer shrink-0"
+                          className="w-8 h-8 sm:w-auto sm:h-full sm:px-2 flex items-center justify-center bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded border border-slate-300 sm:border-0 sm:rounded-none sm:bg-transparent text-[#004387] transition-colors cursor-pointer shrink-0"
                           aria-label={`הוסף 1 עבור ${line.sku}`}
                         >
-                          <Plus size={15} className="lg:w-3 lg:h-3" />
+                          <Plus size={13} className="sm:w-3 sm:h-3" />
                         </button>
-                        <span className="w-9 h-10 min-w-9 min-h-10 flex items-center justify-center text-xs sm:text-sm font-bold bg-white text-slate-800 font-mono border border-slate-200 rounded lg:border-0 lg:border-x lg:border-slate-200 lg:rounded-none lg:w-7 lg:h-full lg:min-w-0 lg:min-h-0 shrink-0">
+                        <span className="w-7 h-8 sm:w-7 sm:h-full flex items-center justify-center text-xs font-bold bg-white text-slate-800 font-mono border border-slate-200 rounded sm:border-0 sm:border-x sm:border-slate-200 sm:rounded-none shrink-0">
                           {line.qty}
                         </span>
                         <button
                           type="button"
                           title="הפחת 1"
                           onClick={() => onDecrement?.(line.sku)}
-                          className="w-10 h-10 min-w-10 min-h-10 flex items-center justify-center bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded border border-slate-300 lg:border-0 lg:rounded-none lg:w-auto lg:h-full lg:min-w-0 lg:min-h-0 lg:px-2 lg:bg-transparent text-red-500 transition-colors cursor-pointer shrink-0"
+                          className="w-8 h-8 sm:w-auto sm:h-full sm:px-2 flex items-center justify-center bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded border border-slate-300 sm:border-0 sm:rounded-none sm:bg-transparent text-red-500 transition-colors cursor-pointer shrink-0"
                           aria-label={`הפחת 1 עבור ${line.sku}`}
                         >
-                          <Minus size={15} className="lg:w-3 lg:h-3" />
+                          <Minus size={13} className="sm:w-3 sm:h-3" />
                         </button>
                         <button
                           type="button"
                           title="הסר לחלוטין"
                           onClick={() => onRemove?.(line.sku)}
-                          className="w-10 h-10 min-w-10 min-h-10 flex items-center justify-center bg-rose-50 hover:bg-rose-100 active:bg-rose-200 rounded border border-rose-300 lg:border-0 lg:border-l lg:border-slate-200 lg:rounded-none lg:w-auto lg:h-full lg:min-w-0 lg:min-h-0 lg:px-2 lg:bg-transparent text-slate-400 hover:text-rose-600 transition-colors cursor-pointer shrink-0"
+                          className="w-8 h-8 sm:w-auto sm:h-full sm:px-2 flex items-center justify-center bg-rose-50 hover:bg-rose-100 active:bg-rose-200 rounded border border-rose-300 sm:border-0 sm:border-l sm:border-slate-200 sm:rounded-none sm:bg-transparent text-slate-400 hover:text-rose-600 transition-colors cursor-pointer shrink-0"
                           aria-label={`הסר לחלוטין עבור ${line.sku}`}
                         >
-                          <X size={15} className="lg:w-3 lg:h-3" />
+                          <X size={13} className="sm:w-3 sm:h-3" />
                         </button>
                       </div>
                     )}
                   </td>
 
                   {/* מיקום */}
-                  <td className="py-2.5 px-3 whitespace-nowrap">
+                  <td className="py-2 px-2 whitespace-nowrap">
                     {isUnplaced ? (
-                      <span className="text-red-700 font-semibold text-xs">
-                        לא שובץ — אין מקום פנוי
+                      <span className="text-red-700 font-semibold text-[11px]">
+                        לא שובץ
                       </span>
                     ) : (
-                      <span className="font-mono text-xs font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded print:bg-slate-50">
+                      <span className="font-mono text-[11px] font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded print:bg-slate-50">
                         {line.positions.join(', ')}
                       </span>
                     )}
@@ -245,14 +251,14 @@ export const OrderSummaryTable: React.FC<OrderSummaryTableProps> = ({
 
                   {/* מחיר יח' */}
                   {withPrice && (
-                    <td className="py-2.5 px-3 font-mono text-xs text-slate-700 whitespace-nowrap">
+                    <td className="py-2 px-2 font-mono text-xs text-slate-700 whitespace-nowrap">
                       ₪{line.unitPrice.toLocaleString('he-IL', { minimumFractionDigits: 2 })}
                     </td>
                   )}
 
                   {/* סה"כ */}
                   {withPrice && (
-                    <td className="py-2.5 px-3 font-mono text-xs font-bold text-[#004387] whitespace-nowrap">
+                    <td className="py-2 px-2 font-mono text-xs font-bold text-[#004387] whitespace-nowrap">
                       ₪{line.lineTotal.toLocaleString('he-IL', { minimumFractionDigits: 2 })}
                     </td>
                   )}
