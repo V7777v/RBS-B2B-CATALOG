@@ -866,6 +866,42 @@ export const reconcileCabinetMatrixEntry = (entry: CabinetMatrixData, product?: 
     res.rearDoor = 'דלת אחורית ממתכת מחוררת עם מנעול';
     res.removableSides = true;
   }
+  // 7. SKU 2177: Official Datasheet (2177.pdf) -> 42U 600x600 Double Perforated Doors
+  else if (baseSku === '2177') {
+    res.u = 42;
+    res.width = 600;
+    res.depth = 600;
+    res.frontDoor = 'דלת קדמית כפולה מחוררת עם מנעול קפיצי';
+    res.rearDoor = 'דלת אחורית כפולה מחוררת עם מנעול קפיצי';
+    res.removableSides = true;
+  }
+  // 8. SKU 2066: Official Datasheet (2066.pdf) -> 42U 600x800 Double Perforated Doors
+  else if (baseSku === '2066') {
+    res.u = 42;
+    res.width = 600;
+    res.depth = 800;
+    res.frontDoor = 'דלת קדמית כפולה מחוררת עם מנעול קפיצי';
+    res.rearDoor = 'דלת אחורית כפולה מחוררת עם מנעול קפיצי';
+    res.removableSides = true;
+  }
+  // 9. SKU 114802: Official Datasheet (114802.pdf) -> 32U 600x800 Perforated Doors
+  else if (baseSku === '114802') {
+    res.u = 32;
+    res.width = 600;
+    res.depth = 800;
+    res.frontDoor = 'דלת קדמית מחוררת עם מנעול וידית';
+    res.rearDoor = 'דלת אחורית ממתכת מחוררת עם מנעול';
+    res.removableSides = true;
+  }
+  // 10. SKU 1174: Official Datasheet (1174.pdf) -> 32U 600x600 Front Glass Door
+  else if (baseSku === '1174') {
+    res.u = 32;
+    res.width = 600;
+    res.depth = 600;
+    res.frontDoor = 'דלת קדמית זכוכית מחוסמת עם מנעול וידית';
+    res.rearDoor = 'דלת אחורית ממתכת מחוררת עם מנעול';
+    res.removableSides = true;
+  }
 
   // Ensure product name explicit perforated door overrides any accidental mismatch
   const prodName = String(product?.name || '');
