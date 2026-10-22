@@ -12,6 +12,22 @@ const normalizeSku = (sku: any): string =>
     .replace(/[\r\n\t]+/g, "")
     .toUpperCase();
 
+const getBaseSku = (sku: any): string => {
+  const norm = normalizeSku(sku);
+  if (!norm) return "";
+  if (norm === "TBH") return "447580";
+  const match = norm.match(/^(\d+)[A-Z]+$/);
+  return match ? match[1] : norm;
+};
+
+const isSameSku = (skuA: any, skuB: any): boolean => {
+  const normA = normalizeSku(skuA);
+  const normB = normalizeSku(skuB);
+  if (!normA || !normB) return false;
+  if (normA === normB) return true;
+  return getBaseSku(normA) === getBaseSku(normB);
+};
+
 interface MatrixCabSpec {
   u: number;
   width: number | null;
@@ -63,7 +79,10 @@ const CABINET_MATRIX_SPECS: Record<string, MatrixCabSpec> = {
   "2066": { u: 42, width: 600, depth: 800, fans: "4", wheels: "4", feet: "4", shelves: "2", std: ["2234"], hang: [], slide: ["117909"] },
   "206810": { u: 42, width: 600, depth: 1000, fans: "4", wheels: "4", feet: "4", shelves: "2", std: ["117916"], hang: [], slide: ["117909"] },
   "TBH": { u: 44, width: 750, depth: 800, fans: "4", wheels: "4", feet: "4", shelves: "2", std: ["2234"], hang: [], slide: ["117909"] },
+  "447580T": { u: 44, width: 750, depth: 800, fans: "4", wheels: "4", feet: "4", shelves: "2", std: ["2234"], hang: [], slide: ["117909"] },
+  "447580": { u: 44, width: 750, depth: 800, fans: "4", wheels: "4", feet: "4", shelves: "2", std: ["2234"], hang: [], slide: ["117909"] },
   "447510T": { u: 44, width: 750, depth: 1000, fans: "4", wheels: "4", feet: "4", shelves: "2", std: ["117916"], hang: [], slide: ["117909"] },
+  "447510": { u: 44, width: 750, depth: 1000, fans: "4", wheels: "4", feet: "4", shelves: "2", std: ["117916"], hang: [], slide: ["117909"] },
 };
 
 /**
@@ -123,8 +142,10 @@ export function detectCoaxType(product: any): "RG59" | "RG6" | "RG174" | null {
  */
 export function detectCabinetDepthMm(product: any): number | null {
   const sku = normalizeSku(product?.sku);
-  if (CABINET_MATRIX_SPECS[sku]?.depth) {
-    return CABINET_MATRIX_SPECS[sku].depth;
+  const baseSku = getBaseSku(sku);
+  const spec = CABINET_MATRIX_SPECS[sku] || CABINET_MATRIX_SPECS[baseSku];
+  if (spec?.depth) {
+    return spec.depth;
   }
   const text = `${product?.name || ""} ${product?.description || ""}`;
   const explicitDepth = text.match(/עומק[:\s]*(\d{2,4})/);
@@ -136,8 +157,8 @@ export function detectCabinetDepthMm(product: any): number | null {
   if (dimMatch) {
     const d1 = parseInt(dimMatch[1], 10);
     const d2 = parseInt(dimMatch[2], 10);
-    if (d2 === 550 || d2 === 600) return d1;
-    if (d1 === 550 || d1 === 600) return d2;
+    if (d2 === 550 || d2 === 600 || d2 === 750) return d1;
+    if (d1 === 550 || d1 === 600 || d1 === 750) return d2;
     return Math.min(d1, d2);
   }
   return null;
@@ -145,8 +166,10 @@ export function detectCabinetDepthMm(product: any): number | null {
 
 export function detectCabinetU(product: any): number | null {
   const sku = normalizeSku(product?.sku);
-  if (CABINET_MATRIX_SPECS[sku]?.u) {
-    return CABINET_MATRIX_SPECS[sku].u;
+  const baseSku = getBaseSku(sku);
+  const spec = CABINET_MATRIX_SPECS[sku] || CABINET_MATRIX_SPECS[baseSku];
+  if (spec?.u) {
+    return spec.u;
   }
   const text = `${product?.name || ""} ${product?.description || ""}`;
   const m = text.match(/\b(\d{1,2})\s*[uU]\b/);
@@ -205,7 +228,9 @@ export function getSmartRecommendations(
     for (let i = 0; i < skus.length; i++) {
       if (count >= maxPerGroup) break;
       const target = normalizeSku(skus[i]);
-      const found = activeCatalog.find((p) => normalizeSku(p.sku) === target);
+      const found =
+        activeCatalog.find((p) => normalizeSku(p.sku) === target) ||
+        activeCatalog.find((p) => isSameSku(p.sku, target));
       if (found) {
         addCandidate(found, baseScore - i * 0.2, reason, group || reason);
         count++;
@@ -287,7 +312,7 @@ export function getSmartRecommendations(
         .slice(0, maxResults);
     }
 
-    const matrixSpec = CABINET_MATRIX_SPECS[selectedSku] || null;
+    const matrixSpec = CABINET_MATRIX_SPECS[selectedSku] || CABINET_MATRIX_SPECS[getBaseSku(selectedSku)] || null;
     const cabU = matrixSpec?.u ?? detectCabinetU(selectedProduct) ?? 15;
     const cabDepth = matrixSpec?.depth ?? detectCabinetDepthMm(selectedProduct) ?? 600;
     const hasBuiltInFans = matrixSpec ? matrixSpec.fans !== "X" && matrixSpec.fans !== "0" : cabU >= 25;

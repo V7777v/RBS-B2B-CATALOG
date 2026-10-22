@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Server, Loader2, ExternalLink, ShoppingCart, CheckCircle2, BadgePercent, ArrowUpRight, HelpCircle, AlertCircle, Sparkles } from 'lucide-react';
 import { CabinetConfigurator } from './CabinetConfigurator';
 import Papa from 'papaparse';
-import { fetchCabinetMatrix, fetchCompatMap, checkAccessoryFitsCabinet, isAccessoryAShelf, isProductShelf, extractAllMatrixShelfSkus, normalizeSku, isConfigurableCabinet } from '../utils/cabinetData';
+import { fetchCabinetMatrix, fetchCompatMap, checkAccessoryFitsCabinet, isAccessoryAShelf, isProductShelf, extractAllMatrixShelfSkus, normalizeSku, getBaseSku, hasMatchingSku, isConfigurableCabinet } from '../utils/cabinetData';
 import { getToken as getAppCheckToken } from 'firebase/app-check';
 import { appCheck } from '../firebase';
 
@@ -119,24 +119,33 @@ export const AccessoryCabinets: React.FC<AccessoryCabinetsProps> = ({
            const result = checkAccessoryFitsCabinet(productSkuNorm, isShelf, cabinet, compatMap, accDepthFallback);
            
            if (result.fits) {
-               compatibleSkus.add(cabSku);
-               specsMap.set(cabSku, {
+               const normCabSku = normalizeSku(cabSku);
+               const baseCabSku = getBaseSku(normCabSku);
+               compatibleSkus.add(normCabSku);
+               if (baseCabSku) compatibleSkus.add(baseCabSku);
+               const specObj: CabinetSpec = {
                   u: cabinet.u > 0 ? cabinet.u.toString() : 'N/A',
                   fans: cabinet.fans || 'X',
                   wheels: cabinet.wheels || 'X',
                   levelingFeet: cabinet.levelingFeet || 'X',
                   shelvesQty: cabinet.shelvesQty || '0'
-               });
+               };
+               specsMap.set(normCabSku, specObj);
+               if (baseCabSku && !specsMap.has(baseCabSku)) {
+                 specsMap.set(baseCabSku, specObj);
+               }
            }
         }
 
+        const compatibleSkuList = Array.from(compatibleSkus);
         const matchedCabinets = catalogData
-          .filter(p => p && p.sku && compatibleSkus.has(normalizeSku(p.sku)) && isConfigurableCabinet(p))
+          .filter(p => p && p.sku && (compatibleSkus.has(normalizeSku(p.sku)) || compatibleSkus.has(getBaseSku(p.sku)) || hasMatchingSku(compatibleSkuList, p.sku)) && isConfigurableCabinet(p))
           .map(cab => {
              const key = normalizeSku(cab.sku);
+             const baseKey = getBaseSku(cab.sku);
              return {
                ...cab,
-               specDetails: specsMap.get(key) || null
+               specDetails: specsMap.get(key) || specsMap.get(baseKey) || null
              };
           });
 

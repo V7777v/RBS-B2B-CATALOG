@@ -19,7 +19,64 @@ export interface CabinetMatrixData {
   removableSides?: boolean;
 }
 
-export const normalizeSku = (sku: any): string => String(sku ?? '').trim().toUpperCase();
+export const normalizeSku = (sku: any): string =>
+  String(sku ?? '')
+    .replace(/[\r\n\t]+/g, '')
+    .trim()
+    .toUpperCase();
+
+/**
+ * Returns the base numeric SKU without trailing letter suffixes (e.g. "447510T" -> "447510", "130460D" -> "130460").
+ * Allows matching SKUs across sheets even when one sheet omits or includes a trailing letter.
+ */
+export const getBaseSku = (sku: any): string => {
+  const norm = normalizeSku(sku);
+  if (!norm) return '';
+  if (norm === 'TBH') return '447580';
+  const m = norm.match(/^(\d+)[A-Z]+$/);
+  return m ? m[1] : norm;
+};
+
+export const isSameSku = (a: any, b: any): boolean => {
+  const normA = normalizeSku(a);
+  const normB = normalizeSku(b);
+  if (!normA || !normB) return false;
+  if (normA === normB) return true;
+  const baseA = getBaseSku(normA);
+  const baseB = getBaseSku(normB);
+  return Boolean(baseA && baseB && baseA === baseB);
+};
+
+export const hasMatchingSku = (collection: Set<string> | string[] | undefined | null, targetSku: any): boolean => {
+  if (!collection) return false;
+  const norm = normalizeSku(targetSku);
+  if (!norm) return false;
+  const base = getBaseSku(norm);
+  if (collection instanceof Set) {
+    if (collection.has(norm) || (base && collection.has(base))) return true;
+    for (const item of collection) {
+      if (isSameSku(item, norm)) return true;
+    }
+    return false;
+  }
+  if (Array.isArray(collection)) {
+    return collection.some(item => isSameSku(item, norm));
+  }
+  return false;
+};
+
+export const findInCatalogMap = (catalogMap: Map<string, any> | undefined | null, targetSku: any): any => {
+  if (!catalogMap) return undefined;
+  const norm = normalizeSku(targetSku);
+  if (!norm) return undefined;
+  if (catalogMap.has(norm)) return catalogMap.get(norm);
+  const base = getBaseSku(norm);
+  if (base && catalogMap.has(base)) return catalogMap.get(base);
+  for (const [k, v] of catalogMap.entries()) {
+    if (isSameSku(k, norm)) return v;
+  }
+  return undefined;
+};
 
 export const GENERIC_SHELF_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 240" width="100%" height="100%">
@@ -120,6 +177,45 @@ export const parseCompatibleSkus = (cellValue: string | undefined): string[] => 
   return val.split(/[\s,;\n]+/).map(s => normalizeSku(s)).filter(s => s.length > 0);
 };
 
+export const normalizeDimensionMm = (rawVal: any): number | null => {
+  const parsed = parseInt(String(rawVal ?? '').trim(), 10);
+  if (isNaN(parsed) || parsed <= 0) return null;
+  // In the sheet, some widths/depths are written in cm (e.g. "75" instead of "750")
+  return parsed < 150 ? parsed * 10 : parsed;
+};
+
+export const resolveCabinetMatrixRow = (cabRows: any[][], product: any): any[] | null => {
+  if (!Array.isArray(cabRows) || cabRows.length <= 2 || !product) return null;
+  const productSkuNorm = normalizeSku(product.sku || product.pn);
+  const productBaseSku = getBaseSku(productSkuNorm);
+
+  // 1. Exact SKU match
+  for (let i = 2; i < cabRows.length; i++) {
+    const row = cabRows[i];
+    if (!row || row[0] === undefined || row[0] === null) continue;
+    const rowSku = normalizeSku(row[0]);
+    if (rowSku && rowSku !== 'X' && rowSku === productSkuNorm) {
+      return row;
+    }
+  }
+
+  // 2. Base SKU match (ignoring trailing letters, e.g. 447510T <-> 447510, or 447580T <-> TBH)
+  for (let i = 2; i < cabRows.length; i++) {
+    const row = cabRows[i];
+    if (!row || row[0] === undefined || row[0] === null) continue;
+    const rowSku = normalizeSku(row[0]);
+    if (!rowSku || rowSku === 'X') continue;
+    if (isSameSku(rowSku, productSkuNorm)) {
+      return row;
+    }
+    if (rowSku === 'TBH' && (productBaseSku === '447580' || productSkuNorm === '447580T')) {
+      return row;
+    }
+  }
+
+  return null;
+};
+
 export const fetchCabinetMatrix = async (appCheckTok: string): Promise<Record<string, CabinetMatrixData>> => {
   const acHeaders = { headers: { 'X-Firebase-AppCheck': appCheckTok } };
   const CABINETS_CSV_URL = '/api/sheets?gid=250535112';
@@ -150,17 +246,15 @@ export const fetchCabinetMatrix = async (appCheckTok: string): Promise<Record<st
     for (let i = 2; i < cabRows.length; i++) {
        const row = cabRows[i];
        if (!row || row[0] === undefined || row[0] === null) continue;
-       const sku = normalizeSku(row[0]);
-       if (!sku || sku === 'X') continue;
+       const rawSku = normalizeSku(row[0]);
+       if (!rawSku || rawSku === 'X') continue;
+       const sku = rawSku === 'TBH' ? '447580T' : rawSku;
 
        const uVal = parseInt(String(row[2]), 10);
-       const widthVal = parseInt(String(row[3]), 10);
-       const depthVal = parseInt(String(row[4]), 10);
+       const widthVal = normalizeDimensionMm(row[3]);
+       const depthVal = normalizeDimensionMm(row[4]);
        const resolvedU = isNaN(uVal) ? 0 : uVal;
 
-       // 1. cabinetData.ts: read a new optional sheet column "sidePanels" (header text may be "פאנלי צד").
-       // Values: "ניתן להסרה" → removableSides: true, anything else/empty → false.
-       // Default when the column is missing: true for totalU >= 22, false otherwise.
        let removableSides: boolean;
        if (sidePanelsColIdx !== -1 && row[sidePanelsColIdx] !== undefined && row[sidePanelsColIdx] !== null && String(row[sidePanelsColIdx]).trim() !== '') {
          const sideVal = String(row[sidePanelsColIdx]).trim();
@@ -169,11 +263,11 @@ export const fetchCabinetMatrix = async (appCheckTok: string): Promise<Record<st
          removableSides = resolvedU >= 22;
        }
 
-       matrix[sku] = {
+       const entry: CabinetMatrixData = {
          sku,
          u: resolvedU,
-         width: isNaN(widthVal) ? null : widthVal,
-         depth: isNaN(depthVal) ? null : depthVal,
+         width: widthVal,
+         depth: depthVal,
          frontDoor: String(row[5] ?? '').trim(),
          rearDoor: String(row[6] ?? '').trim(),
          color: String(row[7] ?? '').trim(),
@@ -186,6 +280,17 @@ export const fetchCabinetMatrix = async (appCheckTok: string): Promise<Record<st
          suitableSliding: parseCompatibleSkus(row[14]),
          removableSides,
        };
+
+       matrix[sku] = entry;
+       const baseSku = getBaseSku(sku);
+       if (baseSku && !matrix[baseSku]) {
+         matrix[baseSku] = entry;
+       }
+       if (rawSku === 'TBH') {
+         matrix['TBH'] = entry;
+         matrix['447580T'] = entry;
+         matrix['447580'] = entry;
+       }
     }
     return matrix;
   } catch (e) {
@@ -217,9 +322,14 @@ export const fetchCompatMap = async (appCheckTok: string): Promise<Record<string
       const compRows = (Papa.parse(compText, { header: false, skipEmptyLines: false }).data) as any[][];
       for (const row of compRows) {
         const sku = normalizeSku(row[0]);
-        if (!sku || !/^[0-9]/.test(sku)) continue;
+        if (!sku || sku === 'מק"ט' || sku === 'מקט' || sku.includes('מידע')) continue;
         const rangeStr = String(row[5] ?? '');
-        if (rangeStr.trim()) compatMap[sku] = parseCompatRange(rangeStr);
+        if (rangeStr.trim()) {
+          const parsed = parseCompatRange(rangeStr);
+          compatMap[sku] = parsed;
+          const base = getBaseSku(sku);
+          if (base && !compatMap[base]) compatMap[base] = parsed;
+        }
       }
     }
   } catch (e) {
@@ -232,7 +342,6 @@ export const KNOWN_MATRIX_SHELF_SKUS = new Set<string>([
   '1024',
   '1152',
   '2234',
-  '1179',
   '117909',
   '117911',
   '117913',
@@ -245,6 +354,7 @@ export const KNOWN_MATRIX_SHELF_SKUS = new Set<string>([
   '150467',
   '150470',
   '130460D',
+  '130460',
 ]);
 
 export const extractAllMatrixShelfSkus = (matrix: Record<string, CabinetMatrixData>): Set<string> => {
@@ -252,9 +362,24 @@ export const extractAllMatrixShelfSkus = (matrix: Record<string, CabinetMatrixDa
   for (const cabSku in matrix) {
     const cab = matrix[cabSku];
     if (!cab) continue;
-    (cab.suitableStandard || []).forEach(s => s && s !== 'X' && set.add(normalizeSku(s)));
-    (cab.suitableHanging || []).forEach(s => s && s !== 'X' && set.add(normalizeSku(s)));
-    (cab.suitableSliding || []).forEach(s => s && s !== 'X' && set.add(normalizeSku(s)));
+    (cab.suitableStandard || []).forEach(s => {
+      if (s && s !== 'X') {
+        set.add(normalizeSku(s));
+        set.add(getBaseSku(s));
+      }
+    });
+    (cab.suitableHanging || []).forEach(s => {
+      if (s && s !== 'X') {
+        set.add(normalizeSku(s));
+        set.add(getBaseSku(s));
+      }
+    });
+    (cab.suitableSliding || []).forEach(s => {
+      if (s && s !== 'X') {
+        set.add(normalizeSku(s));
+        set.add(getBaseSku(s));
+      }
+    });
   }
   return set;
 };
@@ -271,21 +396,20 @@ export const isProductShelf = (
 
   if (typeof prodOrSku === 'string') {
     sku = normalizeSku(prodOrSku);
-    if (catalogMap && catalogMap.has(sku)) {
-      prod = catalogMap.get(sku);
-    }
+    prod = findInCatalogMap(catalogMap, sku);
   } else if (typeof prodOrSku === 'object') {
     sku = normalizeSku(prodOrSku.sku || prodOrSku.pn);
     prod = prodOrSku;
-    if ((!prod.name || !prod.description) && catalogMap && catalogMap.has(sku)) {
-      prod = { ...catalogMap.get(sku), ...prod };
+    if ((!prod.name || !prod.description) && catalogMap) {
+      const fromMap = findInCatalogMap(catalogMap, sku);
+      if (fromMap) prod = { ...fromMap, ...prod };
     }
   }
 
-  // 1. Check SKU against matrix shelf columns across the matrix
+  // 1. Check SKU against matrix shelf columns across the matrix (including base SKU without trailing letter)
   if (sku) {
-    if (allMatrixShelfSkus && allMatrixShelfSkus.has(sku)) return true;
-    if (KNOWN_MATRIX_SHELF_SKUS.has(sku)) return true;
+    if (hasMatchingSku(allMatrixShelfSkus, sku)) return true;
+    if (hasMatchingSku(KNOWN_MATRIX_SHELF_SKUS, sku)) return true;
   }
 
   // 2. Check product text / subcategories
@@ -295,14 +419,14 @@ export const isProductShelf = (
     const sub = String(prod.subcategory || prod['קטגוריה'] || '').toLowerCase();
     const nested = String(prod.nestedSubcategory || prod['תת קטגוריה'] || prod['Nested subcategory'] || '').toLowerCase();
 
-    // Prevent non-shelf equipment (amplifiers, UPS, switches, PDUs, etc.) from accidental classification
-    const isExplicitNonShelf = /מגבר|amplifier|מתג|switch|נתב|router|אל פסק|ups|pdu|פס שקע|פאנל|panel|מברשת|brush|מאוורר|fan|גלגל|wheel|רגלית|feet|בורג|screw|תושבת/i.test(name);
+    // Prevent non-shelf equipment (drawers, amplifiers, UPS, switches, PDUs, etc.) from accidental shelf classification
+    const isExplicitNonShelf = /מגירה|drawer|מגבר|amplifier|מתג|switch|נתב|router|אל פסק|ups|pdu|פס שקע|פאנל|panel|מברשת|brush|מאוורר|fan|גלגל|wheel|רגלית|feet|בורג|screw|תושבת/i.test(name);
     if (isExplicitNonShelf) return false;
 
-    if (/מדף|shelf|מגירה|drawer/i.test(name)) return true;
+    if (/מדף|shelf/i.test(name)) return true;
     if (nested.includes('מדפ') || sub.includes('מדפ')) return true;
     // Strict description check: only if explicitly beginning or titled as shelf
-    if (/^\s*(מדף|מגירה|shelf|drawer)\b/i.test(desc)) return true;
+    if (/^\s*(מדף|shelf)\b/i.test(desc)) return true;
   }
 
   return false;
@@ -579,9 +703,10 @@ export function groupAccessoriesForDisplay(
 export const isAccessoryAShelf = (accNameOrDescOrSku: string): boolean => {
   if (!accNameOrDescOrSku) return false;
   const norm = normalizeSku(accNameOrDescOrSku);
-  if (KNOWN_MATRIX_SHELF_SKUS.has(norm)) return true;
+  if (hasMatchingSku(KNOWN_MATRIX_SHELF_SKUS, norm)) return true;
   const text = accNameOrDescOrSku.toLowerCase();
-  return text.includes('מדף') || text.includes('shelf') || text.includes('מגירה') || text.includes('drawer');
+  if (text.includes('מגירה') || text.includes('drawer')) return false;
+  return text.includes('מדף') || text.includes('shelf');
 };
 
 export const checkAccessoryFitsCabinet = (
@@ -592,19 +717,20 @@ export const checkAccessoryFitsCabinet = (
   accDepthFallback: number | null
 ): { fits: boolean; reason: string } => {
   const normAccSku = normalizeSku(accSku);
+  const baseAccSku = getBaseSku(normAccSku);
   
-  // Matrix check for shelves
+  // Matrix check for shelves (tolerant of trailing letters on SKUs)
   if (isShelf) {
-    const isStd = cabinet.suitableStandard.includes(normAccSku);
-    const isHanging = cabinet.suitableHanging.includes(normAccSku);
-    const isSliding = cabinet.suitableSliding.includes(normAccSku);
+    const isStd = hasMatchingSku(cabinet.suitableStandard, normAccSku);
+    const isHanging = hasMatchingSku(cabinet.suitableHanging, normAccSku);
+    const isSliding = hasMatchingSku(cabinet.suitableSliding, normAccSku);
     
     if (isStd || isHanging || isSliding) {
       return { fits: true, reason: 'Matched in cabinet matrix' };
     }
     
     // Conflict detection
-    const c = compatMap[normAccSku];
+    const c = compatMap[normAccSku] || (baseAccSku ? compatMap[baseAccSku] : undefined);
     if (c) {
       const uFits = (!c.uMin || cabinet.u >= c.uMin) && (!c.uMax || cabinet.u <= c.uMax);
       const dFits = (!c.dMin || (cabinet.depth !== null && cabinet.depth >= c.dMin)) && 
@@ -618,7 +744,7 @@ export const checkAccessoryFitsCabinet = (
   }
   
   // For non-shelves, check compatMap
-  const c = compatMap[normAccSku];
+  const c = compatMap[normAccSku] || (baseAccSku ? compatMap[baseAccSku] : undefined);
   if (c) {
     if (c.all) return { fits: true, reason: 'Compat map - fits all' };
     
@@ -699,16 +825,17 @@ export const isCabinetProduct = (pp: any): boolean => {
   const isAccessoryOrEquipment = 
     /מדף|מדפים|shelf|shelves|מגירה|drawer/i.test(name) ||
     /פאנל|פנל|panel|blank|עיוור|סיבים/i.test(name) ||
-    /מאוורר|מפוח|fan|איוורור/i.test(name) ||
+    /מאוורר|מאורר|מפוח|fan|איוורור|בקר/i.test(name) ||
     /פס שקע|פסי שקעים|שקע|pdu|power strip/i.test(name) ||
-    /ניהול כבל|מארגן כבל|תעלת כבל|ארגונית כבל|מברשת|brush|cable management/i.test(name) ||
+    /ניהול כבל|מארגן כבל|תעלת כבל|תעלה|ארגונית כבל|מברשת|brush|cable management|מסתיר/i.test(name) ||
     /בורג|ברגים|אום|אומים|screw|cage nut/i.test(name) ||
     /גלגל|גלגלים|caster|wheel|רגלי|רגלית|feet/i.test(name) ||
-    /דלת חלופית|דופן צד|side panel|מנעול לארון|ידית לארון|lock|handle/i.test(name) ||
+    /דלת\s+חלופית|דלת\s+מתכת|דלת\s+מחוררת|דלת\s+לארון|^דלת\b|דופן צד|side panel|מנעול לארון|ידית לארון|lock|handle/i.test(name) ||
+    /תאורת|תאורה|נורת|נורה|led\b|לד\b/i.test(name) ||
     /הארקה|grounding|תרמוסטט|thermostat|בסיס לארון|plinth/i.test(name) ||
-    /מסיל|מסילות|rail|פרופיל|תושבת|bracket|מתאם/i.test(name) ||
+    /מסיל|מסילות|rail|רלס|תומכי|פרופיל|תושבת|bracket|מתאם/i.test(name) ||
     /מתג|switch|נתב|router|מגבר|amplifier|אל פסק|ups|סולל|battery|nvr|dvr|מצלמ|camera|ספק כח|ספק כוח|power supply/i.test(name) ||
-    /ערכת|kit|כלי עבודה|tool|מחלץ|extractor/i.test(name);
+    /ערכת|kit|כלי עבודה|כלי\b|tool|מחלץ|extractor/i.test(name);
 
   if (isAccessoryOrEquipment) return false;
 

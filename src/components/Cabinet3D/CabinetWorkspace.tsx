@@ -694,11 +694,11 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
   const renderSimulation = () => (
     <div className="flex-1 min-w-0 h-full flex flex-col relative bg-slate-100 overflow-hidden">
       {/* Spec Notice Banner */}
-      {normalizeSku(product?.sku) === '447510T' && (
+      {normalizeSku(product?.sku).replace(/^447510$/, '447510T') === '447510T' && (
         <div className="bg-amber-50 border-b border-amber-200 px-3 py-1 flex items-center justify-between gap-2 text-amber-900 text-xs shrink-0 z-10">
           <span className="flex items-center gap-1.5 truncate">
             <Award size={13} className="text-amber-600 shrink-0" />
-            <strong className="truncate">מפרט 447510T Boost:</strong> דלתות מחוררות כפולות, 4 מאווררים, תעלות 400 מ״מ ומדפי 117914.
+            <strong className="truncate">מפרט 447510T:</strong> דלתות מחוררות כפולות, 4 מאווררים, תעלות כבילה ומדפים תואמים ({cabinetData?.suitableStandard?.join(', ') || '117916'}).
           </span>
           <span className="text-[10px] bg-amber-200/60 text-amber-900 font-mono px-1.5 py-0.2 rounded shrink-0">44U 75x100</span>
         </div>

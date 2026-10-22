@@ -1,4 +1,4 @@
-import { CabinetMatrixData, normalizeSku } from './cabinetData';
+import { CabinetMatrixData, normalizeSku, getBaseSku } from './cabinetData';
 
 export interface ZeroUException {
   sku: string;
@@ -75,6 +75,7 @@ export const VERIFIED_ZERO_U_EXCEPTIONS: Record<string, ZeroUException> = {
     zone: 'hardware',
     reason: 'תומכים צידיים למסילות הארון עבור ציוד כבד, אינם תופסים יחידות U חזיתיות',
     minDepth: 800,
+    maxDepth: 800,
   },
   '150481': {
     sku: '150481',
@@ -82,6 +83,15 @@ export const VERIFIED_ZERO_U_EXCEPTIONS: Record<string, ZeroUException> = {
     zone: 'hardware',
     reason: 'תומכים צידיים למסילות הארון עבור ציוד כבד, אינם תופסים יחידות U חזיתיות',
     minDepth: 1000,
+    maxDepth: 1000,
+  },
+  '1149': {
+    sku: '1149',
+    name: 'דלת מתכת מחוררת לארון 12U צבע שחור',
+    zone: 'hardware',
+    reason: 'דלת חלופית ייעודית לארון 12U, אינה תופסת יחידות U במסילות',
+    minU: 12,
+    maxU: 12,
   },
 
   // Cage Nuts & Screws
@@ -277,13 +287,19 @@ export const resolveUConsumption = (
     return { u: volResult.volume, source: 'explicit' };
   }
 
-  // Priority 2: Verified 0U exception mapping
-  if (normSku && VERIFIED_ZERO_U_EXCEPTIONS[normSku]) {
+  // Priority 2: Verified 0U exception mapping (including base SKU without trailing letter)
+  const baseSku = getBaseSku(normSku);
+  if ((normSku && VERIFIED_ZERO_U_EXCEPTIONS[normSku]) || (baseSku && VERIFIED_ZERO_U_EXCEPTIONS[baseSku])) {
     return { u: 0, source: 'zero_u_rule' };
   }
 
   const text = `${pp?.sku || ''} ${pp?.name || ''} ${pp?.description || ''}`.toLowerCase();
   
+  // 2U Rack Drawer (1179)
+  if (normSku === '1179' || baseSku === '1179' || /מגירה\s*2u/i.test(text)) {
+    return { u: 2, source: 'rack_pattern_default' };
+  }
+
   // Specific catch for brush panel / cable management (פנל שיערות / פנל עיוור) that might default to 0 incorrectly
   if (text.includes('פנל') || text.includes('פאנל') || text.includes('ניהול כבל') || text.includes('מארגן כבל')) {
     const uMatch = text.match(/(\d+)\s*u\b/i);
@@ -321,9 +337,20 @@ export const checkTrackBAccessoryCompatibility = (
   if (!cabinet) return { fits: true, reason: 'No cabinet constraints' };
 
   const normSku = normalizeSku(pp?.sku);
+  const baseSku = getBaseSku(normSku);
+
+  // 2U Drawer (1179) requires at least 6U and 450mm depth
+  if (normSku === '1179' || baseSku === '1179') {
+    if (cabinet.u > 0 && cabinet.u < 6) {
+      return { fits: false, reason: 'מגירה 2U דורשת ארון 6U ומעלה' };
+    }
+    if (cabinet.depth !== null && cabinet.depth < 450) {
+      return { fits: false, reason: 'מגירה 2U דורשת עומק ארון 450 מ"מ ומעלה' };
+    }
+  }
 
   // Check verified constraints
-  const zeroUDef = VERIFIED_ZERO_U_EXCEPTIONS[normSku];
+  const zeroUDef = VERIFIED_ZERO_U_EXCEPTIONS[normSku] || (baseSku ? VERIFIED_ZERO_U_EXCEPTIONS[baseSku] : undefined);
   if (zeroUDef) {
     if (zeroUDef.minU && cabinet.u > 0 && cabinet.u < zeroUDef.minU) {
       return { fits: false, reason: `מתאים לארונות מ-${zeroUDef.minU}U ומעלה` };
@@ -339,9 +366,9 @@ export const checkTrackBAccessoryCompatibility = (
     }
   }
 
-  // Check compatMap from sheet 1366808268 if present
-  if (compatMap && compatMap[normSku]) {
-    const c = compatMap[normSku];
+  // Check compatMap from sheet 1366808268 if present (including base SKU without trailing letter)
+  const c = compatMap ? (compatMap[normSku] || (baseSku ? compatMap[baseSku] : undefined)) : undefined;
+  if (c) {
     if (c.all) return { fits: true, reason: 'Universal fit from sheet' };
     if (c.uMin != null && cabinet.u > 0 && cabinet.u < c.uMin) {
       return { fits: false, reason: `דרוש מינימום ${c.uMin}U` };

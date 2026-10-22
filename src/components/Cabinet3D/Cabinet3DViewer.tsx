@@ -321,10 +321,19 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     const findCatalogImage = (sku?: string) => {
       if (!sku || !catalogData || !Array.isArray(catalogData)) return undefined;
       const clean = sku.trim().toUpperCase();
-      const p = catalogData.find((x: any) => x && (x.sku?.trim().toUpperCase() === clean || x.pn?.trim().toUpperCase() === clean));
+      const baseClean = clean.replace(/^(\d+)[A-Z]+$/, '$1');
+      const p = catalogData.find((x: any) => {
+        if (!x) return false;
+        const xSku = x.sku?.trim().toUpperCase() || '';
+        const xPn = x.pn?.trim().toUpperCase() || '';
+        const xBase = xSku.replace(/^(\d+)[A-Z]+$/, '$1');
+        return xSku === clean || xPn === clean || (baseClean && xBase === baseClean);
+      });
       if (!p) return undefined;
       return (Array.isArray(p.images) && p.images[0]) || p.imageURL || p.image;
     };
+
+    const defaultIncludedShelfSku = cabinetData?.suitableStandard?.[0] || '1152';
 
     slots.forEach(slot => {
       if (slot.type === 'empty') return;
@@ -334,7 +343,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       const uStart = slot.uIndex - spanU + 1; // 1-based bottom of the span
       const isIncluded = slot.type === 'preset-shelf' || slot.type === 'preset-fan' || Boolean((slot as any).isIncluded);
       const instId = slot.instanceId || `item-${slot.uIndex}-${slot.name}`;
-      const itemSku = slot.accessoryRef?.sku || slot.accessoryRef?.pn || (isIncluded ? '117914' : '');
+      const itemSku = slot.accessoryRef?.sku || slot.accessoryRef?.pn || (isIncluded ? defaultIncludedShelfSku : '');
 
       const resolvedImage = slot.accessoryRef?.image 
         || slot.accessoryRef?.imageURL 

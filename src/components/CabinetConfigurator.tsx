@@ -39,7 +39,7 @@ import {
   Printer
 } from 'lucide-react';
 import Papa from 'papaparse';
-import { CabinetMatrixData, GroupedRubric, KNOWN_MATRIX_SHELF_SKUS, GENERIC_SHELF_IMAGE, checkAccessoryFitsCabinet, deriveBrand, extractAllMatrixShelfSkus, fetchCabinetMatrix, fetchCompatMap, groupAccessoriesForDisplay, isAccessoryAShelf, isCabinetProduct, isConfigurableCabinet, isConfiguratorExcludedCabinet, isProductShelf, normalizeSku, parseAccessoryCount, parseCabinetDepthFromName, parseCompatRange, parseCompatibleSkus, parseDepthMmLocal } from '../utils/cabinetData';
+import { CabinetMatrixData, GroupedRubric, KNOWN_MATRIX_SHELF_SKUS, GENERIC_SHELF_IMAGE, checkAccessoryFitsCabinet, deriveBrand, extractAllMatrixShelfSkus, fetchCabinetMatrix, fetchCompatMap, findInCatalogMap, getBaseSku, groupAccessoriesForDisplay, hasMatchingSku, isAccessoryAShelf, isCabinetProduct, isConfigurableCabinet, isConfiguratorExcludedCabinet, isProductShelf, isSameSku, normalizeDimensionMm, normalizeSku, parseAccessoryCount, parseCabinetDepthFromName, parseCompatRange, parseCompatibleSkus, parseDepthMmLocal, resolveCabinetMatrixRow } from '../utils/cabinetData';
 import { 
   analyzeCabinetSpace,
   classifyItemPlacement,
@@ -183,6 +183,8 @@ const buildCatalogAccessories = (
       if (n && n !== 'X') {
         inMatrixShelves.add(n);
         shelfTypeMap.set(n, 'סטנדרטי');
+        const b = getBaseSku(n);
+        if (b && !shelfTypeMap.has(b)) shelfTypeMap.set(b, 'סטנדרטי');
       }
     });
     (cabinet.suitableHanging || []).forEach(s => {
@@ -190,6 +192,8 @@ const buildCatalogAccessories = (
       if (n && n !== 'X') {
         inMatrixShelves.add(n);
         shelfTypeMap.set(n, 'תלוי');
+        const b = getBaseSku(n);
+        if (b && !shelfTypeMap.has(b)) shelfTypeMap.set(b, 'תלוי');
       }
     });
     (cabinet.suitableSliding || []).forEach(s => {
@@ -197,6 +201,8 @@ const buildCatalogAccessories = (
       if (n && n !== 'X') {
         inMatrixShelves.add(n);
         shelfTypeMap.set(n, 'נשלף');
+        const b = getBaseSku(n);
+        if (b && !shelfTypeMap.has(b)) shelfTypeMap.set(b, 'נשלף');
       }
     });
   }
@@ -205,7 +211,13 @@ const buildCatalogAccessories = (
   (catalogData || []).forEach((p: any) => {
     if (p && p.sku) {
       const s = normalizeSku(p.sku);
-      if (s) catalogMap.set(s, p);
+      if (s) {
+        catalogMap.set(s, p);
+        const base = getBaseSku(s);
+        if (base && !catalogMap.has(base)) {
+          catalogMap.set(base, p);
+        }
+      }
     }
   });
 
@@ -215,14 +227,15 @@ const buildCatalogAccessories = (
   // Track 1: Shelves permitted in Cabinet Matrix (authoritative and sole source for shelves)
   // ==========================================
   inMatrixShelves.forEach(shelfSku => {
-    const prod = catalogMap.get(shelfSku);
-    const origSku = prod?.sku || shelfSku;
-    const name = prod?.name || `מדף מק"ט ${shelfSku}`;
+    const prod = findInCatalogMap(catalogMap, shelfSku);
+    const origSku = prod?.sku ? String(prod.sku).trim() : shelfSku;
+    const normKey = normalizeSku(origSku) || shelfSku;
+    const name = prod?.name || `מדף מק"ט ${origSku}`;
     const desc = prod?.description || '';
     const uSize = resolveUConsumption(prod).u;
     const price = prod?.price ? parseFloat(String(prod.price).replace(/,/g, '')) : 0;
     
-    itemsMap.set(shelfSku, {
+    itemsMap.set(normKey, {
       pn: origSku,
       sku: origSku,
       name,
@@ -238,7 +251,7 @@ const buildCatalogAccessories = (
       _curated: true,
       image: (prod?.images && prod.images[0]) || prod?.imageURL || '',
       isShelf: true,
-      shelfType: shelfTypeMap.get(shelfSku) || 'סטנדרטי',
+      shelfType: shelfTypeMap.get(shelfSku) || shelfTypeMap.get(getBaseSku(shelfSku)) || 'סטנדרטי',
       _source: 'matrix_shelf'
     });
   });
@@ -248,8 +261,10 @@ const buildCatalogAccessories = (
   // ==========================================
   (catalogData || []).forEach((pp: any) => {
     if (!pp || !pp.sku) return;
+    if (!String(pp.name || '').trim()) return;
     const normSku = normalizeSku(pp.sku);
-    if (!normSku || normSku === productSkuNorm || normSku === '111014') return;
+    const baseSku = getBaseSku(normSku);
+    if (!normSku || isSameSku(normSku, productSkuNorm) || normSku === '111014') return;
 
     // Check if this item belongs to Infrastructure pricelist
     if (!isInfrastructureItem(pp)) return;
@@ -261,13 +276,19 @@ const buildCatalogAccessories = (
     const cat = String(pp.category || '');
     const sub = String(pp.subcategory || '');
     const nested = String(pp['Nested subcategory'] || pp.nestedSubcategory || '');
+
+    // Exclude outdoor metal/polyester enclosure accessories from indoor 19" rack cabinets
+    if (nested.includes('מתכת חיצוני') || nested.includes('פוליאסטר חיצוני')) return;
+
     const isAccCategory = 
       sub.includes('ארונות תקשורת') || 
       cat.includes('ארונות תקשורת') || 
       nested.includes('אביזרים') || 
       nested.includes('פסי שקעים') ||
       compatMap[normSku] !== undefined ||
-      VERIFIED_ZERO_U_EXCEPTIONS[normSku] !== undefined;
+      (baseSku && compatMap[baseSku] !== undefined) ||
+      VERIFIED_ZERO_U_EXCEPTIONS[normSku] !== undefined ||
+      (baseSku && VERIFIED_ZERO_U_EXCEPTIONS[baseSku] !== undefined);
 
     if (!isAccCategory) return;
 
@@ -281,6 +302,9 @@ const buildCatalogAccessories = (
       }
       if (/גלגל|caster|wheel/i.test(itemHay) && cabinet && parseAccessoryCount(cabinet.wheels) > 0) {
         return; // Cabinet already has casters
+      }
+      if (/רגלי|רגלית|feet/i.test(itemHay) && cabinet && parseAccessoryCount(cabinet.levelingFeet) > 0) {
+        return; // Cabinet already includes leveling feet
       }
     }
 
@@ -450,9 +474,9 @@ const buildCatalogAccessories = (
     const isShelf = isProductShelf(item, catalogMap, allMatrixShelves);
     const normSku = normalizeSku(item.sku || item.pn);
     if (isShelf) {
-      if (inMatrixShelves.has(normSku)) {
+      if (hasMatchingSku(inMatrixShelves, normSku)) {
         item.isShelf = true;
-        if (!item.shelfType) item.shelfType = shelfTypeMap.get(normSku) || 'סטנדרטי';
+        if (!item.shelfType) item.shelfType = shelfTypeMap.get(normSku) || shelfTypeMap.get(getBaseSku(normSku)) || 'סטנדרטי';
         finalUnified.push(item);
       }
       // Shelves not in inMatrixShelves are dropped!
@@ -619,7 +643,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   useEffect(() => {
     const map = new Map<string, any>();
     (catalogData || []).forEach((p: any) => {
-      if (p && p.sku) map.set(normalizeSku(p.sku), p);
+      if (p && p.sku) {
+        const norm = normalizeSku(p.sku);
+        map.set(norm, p);
+        const base = getBaseSku(norm);
+        if (base && !map.has(base)) map.set(base, p);
+      }
     });
     catalogMapRef.current = map;
   }, [catalogData]);
@@ -651,14 +680,14 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         }
         const isShelf = isProductShelf(item, catalogMapRef.current, allMatrixShelvesRef.current);
         if (isShelf) {
-          const isAllowedShelf = inMatrixShelvesRef.current.has(skuNorm);
+          const isAllowedShelf = hasMatchingSku(inMatrixShelvesRef.current, skuNorm);
           if (!isAllowedShelf) {
             console.warn(`[CabinetConfigurator] Sanitized: removed incompatible shelf ${skuNorm} on cabinet ${cabinetData.sku}`);
             changed = true;
             return false;
           }
         }
-        if (!allowedSkus.has(skuNorm)) {
+        if (!hasMatchingSku(allowedSkus, skuNorm)) {
           console.warn(`[CabinetConfigurator] Sanitized: removed incompatible accessory ${skuNorm} on cabinet ${cabinetData.sku}`);
           changed = true;
           return false;
@@ -847,25 +876,28 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     }
 
     const builtSlots: VisualSlot[] = [];
+    const defaultStdShelfSku = cabinetData?.suitableStandard?.[0] || '1152';
+    const defaultStdShelfProd = findInCatalogMap(catalogMapRef.current, defaultStdShelfSku);
+    const defaultStdShelfName = defaultStdShelfProd?.name || 'מדף קבוע בעומס כבד מאוורר 19 אינץ׳';
     for (let u = totalSlotsU; u >= 1; u--) {
       const shelfEntry = shelfPositions.find(s => s.u === u);
       if (shelfEntry) {
         builtSlots.push({
           uIndex: u,
           type: 'preset-shelf',
-          name: 'מדף קבוע בעומס כבד (כלול בארון)',
-          description: 'מדף קבוע בעומס כבד מאוורר 19 אינץ׳ (דגם 117914). חלק מתצורת היצרן. ניתן לשינוי מיקום.',
+          name: `${defaultStdShelfName} (כלול בארון)`,
+          description: `${defaultStdShelfName} (מק"ט ${defaultStdShelfSku}). חלק מתצורת היצרן. ניתן לשינוי מיקום.`,
           spanU: 1,
           isAnchor: true,
           instanceId: shelfEntry.instanceId,
           accessoryRef: {
-            name: 'מדף קבוע בעומס כבד מאוורר 19 אינץ׳',
-            sku: '117914',
+            name: defaultStdShelfName,
+            sku: defaultStdShelfSku,
             isPreset: true,
             isLocked: false,
             price: 0,
             uSize: 1,
-            description: 'מדף קבוע בעומס כבד מאוורר 19 אינץ׳ (דגם 117914). חלק מתצורת היצרן.'
+            description: `${defaultStdShelfName} (מק"ט ${defaultStdShelfSku}). חלק מתצורת היצרן.`
           }
         });
       } else {
@@ -1459,7 +1491,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   ) => {
     const normSku = normalizeSku(acc.sku || acc.pn);
     const isShelf = isProductShelf(acc, catalogMapRef.current, allMatrixShelvesRef.current);
-    if (isShelf && !inMatrixShelvesRef.current.has(normSku)) {
+    if (isShelf && !hasMatchingSku(inMatrixShelvesRef.current, normSku)) {
       console.warn(`[CabinetConfigurator] Shelf ${normSku} is not permitted for cabinet ${cabinetData?.sku}. Blocked.`);
       alert(`מדף ${normSku} אינו נתמך עבור ארון ${cabinetData?.sku || product?.sku} לפי המטריצה.`);
       return;
@@ -1682,9 +1714,14 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             const compRows = (Papa.parse(compText, { header: false, skipEmptyLines: false }).data) as any[][];
             for (const row of compRows) {
               const sku = normalizeSku(row[0]);
-              if (!sku || !/^[0-9]/.test(sku)) continue;
+              if (!sku || sku === 'מק"ט' || sku === 'מקט' || sku.includes('מידע')) continue;
               const rangeStr = String(row[5] ?? '');
-              if (rangeStr.trim()) compatMap[sku] = parseCompatRange(rangeStr);
+              if (rangeStr.trim()) {
+                const parsed = parseCompatRange(rangeStr);
+                compatMap[sku] = parsed;
+                const base = getBaseSku(sku);
+                if (base && !compatMap[base]) compatMap[base] = parsed;
+              }
             }
           }
         } catch (e) { console.warn('[CabinetConfigurator] compat sheet optional - skipped', e); }
@@ -1701,141 +1738,17 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
             if (str.toUpperCase() === 'X') return;
             str.split(/[\s,;\n]+/).forEach((s: string) => {
               const norm = normalizeSku(s);
-              if (norm && norm !== 'X') allMatrixShelves.add(norm);
+              if (norm && norm !== 'X') {
+                allMatrixShelves.add(norm);
+                allMatrixShelves.add(getBaseSku(norm));
+              }
             });
           });
         }
         allMatrixShelvesRef.current = allMatrixShelves;
 
-        // Dedicated handling for SKU 447510T based on manufacturer technical drawing
-        if (productSkuNorm === '447510T') {
-          const spec447510T: CabinetMatrixData = {
-            sku: '447510T',
-            model: '44U 75 X 100-Floor Standing Rack Boost',
-            u: 44,
-            width: 750,
-            depth: 1000,
-            frontDoor: 'דלת כפולה מחוררת עם מנעול קפיצי (Spring Lock)',
-            rearDoor: 'דלת כפולה מחוררת עם מנעול קפיצי (Spring Lock)',
-            color: 'RAL9005 Black',
-            fans: '4',
-            wheels: '4',
-            levelingFeet: '4',
-            shelvesQty: '2',
-            suitableStandard: ['117914'],
-            suitableHanging: [],
-            suitableSliding: []
-          };
-          setCabinetData(spec447510T);
-          setTotalU(44);
-          let initialAvailableU = 44;
-          const inMatrixShelves = new Set<string>(['117914']);
-          inMatrixShelvesRef.current = inMatrixShelves;
-          setIncludedItems([
-            'דלת קדמית כפולה מחוררת עם מנעול קפיצי',
-            'דלת אחורית כפולה מחוררת עם מנעול קפיצי',
-            'יחידת 4 מאווררי גג בפלטה אחת עם כבל',
-            '4 גלגלים כבדים + 4 רגליות פילוס',
-            '2 מדפים קבועים 470*650*48 (מק״ט 117914)',
-            '2 תעלות כבילה אנכיות 400 מ״מ',
-            'פס הארקה ראשי מנחושת וכבלים',
-            'דלתות צד פריקות עם מנעול עגול',
-            '50 סטים ברגים ודיסקיות Cage Nuts',
-            'קופסת חיבור ייעודית לפס 12 שקעים PDU'
-          ]);
-          setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, spec447510T, compatMap, allMatrixShelves));
-          setLoading(false);
-          return;
-        }
-
-        // Dedicated handling for Boost RackMount 42U based on manufacturer specification
-        if (productSkuNorm === 'BOOST-42U' || productSkuNorm === '42U-BOOST' || productSkuNorm === '42U' || isCabinetBoost42U(product, null)) {
-          const specBoost42U: CabinetMatrixData = {
-            sku: productSkuNorm || 'BOOST-42U',
-            model: '42U Floor Standing Cabinet Boost RackMount',
-            u: 42,
-            width: product?.width || 600,
-            depth: product?.depth || 1000,
-            frontDoor: 'דלת קדמית זכוכית מחוסמת 5 מ״מ עם מסגרת פלדה SPCC ומנעול ידית',
-            rearDoor: 'דלת אחורית פלדה SPCC עם מנעול עגול',
-            color: 'RAL9005 Black SPCC Cold Rolled Steel',
-            fans: '4',
-            wheels: '4',
-            levelingFeet: '4',
-            shelvesQty: '1',
-            suitableStandard: ['117914'],
-            suitableHanging: [],
-            suitableSliding: []
-          };
-          setCabinetData(specBoost42U);
-          setTotalU(42);
-          const inMatrixShelves = new Set<string>(['117914']);
-          inMatrixShelvesRef.current = inMatrixShelves;
-          setIncludedItems([
-            'דלת קדמית זכוכית מחוסמת 5.0 מ״מ עם מסגרת פלדה SPCC ומנעול ידית (2 מפתחות)',
-            'דלת אחורית פלדה SPCC 1.2 מ״מ עם מנעול עגול (2 מפתחות)',
-            '2 דלתות צד פריקות SPCC 1.0 מ״מ עם בריחי נעילה מהירים',
-            'יחידת גג 4 מאווררים תעשייתיים 120*120*38 מ״מ (Fan Unit SPCC 1.2mm)',
-            '4 גלגלי נסיעה כבדים (Castors)',
-            '4 רגליות פילוס מתכווננות M10 (Adjustable Feet)',
-            '6 קורות עומק Mounting Angles בעובי 1.2 מ״מ עם חריצי כיוונון (3 מכל צד)',
-            '4 פרופילי עמודים 19" בעובי 2.0 מ״מ SPCC עם סימוני U וחורי כלוב',
-            'מכסי פתחי כבילה עליונים ותחתונים (Top & Bottom Cover Boards)',
-            '20 סטים של ברגי M6 ואומי כלוב (M6 Cage Nuts & Screws Zinc Coated)',
-            'כבלים ומחברי הארקה (Grounding Kit)'
-          ]);
-          setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, specBoost42U, compatMap, allMatrixShelves));
-          setLoading(false);
-          return;
-        }
-
-        // Dedicated handling for SKU 221221 (Boost RackMount 4U Single Section Wall Cabinet) based on manufacturer blueprint
-        if (productSkuNorm === '221221' || productSkuNorm === '221-221' || isCabinet221221(product, null)) {
-          const spec221221: CabinetMatrixData = {
-            sku: '221221',
-            model: 'Boost RackMount 4U Single Section Wall Cabinet (550*400*200)',
-            u: 4,
-            width: 550,
-            depth: 400,
-            frontDoor: 'דלת קדמית זכוכית מחוסמת 4.0 מ״מ עם מסגרת פלדה SPCC ומנעול עגול',
-            rearDoor: 'ללא דלת אחורית (גב פלדה SPCC 0.8 מ״מ לתלייה על קיר)',
-            color: 'RAL9005 Black SPCC Cold Rolled Steel',
-            fans: '1 (מגרעת בגג להרכבת מאוורר 120 מ״מ)',
-            wheels: '0',
-            levelingFeet: '0',
-            shelvesQty: '0',
-            suitableStandard: [],
-            suitableHanging: [],
-            suitableSliding: []
-          };
-          setCabinetData(spec221221);
-          setTotalU(4);
-          inMatrixShelvesRef.current = new Set<string>();
-          setIncludedItems([
-            'גוף ארון מודולרי SPCC Cold Rolled Steel תקן 19 אינץ׳ (ANSI/EIA RS-310-D)',
-            'דלת קדמית זכוכית מחוסמת 4.0 מ״מ עם מסגרת פלדה SPCC 1.0 מ״מ ומנעול עגול קטן עם מפתחות',
-            'גב פלדה SPCC 0.8 מ״מ לתלייה על הקיר עם חורי מפתח ופתח כבילה ייעודי',
-            '2 דלתות צד פריקות SPCC 0.8 מ״מ עם פתחי אוורור (Louvers) ובריחי נעילה מהירים',
-            'מגרעת עליונה (Fan Cutout) להרכבת מאוורר 120 מ״מ בגג הארון',
-            'פתחי כבילה עליון ותחתון עם פלטת Knockout נשלפת',
-            'זוג עמודי מונטינג קדמיים 19" בעובי 1.2 מ״מ SPCC עם סימוני 4U וחורי כלוב',
-            'ערכת ברגים, דיסקיות ואומי כלוב M6 Cage Nuts',
-            'הכנה וברגי הארקה (Grounding Studs)'
-          ]);
-          setCompatibleAccessories(buildCatalogAccessories(catalogData, productSkuNorm, spec221221, compatMap, allMatrixShelves));
-          setLoading(false);
-          return;
-        }
-
-        let cabRow: any[] | null = null;
-        for (let i = 2; i < cabRows.length; i++) {
-           if (cabRows[i] && cabRows[i][0] !== undefined && cabRows[i][0] !== null) {
-               if (normalizeSku(cabRows[i][0]) === productSkuNorm) {
-                   cabRow = cabRows[i];
-                   break;
-               }
-           }
-        }
+        // Match cabinet row in 'טבלת ארונות מעודכנת' (gid=250535112) using exact or letter-insensitive base SKU
+        const cabRow = resolveCabinetMatrixRow(cabRows, product);
 
         if (!cabRow) {
            console.warn("Cabinet not found in external configurator sheet for SKU:", product.sku);
@@ -1895,14 +1808,15 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
            return;
         }
 
-        const widthVal = parseInt(String(cabRow[3] ?? ''), 10);
-        const depthVal = parseInt(String(cabRow[4] ?? ''), 10);
+        const widthVal = normalizeDimensionMm(cabRow[3]);
+        const depthVal = normalizeDimensionMm(cabRow[4]);
         const desc = product.description || '';
+        const rawRowSku = normalizeSku(cabRow[0]);
         const data: CabinetMatrixData = {
-           sku: cabRow[0]?.toString() || '',
+           sku: rawRowSku === 'TBH' ? productSkuNorm : (cabRow[0]?.toString()?.trim() || productSkuNorm),
            u: parseInt(cabRow[2]?.toString() || '0', 10),
-           width: isNaN(widthVal) ? null : widthVal,
-           depth: isNaN(depthVal) ? null : depthVal,
+           width: widthVal,
+           depth: depthVal,
            frontDoor: String(cabRow[5] ?? '').trim(),
            rearDoor: String(cabRow[6] ?? '').trim(),
            color: String(cabRow[7] ?? '').trim(),
@@ -1921,7 +1835,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
           ...data.suitableStandard,
           ...data.suitableHanging,
           ...data.suitableSliding
-        ].map(normalizeSku).filter(s => s && s !== 'X'));
+        ].flatMap(s => [normalizeSku(s), getBaseSku(s)]).filter(s => s && s !== 'X'));
         inMatrixShelvesRef.current = inMatrixShelves;
 
         // U capacity
@@ -1937,7 +1851,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         if (initialAccessory) {
           const initSku = normalizeSku(initialAccessory.sku || initialAccessory.pn);
           const isInitShelf = isProductShelf(initialAccessory, catalogMapRef.current, allMatrixShelves);
-          if (isInitShelf && !inMatrixShelves.has(initSku)) {
+          if (isInitShelf && !hasMatchingSku(inMatrixShelves, initSku)) {
             console.warn(`[CabinetConfigurator] initialAccessory ${initSku} is a shelf not permitted by cabinet matrix for ${productSkuNorm}. Ignored.`);
           } else {
             const uSz = resolveUConsumption(initialAccessory).u;
@@ -2308,7 +2222,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   };
 
   const getIncludedPreviewItem = (itemText: string, idx: number): EnrichedPreviewItem => {
-    const isShelf = /מדף|shelf|117914/i.test(itemText);
+    const isShelf = /מדף|shelf/i.test(itemText);
     const isFan = /מאוורר|fan|איוורור/i.test(itemText);
     const isWheels = /גלגל|casters/i.test(itemText);
     const isFeet = /פילוס|feet/i.test(itemText);
@@ -2323,10 +2237,13 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     let zone = 'ציוד מובנה בארון';
 
     if (isShelf) {
-      sku = '117914';
-      zone = 'מסילות U חזיתיות (U19-U20)';
-      description = 'מדף קבוע בעומס כבד מאוורר 19 אינץ׳ (דגם 117914) כולל פתחי איוורור מקבילים וחיזוקי פלדה כפולים.';
-      const shelfProd = catalogData?.find((p: any) => normalizeSku(p.sku) === '117914');
+      const stdShelfSku = cabinetData?.suitableStandard?.[0] || '1152';
+      sku = stdShelfSku;
+      zone = 'מסילות U חזיתיות';
+      const shelfProd = catalogData?.find((p: any) => isSameSku(p.sku, stdShelfSku));
+      description = shelfProd?.name
+        ? `${shelfProd.name} (מק"ט ${stdShelfSku})`
+        : `מדף קבוע מאוורר 19 אינץ׳ (מק"ט ${stdShelfSku}).`;
       image = shelfProd?.images?.[0] || shelfProd?.imageURL || '';
     } else if (isFan) {
       zone = 'תקרת הארון (Roof Unit)';
@@ -2872,12 +2789,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         </div>
       </div>
 
-      {normalizeSku(product?.sku) === '447510T' && (
+      {isSameSku(product?.sku, '447510T') && (
         <div className="bg-amber-500/10 border-b border-amber-500/40 p-3 px-4 flex items-center justify-between gap-3 text-amber-950 flex-wrap">
           <div className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold">
             <Award size={18} className="text-amber-600 shrink-0" />
             <span>
-              <strong>הדמיית תלת-ממד ייעודית לפי מפרט יצרן רשמי (מק״ט 447510T Boost):</strong> שוחזרו דלתות כפולות מחוררות (Spring Lock), 4 מאווררי גג, תעלות כבילה אנכיות 400 מ״מ, גלגלים, רגליות ומדפי PN 117914.
+              <strong>הדמיית תלת-ממד ייעודית לפי מפרט יצרן רשמי (מק״ט 447510T Boost):</strong> שוחזרו דלתות כפולות מחוררות (Spring Lock), 4 מאווררי גג, תעלות כבילה אנכיות 400 מ״מ, גלגלים, רגליות ומדפים תואמים ({cabinetData?.suitableStandard?.join(', ') || '117916'}).
             </span>
           </div>
           <span className="text-[11px] bg-amber-600 text-white font-bold px-2 py-0.5 shadow-xs">

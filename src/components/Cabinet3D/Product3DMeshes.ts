@@ -94,7 +94,7 @@ export function buildProduct3DMesh(
 
   // 1. PHYSICAL CHASSIS & MOUNTING EARS (Body & Depth)
   if (isShelf) {
-    const isPN117914 = skuLower.includes('117914') || nameLower.includes('117914') || descLower.includes('117914');
+    const isPN117914 = skuLower.includes('117914') || skuLower.includes('117916') || nameLower.includes('117914') || nameLower.includes('117916') || descLower.includes('117914') || descLower.includes('117916');
     let shelfMat = item.isIncluded ? materials.includedShelfMat : materials.shelfMat;
     if (isPN117914) {
       const ventTexture = createDiagonalVentSlotTexture();

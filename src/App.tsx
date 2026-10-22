@@ -805,9 +805,9 @@ export const PRODUCT_447510T = {
   id: "447510T",
   sku: "447510T",
   pn: "447510T",
-  name: "ארון תקשורת עומד 44U 75x100 דגם 447510T Boost-RackMount",
-  description: "ארון שרתים ותקשורת מסיבי 44U ברוחב 750 מ״מ ועומק 1000 מ״מ מבית Boost-RackMount (מק״ט 447510T). מפרט יצרן מלא: דלתות קדמיות ואחוריות כפולות מחוררות עם מנעול קפיצי (Spring Lock), 4 מאווררי גג מובנים בפלטה אחת עם כבל, 4 גלגלים כבדים ו-4 רגליות פילוס, 2 מדפים קבועים 470*650*48 (מק״ט 117914) עם פתחי איוורור אלכסוניים, 2 תעלות כבילה אנכיות 400 מ״מ, מוט הארקה ראשי מנחושת עם כבלים, דלתות צד פריקות עם מנעול עגול, וקופסת חיבור לפס 12 שקעים PDU.",
-  price: 2890,
+  name: "ארון תקשורת 44U גודל 1000*750 רק מברזל מחורר",
+  description: "ארון שרתים ותקשורת מסיבי 44U ברוחב 750 מ״מ ועומק 1000 מ״מ (מק״ט 447510T). מפרט יצרן מלא: דלתות קדמיות ואחוריות כפולות מחוררות, 4 מאווררי גג מובנים, 4 גלגלים כבדים ו-4 רגליות פילוס, 2 מדפים קבועים (מדף תואם מק״ט 117916 / נשלף 117909), תעלות כבילה אנכיות ודלתות צד פריקות.",
+  price: 3500,
   category: "ארונות תקשורת ואביזרים",
   catalog: "ארונות תקשורת ואביזרים",
   subcategory: "ארונות עומדים",
@@ -4016,7 +4016,7 @@ export default function App() {
   const [subcategoriesGlobalData, setSubcategoriesGlobalData] = useState<any[]>(
     [],
   );
-  const [catalogData, setCatalogData] = useState<any[]>([PRODUCT_447510T, PRODUCT_BOOST_42U]);
+  const [catalogData, setCatalogData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProductsLoading, setIsProductsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -6028,12 +6028,6 @@ export default function App() {
             return true;
           });
           const combined = [...prev, ...uniqueNew];
-          if (!ids.has(PRODUCT_447510T.id)) {
-            combined.push(PRODUCT_447510T);
-          }
-          if (!ids.has(PRODUCT_BOOST_42U.id)) {
-            combined.push(PRODUCT_BOOST_42U);
-          }
           return combined;
         });
         setProductsOffset((prev) => prev + 50);
@@ -6218,12 +6212,6 @@ export default function App() {
             seen.add(p.id);
             return true;
           });
-          if (!seen.has(PRODUCT_447510T.id)) {
-            res.push(PRODUCT_447510T);
-          }
-          if (!seen.has(PRODUCT_BOOST_42U.id)) {
-            res.push(PRODUCT_BOOST_42U);
-          }
           return res;
         };
 
