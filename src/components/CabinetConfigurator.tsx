@@ -643,9 +643,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
   const allMatrixShelvesRef = React.useRef<Set<string>>(new Set<string>(KNOWN_MATRIX_SHELF_SKUS));
   const inMatrixShelvesRef = React.useRef<Set<string>>(new Set<string>());
-  const catalogMapRef = React.useRef<Map<string, any>>(new Map<string, any>());
-
-  useEffect(() => {
+  const catalogMap = React.useMemo(() => {
     const map = new Map<string, any>();
     (catalogData || []).forEach((p: any) => {
       if (p && p.sku) {
@@ -655,8 +653,10 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
         if (base && !map.has(base)) map.set(base, p);
       }
     });
-    catalogMapRef.current = map;
+    return map;
   }, [catalogData]);
+  const catalogMapRef = React.useRef<Map<string, any>>(catalogMap);
+  catalogMapRef.current = catalogMap;
 
   useEffect(() => {
     if (product?.sku) CABINET_CFG_STORE[product.sku] = selectedOptionals;
@@ -881,9 +881,15 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     }
 
     const builtSlots: VisualSlot[] = [];
-    const defaultStdShelfSku = cabinetData?.suitableStandard?.[0] || '1152';
-    const defaultStdShelfProd = findInCatalogMap(catalogMapRef.current, defaultStdShelfSku);
-    const defaultStdShelfName = defaultStdShelfProd?.name || 'מדף קבוע בעומס כבד מאוורר 19 אינץ׳';
+    const defaultStdShelfSku =
+      cabinetData?.suitableStandard?.[0] ||
+      cabinetData?.suitableHanging?.[0] ||
+      cabinetData?.suitableSliding?.[0] ||
+      '1152';
+    const defaultStdShelfProd = findInCatalogMap(catalogMap, defaultStdShelfSku);
+    const defaultStdShelfName =
+      (defaultStdShelfProd && !isCabinetProduct(defaultStdShelfProd) ? defaultStdShelfProd.name : '') ||
+      'מדף קבוע בעומס כבד מאוורר 19 אינץ׳';
     for (let u = totalSlotsU; u >= 1; u--) {
       const shelfEntry = shelfPositions.find(s => s.u === u);
       if (shelfEntry) {
@@ -931,7 +937,7 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     }
     
     return { usedU: calcUsedU, slots: builtSlots, nonUAccessories, unallocatedItems };
-  }, [totalU, includedItems, selectedOptionals, cabinetData, presetOverrides]);
+  }, [totalU, includedItems, selectedOptionals, cabinetData, presetOverrides, catalogMap]);
 
   // --- DYNAMIC SLOT CALCULATION FOR VISUAL CHASSIS & ORDER SUMMARY ---
   const getAccessoryImage = (acc: any): string => {
@@ -947,9 +953,9 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
       return acc.accessoryRef.image;
     }
     const targetSku = normalizeSku(acc.sku || acc.pn || acc.accessoryRef?.sku || acc.accessoryRef?.pn || '');
-    if (targetSku && catalogData && Array.isArray(catalogData)) {
-      const found = catalogData.find((p: any) => normalizeSku(p.sku) === targetSku);
-      if (found) {
+    if (targetSku) {
+      const found = findInCatalogMap(catalogMap, targetSku);
+      if (found && !isCabinetProduct(found)) {
         if (found.images && Array.isArray(found.images) && found.images[0]) {
           return found.images[0];
         }
@@ -961,10 +967,12 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
 
   const getRealProductImage = (acc: any): string => {
     if (!acc) return '';
-    const targetSku = normalizeSku(acc.sku || acc.pn || acc.accessoryRef?.sku || acc.accessoryRef?.pn || '');
-    if (targetSku && catalogData && Array.isArray(catalogData)) {
-      const found = catalogData.find((p: any) => normalizeSku(p.sku) === targetSku);
-      if (found) {
+    const rawSku = String(acc.sku || acc.pn || acc.accessoryRef?.sku || acc.accessoryRef?.pn || '').trim();
+    const targetSku = normalizeSku(rawSku);
+    const isSyntheticToken = /^(BUILTIN-|OPTIONAL-|WHEELS$|FEET$|FAN-BAY-|TOP-|SIDE-|MOUNTING-|FIXED-|WALL-|CASTERS-|FRONT-DOOR|REAR-DOOR|כלול)/.test(rawSku);
+    if (targetSku && !isSyntheticToken) {
+      const found = findInCatalogMap(catalogMap, targetSku);
+      if (found && !isCabinetProduct(found)) {
         if (found.images && Array.isArray(found.images) && found.images[0]) return found.images[0];
         if (found.imageURL) return found.imageURL;
         if (found.image) return found.image;
@@ -972,15 +980,22 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     }
     const isShelf = acc.type === 'preset-shelf' || acc.isShelf || /מדף|shelf/i.test(acc.name || acc.description || '');
     if (isShelf && catalogData && Array.isArray(catalogData)) {
-      if (cabinetData?.suitableStandard?.length) {
-        for (const stdSku of cabinetData.suitableStandard) {
-          const foundStd = catalogData.find((p: any) => normalizeSku(p.sku) === normalizeSku(stdSku));
-          if (foundStd?.images?.[0]) return foundStd.images[0];
-          if (foundStd?.imageURL) return foundStd.imageURL;
+      const candidateShelfSkus = [
+        ...(cabinetData?.suitableStandard || []),
+        ...(cabinetData?.suitableHanging || []),
+        ...(cabinetData?.suitableSliding || []),
+      ];
+      for (const stdSku of candidateShelfSkus) {
+        const foundStd = findInCatalogMap(catalogMap, stdSku);
+        if (foundStd && !isCabinetProduct(foundStd)) {
+          if (foundStd.images?.[0]) return foundStd.images[0];
+          if (foundStd.imageURL) return foundStd.imageURL;
         }
       }
-      const anyRealShelf = catalogData.find((p: any) => 
-        /מדף|shelf/i.test(p.name || p.description || p.sku || '') && 
+      const anyRealShelf = catalogData.find((p: any) =>
+        p &&
+        !isCabinetProduct(p) &&
+        isProductShelf(p, catalogMap, allMatrixShelvesRef.current) &&
         ((p.images && p.images[0]) || p.imageURL)
       );
       if (anyRealShelf?.images?.[0]) return anyRealShelf.images[0];
@@ -2200,29 +2215,86 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
     let finalImage = image;
     let finalDesc = description;
 
-    if (slot.sku === 'BUILTIN-FAN' || slot.sku === 'OPTIONAL-FAN') {
-      const isOpt = slot.sku === 'OPTIONAL-FAN';
-      const actualFan = isOpt 
-         ? selectedOptionals.find(o => /מאוורר|fan/i.test(`${o.name} ${o.description}`)) 
-         : catalogData?.find((p: any) => /מאוורר|fan/i.test(`${p.name} ${p.description}`) && p.images?.length > 0);
-      
-      if (actualFan) {
-        finalSku = actualFan.sku || actualFan.pn || finalSku;
-        finalImage = actualFan.images?.[0] || actualFan.imageURL || finalImage;
-        if (isOpt) finalDesc = actualFan.description || finalDesc;
+    const rawSlotSku = String(slot.sku || acc.sku || '').trim();
+    const isFanSlot =
+      rawSlotSku === 'BUILTIN-FAN' ||
+      rawSlotSku === 'OPTIONAL-FAN' ||
+      rawSlotSku === 'FAN-UNIT-4X120' ||
+      /^FAN-BAY-\d+$/.test(rawSlotSku) ||
+      slot.type === 'fan' ||
+      slot.type === 'preset-fan';
+    const isWheelSlot =
+      rawSlotSku === 'WHEELS' ||
+      rawSlotSku === 'BUILTIN-WHEELS' ||
+      rawSlotSku === 'OPTIONAL-WHEELS' ||
+      rawSlotSku === 'CASTERS-FEET-SET' ||
+      slot.type === 'caster';
+    const isFeetSlot =
+      rawSlotSku === 'FEET' ||
+      rawSlotSku === 'BUILTIN-FEET' ||
+      rawSlotSku === 'OPTIONAL-FEET' ||
+      slot.type === 'feet';
+    const isShelfSlot =
+      slot.type === 'preset-shelf' ||
+      slot.type === 'shelf' ||
+      acc.isShelf;
+
+    if (isFanSlot) {
+      const isOpt = rawSlotSku === 'OPTIONAL-FAN';
+      const optFan = isOpt
+        ? selectedOptionals.find(o => /מאוורר|fan/i.test(`${o.name} ${o.description}`))
+        : null;
+      const verifiedFan = optFan || findInCatalogMap(catalogMap, '2233');
+      if (verifiedFan && !isCabinetProduct(verifiedFan)) {
+        finalSku = String(verifiedFan.sku || verifiedFan.pn || '2233').trim();
+        finalImage = verifiedFan.images?.[0] || verifiedFan.imageURL || verifiedFan.image || finalImage;
+        if (isOpt && verifiedFan.description) finalDesc = verifiedFan.description;
+      } else {
+        finalSku = '2233';
       }
-    } else if (slot.sku === 'WHEELS' || slot.type === 'caster') {
-      const casterProd = catalogData?.find((p: any) => /גלגל|casters/i.test(`${p.name} ${p.description}`) && p.images?.length > 0);
-      if (casterProd) {
-        finalSku = casterProd.sku || casterProd.pn || finalSku;
-        finalImage = casterProd.images?.[0] || casterProd.imageURL || finalImage;
+    } else if (isWheelSlot) {
+      const isOpt = rawSlotSku === 'OPTIONAL-WHEELS';
+      const optWheel = isOpt
+        ? selectedOptionals.find(o => /גלגל|caster|wheel/i.test(`${o.name} ${o.description}`))
+        : null;
+      const verifiedCaster = optWheel || findInCatalogMap(catalogMap, '2232');
+      if (verifiedCaster && !isCabinetProduct(verifiedCaster)) {
+        finalSku = String(verifiedCaster.sku || verifiedCaster.pn || '2232').trim();
+        finalImage = verifiedCaster.images?.[0] || verifiedCaster.imageURL || verifiedCaster.image || finalImage;
+      } else {
+        finalSku = '2232';
       }
-    } else if (slot.sku === 'FEET' || slot.type === 'feet') {
-      const feetProd = catalogData?.find((p: any) => /פילוס/i.test(`${p.name} ${p.description}`) && p.images?.length > 0);
-      if (feetProd) {
-        finalSku = feetProd.sku || feetProd.pn || finalSku;
-        finalImage = feetProd.images?.[0] || feetProd.imageURL || finalImage;
+    } else if (isFeetSlot) {
+      const isOpt = rawSlotSku === 'OPTIONAL-FEET';
+      const optFeet = isOpt
+        ? selectedOptionals.find(o => /רגל|פילוס|feet/i.test(`${o.name} ${o.description}`))
+        : null;
+      const targetFeetSku = (totalU || 42) >= 20 ? '1118' : '111818';
+      const verifiedFeet = optFeet || findInCatalogMap(catalogMap, targetFeetSku) || findInCatalogMap(catalogMap, '1118');
+      if (verifiedFeet && !isCabinetProduct(verifiedFeet)) {
+        finalSku = String(verifiedFeet.sku || verifiedFeet.pn || targetFeetSku).trim();
+        finalImage = verifiedFeet.images?.[0] || verifiedFeet.imageURL || verifiedFeet.image || finalImage;
+      } else {
+        finalSku = targetFeetSku;
       }
+    } else if (isShelfSlot) {
+      const shelfTargetSku =
+        (!/^(BUILTIN|OPTIONAL|כלול)/.test(rawSlotSku) && rawSlotSku) ||
+        cabinetData?.suitableStandard?.[0] ||
+        cabinetData?.suitableHanging?.[0] ||
+        cabinetData?.suitableSliding?.[0] ||
+        '1152';
+      const shelfProd = findInCatalogMap(catalogMap, shelfTargetSku);
+      if (shelfProd && !isCabinetProduct(shelfProd)) {
+        finalSku = String(shelfProd.sku || shelfTargetSku).trim();
+        finalImage = shelfProd.images?.[0] || shelfProd.imageURL || shelfProd.image || finalImage || GENERIC_SHELF_IMAGE;
+      } else {
+        finalSku = shelfTargetSku;
+        if (!finalImage) finalImage = GENERIC_SHELF_IMAGE;
+      }
+    } else if (/^(TOP-COVER-VENT|TOP-CABLE-ENTRY|SIDE-PANEL-SPCC|MOUNTING-PROFILE-19|MOUNTING-ANGLE-SPCC|WALL-BRACKET|FIXED-BACK-PANEL|FRONT-DOOR|REAR-DOOR)$/.test(rawSlotSku)) {
+      const cabSku = product?.sku || cabinetData?.sku || '';
+      finalSku = cabSku ? `${cabSku} (מובנה בארון)` : 'חלק מובנה בארון';
     }
 
     return {
@@ -2243,60 +2315,95 @@ export const CabinetConfigurator: React.FC<CabinetConfiguratorProps> = ({ produc
   };
 
   const getIncludedPreviewItem = (itemText: string, idx: number): EnrichedPreviewItem => {
-    const isShelf = /מדף|shelf/i.test(itemText);
+    const isShelf = /מדף|מדפים|shelf/i.test(itemText);
     const isFan = /מאוורר|fan|איוורור/i.test(itemText);
     const isWheels = /גלגל|casters/i.test(itemText);
-    const isFeet = /פילוס|feet/i.test(itemText);
+    const isFeet = /רגלי|פילוס|feet/i.test(itemText);
     const isNuts = /אומי|כלוב|ברגים|nuts/i.test(itemText);
     const isGround = /הארקה|ground/i.test(itemText);
     const isDoors = /דלת|רשת/i.test(itemText);
     const isTrays = /תעלות|כבילה|400/i.test(itemText);
 
-    let sku = 'כלול בארון';
+    const cabSku = product?.sku || cabinetData?.sku || '';
+    let sku = cabSku ? `${cabSku} (כלול בארון)` : 'כלול בארון';
     let image = '';
     let description = itemText;
     let zone = 'ציוד מובנה בארון';
 
     if (isShelf) {
-      const stdShelfSku = cabinetData?.suitableStandard?.[0] || '1152';
-      sku = stdShelfSku;
-      zone = 'מסילות U חזיתיות';
-      const shelfProd = catalogData?.find((p: any) => isSameSku(p.sku, stdShelfSku));
-      description = shelfProd?.name
-        ? `${shelfProd.name} (מק"ט ${stdShelfSku})`
-        : `מדף קבוע מאוורר 19 אינץ׳ (מק"ט ${stdShelfSku}).`;
-      image = shelfProd?.images?.[0] || shelfProd?.imageURL || '';
+      const explicitSkuMatch = itemText.match(/מק["״']ט\s*([0-9A-Za-z-]+)/);
+      const stdShelfSku =
+        explicitSkuMatch?.[1] ||
+        cabinetData?.suitableStandard?.[0] ||
+        cabinetData?.suitableHanging?.[0] ||
+        cabinetData?.suitableSliding?.[0] ||
+        '1152';
+      const shelfProd = findInCatalogMap(catalogMap, stdShelfSku);
+      const validShelfProd = shelfProd && !isCabinetProduct(shelfProd) ? shelfProd : null;
+      sku = validShelfProd?.sku ? String(validShelfProd.sku).trim() : stdShelfSku;
+      zone = 'מסילות U חזיתיות ואחוריות';
+      const shelfCount = parseAccessoryCount(itemText) || parseAccessoryCount(cabinetData?.shelvesQty) || 1;
+      description = validShelfProd?.name
+        ? `${validShelfProd.name} (מק"ט ${sku}) — ${shelfCount} יח' כלולות בתצורת היצרן של הארון.`
+        : `מדף מתכת מאוורר 19 אינץ׳ (מק"ט ${sku}) — ${shelfCount} יח' כלולות בתצורת היצרן של הארון.`;
+      image = validShelfProd?.images?.[0] || validShelfProd?.imageURL || GENERIC_SHELF_IMAGE;
     } else if (isFan) {
       zone = 'תקרת הארון (Roof Unit)';
-      description = 'יחידת 4 מאווררי יניקה שקטים מובנים בגג הארון לסירקולציית אוויר וקירור מיטבי.';
-      const fanProd = catalogData?.find((p: any) => /מאוורר|fan/i.test(`${p.name} ${p.description}`) && p.images && p.images.length > 0);
-      if (fanProd) {
-        sku = fanProd.sku || sku;
-        image = fanProd.images?.[0] || fanProd.imageURL || '';
-      }
+      const fanCount = parseAccessoryCount(itemText) || parseAccessoryCount(cabinetData?.fans) || 2;
+      const fanProd = findInCatalogMap(catalogMap, '2233');
+      const validFanProd = fanProd && !isCabinetProduct(fanProd) ? fanProd : null;
+      sku = validFanProd?.sku ? String(validFanProd.sku).trim() : '2233';
+      image = validFanProd?.images?.[0] || validFanProd?.imageURL || '';
+      description = `יחידת איוורור הכוללת ${fanCount} מאווררי גג 120 מ"מ 220V שקטים המובנים בתקרת הארון לסירקולציית אוויר וקירור מיטבי (מק"ט מאוורר תואם: ${sku}).`;
+    } else if (isWheels) {
+      zone = 'בסיס הארון (Plinth / Base)';
+      const wheelCount = parseAccessoryCount(itemText) || parseAccessoryCount(cabinetData?.wheels) || 4;
+      const casterProd = findInCatalogMap(catalogMap, '2232');
+      const validCasterProd = casterProd && !isCabinetProduct(casterProd) ? casterProd : null;
+      sku = validCasterProd?.sku ? String(validCasterProd.sku).trim() : '2232';
+      image = validCasterProd?.images?.[0] || validCasterProd?.imageURL || '';
+      description = validCasterProd?.name
+        ? `${validCasterProd.name} (מק"ט ${sku}) — סט ${wheelCount} גלגלים תעשייתיים לשינוע קל ובטוח של הארון (כלול במארז).`
+        : `סט ${wheelCount} גלגלים תעשייתיים לארון תקשורת (מק"ט ${sku}) — כלול במארז הארון.`;
+    } else if (isFeet) {
+      zone = 'בסיס הארון (Plinth / Base)';
+      const feetCount = parseAccessoryCount(itemText) || parseAccessoryCount(cabinetData?.levelingFeet) || 4;
+      const targetFeetSku = (totalU || 42) >= 20 ? '1118' : '111818';
+      const feetProd = findInCatalogMap(catalogMap, targetFeetSku) || findInCatalogMap(catalogMap, '1118');
+      const validFeetProd = feetProd && !isCabinetProduct(feetProd) ? feetProd : null;
+      sku = validFeetProd?.sku ? String(validFeetProd.sku).trim() : targetFeetSku;
+      image = validFeetProd?.images?.[0] || validFeetProd?.imageURL || '';
+      description = validFeetProd?.name
+        ? `${validFeetProd.name} (מק"ט ${sku}) — סט ${feetCount} רגלי פילוס מתכווננות בגובה לקיבוע יציב ומפולס של הארון.`
+        : `סט ${feetCount} רגלי פילוס מתכווננות בגובה לקיבוע יציב ומפולס (מק"ט ${sku}).`;
     } else if (isDoors) {
       zone = 'חזית וגב הארון';
-      description = 'דלת קדמית ואחורית עם רשת מחוררת 71% אוורור וידיות נעילה בריח.';
+      description = 'דלתות הארון המקוריות מפלדת SPCC / זכוכית מחוסמת עם מנעול מפתח תקני כחלק משלד הארון.';
+      image = product?.images?.[0] || product?.imageURL || '';
     } else if (isTrays) {
-      zone = 'דפנות צדדיות';
-      description = 'זוג תעלות כבילה ורטיקליות ברוחב 400 מ״מ לניהול כבלי תקשורת ונתיבי סיבים אופטיים.';
+      zone = 'דפנות צדדיות ומסלולי חיווט';
+      description = 'תעלות כבילה ורטיקליות מובנות לניהול כבלי תקשורת ונתיבי סיבים אופטיים לאורך הארון.';
+    } else if (isGround && isNuts) {
+      zone = 'ערכת הארקה והתקנה נלווית';
+      const nutsProd = findInCatalogMap(catalogMap, '8224') || findInCatalogMap(catalogMap, '13454511');
+      const validNutsProd = nutsProd && !isCabinetProduct(nutsProd) ? nutsProd : null;
+      if (validNutsProd) {
+        sku = String(validNutsProd.sku).trim();
+        image = validNutsProd.images?.[0] || validNutsProd.imageURL || '';
+      }
+      description = 'פס הארקה נחושת אנכי מובנה + שקית התקנה עם 50 סטים של אומי כלוב M6 וברגים להרכבת ציוד במסילות 19 אינץ׳.';
     } else if (isGround) {
       zone = 'דופן ורטיקלית';
       description = 'פס הארקה נחושת אנכי מובנה עם נקודות חיבור מוארקות לכל רכיבי המסד.';
-    } else if (isWheels) {
-      zone = 'בסיס הארון';
-      description = 'סט 4 גלגלים כבדים (2 עם מעצור) לשינוע קל ובטוח של הארון.';
-      const casterProd = catalogData?.find((p: any) => /גלגל|casters/i.test(`${p.name} ${p.description}`) && p.images && p.images.length > 0);
-      if (casterProd) {
-        sku = casterProd.sku || sku;
-        image = casterProd.images?.[0] || casterProd.imageURL || '';
-      }
-    } else if (isFeet) {
-      zone = 'בסיס הארון';
-      description = 'סט 4 רגלי פילוס מתכווננות בגובה לקיבוע יציב ומפולס.';
     } else if (isNuts) {
       zone = 'ערכת התקנה נלווית';
-      description = 'שקית התקנה עם 50 אומי כלוב M6, ברגים וטבעות פלסטיק להרכבת ציוד במסילות.';
+      const nutsProd = findInCatalogMap(catalogMap, '8224') || findInCatalogMap(catalogMap, '13454511');
+      const validNutsProd = nutsProd && !isCabinetProduct(nutsProd) ? nutsProd : null;
+      if (validNutsProd) {
+        sku = String(validNutsProd.sku).trim();
+        image = validNutsProd.images?.[0] || validNutsProd.imageURL || '';
+      }
+      description = 'שקית התקנה עם אומי כלוב M6, ברגים וטבעות להרכבת ציוד במסילות 19 אינץ׳.';
     }
 
     return {

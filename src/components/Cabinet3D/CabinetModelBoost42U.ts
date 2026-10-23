@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CabinetDimensions3D, DoorLeafState, DoorState } from './Cabinet3DTypes';
-import { CabinetMatrixData } from '../../utils/cabinetData';
+import { CabinetMatrixData, parseAccessoryCount } from '../../utils/cabinetData';
 import {
   SCALE_MM_TO_UNITS,
   U_HEIGHT_UNITS,
@@ -11,33 +11,11 @@ import {
   resolveCabinetDoorsInfo,
 } from './CabinetModelBuilder';
 import { createBoostHeaderBadgeMesh } from './BoostRackMountLogo';
+import { createPerforationTexture } from './BrandTextures';
 
 /**
  * High-fidelity 3D simulation strictly built according to the official manufacturer specification:
- * Boost RackMount - מפרט ארונות 42U (Pages 1-3)
- *
- * SPECIFICATION BREAKDOWN:
- * - Standards: ANSI/EIARS-310-D, DIN41491;PART1, IEC297-2, DIN41494;PART7, GB.T3047.2-92, 19" international standard
- * - Material: Cold Rolled Steel SPCC, RAL9005 Black Powder Coated
- * - Capacity: 42U (1866.9mm internal rail span)
- * - Dimensions: 600mm Width x 1000mm Depth, Frame Height ~2000mm, Total Height ~2055mm
- * - Max Static Loading: 800KGS (With adjustable feet)
- * - No. 1: Top Cover (SPCC 1.2mm) with Top Cover Board (knockouts) and M4*8 screws
- * - No. 2: Bottom Panel (SPCC 1.2mm) with Bottom Cover Board (sliding cable entry)
- * - No. 3: 4x Mounting Profiles 19" (SPCC 2.0mm) with EIA-310-D square cage nut holes & stamped U numbers
- * - No. 4: 6x Mounting Angles (SPCC 1.2mm horizontal depth rails, 3 per side for 42U) with adjustment slots
- * - No. 5: Toughened Glass Front Door (SPCC 1.2 frame + 5.0mm Toughened Glass + curved side vents)
- * - No. 6: 2x Structural Frames (SPCC 1.2mm front and rear welded frame arches)
- * - No. 7: Fan Unit (SPCC 1.2mm modular roof tray)
- * - No. 8: 4x Industrial Fans (120*120*38mm) with metallic finger guards
- * - No. 9: 2x Detachable Side Panels (SPCC 1.0mm) with L-type quick release latches
- * - No. 10: Rear Sheet Steel Door (SPCC 1.2mm)
- * - No. 11: Handle Lock for Front Door (Galvanized with 2 keys & swing lever)
- * - No. 12: Small Round Lock for Rear Door (Galvanized with 2 keys)
- * - No. 13 & 19: 20 SET M6 Screws & Square Cage Nuts (Zinc coated)
- * - No. 14: 4x M10 Adjustable Leveling Feet (Steel zinc coated)
- * - No. 15: 4x Heavy-duty Swivel Castors / Wheels
- * - Grounding cages & bonding wires (Item 21)
+ * Boost RackMount - מפרט ארונות 42U (Pages 1-3: 2178 600x600 & 2068 600x800)
  */
 
 export function buildBoost42UCabinetGroup(
@@ -188,10 +166,9 @@ export function buildBoost42UCabinetGroup(
   };
   group.add(roofMesh);
 
-  // Boost brand nameplate badge on the front face of the top header bar (FRAME group child)
-  // Right-aligned: right edge at (innerWidth/2 - 0.12); centered on header bar height; z = header front surface + 0.01
+  // Boost brand nameplate badge on the front face of the top header bar
   const headerBadgeMesh = createBoostHeaderBadgeMesh(
-    widthUnits - 0.28, // inner width between 14mm corner posts
+    widthUnits - 0.28,
     roofHeight,
     halfH - roofHeight / 2,
     halfD,
@@ -200,9 +177,9 @@ export function buildBoost42UCabinetGroup(
   group.add(headerBadgeMesh);
 
   // Top cable entry cover board (Page 3 Item 4 & 17)
-  const topCoverBoardGeom = new THREE.BoxGeometry(widthUnits * 0.45, 0.03, depthUnits * 0.25);
-  const topCoverBoard = new THREE.Mesh(topCoverBoardGeom, chromeMat);
-  topCoverBoard.position.set(0, halfH + 0.015, -depthUnits * 0.28);
+  const topCoverBoardGeom = new THREE.BoxGeometry(widthUnits * 0.45, 0.016, 0.55);
+  const topCoverBoard = new THREE.Mesh(topCoverBoardGeom, steelMat);
+  topCoverBoard.position.set(0, halfH + 0.008, -halfD + 0.45);
   (topCoverBoard as any).userData = {
     isProductMesh: true,
     item: {
@@ -218,21 +195,46 @@ export function buildBoost42UCabinetGroup(
   group.add(topCoverBoard);
 
   // =========================================================================
-  // 3. FAN UNIT (1 PCS) & 4x INDUSTRIAL FANS 120*120*38mm (Page 2 Items 7, 8; Page 3 Item 11)
-  // SPCC 1.2mm Modular roof fan unit housing 4x 120mm fans
+  // 3. FLUSH ROOF VENTILATION GRILLE & INTERIOR CEILING FAN UNIT (Page 2 Items 7, 8)
+  // Respects exact datasheet fan count: 2 fans for 600x600 (2178) or 4 fans for 600x800 (2068)
   // =========================================================================
-  const fanUnitWidth = widthUnits * 0.72; // ~430mm
-  const fanUnitDepth = depthUnits * 0.65; // ~650mm
-  const fanUnitGeom = new THREE.BoxGeometry(fanUnitWidth, 0.04, fanUnitDepth);
-  const fanUnitMesh = new THREE.Mesh(fanUnitGeom, steelMat);
-  fanUnitMesh.position.set(0, halfH - 0.02, depthUnits * 0.06);
+  const builtInFans = parseAccessoryCount(cabinetData?.fans) || (depthUnits >= 7.5 ? 4 : 2);
+  const totalFans = builtInFans + (options?.additionalFansCount || 0);
+  const isFourFans = totalFans > 2 || builtInFans > 2;
+
+  const ventGrilleW = Math.min(widthUnits * 0.56, 3.30);
+  const ventGrilleD = isFourFans ? Math.min(depthUnits * 0.46, 3.20) : Math.min(depthUnits * 0.30, 1.75);
+  const roofPerfTex = createPerforationTexture();
+  if (roofPerfTex) {
+    roofPerfTex.repeat.set(ventGrilleW * 4.5, ventGrilleD * 4.5);
+  }
+  const roofGrilleMat = new THREE.MeshStandardMaterial({
+    color: 0x27272a,
+    map: roofPerfTex || null,
+    roughness: 0.55,
+    metalness: 0.55,
+  });
+  const roofGrilleMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(ventGrilleW, 0.012, ventGrilleD),
+    roofGrilleMat
+  );
+  roofGrilleMesh.position.set(0, halfH + 0.006, 0.15);
+  group.add(roofGrilleMesh);
+
+  // Modular Fan Unit Tray mounted INSIDE ceiling below roof
+  const roofCeilingY = halfH - roofHeight;
+  const fanUnitMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(ventGrilleW + 0.24, 0.04, ventGrilleD + 0.24),
+    steelMat
+  );
+  fanUnitMesh.position.set(0, roofCeilingY - 0.02, 0.15);
   (fanUnitMesh as any).userData = {
     isProductMesh: true,
     item: {
       instanceId: 'fan-unit-tray-boost-42u',
       sku: 'FAN-UNIT-42U',
-      name: 'יחידת מאווררי גג SPCC 1.2mm (כלול בארון)',
-      description: 'מגש פלדה מובנה בגג הארון (Item 7 Fan Unit) המאכלס 4 מאווררים תעשייתיים לשאיבת חום ויצירת סירקולציה פעילה.',
+      name: `יחידת מאווררי תקרה SPCC 1.2mm (${builtInFans} מאווררים כלולים)`,
+      description: `מגש פלדה מובנה בתקרת הארון (Item 7 Fan Unit) המאכלס ${builtInFans} מאווררים תעשייתיים לשאיבת חום.`,
       price: 0,
       isIncluded: true,
       type: 'fan',
@@ -240,49 +242,105 @@ export function buildBoost42UCabinetGroup(
   };
   group.add(fanUnitMesh);
 
-  // 4 Fans: 120*120*38mm positioned in 2x2 matrix
-  const fanPositions = [
-    { x: -0.95, z: -1.20, label: 'קדמי-שמאל' },
-    { x: 0.95, z: -1.20, label: 'קדמי-ימין' },
-    { x: -0.95, z: 1.20, label: 'אחורי-שמאל' },
-    { x: 0.95, z: 1.20, label: 'אחורי-ימין' },
-  ];
+  const fanPositions = isFourFans
+    ? [
+        { x: -0.72, z: 0.15 + 0.72, label: 'קדמי-שמאל' },
+        { x: 0.72, z: 0.15 + 0.72, label: 'קדמי-ימין' },
+        { x: -0.72, z: 0.15 - 0.72, label: 'אחורי-שמאל' },
+        { x: 0.72, z: 0.15 - 0.72, label: 'אחורי-ימין' },
+      ]
+    : [
+        { x: -0.72, z: 0.15, label: 'שמאל' },
+        { x: 0.72, z: 0.15, label: 'ימין' },
+      ];
+
+  const fanMidY = (halfH + roofCeilingY) / 2;
+  const topRelY = halfH - fanMidY;
+  const btmRelY = roofCeilingY - fanMidY;
+  const fullSpanH = halfH - roofCeilingY;
+  const darkWellMat = new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.85, metalness: 0.2 });
 
   fanPositions.forEach((fp, idx) => {
     const fanGroup = new THREE.Group();
     fanGroup.name = `boost-42u-fan-${idx + 1}`;
-    fanGroup.position.set(fp.x, halfH - 0.02, depthUnits * 0.06 + fp.z);
+    fanGroup.position.set(fp.x, fanMidY, fp.z);
 
-    // 120mm Square Housing
-    const fanBoxGeom = new THREE.BoxGeometry(1.20, 0.38, 1.20);
+    // 120mm Square Housing penetrating roof so it is visible from top exterior & bottom ceiling
+    const fanBoxGeom = new THREE.BoxGeometry(1.18, fullSpanH + 0.032, 1.18);
     const fanBox = new THREE.Mesh(fanBoxGeom, steelMat);
+    fanBox.position.set(0, 0.004, 0);
     fanGroup.add(fanBox);
 
-    // Circular Aperture
-    const fanHoleGeom = new THREE.CylinderGeometry(0.54, 0.54, 0.40, 24);
-    const fanHole = new THREE.Mesh(fanHoleGeom, materials.accentMat);
+    // Dark Circular Turbine Well
+    const fanHoleGeom = new THREE.CylinderGeometry(0.50, 0.50, fullSpanH + 0.036, 28);
+    const fanHole = new THREE.Mesh(fanHoleGeom, darkWellMat);
+    fanHole.position.set(0, 0.004, 0);
     fanGroup.add(fanHole);
 
-    // Metallic Finger Guard concentric rings
-    [0.22, 0.38, 0.52].forEach(r => {
-      const ringGeom = new THREE.TorusGeometry(r, 0.012, 6, 24);
-      ringGeom.rotateX(Math.PI / 2);
-      const ring = new THREE.Mesh(ringGeom, chromeMat);
-      ring.position.set(0, 0.19, 0);
-      fanGroup.add(ring);
-    });
+    // Top & Bottom Intake Bezels
+    const bezelGeom = new THREE.TorusGeometry(0.50, 0.018, 8, 28);
+    bezelGeom.rotateX(Math.PI / 2);
+    const topBezel = new THREE.Mesh(bezelGeom, materials.accentMat);
+    topBezel.position.set(0, topRelY + 0.024, 0);
+    fanGroup.add(topBezel);
 
-    // Rotor Hub
-    const rotorHubGeom = new THREE.CylinderGeometry(0.16, 0.16, 0.22, 16);
+    const btmBezel = new THREE.Mesh(bezelGeom, chromeMat);
+    btmBezel.position.set(0, btmRelY - 0.016, 0);
+    fanGroup.add(btmBezel);
+
+    // Rotor Hub & 7 Blades on top & bottom
+    const rotorHubGeom = new THREE.CylinderGeometry(0.16, 0.16, fullSpanH + 0.044, 16);
     const rotorHub = new THREE.Mesh(rotorHubGeom, chromeMat);
+    rotorHub.position.set(0, 0.004, 0);
     fanGroup.add(rotorHub);
+
+    const bladeGeom = new THREE.BoxGeometry(0.30, 0.022, 0.11);
+    for (let b = 0; b < 7; b++) {
+      const angle = (b * Math.PI * 2) / 7;
+      const bx = Math.cos(angle) * 0.27;
+      const bz = Math.sin(angle) * 0.27;
+
+      const topBlade = new THREE.Mesh(bladeGeom, chromeMat);
+      topBlade.position.set(bx, topRelY + 0.020, bz);
+      topBlade.rotation.y = -angle + 0.35;
+      topBlade.rotation.z = 0.28;
+      fanGroup.add(topBlade);
+
+      const btmBlade = new THREE.Mesh(bladeGeom, chromeMat);
+      btmBlade.position.set(bx, btmRelY - 0.010, bz);
+      btmBlade.rotation.y = -angle + 0.35;
+      btmBlade.rotation.z = 0.28;
+      fanGroup.add(btmBlade);
+    }
+
+    // Metallic Finger Guard concentric rings & spokes on top exterior & bottom ceiling
+    const spokeGeom = new THREE.BoxGeometry(0.96, 0.010, 0.010);
+    [topRelY + 0.030, btmRelY - 0.020].forEach(gy => {
+      [0.19, 0.33, 0.46].forEach(r => {
+        const ringGeom = new THREE.TorusGeometry(r, 0.009, 6, 24);
+        ringGeom.rotateX(Math.PI / 2);
+        const ring = new THREE.Mesh(ringGeom, chromeMat);
+        ring.position.set(0, gy, 0);
+        fanGroup.add(ring);
+      });
+
+      const sp1 = new THREE.Mesh(spokeGeom, chromeMat);
+      sp1.position.set(0, gy + 0.002, 0);
+      sp1.rotation.y = Math.PI / 4;
+      fanGroup.add(sp1);
+
+      const sp2 = new THREE.Mesh(spokeGeom, chromeMat);
+      sp2.position.set(0, gy + 0.002, 0);
+      sp2.rotation.y = -Math.PI / 4;
+      fanGroup.add(sp2);
+    });
 
     (fanGroup as any).userData = {
       isProductMesh: true,
       item: {
         instanceId: `roof-fan-boost-42u-${idx + 1}`,
         sku: 'FAN-120-38',
-        name: `מאוורר תעשייתי 120*120*38 מ״מ (#${idx + 1} ${fp.label})`,
+        name: `מאוורר גג תעשייתי 120*120*38 מ״מ (#${idx + 1} מתוך ${builtInFans} - ${fp.label})`,
         description: 'מאוורר איוורור תעשייתי עליון 120*120*38 מ״מ מובנה בגג הארון לשאיבת חום שרתים וציוד תקשורת.',
         price: 0,
         isIncluded: true,

@@ -333,7 +333,11 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       return (Array.isArray(p.images) && p.images[0]) || p.imageURL || p.image;
     };
 
-    const defaultIncludedShelfSku = cabinetData?.suitableStandard?.[0] || '1152';
+    const defaultIncludedShelfSku =
+      cabinetData?.suitableStandard?.[0] ||
+      cabinetData?.suitableHanging?.[0] ||
+      cabinetData?.suitableSliding?.[0] ||
+      '1152';
 
     slots.forEach(slot => {
       if (slot.type === 'empty') return;
@@ -442,8 +446,9 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     const safeSizeX = isFinite(size.x) && size.x > 0.5 ? size.x : fallbackW;
     const safeSizeZ = isFinite(size.z) && size.z > 0.5 ? size.z : fallbackD;
 
-    // 22% margin on desktop, 32% margin on mobile portrait ensures comfortable breathing room at top and bottom for UI headers / mobile toolbars
-    const margin = safeAspect < 1.0 ? 1.32 : 1.22;
+    // On mobile portrait (<1.0 aspect), provide extra breathing room and shift target slightly downward so cabinet sits higher above bottom toolbars
+    const isMobilePortrait = safeAspect < 1.0;
+    const margin = isMobilePortrait ? 1.32 : 1.22;
     const distForHeight = ((safeSizeY * margin) / 2) / Math.tan(fovVRad / 2);
     const distForWidth = ((safeSizeX * margin) / 2) / Math.tan(fovHRad / 2);
     let fitDist = Math.max(distForHeight, distForWidth);
@@ -452,10 +457,8 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     }
 
     const halfDepth = Math.max(safeSizeZ / 2, fallbackD / 2);
-    // On mobile portrait, raise centerY slightly so the cabinet sits in the open upper/center portion above the dock
-    const mobileCenterOffset = safeAspect < 1.0 ? safeSizeY * 0.05 : 0;
-    const rawCenterY = isFinite(center.y) ? center.y : (totalU * U_HEIGHT_UNITS * 0.07);
-    const centerY = rawCenterY + mobileCenterOffset;
+    const baseCenterY = isFinite(center.y) ? center.y : (totalU * U_HEIGHT_UNITS * 0.07);
+    const centerY = isMobilePortrait ? baseCenterY - safeSizeY * 0.06 : baseCenterY;
 
     return {
       size: new THREE.Vector3(safeSizeX, safeSizeY, safeSizeZ),
@@ -1069,14 +1072,20 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
     const controls = new OrbitControls(camera, canvas);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.minDistance = 2.0;
-    controls.maxDistance = 200.0;
-    controls.maxPolarAngle = Math.PI * 0.90;
-    controls.target.set(0, initTargetY, 0);
+    controls.rotateSpeed = 0.85;
+    controls.zoomSpeed = 1.1;
+    controls.panSpeed = 0.8;
+    controls.enableRotate = true;
+    controls.enableZoom = true;
+    controls.enablePan = true;
     controls.touches = {
       ONE: THREE.TOUCH.ROTATE,
       TWO: THREE.TOUCH.DOLLY_PAN,
     };
+    controls.minDistance = 2.0;
+    controls.maxDistance = 200.0;
+    controls.maxPolarAngle = Math.PI * 0.90;
+    controls.target.set(0, initTargetY, 0);
     controls.update();
     controlsRef.current = controls;
 
@@ -1220,32 +1229,34 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         touchStartX = e.clientX;
         touchStartY = e.clientY;
         touchStartTime = Date.now();
-        draggingItem = null; // NEVER initiate 3D item drag on mobile touch — touch is dedicated to fluid OrbitControls rotation and pinch zoom!
-      } else {
-        const intersects = getRaycastTargets(e.clientX, e.clientY);
-        for (const hit of intersects) {
-          let obj: THREE.Object3D | null = hit.object;
-          let isProduct = false;
-          let item = null;
-          let hitIsDoor = false;
-          while (obj && obj !== scene) {
-            if ((obj as any).userData?.isDoor) {
-              hitIsDoor = true;
-              break;
-            }
-            if ((obj as any).userData?.isProductMesh) {
-              isProduct = true;
-              item = (obj as any).userData.item;
-              break;
-            }
-            obj = obj.parent;
+        // On touch devices, single-finger drag is dedicated to OrbitControls 3D rotation
+        draggingItem = null;
+        return;
+      }
+
+      const intersects = getRaycastTargets(e.clientX, e.clientY);
+      for (const hit of intersects) {
+        let obj: THREE.Object3D | null = hit.object;
+        let isProduct = false;
+        let item = null;
+        let hitIsDoor = false;
+        while (obj && obj !== scene) {
+          if ((obj as any).userData?.isDoor) {
+            hitIsDoor = true;
+            break;
           }
-          if (hitIsDoor) continue;
-          
-          if (isProduct && item && !item.isIncluded) {
-             draggingItem = item;
-             break;
+          if ((obj as any).userData?.isProductMesh) {
+            isProduct = true;
+            item = (obj as any).userData.item;
+            break;
           }
+          obj = obj.parent;
+        }
+        if (hitIsDoor) continue;
+        
+        if (isProduct && item && !item.isIncluded) {
+           draggingItem = item;
+           break;
         }
       }
     };
@@ -2375,7 +2386,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       className={`relative border-2 border-slate-300 flex flex-col overflow-hidden transition-all duration-300 select-none rounded-xl ${getBackdropClass()} ${
         isWidescreen
           ? 'h-[72vh] sm:h-[78vh] lg:h-[min(900px,calc(100dvh-5rem))]'
-          : 'h-[58vh] min-h-[440px] sm:h-[65vh] lg:h-[min(760px,calc(100dvh-8rem))]'
+          : 'h-[60vh] sm:h-[65vh] lg:h-[min(760px,calc(100dvh-8rem))]'
       } ${className}`}
       dir="rtl"
     >
@@ -2383,8 +2394,8 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       <canvas
         key={canvasKey}
         ref={canvasRef}
-        className="w-full h-full block touch-none focus:outline-none"
-        style={{ touchAction: 'none' }}
+        style={{ touchAction: mobileTouchMode === 'scroll' ? 'pan-y' : 'none' }}
+        className="w-full h-full block touch-none focus:outline-none cursor-grab active:cursor-grabbing"
         tabIndex={0}
         aria-label="הדמיית ארון תקשורת תלת-ממדית אינטראקטיבית"
       />
@@ -2416,7 +2427,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
 
       {/* Top Floating Notification Banner for Newly Added Product */}
       {showAddedBanner && newlyAddedInstance && (
-        <div className="absolute top-12 sm:top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto animate-in fade-in slide-in-from-top-3 duration-300 max-w-[92%] sm:max-w-md">
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto animate-in fade-in slide-in-from-top-3 duration-300 max-w-[92%] sm:max-w-md">
           <div className="bg-slate-900/95 text-white border border-emerald-400/80 px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2.5 backdrop-blur-md text-xs">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
             <span className="truncate">
@@ -2447,26 +2458,26 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       )}
 
       {/* Top HUD Toolbar */}
-      <div className="absolute top-2 sm:top-2.5 right-2 sm:right-2.5 left-2 sm:left-2.5 flex items-center justify-between gap-1.5 sm:gap-2 pointer-events-none z-20">
-        {/* Left Side: Status Badges */}
-        <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap pointer-events-auto">
-          <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700/80 text-white text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-0.5 sm:py-1 flex items-center gap-1.5 sm:gap-2 shadow-md rounded-lg sm:rounded-md">
-            <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400 animate-pulse" />
+      <div className="absolute top-2 right-2 left-2 flex items-start justify-between gap-1.5 pointer-events-none z-20">
+        {/* Right Side (RTL start): Status Badges */}
+        <div className="flex items-center gap-1 flex-wrap pointer-events-auto max-w-[48%] sm:max-w-none">
+          <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700/90 text-white text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-1 flex items-center gap-1.5 shadow-md rounded-md">
+            <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
             <span className="font-bold">{dims.totalU}U</span>
-            <span className="text-slate-400 text-[9px] sm:text-[10px] font-mono">
-              {dims.widthMm}x{dims.depthMm}mm
+            <span className="text-slate-400 text-[9.5px] sm:text-[10px] font-mono">
+              {dims.widthMm}×{dims.depthMm}
             </span>
           </div>
 
           {dims.isSpecific447510T && (
-            <div className="hidden sm:flex bg-amber-500/20 border border-amber-400 text-amber-300 text-[10px] sm:text-[10.5px] px-2 sm:px-2.5 py-1 items-center gap-1.5 font-bold shadow-md rounded-md">
+            <div className="hidden sm:flex bg-amber-500/20 border border-amber-400 text-amber-300 text-[10.5px] px-2.5 py-1 items-center gap-1.5 font-bold shadow-md rounded-md">
               <Award size={13} className="text-amber-400" />
               <span>מפרט Boost {dims.depthMm === 800 ? '447580T' : '447510T'}</span>
             </div>
           )}
 
           {dims.isSpecificBoost42U && (
-            <div className="hidden sm:flex bg-emerald-500/20 border border-emerald-400 text-emerald-300 text-[10px] sm:text-[10.5px] px-2 sm:px-2.5 py-1 items-center gap-1.5 font-bold shadow-md rounded-md">
+            <div className="hidden sm:flex bg-emerald-500/20 border border-emerald-400 text-emerald-300 text-[10.5px] px-2.5 py-1 items-center gap-1.5 font-bold shadow-md rounded-md">
               <Award size={13} className="text-emerald-400" />
               <span>מפרט Boost Rack 42U</span>
             </div>
@@ -2475,33 +2486,33 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           {unallocatedCount > 0 && (
             <div
               id="hud-unallocated-badge"
-              className="bg-rose-600/95 border border-rose-400 text-white text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-0.5 sm:py-1 flex items-center gap-1 font-bold shadow-md animate-pulse rounded-md"
+              className="bg-rose-600/95 border border-rose-400 text-white text-[10px] sm:text-[11px] px-2 py-0.5 sm:px-2.5 sm:py-1 flex items-center gap-1 font-bold shadow-md animate-pulse rounded-md"
               title={`${unallocatedCount} פריטים ללא מקום פנוי`}
             >
-              <span>⚠ {unallocatedCount} ללא מקום</span>
+              <span>⚠ {unallocatedCount}</span>
             </div>
           )}
 
           {hoveredSlotU !== null && (
-            <div className="bg-[#004387] border border-blue-400 text-white text-[10px] sm:text-[11px] font-bold px-2 py-0.5 sm:py-1 flex items-center gap-1 shadow-lg animate-in fade-in rounded-md">
+            <div className="bg-[#004387] border border-blue-400 text-white text-[10px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-2.5 sm:py-1 flex items-center gap-1 shadow-lg animate-in fade-in rounded-md">
               <span>➕ U{hoveredSlotU}</span>
             </div>
           )}
 
           {hoveredDoorPrompt !== null && hoveredSlotU === null && (
-            <div className="bg-slate-900/95 border border-indigo-400 text-indigo-200 text-[10px] sm:text-[11px] font-bold px-2 py-0.5 sm:py-1 flex items-center gap-1 shadow-lg animate-in fade-in rounded-md">
+            <div className="hidden sm:flex bg-slate-900/95 border border-indigo-400 text-indigo-200 text-[11px] font-bold px-2.5 py-1 items-center gap-1.5 shadow-lg animate-in fade-in rounded-md">
               <span>🚪 {hoveredDoorPrompt}</span>
             </div>
           )}
         </div>
 
-        {/* Right Side: Essential Actions (Zoom, Focus and Labels) */}
-        <div className="flex items-center gap-0.5 sm:gap-1 bg-slate-900/90 backdrop-blur-md border border-slate-700/80 p-0.5 sm:p-1 pointer-events-auto shadow-md rounded-lg sm:rounded-md shrink-0">
+        {/* Left Side (RTL end): Essential Actions (Zoom, Focus, Labels, Widescreen) */}
+        <div className="flex items-center gap-0.5 sm:gap-1 bg-slate-900/90 backdrop-blur-md border border-slate-700/90 p-0.5 sm:p-1 pointer-events-auto shadow-md rounded-lg shrink-0">
           {/* Zoom In */}
           <button
             type="button"
             onClick={() => handleZoom(1)}
-            className="w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors cursor-pointer shrink-0"
+            className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors cursor-pointer shrink-0"
             title="התקרב (זום אין)"
             aria-label="התקרב"
           >
@@ -2512,22 +2523,11 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           <button
             type="button"
             onClick={() => handleZoom(-1)}
-            className="w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors cursor-pointer shrink-0"
+            className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors cursor-pointer shrink-0"
             title="התרחק (זום אאוט)"
             aria-label="התרחק"
           >
             <ZoomOut size={15} />
-          </button>
-
-          {/* Reset Camera (Quick reset button on top toolbar for mobile) */}
-          <button
-            type="button"
-            onClick={() => fitCameraToCabinet(false)}
-            className="w-7 h-7 sm:hidden flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors cursor-pointer shrink-0"
-            title="איפוס מצלמה"
-            aria-label="איפוס"
-          >
-            <RotateCcw size={14} />
           </button>
 
           {/* Focus on Product / Restore Framing Toggle */}
@@ -2535,7 +2535,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
             <button
               type="button"
               onClick={restorePreviousFraming}
-              className="w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center text-[11px] font-semibold bg-blue-800 text-white hover:bg-blue-700 rounded-md transition-colors cursor-pointer shrink-0"
+              className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-[11px] font-semibold bg-blue-800 text-white hover:bg-blue-700 rounded-md transition-colors cursor-pointer shrink-0"
               title="חזור למבט הקודם"
             >
               <CornerUpLeft size={15} />
@@ -2544,7 +2544,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
             <button
               type="button"
               onClick={() => focusOnSelectedProduct()}
-              className="w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center text-[11px] font-semibold hover:bg-slate-800 text-slate-300 hover:text-white rounded-md transition-colors cursor-pointer shrink-0"
+              className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center text-[11px] font-semibold hover:bg-slate-800 text-slate-300 hover:text-white rounded-md transition-colors cursor-pointer shrink-0"
               title="התמקדות בציוד הנבחר"
             >
               <Eye size={15} />
@@ -2555,7 +2555,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           <button
             type="button"
             onClick={() => setShowAllLabels(prev => !prev)}
-            className={`h-7 sm:h-10 px-2 sm:px-2.5 flex items-center justify-center gap-1 sm:gap-1.5 text-[11px] font-bold rounded-md transition-colors cursor-pointer shrink-0 ${
+            className={`h-8 sm:h-9 px-2 flex items-center justify-center gap-1 text-[10.5px] font-bold rounded-md transition-colors cursor-pointer shrink-0 ${
               showAllLabels
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'text-slate-300 hover:text-white hover:bg-slate-800'
@@ -2567,14 +2567,14 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
             <span className="hidden sm:inline">תוויות</span>
           </button>
 
-          {/* Widescreen Toggle (Desktop/Tablet only) */}
+          {/* Widescreen Toggle */}
           <button
             type="button"
             onClick={() => setIsWidescreen(w => !w)}
-            className="hidden sm:flex w-10 h-10 items-center justify-center hover:bg-slate-800 text-slate-300 hover:text-white rounded-md transition-colors cursor-pointer shrink-0"
+            className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center hover:bg-slate-800 text-slate-300 hover:text-white rounded-md transition-colors cursor-pointer shrink-0"
             title={isWidescreen ? 'תצוגה רגילה' : 'תצוגה מוגדלת'}
           >
-            {isWidescreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            {isWidescreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
         </div>
       </div>
@@ -2583,12 +2583,12 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
       {showInteractionHint && (
         <div
           onClick={dismissInteractionHint}
-          className="absolute top-12 sm:top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto cursor-pointer animate-in fade-in slide-in-from-top-2 duration-300 max-w-[90%] sm:max-w-max"
+          className="absolute top-12 sm:top-14 left-1/2 -translate-x-1/2 z-30 pointer-events-auto cursor-pointer animate-in fade-in slide-in-from-top-2 duration-300 max-w-[92%] sm:max-w-max"
         >
-          <div className="bg-slate-900/95 hover:bg-slate-900 text-slate-200 hover:text-white border border-slate-600/90 hover:border-blue-500/80 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full shadow-2xl backdrop-blur-md text-[10.5px] sm:text-xs font-medium flex items-center gap-1.5 sm:gap-2 transition-all group">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0 group-hover:scale-125 transition-transform" />
-            <span className="whitespace-nowrap">
-              לחץ על הדלת לפתיחה · לחץ על פאנל צד להסרה
+          <div className="bg-slate-900/90 hover:bg-slate-900 text-slate-200 hover:text-white border border-slate-600/80 hover:border-blue-500/80 px-3 py-1 rounded-full shadow-xl backdrop-blur-md text-[10.5px] sm:text-xs font-medium flex items-center gap-1.5 transition-all group">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+            <span className="truncate">
+              החלק באצבע לסיבוב 360° · הקש על דלת לפתיחה
             </span>
           </div>
         </div>
@@ -2747,15 +2747,15 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         </button>
       </aside>
 
-      {/* Mobile Horizontal Toolbar (<lg): Compact floating pill docked cleanly near bottom */}
+      {/* Mobile Horizontal Toolbar (<lg): Sleek compact pill above the bottom dock */}
       <nav
         aria-label="סרגל כלי תצוגה במובייל"
-        className="lg:hidden absolute bottom-11 sm:bottom-14 left-1/2 -translate-x-1/2 flex items-center justify-center gap-1 py-1 px-2.5 bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-full shadow-2xl z-20 pointer-events-auto max-w-[94%] overflow-x-auto no-scrollbar"
+        className="lg:hidden absolute bottom-11 left-1/2 -translate-x-1/2 max-w-[96%] flex items-center gap-1 overflow-x-auto py-1 px-1.5 bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-full shadow-xl z-20 pointer-events-auto no-scrollbar"
       >
         <button
           type="button"
           onClick={() => setCameraPreset('front')}
-          className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center rounded-full text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
+          className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full text-slate-300 hover:text-white active:bg-slate-800 transition-colors cursor-pointer"
           title="חזית"
         >
           <ArrowDown size={14} />
@@ -2763,7 +2763,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         <button
           type="button"
           onClick={() => setCameraPreset('rear')}
-          className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center rounded-full text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
+          className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full text-slate-300 hover:text-white active:bg-slate-800 transition-colors cursor-pointer"
           title="אחור"
         >
           <ArrowUp size={14} />
@@ -2771,7 +2771,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         <button
           type="button"
           onClick={() => setCameraPreset('right')}
-          className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center rounded-full text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
+          className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full text-slate-300 hover:text-white active:bg-slate-800 transition-colors cursor-pointer"
           title="צד ימין"
         >
           <ArrowRight size={14} />
@@ -2779,7 +2779,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         <button
           type="button"
           onClick={() => setCameraPreset('left')}
-          className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center rounded-full text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
+          className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full text-slate-300 hover:text-white active:bg-slate-800 transition-colors cursor-pointer"
           title="צד שמאל"
         >
           <ArrowLeft size={14} />
@@ -2787,7 +2787,7 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
         <button
           type="button"
           onClick={() => setCameraPreset('iso')}
-          className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center rounded-full text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
+          className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full text-slate-300 hover:text-white active:bg-slate-800 transition-colors cursor-pointer"
           title="איזומטרי"
         >
           <Box size={14} />
@@ -2805,12 +2805,12 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
               return 'studio-light';
             });
           }}
-          className={`w-7 h-7 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center rounded-full transition-colors cursor-pointer ${
+          className={`w-7 h-7 shrink-0 flex items-center justify-center rounded-full transition-colors cursor-pointer ${
             backdropTheme === 'studio-light'
-              ? 'text-amber-400 hover:bg-slate-800/90'
+              ? 'text-amber-400 active:bg-slate-800'
               : backdropTheme === 'datacenter'
-              ? 'text-blue-400 hover:bg-slate-800/90'
-              : 'text-slate-100 hover:bg-slate-800/90'
+              ? 'text-blue-400 active:bg-slate-800'
+              : 'text-slate-100 active:bg-slate-800'
           }`}
           title={`תאורה (${backdropTheme === 'studio-light' ? 'סטודיו' : backdropTheme === 'datacenter' ? 'שרתים' : 'לבן נקי'})`}
         >
@@ -2823,6 +2823,8 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           )}
         </button>
 
+        <div className="w-px h-4 bg-slate-700/80 shrink-0 mx-0.5" />
+
         {/* Remove/Restore Front Door */}
         {doorsInfo.hasFrontDoor && (
           <button
@@ -2831,10 +2833,10 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
               const isRemoved = doorState.front === 'removed';
               handleSetDoorState('front', isRemoved ? 'open' : 'removed');
             }}
-            className={`w-7 h-7 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center rounded-full transition-colors cursor-pointer ${
+            className={`w-7 h-7 shrink-0 flex items-center justify-center rounded-full transition-colors cursor-pointer ${
               doorState.front === 'removed'
                 ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-300 hover:text-white hover:bg-slate-800/90'
+                : 'text-slate-300 hover:text-white active:bg-slate-800'
             }`}
             title={doorState.front === 'removed' ? 'החזר דלת קדמית' : 'הסר דלת קדמית'}
           >
@@ -2854,10 +2856,10 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
               const isRemoved = doorState.rear === 'removed';
               handleSetDoorState('rear', isRemoved ? 'closed' : 'removed');
             }}
-            className={`w-7 h-7 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center rounded-full transition-colors cursor-pointer ${
+            className={`w-7 h-7 shrink-0 flex items-center justify-center rounded-full transition-colors cursor-pointer ${
               doorState.rear === 'removed'
                 ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-300 hover:text-white hover:bg-slate-800/90'
+                : 'text-slate-300 hover:text-white active:bg-slate-800'
             }`}
             title={doorState.rear === 'removed' ? 'החזר דלת אחורית' : 'הסר דלת אחורית'}
           >
@@ -2869,42 +2871,44 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
           </button>
         )}
 
+        <div className="w-px h-4 bg-slate-700/80 shrink-0 mx-0.5" />
+
         {/* Reset Camera */}
         <button
           type="button"
           onClick={() => fitCameraToCabinet(false)}
-          className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center rounded-full text-slate-300 hover:text-white hover:bg-slate-800/90 transition-colors cursor-pointer"
+          className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full text-slate-300 hover:text-white active:bg-slate-800 transition-colors cursor-pointer"
           title="איפוס מצלמה"
         >
           <RotateCcw size={13} />
         </button>
       </nav>
 
-      {/* Bottom HUD: One unified clean bar without clutter */}
-      <div className="absolute bottom-1.5 sm:bottom-2.5 right-2 sm:right-2.5 left-2 sm:left-2.5 flex items-center justify-between gap-1.5 pointer-events-none z-20">
+      {/* Bottom HUD: Single compact row on mobile & desktop */}
+      <div className="absolute bottom-1.5 right-2 left-2 flex items-center justify-between gap-1.5 pointer-events-none z-20">
         {/* Included Items Details */}
-        <div className="h-8 sm:min-h-11 bg-slate-900/90 backdrop-blur-md border border-slate-700/80 text-slate-200 text-[10px] sm:text-[10.5px] px-2.5 py-1 flex items-center gap-1.5 pointer-events-auto shadow-md max-w-[50%] sm:max-w-md overflow-x-auto rounded-lg sm:rounded-md shrink-0">
+        <div className="h-8 sm:h-9 bg-slate-900/90 backdrop-blur-md border border-slate-700/90 text-slate-200 text-[10px] sm:text-[11px] px-2 sm:px-2.5 flex items-center gap-1.5 pointer-events-auto shadow-md min-w-0 flex-1 sm:flex-initial sm:max-w-md overflow-hidden rounded-lg">
           <ShieldCheck size={13} className="text-emerald-400 shrink-0" />
-          <span className="font-semibold text-slate-300 shrink-0 hidden sm:inline">כלול בארון:</span>
+          <span className="font-semibold text-slate-300 shrink-0 hidden xs:inline">כלול:</span>
           {includedSummary.length > 0 ? (
             <span className="truncate text-slate-300">{includedSummary.join(' · ')}</span>
           ) : (
-            <span className="text-slate-400">ללא אביזרים מובנים</span>
+            <span className="truncate text-slate-400">ללא אביזרים מובנים</span>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 pointer-events-auto shrink-0">
+        <div className="flex items-center gap-1.5 pointer-events-auto shrink-0">
           {/* 0U PDU Button */}
           {onOpenPduModal && (
             <button
               type="button"
               onClick={onOpenPduModal}
-              className="h-8 sm:min-h-11 bg-amber-600/95 hover:bg-amber-500 backdrop-blur-md border border-amber-300/90 text-slate-950 text-[11px] sm:text-xs font-black px-2.5 sm:px-3 py-1 flex items-center justify-center gap-1 transition-colors shadow-lg cursor-pointer shrink-0 rounded-lg sm:rounded-md active:scale-95"
+              className="h-8 sm:h-9 bg-amber-500 hover:bg-amber-400 border border-amber-300 text-slate-950 text-[11px] sm:text-xs font-black px-2.5 sm:px-3 flex items-center justify-center gap-1 transition-colors shadow-md cursor-pointer shrink-0 rounded-lg"
               title="הוסף פסי שקעים PDU מותקנים ברלס אחורי עליון ללא תפיסת מקום חזיתי (0U)"
             >
               <Zap size={13} className="fill-slate-950 shrink-0" />
               <span className="hidden sm:inline">פס שקעים PDU (0U)</span>
-              <span className="sm:hidden font-black">PDU</span>
+              <span className="sm:hidden font-black">+ PDU</span>
             </button>
           )}
 
@@ -2913,21 +2917,21 @@ export const Cabinet3DViewer: React.FC<Cabinet3DViewerProps> = ({
             <button
               type="button"
               onClick={onOpenAuxiliaryModal}
-              className="h-8 sm:min-h-11 bg-indigo-900/95 hover:bg-indigo-800 backdrop-blur-md border border-indigo-400/90 text-indigo-100 text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1 flex items-center justify-center gap-1 transition-colors shadow-lg cursor-pointer shrink-0 rounded-lg sm:rounded-md active:scale-95"
+              className="h-8 sm:h-9 bg-indigo-900/95 hover:bg-indigo-800 border border-indigo-400 text-indigo-100 text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 flex items-center justify-center gap-1 transition-colors shadow-md cursor-pointer shrink-0 rounded-lg"
               title="הוסף אביזרי גג, בסיס, דפנות או ציוד חומרה ללא תפיסת יחידות U"
             >
               <Layers size={13} className="text-indigo-300 shrink-0" />
               <span className="hidden sm:inline">הוסף ציוד נלווה (0U)</span>
-              <span className="sm:hidden">נלווה</span>
+              <span className="sm:hidden">+ נלווה</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Accessibility Keyboard Slot Picker Bar */}
+      {/* Accessibility Keyboard Slot Picker Bar (Desktop / Keyboard users) */}
       {emptySlots.length > 0 && (
         <div
-          className="bg-slate-900 border-t border-slate-800 px-3 py-1.5 flex items-center justify-between gap-2 flex-wrap text-xs z-30"
+          className="hidden sm:flex bg-slate-900 border-t border-slate-800 px-3 py-1.5 items-center justify-between gap-2 flex-wrap text-xs z-30"
           role="region"
           aria-label="בחירת יחידות U פנויות במקלדת"
         >

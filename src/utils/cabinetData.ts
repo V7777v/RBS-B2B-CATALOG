@@ -794,13 +794,14 @@ export const reconcileCabinetMatrixEntry = (entry: CabinetMatrixData, product?: 
   const baseSku = getBaseSku(entry.sku || product?.sku);
   const res: CabinetMatrixData = { ...entry };
 
-  // 1. SKU 114809: Official BoostRack 10U Datasheet ("ארון תקשורת 10U בגודל 500*550 דלת מחוררת שחור") -> W=550, D=500
+  // 1. SKU 114809: Official BoostRack 10U Wall Cabinet Datasheet ("PN114809 10U 55X50") -> W=550, D=500
+  // Schematic BOM: "3. Fixed back panel (for wall mounting)", "6. Front single perforated door with lock"
   if (baseSku === '114809') {
     res.u = 10;
     res.width = 550;
     res.depth = 500;
-    res.frontDoor = 'דלת קדמית מחוררת עם מנעול וידית';
-    res.rearDoor = 'דלת אחורית ממתכת מחוררת';
+    res.frontDoor = 'דלת קדמית יחידה מחוררת עם מנעול';
+    res.rearDoor = 'פח אטום (גב קבוע לתלייה)';
     res.removableSides = true;
   }
   // 2. SKU 1062: Official Datasheet ("Data sheet Glass door 10U 6040 wall cabinet.pdf") -> W=600, D=400
@@ -808,6 +809,8 @@ export const reconcileCabinetMatrixEntry = (entry: CabinetMatrixData, product?: 
     res.u = 10;
     res.width = 600;
     res.depth = 400;
+    res.frontDoor = 'דלת קדמית זכוכית מחוסמת עם מנעול';
+    res.rearDoor = 'פח אטום (גב קבוע לתלייה)';
     res.removableSides = true;
   }
   // 3. SKU 447510T / 447510: Official BoostRack 44U 750x1000 Double Perforated Doors Datasheet
@@ -848,58 +851,139 @@ export const reconcileCabinetMatrixEntry = (entry: CabinetMatrixData, product?: 
       res.suitableSliding = ['117909'];
     }
   }
-  // 5. SKU 206810: Official Datasheet (206810.pdf) -> 42U 600x1000 Front Glass Door + Rear Perforated Metal Door
-  else if (baseSku === '206810') {
-    res.u = 42;
-    res.width = 600;
-    res.depth = 1000;
-    res.frontDoor = 'דלת קדמית זכוכית מחוסמת עם מנעול וידית';
-    res.rearDoor = 'דלת אחורית ממתכת מחוררת עם מנעול';
-    res.removableSides = true;
-  }
-  // 6. SKU 217980: Official Datasheet (Data sheet Glass door 20U 6080 floor standing cabinet.pdf) -> 20U 600x800 Front Glass Door + Rear Perforated Metal Door
-  else if (baseSku === '217980') {
-    res.u = 20;
-    res.width = 600;
-    res.depth = 800;
-    res.frontDoor = 'דלת קדמית זכוכית מחוסמת עם מנעול וידית';
-    res.rearDoor = 'דלת אחורית ממתכת מחוררת עם מנעול';
-    res.removableSides = true;
-  }
-  // 7. SKU 2177: Official Datasheet (2177.pdf) -> 42U 600x600 Double Perforated Doors
-  else if (baseSku === '2177') {
-    res.u = 42;
+  // 5. SKU 1274: Official Datasheet (PN1274 32U 60 X 60-Floor Standing Rack)
+  // Schematic BOM: "3. Back door single perforated door with handle lock", "4. 2PCS Fans", "6. Front single perforated door with handle lock"
+  else if (baseSku === '1274') {
+    res.u = 32;
     res.width = 600;
     res.depth = 600;
-    res.frontDoor = 'דלת קדמית כפולה מחוררת עם מנעול קפיצי';
-    res.rearDoor = 'דלת אחורית כפולה מחוררת עם מנעול קפיצי';
+    res.frontDoor = 'דלת קדמית יחידה מחוררת עם ידית נעילה';
+    res.rearDoor = 'דלת אחורית יחידה מחוררת עם ידית נעילה';
+    res.fans = '2';
+    res.wheels = '4';
+    res.levelingFeet = '4';
     res.removableSides = true;
   }
-  // 8. SKU 2066: Official Datasheet (2066.pdf) -> 42U 600x800 Double Perforated Doors
-  else if (baseSku === '2066') {
-    res.u = 42;
-    res.width = 600;
-    res.depth = 800;
-    res.frontDoor = 'דלת קדמית כפולה מחוררת עם מנעול קפיצי';
-    res.rearDoor = 'דלת אחורית כפולה מחוררת עם מנעול קפיצי';
-    res.removableSides = true;
-  }
-  // 9. SKU 114802: Official Datasheet (114802.pdf) -> 32U 600x800 Perforated Doors
+  // 6. SKU 114802: Official Datasheet (114802.pdf - 32U 600x800)
+  // Single perforated front door + Single perforated rear door + 4 fans
   else if (baseSku === '114802') {
     res.u = 32;
     res.width = 600;
     res.depth = 800;
-    res.frontDoor = 'דלת קדמית מחוררת עם מנעול וידית';
-    res.rearDoor = 'דלת אחורית ממתכת מחוררת עם מנעול';
+    res.frontDoor = 'דלת קדמית יחידה מחוררת עם ידית נעילה';
+    res.rearDoor = 'דלת אחורית יחידה מחוררת עם ידית נעילה';
+    res.fans = '4';
+    res.wheels = '4';
+    res.levelingFeet = '4';
     res.removableSides = true;
   }
-  // 10. SKU 1174: Official Datasheet (1174.pdf) -> 32U 600x600 Front Glass Door
+  // 7. SKU 114803: Official Datasheet (PN114803 25U 60 X 80-Floor Standing Rack)
+  // Schematic BOM: "3. Back door single perforated door with handle lock", "4. 2PCS Fans", "6. Front single perforated door with handle lock"
+  else if (baseSku === '114803') {
+    res.u = 25;
+    res.width = 600;
+    res.depth = 800;
+    res.frontDoor = 'דלת קדמית יחידה מחוררת עם ידית נעילה';
+    res.rearDoor = 'דלת אחורית יחידה מחוררת עם ידית נעילה';
+    res.fans = '2';
+    res.wheels = '4';
+    res.levelingFeet = '4';
+    res.removableSides = true;
+  }
+  // 8. SKU 217980: 20U 600x800 Floor Standing Rack (Single perforated front & rear doors, 2 fans)
+  else if (baseSku === '217980') {
+    res.u = 20;
+    res.width = 600;
+    res.depth = 800;
+    res.frontDoor = 'דלת קדמית יחידה מחוררת עם ידית נעילה';
+    res.rearDoor = 'דלת אחורית יחידה מחוררת עם ידית נעילה';
+    res.fans = '2';
+    res.wheels = '4';
+    res.levelingFeet = '4';
+    res.removableSides = true;
+  }
+  // 9. SKU 2177: Official Datasheet (2177.pdf) -> 42U 600x600 Single Perforated Front & Rear Doors (1 PCS each), 2 Fans
+  else if (baseSku === '2177') {
+    res.u = 42;
+    res.width = 600;
+    res.depth = 600;
+    res.frontDoor = 'דלת קדמית יחידה מחוררת עם ידית נעילה';
+    res.rearDoor = 'דלת אחורית יחידה מחוררת עם מנעול';
+    res.fans = '2';
+    res.wheels = '4';
+    res.levelingFeet = '4';
+    res.removableSides = true;
+  }
+  // 10. SKU 2066: Official Datasheet (2066.pdf) -> 42U 600x800 Single Perforated Front & Rear Doors (1 PCS each), 4 Fans
+  else if (baseSku === '2066') {
+    res.u = 42;
+    res.width = 600;
+    res.depth = 800;
+    res.frontDoor = 'דלת קדמית יחידה מחוררת עם ידית נעילה';
+    res.rearDoor = 'דלת אחורית יחידה מחוררת עם מנעול';
+    res.fans = '4';
+    res.wheels = '4';
+    res.levelingFeet = '4';
+    res.removableSides = true;
+  }
+  // 11. SKU 206810: 42U 600x1000 Floor Standing Rack -> Single Perforated Front & Rear Doors, 4 Fans
+  else if (baseSku === '206810') {
+    res.u = 42;
+    res.width = 600;
+    res.depth = 1000;
+    res.frontDoor = 'דלת קדמית יחידה מחוררת עם ידית נעילה';
+    res.rearDoor = 'דלת אחורית יחידה מחוררת עם מנעול';
+    res.fans = '4';
+    res.wheels = '4';
+    res.levelingFeet = '4';
+    res.removableSides = true;
+  }
+  // 12. SKU 2068: Official Datasheet (2068.pdf) -> 42U 600x800 Front Glass Door (1 PCS) + Rear Solid Steel Door (1 PCS), 4 Fans
+  else if (baseSku === '2068') {
+    res.u = 42;
+    res.width = 600;
+    res.depth = 800;
+    res.frontDoor = 'דלת קדמית זכוכית מחוסמת עם ידית נעילה';
+    res.rearDoor = 'דלת אחורית יחידה מפלדה עם מנעול';
+    res.fans = '4';
+    res.wheels = '4';
+    res.levelingFeet = '4';
+    res.removableSides = true;
+  }
+  // 13. SKU 2178: Official Datasheet (2178.pdf) -> 42U 600x600 Front Glass Door (1 PCS) + Rear Solid Steel Door (1 PCS), 2 Fans
+  else if (baseSku === '2178') {
+    res.u = 42;
+    res.width = 600;
+    res.depth = 600;
+    res.frontDoor = 'דלת קדמית זכוכית מחוסמת עם ידית נעילה';
+    res.rearDoor = 'דלת אחורית יחידה מפלדה עם מנעול';
+    res.fans = '2';
+    res.wheels = '4';
+    res.levelingFeet = '4';
+    res.removableSides = true;
+  }
+  // 14. SKU 1174: Official Datasheet (1174.pdf) -> 32U 600x600 Front Glass Door (1 PCS) + Rear Solid Steel Door (1 PCS), 2 Fans
   else if (baseSku === '1174') {
     res.u = 32;
     res.width = 600;
     res.depth = 600;
-    res.frontDoor = 'דלת קדמית זכוכית מחוסמת עם מנעול וידית';
-    res.rearDoor = 'דלת אחורית ממתכת מחוררת עם מנעול';
+    res.frontDoor = 'דלת קדמית זכוכית מחוסמת עם ידית נעילה';
+    res.rearDoor = 'דלת אחורית יחידה מפלדה עם מנעול';
+    res.fans = '2';
+    res.wheels = '4';
+    res.levelingFeet = '4';
+    res.removableSides = true;
+  }
+  // 15. SKU 117480: 32U 600x800 Front Glass Door (1 PCS) + Rear Solid Steel Door (1 PCS), 4 Fans
+  else if (baseSku === '117480') {
+    res.u = 32;
+    res.width = 600;
+    res.depth = 800;
+    res.frontDoor = 'דלת קדמית זכוכית מחוסמת עם ידית נעילה';
+    res.rearDoor = 'דלת אחורית יחידה מפלדה עם מנעול';
+    res.fans = '4';
+    res.wheels = '4';
+    res.levelingFeet = '4';
     res.removableSides = true;
   }
 
@@ -909,7 +993,7 @@ export const reconcileCabinetMatrixEntry = (entry: CabinetMatrixData, product?: 
     res.frontDoor = 'דלת קדמית כפולה מחוררת עם מנעול קפיצי';
     res.rearDoor = 'דלת אחורית כפולה מחוררת עם מנעול קפיצי';
   } else if (/דלת\s+מחוררת/i.test(prodName) && !/מחורר/i.test(res.frontDoor)) {
-    res.frontDoor = 'דלת קדמית מחוררת עם מנעול וידית';
+    res.frontDoor = 'דלת קדמית יחידה מחוררת עם ידית נעילה';
   }
 
   return res;

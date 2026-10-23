@@ -21,7 +21,7 @@ import {
   CheckCircle,
   RotateCcw
 } from 'lucide-react';
-import { GroupedRubric, normalizeSku, isSameSku } from '../../utils/cabinetData';
+import { GroupedRubric, isCabinetProduct, normalizeSku } from '../../utils/cabinetData';
 import { VisualSlot, EnrichedPreviewItem } from '../CabinetConfigurator';
 import { Cabinet3DErrorBoundary } from './Cabinet3DErrorBoundary';
 import { Cabinet3DViewer } from './Cabinet3DViewer';
@@ -166,7 +166,7 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
     let realImage = '';
     const targetSku = normalizeSku(acc.sku || acc.pn || '');
     if (targetSku && catalogData && Array.isArray(catalogData)) {
-      const found = catalogData.find((p: any) => normalizeSku(p.sku) === targetSku);
+      const found = catalogData.find((p: any) => p && !isCabinetProduct(p) && normalizeSku(p.sku) === targetSku);
       if (found) {
         if (found.images && Array.isArray(found.images) && found.images[0]) realImage = found.images[0];
         else if (found.imageURL) realImage = found.imageURL;
@@ -174,20 +174,15 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
       }
     }
     if (!realImage && isShelf && catalogData && Array.isArray(catalogData)) {
-      if (cabinetData?.suitableStandard?.length) {
-        for (const stdSku of cabinetData.suitableStandard) {
-          const foundStd = catalogData.find((p: any) => normalizeSku(p.sku) === normalizeSku(stdSku));
-          if (foundStd?.images?.[0]) { realImage = foundStd.images[0]; break; }
-          if (foundStd?.imageURL) { realImage = foundStd.imageURL; break; }
-        }
-      }
-      if (!realImage) {
-        const anyRealShelf = catalogData.find((p: any) => 
-          /מדף|shelf/i.test(p.name || p.description || p.sku || '') && 
-          ((p.images && p.images[0]) || p.imageURL)
-        );
-        if (anyRealShelf?.images?.[0]) realImage = anyRealShelf.images[0];
-        else if (anyRealShelf?.imageURL) realImage = anyRealShelf.imageURL;
+      const candidateShelfSkus = [
+        ...(cabinetData?.suitableStandard || []),
+        ...(cabinetData?.suitableHanging || []),
+        ...(cabinetData?.suitableSliding || []),
+      ];
+      for (const stdSku of candidateShelfSkus) {
+        const foundStd = catalogData.find((p: any) => p && !isCabinetProduct(p) && normalizeSku(p.sku) === normalizeSku(stdSku));
+        if (foundStd?.images?.[0]) { realImage = foundStd.images[0]; break; }
+        if (foundStd?.imageURL) { realImage = foundStd.imageURL; break; }
       }
     }
 
@@ -694,15 +689,13 @@ export const CabinetWorkspace: React.FC<CabinetWorkspaceProps> = ({
   const renderSimulation = () => (
     <div className="flex-1 min-w-0 h-full flex flex-col relative bg-slate-100 overflow-hidden">
       {/* Spec Notice Banner */}
-      {(isSameSku(product?.sku, '447510T') || isSameSku(product?.sku, '447580T')) && (
+      {normalizeSku(product?.sku).replace(/^447510$/, '447510T') === '447510T' && (
         <div className="bg-amber-50 border-b border-amber-200 px-3 py-1 flex items-center justify-between gap-2 text-amber-900 text-xs shrink-0 z-10">
           <span className="flex items-center gap-1.5 truncate">
             <Award size={13} className="text-amber-600 shrink-0" />
-            <strong className="truncate">מפרט {isSameSku(product?.sku, '447580T') ? '447580T' : '447510T'}:</strong> דלתות מחוררות כפולות, 4 מאווררים, תעלות כבילה ומדפים תואמים ({cabinetData?.suitableStandard?.join(', ') || (isSameSku(product?.sku, '447580T') ? '2234' : '117916')}).
+            <strong className="truncate">מפרט 447510T:</strong> דלתות מחוררות כפולות, 4 מאווררים, תעלות כבילה ומדפים תואמים ({cabinetData?.suitableStandard?.join(', ') || '117916'}).
           </span>
-          <span className="text-[10px] bg-amber-200/60 text-amber-900 font-mono px-1.5 py-0.2 rounded shrink-0">
-            44U {isSameSku(product?.sku, '447580T') ? '75x80' : '75x100'}
-          </span>
+          <span className="text-[10px] bg-amber-200/60 text-amber-900 font-mono px-1.5 py-0.2 rounded shrink-0">44U 75x100</span>
         </div>
       )}
 

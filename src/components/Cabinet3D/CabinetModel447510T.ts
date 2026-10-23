@@ -23,7 +23,7 @@ import { createPerforationTexture } from './BrandTextures';
  * - Rear Door: Perforated double door (French doors) with Spring lock
  * - 4 Fans unit in one plate with one cable on top canopy
  * - 4 Heavy-duty casters + 4 leveling feet (bottom view)
- * - 2pcs Fixed Shelf 470*650*48 (PN 117916) with diagonal ventilation slots (Page 8)
+ * - 2pcs Fixed Shelf 470*650*48 (PN 117914) with diagonal ventilation slots (Page 8)
  * - 2x 400mm width cable trays (400.2 x 1958.9 x 10.6 mm, Page 4)
  * - Horizontal depth struts 1860 x 67.5 mm (Page 5)
  * - 19" vertical rails 1948.9 x 69 x 51.5 mm L-angle with EIA-310 cage holes & U numbers (Page 6)
@@ -35,7 +35,7 @@ import { createPerforationTexture } from './BrandTextures';
 
 let cachedVentSlotTexture: THREE.CanvasTexture | null = null;
 
-// Page 8: Diagonal ventilation slots texture for Fixed Shelf PN 117916 / 117914
+// Page 8: Diagonal ventilation slots texture for Fixed Shelf PN 117914
 export function createDiagonalVentSlotTexture(): THREE.CanvasTexture | null {
   if (cachedVentSlotTexture) return cachedVentSlotTexture;
   if (typeof document === 'undefined') return null;

@@ -158,7 +158,12 @@ export function build221221CabinetGroup(
   group.add(topPlateMesh);
 
   // Circular fan cutout & grille on the roof (Page 2 blueprint: circular fan cutout)
+  const hasOptionalFan = (options?.additionalFansCount || 0) > 0;
   const fanHoleRadius = 0.55; // ~110mm fan intake
+  const fanBayGroup = new THREE.Group();
+  fanBayGroup.name = 'roof-fan-bay-221221';
+  fanBayGroup.position.set(0, halfH + 0.002, 0.20);
+
   const fanRingGeom = new THREE.RingGeometry(0.12, fanHoleRadius, 32);
   const fanRingMesh = new THREE.Mesh(
     fanRingGeom,
@@ -170,8 +175,20 @@ export function build221221CabinetGroup(
     })
   );
   fanRingMesh.rotation.x = -Math.PI / 2;
-  fanRingMesh.position.set(0, halfH + 0.002, 0.20);
-  group.add(fanRingMesh);
+  fanBayGroup.add(fanRingMesh);
+
+  // 4 Corner pre-drilled mounting bosses around the 120mm fan bay
+  const bossGeom = new THREE.CylinderGeometry(0.024, 0.024, 0.016, 10);
+  [
+    [-0.48, -0.48],
+    [0.48, -0.48],
+    [-0.48, 0.48],
+    [0.48, 0.48],
+  ].forEach(([bx, bz]) => {
+    const boss = new THREE.Mesh(bossGeom, chromeMat);
+    boss.position.set(bx, 0.006, bz);
+    fanBayGroup.add(boss);
+  });
 
   // Concentric wire grille rings & spokes
   [0.22, 0.35, 0.48].forEach(r => {
@@ -180,9 +197,39 @@ export function build221221CabinetGroup(
       chromeMat
     );
     ringWire.rotation.x = -Math.PI / 2;
-    ringWire.position.set(0, halfH + 0.003, 0.20);
-    group.add(ringWire);
+    ringWire.position.set(0, 0.003, 0);
+    fanBayGroup.add(ringWire);
   });
+
+  if (hasOptionalFan) {
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.03, 16), chromeMat);
+    hub.position.set(0, 0.008, 0);
+    fanBayGroup.add(hub);
+    for (let b = 0; b < 7; b++) {
+      const angle = (b * Math.PI * 2) / 7;
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.018, 0.10), chromeMat);
+      blade.position.set(Math.cos(angle) * 0.28, 0.008, Math.sin(angle) * 0.28);
+      blade.rotation.y = -angle + 0.35;
+      blade.rotation.z = 0.25;
+      fanBayGroup.add(blade);
+    }
+  }
+
+  (fanBayGroup as any).userData = {
+    isProductMesh: true,
+    item: {
+      instanceId: 'roof-fan-bay-221221',
+      sku: hasOptionalFan ? 'OPTIONAL-FAN' : 'FAN-BAY-1',
+      name: hasOptionalFan
+        ? 'מאוורר גג 120 מ״מ מותקן (ציוד אופציונלי)'
+        : 'הכנה למאוורר גג 120 מ״מ - מקום מסומן להתקנה',
+      description: 'פתח אוורור עגול 120 מ״מ מסומן בגג הארון עם 4 חורי עיגון להתקנת מאוורר תקרה.',
+      price: 0,
+      isIncluded: !hasOptionalFan,
+      type: hasOptionalFan ? 'fan' : 'active',
+    },
+  };
+  group.add(fanBayGroup);
 
   // Top cable entry knockout plate with screws (Page 2 blueprint: rectangular plate)
   const cableEntryGeom = new THREE.BoxGeometry(2.40, 0.015, 0.70);
