@@ -14540,20 +14540,20 @@ export default function App() {
               onClick={() => setPresentationVideoModal(null)}
             >
               <div
-                className="relative w-full max-w-4xl bg-[#0c2d57] border border-white/15 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+                className="relative w-full max-w-3xl max-h-[90vh] bg-[#0c2d57] border border-white/20 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* Modal Header */}
-                <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 bg-[#081f3d] border-b border-white/10">
+                {/* Modal Header - Always visible (flex-shrink-0) */}
+                <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-3.5 bg-[#081f3d] border-b border-white/15 flex-shrink-0">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-[#f7941d]/20 border border-[#f7941d]/40 flex items-center justify-center text-[#f7941d] flex-shrink-0">
-                      <PlayCircle size={24} />
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#f7941d]/20 border border-[#f7941d]/40 flex items-center justify-center text-[#f7941d] flex-shrink-0">
+                      <PlayCircle size={22} />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-base sm:text-xl font-bold text-white truncate">
+                      <h3 className="text-sm sm:text-lg font-bold text-white truncate">
                         {presentationVideoModal.title}
                       </h3>
-                      <p className="text-xs sm:text-sm text-blue-200/80 truncate">
+                      <p className="text-[11px] sm:text-xs text-blue-200/80 truncate">
                         {presentationVideoModal.subtitle}
                       </p>
                     </div>
@@ -14561,17 +14561,28 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setPresentationVideoModal(null)}
-                    aria-label="סגור סרטון והמשך בקטלוג"
-                    title="סגור סרטון והמשך בקטלוג"
-                    className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-red-600 text-white font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer active:scale-95 flex-shrink-0 text-xs sm:text-sm"
+                    aria-label="סגור חלון צפייה"
+                    title="סגור חלון צפייה"
+                    className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-extrabold px-4 py-2 rounded-xl shadow-md transition-all cursor-pointer active:scale-95 flex-shrink-0 text-xs sm:text-sm border border-white/20"
                   >
-                    <span>סגור</span>
-                    <X size={18} />
+                    <span>סגור חלון צפייה</span>
+                    <X size={18} className="stroke-[2.5]" />
                   </button>
                 </div>
 
-                {/* Video Player Area */}
-                <div className="relative w-full aspect-video bg-black flex items-center justify-center">
+                {/* Video Player Area - Constrained height so vertical (9:16) videos fit comfortably inside the screen */}
+                <div className="relative w-full flex-1 min-h-0 max-h-[65vh] bg-black flex items-center justify-center overflow-hidden">
+                  {/* Floating Close Button directly on the video corner for instant visibility */}
+                  <button
+                    type="button"
+                    onClick={() => setPresentationVideoModal(null)}
+                    aria-label="סגור סרטון"
+                    className="absolute top-3 left-3 z-30 inline-flex items-center gap-1.5 bg-black/75 hover:bg-red-600 text-white font-bold px-3.5 py-1.5 rounded-xl border border-white/30 backdrop-blur-md shadow-lg transition-all cursor-pointer active:scale-95 text-xs sm:text-sm"
+                  >
+                    <X size={16} className="stroke-[2.5]" />
+                    <span>סגור סרטון</span>
+                  </button>
+
                   {videoInfo.type === "video" && !presentationVideoFailed ? (
                     <>
                       <video
@@ -14601,7 +14612,7 @@ export default function App() {
                             setPresentationVideoFailed(true);
                           }
                         }}
-                        className="w-full h-full object-contain"
+                        className="w-full h-full max-h-[65vh] object-contain"
                       />
                       {isPresentationVideoMuted && (
                         <button
@@ -14614,7 +14625,7 @@ export default function App() {
                               el.play().catch(() => {});
                             }
                           }}
-                          className="absolute top-4 right-4 z-20 inline-flex items-center gap-2 bg-[#f7941d] hover:bg-[#e07d08] text-white font-bold px-4 py-2 rounded-full shadow-lg transition-all cursor-pointer animate-bounce text-xs sm:text-sm"
+                          className="absolute top-3 right-3 z-30 inline-flex items-center gap-2 bg-[#f7941d] hover:bg-[#e07d08] text-white font-bold px-4 py-2 rounded-full shadow-lg transition-all cursor-pointer animate-bounce text-xs sm:text-sm"
                         >
                           <span>🔊 הפעל שמע</span>
                         </button>
@@ -14624,32 +14635,32 @@ export default function App() {
                     <iframe
                       src={videoInfo.fallbackIframeSrc || videoInfo.src}
                       title={presentationVideoModal.title}
-                      className="w-full h-full border-0"
+                      className="w-full aspect-video max-h-[65vh] border-0"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
                       allowFullScreen
                     />
                   )}
                 </div>
 
-                {/* Modal Footer */}
-                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-3.5 bg-[#081f3d] border-t border-white/10">
+                {/* Modal Footer - Always visible (flex-shrink-0) */}
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-3.5 bg-[#081f3d] border-t border-white/15 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPresentationVideoModal(null)}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#f7941d] hover:bg-[#e07d08] text-white font-extrabold px-6 py-2.5 rounded-xl text-sm sm:text-base shadow-lg transition-all cursor-pointer active:scale-95"
+                  >
+                    <span>סגור חלון צפייה והמשך לקטלוג</span>
+                    <ArrowLeft size={18} />
+                  </button>
                   <a
                     href={videoInfo.originalUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-blue-200 hover:text-white transition-colors underline"
+                    className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-blue-200 hover:text-white transition-colors underline mx-auto sm:mx-0"
                   >
                     <ExternalLink size={15} />
                     <span>פתיחת הסרטון בחלון נפרד</span>
                   </a>
-                  <button
-                    type="button"
-                    onClick={() => setPresentationVideoModal(null)}
-                    className="inline-flex items-center justify-center gap-2 bg-[#f7941d] hover:bg-[#e07d08] text-white font-bold px-5 py-2.5 rounded-xl text-sm shadow-md transition-all cursor-pointer active:scale-95 mr-auto"
-                  >
-                    <span>סגור והמשך לקטלוג</span>
-                    <ArrowLeft size={17} />
-                  </button>
                 </div>
               </div>
             </div>
