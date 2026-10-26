@@ -60,7 +60,7 @@ function isAllowedForGuest(colName: string): boolean {
     "brand", "מותג",
     "isnew", "coming soon", "cooming soon",
     "active", "פעיל",
-    "manuallink", "videolink", "specslink",
+    "manuallink", "videolink", "specslink", "video", "videourl", "video_url", "סרטון", "וידאו", "סרטון הצגה", "קישור לסרטון",
     "סקירת מוצרים", "סקירת מוצר", "reviewlink",
     "אישורי מעבדה", "labcerts",
     "נפח", "נפח בארון", "התאמה לארון", "tags",

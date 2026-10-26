@@ -303,6 +303,128 @@ const getVideoEmbedUrl = (url: string) => {
     ? `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0`
     : null;
 };
+const extractVideoFromRow = (row: any): string => {
+  if (!row || typeof row !== "object") return "";
+  const direct =
+    row.video ||
+    row.Video ||
+    row.VIDEO ||
+    row.videoURL ||
+    row.videoUrl ||
+    row.video_url ||
+    row["סרטון"] ||
+    row["וידאו"] ||
+    row["סרטון הצגה"] ||
+    row["קישור לסרטון"];
+  if (typeof direct === "string" && direct.trim()) {
+    const clean = direct.trim();
+    if (clean.startsWith("http") || clean.startsWith("www.")) {
+      return clean.startsWith("www.") ? `https://${clean}` : clean;
+    }
+  }
+  for (const key of Object.keys(row)) {
+    const cleanKey = key.trim().toLowerCase();
+    if (
+      cleanKey === "video" ||
+      cleanKey === "videourl" ||
+      cleanKey === "video_url" ||
+      cleanKey.includes("סרטון") ||
+      cleanKey.includes("וידאו")
+    ) {
+      const val = row[key];
+      if (typeof val === "string" && val.trim()) {
+        const clean = val.trim();
+        if (clean.startsWith("http") || clean.startsWith("www.")) {
+          return clean.startsWith("www.") ? `https://${clean}` : clean;
+        }
+      }
+    }
+  }
+  return "";
+};
+const getPresentationVideoInfo = (
+  url: string,
+): {
+  type: "iframe" | "video";
+  src: string;
+  fallbackIframeSrc?: string;
+  originalUrl: string;
+} | null => {
+  if (!url || typeof url !== "string") return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+
+  // 1. Google Drive Support (file/d/ID, open?id=ID, uc?id=ID) -> stream via /api/video for true HTML5 autoplay
+  if (trimmed.includes("drive.google.com")) {
+    const dMatch = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    const idMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    const fileId = dMatch?.[1] || idMatch?.[1];
+    if (fileId) {
+      return {
+        type: "video",
+        src: `/api/video?id=${encodeURIComponent(fileId)}`,
+        fallbackIframeSrc: `https://drive.google.com/file/d/${fileId}/preview`,
+        originalUrl: trimmed,
+      };
+    }
+  }
+
+  // 2. YouTube Support (watch?v=, youtu.be/, shorts/, embed/)
+  if (trimmed.includes("youtube.com") || trimmed.includes("youtu.be")) {
+    let videoId: string | null = null;
+    try {
+      if (trimmed.includes("youtube.com/watch")) {
+        const u = new URL(trimmed);
+        videoId = u.searchParams.get("v");
+      } else if (trimmed.includes("youtu.be/")) {
+        videoId = trimmed.split("youtu.be/")[1]?.split(/[?&/]/)[0] || null;
+      } else if (trimmed.includes("youtube.com/shorts/")) {
+        videoId = trimmed.split("youtube.com/shorts/")[1]?.split(/[?&/]/)[0] || null;
+      } else if (trimmed.includes("youtube.com/embed/")) {
+        videoId = trimmed.split("youtube.com/embed/")[1]?.split(/[?&/]/)[0] || null;
+      }
+    } catch {
+      if (trimmed.includes("v=")) {
+        videoId = trimmed.split("v=")[1]?.split("&")[0] || null;
+      }
+    }
+    if (videoId) {
+      return {
+        type: "iframe",
+        src: `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1`,
+        originalUrl: trimmed,
+      };
+    }
+  }
+
+  // 3. Vimeo Support
+  if (trimmed.includes("vimeo.com/")) {
+    const vimeoMatch = trimmed.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    if (vimeoMatch?.[1]) {
+      return {
+        type: "iframe",
+        src: `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1`,
+        originalUrl: trimmed,
+      };
+    }
+  }
+
+  // 4. Direct video file (.mp4, .webm, .mov, .m4v)
+  if (/\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/i.test(trimmed)) {
+    return {
+      type: "video",
+      src: trimmed,
+      originalUrl: trimmed,
+    };
+  }
+
+  // Fallback to iframe embed
+  return {
+    type: "iframe",
+    src: trimmed,
+    originalUrl: trimmed,
+  };
+};
 const getPdfPreviewUrl = (url: string) => {
   if (!url) return null;
   try {
@@ -1109,6 +1231,12 @@ const CatalogCard: React.FC<CatalogCardProps> = ({
             <BrandBadge brand={catalog.brand} />
           </div>
         )}
+        {catalog.video && (
+          <div className="absolute bottom-2 right-2 z-10 inline-flex items-center gap-1 bg-[#0c2d57]/90 text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm backdrop-blur-xs">
+            <PlayCircle size={13} className="text-[#f7941d] flex-shrink-0" />
+            <span>סרטון הצגה</span>
+          </div>
+        )}
         {catalog.image && !imgError ? (
           <img
             referrerPolicy="no-referrer"
@@ -1184,6 +1312,12 @@ const SubcategoryCard: React.FC<SubcategoryCardProps> = ({
         {sub.brand && (
           <div className="absolute top-2 right-2 z-10">
             <BrandBadge brand={sub.brand} />
+          </div>
+        )}
+        {sub.video && (
+          <div className="absolute bottom-2 right-2 z-10 inline-flex items-center gap-1 bg-[#0c2d57]/90 text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm backdrop-blur-xs">
+            <PlayCircle size={13} className="text-[#f7941d] flex-shrink-0" />
+            <span>סרטון הצגה</span>
           </div>
         )}
         {sub.image && !imgError ? (
@@ -6099,6 +6233,7 @@ export default function App() {
               desc: (row.desc || row.description || row["תיאור"] || "").trim(),
               image: catImage,
               brand: (row.brand || row["מותג"] || "").trim(),
+              video: extractVideoFromRow(row),
               sortOrder: Number(row.sortOrder || row["סדר"] || 999),
               active:
                 (row.active || row["פעיל"]) === "TRUE" ||
@@ -6192,6 +6327,7 @@ export default function App() {
             isComingSoon: isComingSoon,
             isNew: isNew,
             image: subImage,
+            video: extractVideoFromRow(row),
             active: isActive,
             brand:
               typeof brandValue === "string"
@@ -6679,6 +6815,7 @@ export default function App() {
             "https://placehold.co/600x400/f3f4f6/000000?text=" +
               encodeURIComponent(subName),
           brand: sheetSub?.brand,
+          video: sheetSub?.video || "",
         };
       })
       .filter((sub) => sub.count > 0)
@@ -6857,6 +6994,7 @@ export default function App() {
             "https://placehold.co/600x400/f3f4f6/000000?text=" +
               encodeURIComponent(nestedName),
           brand: sheetSub?.brand,
+          video: sheetSub?.video || "",
         };
       })
       .filter((sub) => sub.count > 0)
@@ -7105,6 +7243,7 @@ export default function App() {
             "https://placehold.co/600x400/f3f4f6/000000?text=" +
               encodeURIComponent(nicheName),
           brand: sheetSub?.brand,
+          video: sheetSub?.video || "",
         };
       })
       .filter((sub) => sub.count > 0)
@@ -7446,6 +7585,148 @@ export default function App() {
     selectedCatalog,
   ]);
 
+  const [presentationVideoModal, setPresentationVideoModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    subtitle: string;
+    videoUrl: string;
+  } | null>(null);
+  const [presentationVideoFailed, setPresentationVideoFailed] = useState(false);
+  const [isPresentationVideoMuted, setIsPresentationVideoMuted] = useState(false);
+  const presentationVideoRef = useRef<HTMLVideoElement | null>(null);
+  const lastAutoOpenedVideoKeyRef = useRef<string | null>(null);
+
+  const openPresentationVideo = useCallback(
+    (payload: { title: string; subtitle: string; videoUrl: string; key?: string }) => {
+      if (!payload.videoUrl) return;
+      if (payload.key) {
+        lastAutoOpenedVideoKeyRef.current = payload.key;
+      }
+      setPresentationVideoFailed(false);
+      setIsPresentationVideoMuted(false);
+      setPresentationVideoModal({
+        isOpen: true,
+        title: payload.title,
+        subtitle: payload.subtitle,
+        videoUrl: payload.videoUrl,
+      });
+    },
+    [],
+  );
+
+  const activePresentationVideo = useMemo(() => {
+    if (searchQuery && currentView !== "product" && currentView !== "checkout") {
+      return null;
+    }
+    // 1. Main Price List / Catalog View (e.g., entering "HIKVISION")
+    if (currentView === "catalog_subs" && selectedCatalog) {
+      const catObj = catalogFolders.find((c) => c.name === selectedCatalog);
+      if (catObj?.video) {
+        return {
+          key: `cat:${selectedCatalog}`,
+          title: selectedCatalog,
+          subtitle: "סרטון הצגה למחירון ראשי",
+          videoUrl: catObj.video,
+        };
+      }
+      return null;
+    }
+
+    // 2. Category / Subcategory / Nested / Niche View inside a Catalog
+    if (
+      currentView === "nested_subs" ||
+      currentView === "niche_subs" ||
+      currentView === "products"
+    ) {
+      const targetSubName =
+        selectedNicheCategory ||
+        selectedNestedSubcategory ||
+        selectedSubcategory;
+      if (targetSubName) {
+        const matchedSub =
+          subcategoriesGlobalData.find(
+            (s) =>
+              s.category === selectedCatalog &&
+              (s.subcategory === targetSubName ||
+                s.nicheCategory === targetSubName ||
+                s.parentSubcategory === targetSubName) &&
+              !!s.video,
+          ) ||
+          subcategoriesGlobalData.find(
+            (s) =>
+              (s.subcategory === targetSubName ||
+                s.nicheCategory === targetSubName) &&
+              !!s.video,
+          );
+        if (matchedSub?.video) {
+          return {
+            key: `sub:${selectedCatalog || ""}|${targetSubName}`,
+            title: targetSubName,
+            subtitle: selectedCatalog
+              ? `${selectedCatalog} — סרטון הצגה לקטגוריה`
+              : "סרטון הצגה לקטגוריה",
+            videoUrl: matchedSub.video,
+          };
+        }
+      }
+    }
+
+    return null;
+  }, [
+    currentView,
+    selectedCatalog,
+    selectedSubcategory,
+    selectedNestedSubcategory,
+    selectedNicheCategory,
+    catalogFolders,
+    subcategoriesGlobalData,
+    searchQuery,
+  ]);
+
+  // Reset tracked video key when returning to home so entering the catalog/category again always pops up the video
+  useEffect(() => {
+    if (currentView === "home") {
+      lastAutoOpenedVideoKeyRef.current = null;
+    }
+  }, [currentView]);
+
+  // Auto-open presentation video modal immediately whenever entering a catalog or category with a video
+  useEffect(() => {
+    if (!activePresentationVideo || !activePresentationVideo.videoUrl) return;
+    if (lastAutoOpenedVideoKeyRef.current !== activePresentationVideo.key) {
+      openPresentationVideo(activePresentationVideo);
+    }
+  }, [activePresentationVideo, openPresentationVideo]);
+
+  // Ensure HTML5 video starts playing immediately when modal opens
+  useEffect(() => {
+    if (!presentationVideoModal?.isOpen || presentationVideoFailed) return;
+    const el = presentationVideoRef.current;
+    if (!el) return;
+    const tryPlay = () => {
+      const playPromise = el.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => {
+          el.muted = true;
+          setIsPresentationVideoMuted(true);
+          el.play().catch(() => {});
+        });
+      }
+    };
+    tryPlay();
+  }, [presentationVideoModal, presentationVideoFailed]);
+
+  useEffect(() => {
+    if (!presentationVideoModal?.isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPresentationVideoModal(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [presentationVideoModal?.isOpen]);
+
   const openShareForProduct = useCallback((prod: any) => {
     if (!prod) return;
     const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -7582,7 +7863,40 @@ export default function App() {
     });
     setSearchQuery("");
     setMobileMenuOpen(false);
+    if (catalogName) {
+      const catObj = catalogFolders.find((c) => c.name === catalogName);
+      if (catObj?.video) {
+        openPresentationVideo({
+          key: `cat:${catalogName}`,
+          title: catalogName,
+          subtitle: "סרטון הצגה למחירון ראשי",
+          videoUrl: catObj.video,
+        });
+      }
+    }
   };
+  const findSubcategoryVideo = useCallback(
+    (catName: string | null, subName: string | null) => {
+      if (!subName) return null;
+      return (
+        subcategoriesGlobalData.find(
+          (s) =>
+            s.category === catName &&
+            (s.subcategory === subName ||
+              s.nicheCategory === subName ||
+              s.parentSubcategory === subName) &&
+            !!s.video,
+        ) ||
+        subcategoriesGlobalData.find(
+          (s) =>
+            (s.subcategory === subName || s.nicheCategory === subName) &&
+            !!s.video,
+        ) ||
+        null
+      );
+    },
+    [subcategoriesGlobalData],
+  );
   const navigateToSubcategory = (subName: string | null) => {
     const activeCatObj = catalogFolders.find((c) => c.name === selectedCatalog);
     const isHotSaleMode =
@@ -7616,6 +7930,19 @@ export default function App() {
       selectedProduct: null,
     });
     setSearchQuery("");
+    if (subName) {
+      const matchedSub = findSubcategoryVideo(selectedCatalog, subName);
+      if (matchedSub?.video) {
+        openPresentationVideo({
+          key: `sub:${selectedCatalog || ""}|${subName}`,
+          title: subName,
+          subtitle: selectedCatalog
+            ? `${selectedCatalog} — סרטון הצגה לקטגוריה`
+            : "סרטון הצגה לקטגוריה",
+          videoUrl: matchedSub.video,
+        });
+      }
+    }
   };
   const navigateToCategoryAndSub = useCallback(
     (catName: string, subName: string) => {
@@ -7650,8 +7977,21 @@ export default function App() {
       });
       setSearchQuery("");
       setMobileMenuOpen(false);
+      if (subName) {
+        const matchedSub = findSubcategoryVideo(catName, subName);
+        if (matchedSub?.video) {
+          openPresentationVideo({
+            key: `sub:${catName || ""}|${subName}`,
+            title: subName,
+            subtitle: catName
+              ? `${catName} — סרטון הצגה לקטגוריה`
+              : "סרטון הצגה לקטגוריה",
+            videoUrl: matchedSub.video,
+          });
+        }
+      }
     },
-    [catalogData, navigateForward],
+    [catalogData, navigateForward, findSubcategoryVideo, openPresentationVideo],
   );
   const navigateToNestedSubcategory = (nestedName: string | null) => {
     let hasNiche = false;
@@ -7672,6 +8012,19 @@ export default function App() {
       selectedProduct: null,
     });
     setSearchQuery("");
+    if (nestedName) {
+      const matchedSub = findSubcategoryVideo(selectedCatalog, nestedName);
+      if (matchedSub?.video) {
+        openPresentationVideo({
+          key: `sub:${selectedCatalog || ""}|${nestedName}`,
+          title: nestedName,
+          subtitle: selectedCatalog
+            ? `${selectedCatalog} — סרטון הצגה לקטגוריה`
+            : "סרטון הצגה לקטגוריה",
+          videoUrl: matchedSub.video,
+        });
+      }
+    }
   };
   const navigateToNicheCategory = (nicheName: string | null) => {
     navigateForward({
@@ -7680,6 +8033,19 @@ export default function App() {
       selectedProduct: null,
     });
     setSearchQuery("");
+    if (nicheName) {
+      const matchedSub = findSubcategoryVideo(selectedCatalog, nicheName);
+      if (matchedSub?.video) {
+        openPresentationVideo({
+          key: `sub:${selectedCatalog || ""}|${nicheName}`,
+          title: nicheName,
+          subtitle: selectedCatalog
+            ? `${selectedCatalog} — סרטון הצגה לקטגוריה`
+            : "סרטון הצגה לקטגוריה",
+          videoUrl: matchedSub.video,
+        });
+      }
+    }
   };
   const navigateToProduct = useCallback(
     (product: any) => {
@@ -9066,10 +9432,24 @@ export default function App() {
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center justify-center gap-3 min-w-0">
+                        <div className="flex items-center justify-center gap-2 sm:gap-3 min-w-0">
                           <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
                             {selectedCatalog || "בחר קטגוריה"}
                           </h2>
+                          {activePresentationVideo && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openPresentationVideo(activePresentationVideo)
+                              }
+                              aria-label="צפה בסרטון הצגה"
+                              title="צפה בסרטון הצגה"
+                              className="inline-flex items-center gap-1.5 bg-[#fff7ed] hover:bg-[#ffedd5] border border-[#fed7aa] text-[#c2410c] font-bold rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0 text-xs sm:text-sm"
+                            >
+                              <PlayCircle size={20} className="flex-shrink-0" />
+                              <span className="hidden xs:inline">סרטון הצגה</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={handleOpenShare}
@@ -9139,10 +9519,24 @@ export default function App() {
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center justify-center gap-3 min-w-0">
+                        <div className="flex items-center justify-center gap-2 sm:gap-3 min-w-0">
                           <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
                             {selectedSubcategory || "בחר תת-קטגוריה"}
                           </h2>
+                          {activePresentationVideo && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openPresentationVideo(activePresentationVideo)
+                              }
+                              aria-label="צפה בסרטון הצגה"
+                              title="צפה בסרטון הצגה"
+                              className="inline-flex items-center gap-1.5 bg-[#fff7ed] hover:bg-[#ffedd5] border border-[#fed7aa] text-[#c2410c] font-bold rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0 text-xs sm:text-sm"
+                            >
+                              <PlayCircle size={20} className="flex-shrink-0" />
+                              <span className="hidden xs:inline">סרטון הצגה</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={handleOpenShare}
@@ -9208,10 +9602,24 @@ export default function App() {
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center justify-center gap-3 min-w-0">
+                        <div className="flex items-center justify-center gap-2 sm:gap-3 min-w-0">
                           <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
                             {selectedNestedSubcategory || "קטגוריית משנה מורחבת"}
                           </h2>
+                          {activePresentationVideo && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openPresentationVideo(activePresentationVideo)
+                              }
+                              aria-label="צפה בסרטון הצגה"
+                              title="צפה בסרטון הצגה"
+                              className="inline-flex items-center gap-1.5 bg-[#fff7ed] hover:bg-[#ffedd5] border border-[#fed7aa] text-[#c2410c] font-bold rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0 text-xs sm:text-sm"
+                            >
+                              <PlayCircle size={20} className="flex-shrink-0" />
+                              <span className="hidden xs:inline">סרטון הצגה</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={handleOpenShare}
@@ -9275,12 +9683,26 @@ export default function App() {
                               </button>
                             )}
                           </div>
-                          <div className="flex items-center justify-center gap-3 min-w-0">
+                          <div className="flex items-center justify-center gap-2 sm:gap-3 min-w-0">
                             <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
                               {selectedNicheCategory ||
                                 selectedNestedSubcategory ||
                                 selectedSubcategory}
                             </h2>
+                            {activePresentationVideo && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openPresentationVideo(activePresentationVideo)
+                                }
+                                aria-label="צפה בסרטון הצגה"
+                                title="צפה בסרטון הצגה"
+                                className="inline-flex items-center gap-1.5 bg-[#fff7ed] hover:bg-[#ffedd5] border border-[#fed7aa] text-[#c2410c] font-bold rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0 text-xs sm:text-sm"
+                              >
+                                <PlayCircle size={20} className="flex-shrink-0" />
+                                <span className="hidden xs:inline">סרטון הצגה</span>
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={handleOpenShare}
@@ -14105,6 +14527,134 @@ export default function App() {
             </button>
           </div>
         )}
+        {/* PRESENTATION VIDEO MODAL (FOR MAIN CATALOGS & SUBCATEGORIES) */}
+        {presentationVideoModal?.isOpen && (() => {
+          const videoInfo = getPresentationVideoInfo(
+            presentationVideoModal.videoUrl,
+          );
+          if (!videoInfo) return null;
+          return (
+            <div
+              className="fixed inset-0 z-[250] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-fade-in"
+              dir="rtl"
+              onClick={() => setPresentationVideoModal(null)}
+            >
+              <div
+                className="relative w-full max-w-4xl bg-[#0c2d57] border border-white/15 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Modal Header */}
+                <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 bg-[#081f3d] border-b border-white/10">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-[#f7941d]/20 border border-[#f7941d]/40 flex items-center justify-center text-[#f7941d] flex-shrink-0">
+                      <PlayCircle size={24} />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-base sm:text-xl font-bold text-white truncate">
+                        {presentationVideoModal.title}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-blue-200/80 truncate">
+                        {presentationVideoModal.subtitle}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPresentationVideoModal(null)}
+                    aria-label="סגור סרטון והמשך בקטלוג"
+                    title="סגור סרטון והמשך בקטלוג"
+                    className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-red-600 text-white font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer active:scale-95 flex-shrink-0 text-xs sm:text-sm"
+                  >
+                    <span>סגור</span>
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Video Player Area */}
+                <div className="relative w-full aspect-video bg-black flex items-center justify-center">
+                  {videoInfo.type === "video" && !presentationVideoFailed ? (
+                    <>
+                      <video
+                        key={videoInfo.src}
+                        ref={presentationVideoRef}
+                        src={videoInfo.src}
+                        controls
+                        autoPlay
+                        playsInline
+                        preload="auto"
+                        onLoadedMetadata={(e) => {
+                          const el = e.currentTarget;
+                          const playPromise = el.play();
+                          if (playPromise && typeof playPromise.catch === "function") {
+                            playPromise.catch(() => {
+                              el.muted = true;
+                              setIsPresentationVideoMuted(true);
+                              el.play().catch(() => {});
+                            });
+                          }
+                        }}
+                        onVolumeChange={(e) => {
+                          setIsPresentationVideoMuted(e.currentTarget.muted);
+                        }}
+                        onError={() => {
+                          if (videoInfo.fallbackIframeSrc) {
+                            setPresentationVideoFailed(true);
+                          }
+                        }}
+                        className="w-full h-full object-contain"
+                      />
+                      {isPresentationVideoMuted && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const el = presentationVideoRef.current;
+                            if (el) {
+                              el.muted = false;
+                              setIsPresentationVideoMuted(false);
+                              el.play().catch(() => {});
+                            }
+                          }}
+                          className="absolute top-4 right-4 z-20 inline-flex items-center gap-2 bg-[#f7941d] hover:bg-[#e07d08] text-white font-bold px-4 py-2 rounded-full shadow-lg transition-all cursor-pointer animate-bounce text-xs sm:text-sm"
+                        >
+                          <span>🔊 הפעל שמע</span>
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <iframe
+                      src={videoInfo.fallbackIframeSrc || videoInfo.src}
+                      title={presentationVideoModal.title}
+                      className="w-full h-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                      allowFullScreen
+                    />
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-3.5 bg-[#081f3d] border-t border-white/10">
+                  <a
+                    href={videoInfo.originalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-blue-200 hover:text-white transition-colors underline"
+                  >
+                    <ExternalLink size={15} />
+                    <span>פתיחת הסרטון בחלון נפרד</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setPresentationVideoModal(null)}
+                    className="inline-flex items-center justify-center gap-2 bg-[#f7941d] hover:bg-[#e07d08] text-white font-bold px-5 py-2.5 rounded-xl text-sm shadow-md transition-all cursor-pointer active:scale-95 mr-auto"
+                  >
+                    <span>סגור והמשך לקטלוג</span>
+                    <ArrowLeft size={17} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
         {/* MOBILE FIXED BOTTOM NAVIGATION BAR */}
         <nav
           aria-label="סרגל ניווט תחתון"
