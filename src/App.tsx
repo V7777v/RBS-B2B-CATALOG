@@ -6756,7 +6756,8 @@ export default function App() {
           (s) =>
             s.category === selectedCatalog &&
             s.subcategory === subName &&
-            !s.parentSubcategory,
+            !s.parentSubcategory &&
+            !s.nicheCategory,
         );
 
         let customImage = sheetSub?.image || null;
@@ -6911,8 +6912,9 @@ export default function App() {
         const sheetSub = subcategoriesGlobalData.find(
           (s) =>
             s.category === selectedCatalog &&
-            (s.subcategory === nestedName ||
-              s.parentSubcategory === nestedName),
+            !s.nicheCategory &&
+            (s.parentSubcategory === nestedName ||
+              (s.subcategory === nestedName && !s.parentSubcategory)),
         );
 
         let customImage = sheetSub?.image || null;
@@ -7652,6 +7654,59 @@ export default function App() {
     [VIDEO_AUTO_COOLDOWN_MS],
   );
 
+  const findSubcategoryVideo = useCallback(
+    (
+      catName: string | null,
+      subName: string | null,
+      nestedName?: string | null,
+      nicheName?: string | null,
+    ) => {
+      // Level 3: Niche Category (only match rows where Niche Category is explicitly set)
+      if (nicheName) {
+        return (
+          subcategoriesGlobalData.find(
+            (s) =>
+              (!catName || !s.category || s.category === catName) &&
+              s.nicheCategory === nicheName &&
+              (!nestedName || !s.parentSubcategory || s.parentSubcategory === nestedName) &&
+              !!s.video,
+          ) || null
+        );
+      }
+
+      // Level 2: Nested Subcategory (only match rows for this nested subcategory that are NOT niche rows)
+      if (nestedName) {
+        return (
+          subcategoriesGlobalData.find(
+            (s) =>
+              (!catName || !s.category || s.category === catName) &&
+              !s.nicheCategory &&
+              (s.parentSubcategory === nestedName ||
+                (s.subcategory === nestedName && !s.parentSubcategory)) &&
+              !!s.video,
+          ) || null
+        );
+      }
+
+      // Level 1: Top-level Subcategory (ONLY match rows where both parentSubcategory and nicheCategory are empty)
+      if (subName) {
+        return (
+          subcategoriesGlobalData.find(
+            (s) =>
+              (!catName || !s.category || s.category === catName) &&
+              s.subcategory === subName &&
+              !s.parentSubcategory &&
+              !s.nicheCategory &&
+              !!s.video,
+          ) || null
+        );
+      }
+
+      return null;
+    },
+    [subcategoriesGlobalData],
+  );
+
   const activePresentationVideo = useMemo(() => {
     if (searchQuery && currentView !== "product" && currentView !== "checkout") {
       return null;
@@ -7670,7 +7725,7 @@ export default function App() {
       return null;
     }
 
-    // 2. Category / Subcategory / Nested / Niche View inside a Catalog
+    // 2. Category / Subcategory / Nested / Niche View inside a Catalog (strict 1-to-1 level matching)
     if (
       currentView === "nested_subs" ||
       currentView === "niche_subs" ||
@@ -7681,24 +7736,16 @@ export default function App() {
         selectedNestedSubcategory ||
         selectedSubcategory;
       if (targetSubName) {
-        const matchedSub =
-          subcategoriesGlobalData.find(
-            (s) =>
-              s.category === selectedCatalog &&
-              (s.subcategory === targetSubName ||
-                s.nicheCategory === targetSubName ||
-                s.parentSubcategory === targetSubName) &&
-              !!s.video,
-          ) ||
-          subcategoriesGlobalData.find(
-            (s) =>
-              (s.subcategory === targetSubName ||
-                s.nicheCategory === targetSubName) &&
-              !!s.video,
-          );
+        const matchedSub = findSubcategoryVideo(
+          selectedCatalog,
+          selectedSubcategory,
+          selectedNestedSubcategory,
+          selectedNicheCategory,
+        );
         if (matchedSub?.video) {
+          const levelKey = `sub:${selectedCatalog || ""}|${selectedSubcategory || ""}|${selectedNestedSubcategory || ""}|${selectedNicheCategory || ""}`;
           return {
-            key: `sub:${selectedCatalog || ""}|${targetSubName}`,
+            key: levelKey,
             title: targetSubName,
             subtitle: selectedCatalog
               ? `${selectedCatalog} — סרטון הצגה לקטגוריה`
@@ -7717,7 +7764,7 @@ export default function App() {
     selectedNestedSubcategory,
     selectedNicheCategory,
     catalogFolders,
-    subcategoriesGlobalData,
+    findSubcategoryVideo,
     searchQuery,
   ]);
 
@@ -7913,28 +7960,6 @@ export default function App() {
       }
     }
   };
-  const findSubcategoryVideo = useCallback(
-    (catName: string | null, subName: string | null) => {
-      if (!subName) return null;
-      return (
-        subcategoriesGlobalData.find(
-          (s) =>
-            s.category === catName &&
-            (s.subcategory === subName ||
-              s.nicheCategory === subName ||
-              s.parentSubcategory === subName) &&
-            !!s.video,
-        ) ||
-        subcategoriesGlobalData.find(
-          (s) =>
-            (s.subcategory === subName || s.nicheCategory === subName) &&
-            !!s.video,
-        ) ||
-        null
-      );
-    },
-    [subcategoriesGlobalData],
-  );
   const navigateToSubcategory = (subName: string | null) => {
     const activeCatObj = catalogFolders.find((c) => c.name === selectedCatalog);
     const isHotSaleMode =
@@ -7969,10 +7994,10 @@ export default function App() {
     });
     setSearchQuery("");
     if (subName) {
-      const matchedSub = findSubcategoryVideo(selectedCatalog, subName);
+      const matchedSub = findSubcategoryVideo(selectedCatalog, subName, null, null);
       if (matchedSub?.video) {
         openPresentationVideo({
-          key: `sub:${selectedCatalog || ""}|${subName}`,
+          key: `sub:${selectedCatalog || ""}|${subName}||`,
           title: subName,
           subtitle: selectedCatalog
             ? `${selectedCatalog} — סרטון הצגה לקטגוריה`
@@ -8016,10 +8041,10 @@ export default function App() {
       setSearchQuery("");
       setMobileMenuOpen(false);
       if (subName) {
-        const matchedSub = findSubcategoryVideo(catName, subName);
+        const matchedSub = findSubcategoryVideo(catName, subName, null, null);
         if (matchedSub?.video) {
           openPresentationVideo({
-            key: `sub:${catName || ""}|${subName}`,
+            key: `sub:${catName || ""}|${subName}||`,
             title: subName,
             subtitle: catName
               ? `${catName} — סרטון הצגה לקטגוריה`
@@ -8051,10 +8076,15 @@ export default function App() {
     });
     setSearchQuery("");
     if (nestedName) {
-      const matchedSub = findSubcategoryVideo(selectedCatalog, nestedName);
+      const matchedSub = findSubcategoryVideo(
+        selectedCatalog,
+        selectedSubcategory,
+        nestedName,
+        null,
+      );
       if (matchedSub?.video) {
         openPresentationVideo({
-          key: `sub:${selectedCatalog || ""}|${nestedName}`,
+          key: `sub:${selectedCatalog || ""}|${selectedSubcategory || ""}|${nestedName}|`,
           title: nestedName,
           subtitle: selectedCatalog
             ? `${selectedCatalog} — סרטון הצגה לקטגוריה`
@@ -8072,10 +8102,15 @@ export default function App() {
     });
     setSearchQuery("");
     if (nicheName) {
-      const matchedSub = findSubcategoryVideo(selectedCatalog, nicheName);
+      const matchedSub = findSubcategoryVideo(
+        selectedCatalog,
+        selectedSubcategory,
+        selectedNestedSubcategory,
+        nicheName,
+      );
       if (matchedSub?.video) {
         openPresentationVideo({
-          key: `sub:${selectedCatalog || ""}|${nicheName}`,
+          key: `sub:${selectedCatalog || ""}|${selectedSubcategory || ""}|${selectedNestedSubcategory || ""}|${nicheName}`,
           title: nicheName,
           subtitle: selectedCatalog
             ? `${selectedCatalog} — סרטון הצגה לקטגוריה`
