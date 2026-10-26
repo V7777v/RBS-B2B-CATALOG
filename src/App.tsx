@@ -828,6 +828,29 @@ const parseProductRow = (row: any) => {
       .map((s: string) => s.trim())
       .filter((s: string) => s.startsWith("http") || s.startsWith("www."));
   }
+  // Parse Video Links (supports multiple comma-separated URLs like image gallery)
+  const videoLinksRaw =
+    row.videoLink ||
+    row.videoLinks ||
+    row["videoLink"] ||
+    row.video ||
+    row.VIDEO ||
+    row["סרטון"] ||
+    row["וידאו"] ||
+    "";
+  let videoLinks: string[] = [];
+  if (Array.isArray(videoLinksRaw)) {
+    videoLinks = videoLinksRaw
+      .map((s: any) => String(s || "").trim())
+      .filter((s: string) => s.startsWith("http") || s.startsWith("www."))
+      .map((s: string) => (s.startsWith("www.") ? "https://" + s : s));
+  } else if (typeof videoLinksRaw === "string" && videoLinksRaw.trim()) {
+    videoLinks = videoLinksRaw
+      .split(/[,;\n]+/)
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.startsWith("http") || s.startsWith("www."))
+      .map((s: string) => (s.startsWith("www.") ? "https://" + s : s));
+  }
   // Parse Compatibility directly from Google Sheets columns
   const isValueTruthy = (val: any) => {
     if (val === true) return true;
@@ -917,6 +940,8 @@ const parseProductRow = (row: any) => {
         ? parsePrice(row["מחיר סיטונאות"] || row["מחיר סיטונאי"])
         : null,
     images: itemImages.map((img: string) => transformImageLink(img, 800)),
+    videoLinks,
+    videoLink: videoLinks[0] || "",
     labCerts: labCerts.map((link: string) =>
       link.startsWith("www.") ? "https://" + link : link,
     ),
@@ -2050,7 +2075,8 @@ const ProductDetailsView = (props: any) => {
     isGuest,
     copyShareLink,
   } = props;
-  const [mainImage, setMainImage] = useState(selectedProduct?.images[0]);
+  const [mainImage, setMainImage] = useState(selectedProduct?.images?.[0]);
+  const [failedGalleryVideoUrls, setFailedGalleryVideoUrls] = useState<Record<string, boolean>>({});
   const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
   const [isZoomed, setIsZoomed] = useState(false);
   const [isAdded, setIsAdded] = useState(false);
@@ -2065,12 +2091,29 @@ const ProductDetailsView = (props: any) => {
   const theme = getBrandTheme(selectedProduct?.brand);
   const isMobileDevice =
     typeof window !== "undefined" && window.innerWidth < 1024;
+
+  const imagesList: string[] = selectedProduct?.images || [];
+  const productVideosList: string[] = useMemo(() => {
+    if (Array.isArray(selectedProduct?.videoLinks) && selectedProduct.videoLinks.length > 0) {
+      return selectedProduct.videoLinks;
+    }
+    if (typeof selectedProduct?.videoLink === "string" && selectedProduct.videoLink.trim()) {
+      return selectedProduct.videoLink
+        .split(/[,;\n]+/)
+        .map((s: string) => s.trim())
+        .filter((s: string) => s.startsWith("http") || s.startsWith("www."))
+        .map((s: string) => (s.startsWith("www.") ? "https://" + s : s));
+    }
+    return [];
+  }, [selectedProduct]);
+
   useEffect(() => {
     if (selectedProduct) {
-      setMainImage(selectedProduct.images[0]);
+      setMainImage(selectedProduct.images?.[0]);
+      setActivePreview(null);
     }
   }, [selectedProduct]);
-  const imagesList = selectedProduct?.images || [];
+
   const activeIdx = imagesList.indexOf(mainImage);
   const handlePrevImage = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -2082,7 +2125,7 @@ const ProductDetailsView = (props: any) => {
       if (carousel) {
         const activeThumb = carousel.children[newIndex] as HTMLElement;
         if (activeThumb) {
-          activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+          activeThumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
         }
       }
     }, 50);
@@ -2097,7 +2140,7 @@ const ProductDetailsView = (props: any) => {
       if (carousel) {
         const activeThumb = carousel.children[newIndex] as HTMLElement;
         if (activeThumb) {
-          activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+          activeThumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
         }
       }
     }, 50);
@@ -2166,36 +2209,36 @@ const ProductDetailsView = (props: any) => {
                 <div className="absolute bottom-3 left-3 bg-white/95 border border-slate-200/90 rounded-md px-2 py-1 text-[11px] sm:text-xs text-slate-500 font-extrabold shadow-sm select-none pointer-events-none z-10">
                   התמונות להמחשה בלבד
                 </div>
-              {/* Left & Right Chevrons overlaid on main image */}
-              {imagesList.length > 1 && (
-                <>
+                {/* Left & Right Chevrons overlaid on main image */}
+                {imagesList.length > 1 && (
+                  <>
+                    <button
+                      onClick={handlePrevImage}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 hover:text-[#004387] border border-gray-100 w-10 h-10 rounded-full shadow-md transition-all active:scale-90 z-20 flex items-center justify-center cursor-pointer"
+                      aria-label="תמונה קודמת"
+                    >
+                      <ChevronLeft size={24} />
+                    </button>
+                    <button
+                      onClick={handleNextImage}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 hover:text-[#004387] border border-gray-100 w-10 h-10 rounded-full shadow-md transition-all active:scale-90 z-20 flex items-center justify-center cursor-pointer"
+                      aria-label="תמונה הבאה"
+                    >
+                      <ChevronRight size={24} />
+                    </button>
+                  </>
+                )}
+                {/* Zoom icon for mobile */}
+                {isMobileDevice && (
                   <button
-                    onClick={handlePrevImage}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 hover:text-[#004387] border border-gray-100 w-10 h-10 rounded-full shadow-md transition-all active:scale-90 z-20 flex items-center justify-center cursor-pointer"
-                    aria-label="תמונה קודמת"
+                    onClick={() => setIsMobileModalOpen(true)}
+                    className="absolute bottom-3 right-3 bg-white/90 text-gray-700 hover:text-[#0c2d57] border border-gray-200 rounded-full p-2.5 shadow-sm active:scale-95 z-20 flex items-center justify-center cursor-pointer"
+                    aria-label="זום"
                   >
-                    <ChevronLeft size={24} />
+                    <ZoomIn size={18} />
                   </button>
-                  <button
-                    onClick={handleNextImage}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 hover:text-[#004387] border border-gray-100 w-10 h-10 rounded-full shadow-md transition-all active:scale-90 z-20 flex items-center justify-center cursor-pointer"
-                    aria-label="תמונה הבאה"
-                  >
-                    <ChevronRight size={24} />
-                  </button>
-                </>
-              )}
-              {/* Zoom icon for mobile */}
-              {isMobileDevice && (
-                <button
-                  onClick={() => setIsMobileModalOpen(true)}
-                  className="absolute bottom-3 right-3 bg-white/90 text-gray-700 hover:text-[#0c2d57] border border-gray-200 rounded-full p-2.5 shadow-sm active:scale-95 z-20 flex items-center justify-center cursor-pointer"
-                  aria-label="זום"
-                >
-                  <ZoomIn size={18} />
-                </button>
-              )}
-            </div>
+                )}
+              </div>
             </div>
             {imagesList.length > 1 && (
               <div className="relative group/carousel mt-1 px-1">
@@ -2216,7 +2259,7 @@ const ProductDetailsView = (props: any) => {
                             idx
                           ] as HTMLElement;
                           if (activeThumb) {
-                            activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                            activeThumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
                           }
                         }
                       }}
@@ -2238,14 +2281,14 @@ const ProductDetailsView = (props: any) => {
                     <button
                       className="absolute top-1/2 left-0 -translate-y-[calc(50%+8px)] -ml-2 sm:-ml-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#004387] hover:bg-gray-50 active:scale-95 transition-all z-20 flex items-center justify-center cursor-pointer"
                       onClick={handlePrevImage}
-                      aria-label="גלול שמאל cursor-pointer"
+                      aria-label="גלול שמאל"
                     >
                       <ChevronLeft size={18} />
                     </button>
                     <button
                       className="absolute top-1/2 right-0 -translate-y-[calc(50%+8px)] -mr-2 sm:-mr-3 bg-white border border-gray-200 rounded-full p-1.5 shadow-md text-gray-500 hover:text-[#004387] hover:bg-gray-50 active:scale-95 transition-all z-20 flex items-center justify-center cursor-pointer"
                       onClick={handleNextImage}
-                      aria-label="גלול ימין cursor-pointer"
+                      aria-label="גלול ימין"
                     >
                       <ChevronRight size={18} />
                     </button>
@@ -2370,6 +2413,7 @@ const ProductDetailsView = (props: any) => {
             {/* DOCUMENTATION & LINKS SECTION */}
             {(selectedProduct.specsLink ||
               selectedProduct.manualLink ||
+              productVideosList.length > 0 ||
               selectedProduct.videoLink ||
               (selectedProduct.labCerts &&
                 selectedProduct.labCerts.length > 0)) && (
@@ -2551,105 +2595,136 @@ const ProductDetailsView = (props: any) => {
                       </a>
                     </div>
                   )}
-                  {/* VIDEO LINK */}
-                  {selectedProduct.videoLink && (
-                    <div className="relative flex flex-col w-full">
-                      {(() => {
-                        const isYouTube =
-                          selectedProduct.videoLink
-                            .toLowerCase()
-                            .includes("youtube.com") ||
-                          selectedProduct.videoLink
-                            .toLowerCase()
-                            .includes("youtu.be");
-                        return (
-                          <a
-                            href={selectedProduct.videoLink}
-                            target="_blank"
-                            rel="noreferrer"
-                            onMouseEnter={() => {
-                              if (hoverTimeoutRef.current)
-                                clearTimeout(hoverTimeoutRef.current);
-                              hoverTimeoutRef.current = setTimeout(() => {
-                                setActivePreview("video");
-                              }, 250);
-                            }}
-                            onMouseLeave={() => {
-                              if (hoverTimeoutRef.current)
-                                clearTimeout(hoverTimeoutRef.current);
-                            }}
-                            className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${activePreview === "video" ? (isYouTube ? "border-[#ff0000]" : "border-[#004387]") : `border-gray-200 ${isYouTube ? "hover:border-[#ff0000]" : "hover:border-[#004387]"}`}`}
-                            style={{ minHeight: "80px" }}
-                          >
-                            {isYouTube ? (
-                              <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
-                                <img
-                                  referrerPolicy="no-referrer"
-                                  src={transformImageLink(
-                                    "https://drive.google.com/file/d/1cXAUJdtw9rAkP1XiF2p5RKeDZ4wRXg_u/view?usp=drive_link",
-                                    120,
-                                  )}
-                                  alt="YouTube"
-                                  className="w-12 h-12 object-contain transition-transform duration-200 group-hover:scale-110"
-                                />
-                              </div>
-                            ) : (
-                              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all shadow-xs duration-250 bg-blue-50 text-blue-600 border border-blue-200 group-hover:bg-blue-600 group-hover:text-white">
-                                <Video
-                                  size={24}
-                                  className="transition-transform duration-200 group-hover:scale-110"
-                                />
-                              </div>
-                            )}
-                            <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center">
-                              <div
-                                className={`text-sm sm:text-base font-bold text-gray-800 transition-all ${isYouTube ? "group-hover:text-[#ff0000]" : "group-hover:text-blue-600"}`}
-                              >
-                                סרטון
-                              </div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setActivePreview(
-                                    activePreview === "video" ? null : "video",
-                                  );
-                                }}
-                                className={`mt-1 text-[11px] sm:text-xs font-bold px-1.5 py-0.5 rounded border transition-all flex items-center gap-1 active:scale-95 cursor-pointer ${isYouTube ? "text-[#ff0000] border-red-100 bg-red-50 hover:bg-orange-50" : "text-blue-600 border-blue-100 bg-blue-50 hover:bg-orange-50"}`}
-                              >
-                                <PlayCircle size={12} />
-                                <span>
-                                  {activePreview === "video"
-                                    ? "הסתר סרטון"
-                                    : "נגן סרטון"}
-                                </span>
-                              </button>
+                  {/* VIDEO LINKS (Supports 1 or multiple comma-separated videos) */}
+                  {productVideosList.map((videoUrl: string, vIdx: number) => {
+                    const previewKey = `video_${vIdx}`;
+                    const isCurrentVideoActive =
+                      activePreview === previewKey ||
+                      (activePreview === "video" && vIdx === 0);
+                    const isYouTube =
+                      videoUrl.toLowerCase().includes("youtube.com") ||
+                      videoUrl.toLowerCase().includes("youtu.be");
+                    const videoTitle =
+                      productVideosList.length > 1
+                        ? `סרטון ${vIdx + 1}`
+                        : "סרטון";
+                    return (
+                      <div key={previewKey} className="relative flex flex-col w-full">
+                        <a
+                          href={videoUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          onMouseEnter={() => {
+                            if (hoverTimeoutRef.current)
+                              clearTimeout(hoverTimeoutRef.current);
+                            hoverTimeoutRef.current = setTimeout(() => {
+                              setActivePreview(previewKey);
+                            }, 250);
+                          }}
+                          onMouseLeave={() => {
+                            if (hoverTimeoutRef.current)
+                              clearTimeout(hoverTimeoutRef.current);
+                          }}
+                          className={`flex items-center gap-3.5 bg-[#fcfcfc] border-2 p-4 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer group w-full text-right ${
+                            isCurrentVideoActive
+                              ? isYouTube
+                                ? "border-[#ff0000]"
+                                : "border-[#004387]"
+                              : `border-gray-200 ${
+                                  isYouTube
+                                    ? "hover:border-[#ff0000]"
+                                    : "hover:border-[#004387]"
+                                }`
+                          }`}
+                          style={{ minHeight: "80px" }}
+                        >
+                          {isYouTube ? (
+                            <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+                              <img
+                                referrerPolicy="no-referrer"
+                                src={transformImageLink(
+                                  "https://drive.google.com/file/d/1cXAUJdtw9rAkP1XiF2p5RKeDZ4wRXg_u/view?usp=drive_link",
+                                  120,
+                                )}
+                                alt="YouTube"
+                                className="w-12 h-12 object-contain transition-transform duration-200 group-hover:scale-110"
+                              />
                             </div>
+                          ) : (
+                            <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all shadow-xs duration-250 bg-blue-50 text-blue-600 border border-blue-200 group-hover:bg-blue-600 group-hover:text-white">
+                              <Video
+                                size={24}
+                                className="transition-transform duration-200 group-hover:scale-110"
+                              />
+                            </div>
+                          )}
+                          <div className="flex-grow min-w-0 pr-1 flex flex-col items-start justify-center">
                             <div
-                              className={`w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 transition-all duration-250 flex-shrink-0 shadow-sm ${isYouTube ? "group-hover:bg-[#ff0000] group-hover:text-white" : "group-hover:bg-blue-600 group-hover:text-white"}`}
+                              className={`text-sm sm:text-base font-bold text-gray-800 transition-all ${
+                                isYouTube
+                                  ? "group-hover:text-[#ff0000]"
+                                  : "group-hover:text-blue-600"
+                              }`}
                             >
-                              <PlayCircle size={18} />
+                              {videoTitle}
                             </div>
-                          </a>
-                        );
-                      })()}
-                    </div>
-                  )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setActivePreview(
+                                  isCurrentVideoActive ? null : previewKey,
+                                );
+                              }}
+                              className={`mt-1 text-[11px] sm:text-xs font-bold px-1.5 py-0.5 rounded border transition-all flex items-center gap-1 active:scale-95 cursor-pointer ${
+                                isYouTube
+                                  ? "text-[#ff0000] border-red-100 bg-red-50 hover:bg-orange-50"
+                                  : "text-blue-600 border-blue-100 bg-blue-50 hover:bg-orange-50"
+                              }`}
+                            >
+                              <PlayCircle size={12} />
+                              <span>
+                                {isCurrentVideoActive
+                                  ? "הסתר סרטון"
+                                  : "נגן סרטון"}
+                              </span>
+                            </button>
+                          </div>
+                          <div
+                            className={`w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 transition-all duration-250 flex-shrink-0 shadow-sm ${
+                              isYouTube
+                                ? "group-hover:bg-[#ff0000] group-hover:text-white"
+                                : "group-hover:bg-blue-600 group-hover:text-white"
+                            }`}
+                          >
+                            <PlayCircle size={18} />
+                          </div>
+                        </a>
+                      </div>
+                    );
+                  })}
                 </div>
                 {/* LIVE PREVIEW BOX */}
                 {activePreview && (
                   <div className="mb-6 border border-gray-200/80 rounded-2xl bg-slate-50/50 p-3 sm:p-4 shadow-xs animate-in fade-in slide-in-from-top-3 duration-300 relative text-right">
-                    <div className="flex items-center justify-between mb-3 flex-row-reverse">
-                      <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3 flex-row-reverse">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {(() => {
+                          const isVideoPreview =
+                            activePreview === "video" ||
+                            activePreview.startsWith("video_");
+                          const videoIdx = activePreview.startsWith("video_")
+                            ? parseInt(activePreview.split("_")[1], 10)
+                            : 0;
                           const rawLink =
                             activePreview === "specs"
                               ? selectedProduct.specsLink
                               : activePreview === "manual"
                                 ? selectedProduct.manualLink
-                                : activePreview === "video"
-                                  ? selectedProduct.videoLink
+                                : isVideoPreview
+                                  ? productVideosList[videoIdx] ||
+                                    selectedProduct.videoLink
                                   : activePreview.startsWith("labCert_")
                                     ? selectedProduct.labCerts?.[
                                         parseInt(activePreview.split("_")[1], 10)
@@ -2678,19 +2753,61 @@ const ProductDetailsView = (props: any) => {
                           <span>סגור תצוגה מקדימה</span>
                         </button>
                       </div>
-                      <span className="text-xs sm:text-sm font-bold text-[#0c2d57] flex items-center gap-1.5">
-                        <Eye size={14} className="text-[#c2410c]" />
-                        <span>
-                          תצוגה מקדימה מהירה:{" "}
-                          {activePreview === "specs"
-                            ? "מפרט טכני"
-                            : activePreview === "manual"
-                              ? "מדריך למשתמש"
-                              : activePreview === "video"
-                                ? "סרטון מוצר"
-                                : `אישור בטיחות ותקן #${parseInt(activePreview.split("_")[1], 10) + 1}`}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs sm:text-sm font-bold text-[#0c2d57] flex items-center gap-1.5">
+                          <Eye size={14} className="text-[#c2410c]" />
+                          <span>
+                            תצוגה מקדימה מהירה:{" "}
+                            {activePreview === "specs"
+                              ? "מפרט טכני"
+                              : activePreview === "manual"
+                                ? "מדריך למשתמש"
+                                : activePreview === "video" ||
+                                    activePreview.startsWith("video_")
+                                  ? productVideosList.length > 1
+                                    ? `סרטון מוצר #${
+                                        (activePreview.startsWith("video_")
+                                          ? parseInt(
+                                              activePreview.split("_")[1],
+                                              10,
+                                            )
+                                          : 0) + 1
+                                      } מתוך ${productVideosList.length}`
+                                    : "סרטון מוצר"
+                                  : `אישור בטיחות ותקן #${parseInt(activePreview.split("_")[1], 10) + 1}`}
+                          </span>
                         </span>
-                      </span>
+                        {(activePreview === "video" ||
+                          activePreview.startsWith("video_")) &&
+                          productVideosList.length > 1 && (
+                            <div className="flex items-center gap-1 mr-2">
+                              {productVideosList.map((_, idx) => {
+                                const currentIdx = activePreview.startsWith(
+                                  "video_",
+                                )
+                                  ? parseInt(activePreview.split("_")[1], 10)
+                                  : 0;
+                                const isActiveTab = currentIdx === idx;
+                                return (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() =>
+                                      setActivePreview(`video_${idx}`)
+                                    }
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                      isActiveTab
+                                        ? "bg-[#004387] text-white shadow-xs"
+                                        : "bg-white text-gray-700 border border-gray-200 hover:border-[#004387]"
+                                    }`}
+                                  >
+                                    סרטון {idx + 1}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                      </div>
                     </div>
 
                     <div className="w-full aspect-[16/10] min-h-[320px] sm:min-h-[480px] bg-white rounded-xl overflow-hidden border border-gray-200 shadow-inner flex flex-col items-center justify-center relative">
@@ -2714,20 +2831,59 @@ const ProductDetailsView = (props: any) => {
                             loading="lazy"
                           />
                         )}
-                      {activePreview === "video" &&
-                        selectedProduct.videoLink && (
-                          <iframe
-                            title="Video Preview"
-                            src={
-                              getVideoEmbedUrl(selectedProduct.videoLink) ||
-                              selectedProduct.videoLink
-                            }
-                            className="w-full h-full border-none"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                            loading="lazy"
-                          />
-                        )}
+                      {(activePreview === "video" ||
+                        activePreview.startsWith("video_")) &&
+                        (() => {
+                          const vIdx = activePreview.startsWith("video_")
+                            ? parseInt(activePreview.split("_")[1], 10)
+                            : 0;
+                          const targetVideoUrl =
+                            productVideosList[vIdx] ||
+                            selectedProduct.videoLink;
+                          if (!targetVideoUrl) return null;
+                          const vInfo =
+                            getPresentationVideoInfo(targetVideoUrl);
+                          const useFallbackIframe =
+                            failedGalleryVideoUrls[targetVideoUrl] &&
+                            vInfo?.fallbackIframeSrc;
+                          if (vInfo?.type === "video" && !useFallbackIframe) {
+                            return (
+                              <video
+                                key={vInfo.src}
+                                src={vInfo.src}
+                                controls
+                                autoPlay
+                                playsInline
+                                preload="auto"
+                                onError={() => {
+                                  if (vInfo.fallbackIframeSrc) {
+                                    setFailedGalleryVideoUrls((prev) => ({
+                                      ...prev,
+                                      [targetVideoUrl]: true,
+                                    }));
+                                  }
+                                }}
+                                className="w-full h-full object-contain bg-black"
+                              />
+                            );
+                          }
+                          const iframeSrc = useFallbackIframe
+                            ? vInfo?.fallbackIframeSrc
+                            : vInfo?.src ||
+                              getVideoEmbedUrl(targetVideoUrl) ||
+                              targetVideoUrl;
+                          return (
+                            <iframe
+                              key={iframeSrc}
+                              title={`Video Preview ${vIdx + 1}`}
+                              src={iframeSrc}
+                              className="w-full h-full border-none bg-black"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                              allowFullScreen
+                              loading="lazy"
+                            />
+                          );
+                        })()}
                       {activePreview.startsWith("labCert_") &&
                         (() => {
                           const certIdx = parseInt(
