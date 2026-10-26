@@ -7596,9 +7596,47 @@ export default function App() {
   const presentationVideoRef = useRef<HTMLVideoElement | null>(null);
   const lastAutoOpenedVideoKeyRef = useRef<string | null>(null);
 
+  const VIDEO_AUTO_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours (once per day)
+
   const openPresentationVideo = useCallback(
-    (payload: { title: string; subtitle: string; videoUrl: string; key?: string }) => {
+    (
+      payload: { title: string; subtitle: string; videoUrl: string; key?: string },
+      forceManual = false,
+    ) => {
       if (!payload.videoUrl) return;
+      const storageKey = `rbs_video_seen_24h_${payload.key || payload.title}`;
+
+      if (!forceManual) {
+        try {
+          const raw = localStorage.getItem(storageKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (
+              parsed &&
+              parsed.videoUrl === payload.videoUrl &&
+              typeof parsed.timestamp === "number" &&
+              Date.now() - parsed.timestamp < VIDEO_AUTO_COOLDOWN_MS
+            ) {
+              // Already shown within the last 24 hours for this exact video URL
+              if (payload.key) {
+                lastAutoOpenedVideoKeyRef.current = payload.key;
+              }
+              return;
+            }
+          }
+        } catch {}
+      }
+
+      try {
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({
+            timestamp: Date.now(),
+            videoUrl: payload.videoUrl,
+          }),
+        );
+      } catch {}
+
       if (payload.key) {
         lastAutoOpenedVideoKeyRef.current = payload.key;
       }
@@ -7611,7 +7649,7 @@ export default function App() {
         videoUrl: payload.videoUrl,
       });
     },
-    [],
+    [VIDEO_AUTO_COOLDOWN_MS],
   );
 
   const activePresentationVideo = useMemo(() => {
@@ -9440,7 +9478,7 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() =>
-                                openPresentationVideo(activePresentationVideo)
+                                openPresentationVideo(activePresentationVideo, true)
                               }
                               aria-label="צפה בסרטון הצגה"
                               title="צפה בסרטון הצגה"
@@ -9527,7 +9565,7 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() =>
-                                openPresentationVideo(activePresentationVideo)
+                                openPresentationVideo(activePresentationVideo, true)
                               }
                               aria-label="צפה בסרטון הצגה"
                               title="צפה בסרטון הצגה"
@@ -9610,7 +9648,7 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() =>
-                                openPresentationVideo(activePresentationVideo)
+                                openPresentationVideo(activePresentationVideo, true)
                               }
                               aria-label="צפה בסרטון הצגה"
                               title="צפה בסרטון הצגה"
@@ -9693,7 +9731,7 @@ export default function App() {
                               <button
                                 type="button"
                                 onClick={() =>
-                                  openPresentationVideo(activePresentationVideo)
+                                  openPresentationVideo(activePresentationVideo, true)
                                 }
                                 aria-label="צפה בסרטון הצגה"
                                 title="צפה בסרטון הצגה"
