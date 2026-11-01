@@ -78,11 +78,13 @@ export const UPSCalculator: React.FC<{ catalogData?: any[], onAddToCart?: (produ
     const finalPriceType = matchingCatalogItem ? matchingCatalogItem.priceType || 'POY' : 'POY';
     
     if (ups.performanceMatrix) {
-        let startPack = ups.internalWh === 0 ? 1 : 0;
         let maxPacks = ups.extPack ? ups.extPack.maxPacks : 0;
-        for (let i = startPack; i <= maxPacks; i++) {
+        if (ups.internalWh === 0 && !ups.performanceMatrix[0]) {
+            configs.push({ packs: 0, mins: 0, requiresExternalPack: true });
+        }
+        for (let i = 0; i <= maxPacks; i++) {
             if (ups.performanceMatrix[i]) {
-                configs.push({ packs: i, mins: calculateFromMatrix(load, ups.performanceMatrix[i]) });
+                configs.push({ packs: i, mins: calculateFromMatrix(load, ups.performanceMatrix[i]), requiresExternalPack: false });
             }
         }
     } else {
@@ -104,7 +106,7 @@ export const UPSCalculator: React.FC<{ catalogData?: any[], onAddToCart?: (produ
                 const inverterEfficiency = 0.84;
                 mins = Math.max(1, Math.floor((totalWh * capacityRetention * inverterEfficiency * 60) / totalDrawFromBattery));
             }
-            configs.push({ packs: 0, mins });
+            configs.push({ packs: 0, mins, requiresExternalPack: false });
         }
     }
     
@@ -233,15 +235,25 @@ export const UPSCalculator: React.FC<{ catalogData?: any[], onAddToCart?: (produ
                        <div className="p-2 space-y-1.5">
                          {r.configs.map((c: any, ci: number) => {
                            const isTower = (r.hebName || '').includes('(מגדל)');
-                           let label = c.packs === 0 ? 'המכשיר עצמו (ללא הרחבה)' : (r.internalWh === 0 && c.packs === 1 ? 'עם 1 מארז חיצוני (מינימום נדרש)' : `הוספת ${c.packs} מארזי סוללות ${isTower ? '(Tower)' : 'לארון'}`);
+                           let label = c.packs === 0
+                             ? 'המכשיר עצמו (ללא הרחבה)'
+                             : (r.internalWh === 0 && c.packs === 1
+                                 ? 'עם 1 מארז חיצוני (מינימום נדרש להפעלה)'
+                                 : `הוספת ${c.packs} מארזי סוללות ${isTower ? '(Tower)' : 'לארון'}`);
                            return (
-                             <div key={ci} className="flex justify-between items-center bg-white px-2.5 py-2 rounded border border-gray-100 shadow-sm transition-all hover:border-[#fe8d00]/30">
+                             <div key={ci} className={`flex justify-between items-center px-2.5 py-2 rounded border shadow-sm transition-all ${c.requiresExternalPack ? 'bg-amber-50/70 border-amber-200' : 'bg-white border-gray-100 hover:border-[#fe8d00]/30'}`}>
                                <div className="flex items-center gap-2 min-w-0">
-                                 {(c.packs > 0) ? <LayoutGrid className="w-4 h-4 text-[#fe8d00]" /> : <Zap className="w-4 h-4 text-[#004387]" />}
+                                 {(c.packs > 0) ? <LayoutGrid className="w-4 h-4 text-[#fe8d00]" /> : <Zap className={`w-4 h-4 ${c.requiresExternalPack ? 'text-amber-600' : 'text-[#004387]'}`} />}
                                  <span className="text-[11px] text-gray-700 font-semibold truncate">{label}</span>
                                </div>
                                <div className="flex items-center gap-2 shrink-0">
-                                 <span className="text-xs font-black text-[#004387] bg-blue-50 px-2 py-1 rounded shrink-0 border border-blue-100/50">{formatTime(c.mins)}</span>
+                                 {c.requiresExternalPack ? (
+                                   <span className="text-[10px] sm:text-xs font-extrabold text-amber-800 bg-amber-100/80 px-2 py-1 rounded shrink-0 border border-amber-300">
+                                     ללא סוללות מובנות (חובה מארז חיצוני)
+                                   </span>
+                                 ) : (
+                                   <span className="text-xs font-black text-[#004387] bg-blue-50 px-2 py-1 rounded shrink-0 border border-blue-100/50">{formatTime(c.mins)}</span>
+                                 )}
                                  {c.packs > 0 && onAddToCart && r.extPack && (
                                    <button 
                                      onClick={(e) => {

@@ -1190,19 +1190,19 @@ const MakatBadge = ({
     <button
       onClick={handleCopy}
       title="העתק מק״ט"
-      className={`group/makat inline-flex items-center justify-center gap-1.5 sm:gap-2.5 bg-gray-50 hover:bg-blue-50 active:bg-blue-100/80 border border-gray-200 hover:border-[#004387] active:border-[#002f5e] transition-all rounded-xl ${isCard ? "py-1 px-2.5 min-h-0 sm:min-h-0" : "py-3.5 px-5 sm:py-2 sm:px-4 min-h-[48px] sm:min-h-[auto]"} w-full sm:w-auto cursor-pointer focus:outline-none select-none touch-manipulation focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f7941d] ${className}`}
+      className={`group/makat inline-flex items-center justify-center gap-1 sm:gap-2 bg-gray-50 hover:bg-blue-50 active:bg-blue-100/80 border border-gray-200 hover:border-[#004387] active:border-[#002f5e] transition-all rounded-xl ${isCard ? "py-1 px-2 min-h-0 sm:min-h-0" : "py-3.5 px-4 sm:py-2 sm:px-4 min-h-[48px] sm:min-h-[auto]"} w-full sm:w-auto max-w-full min-w-0 overflow-hidden cursor-pointer focus:outline-none select-none touch-manipulation focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f7941d] ${className}`}
     >
-      <span className={`text-gray-600 group-hover/makat:text-[#0c2d57] transition-colors font-bold flex items-center justify-center text-center ${isCard ? "whitespace-nowrap text-[12px] tracking-tight" : "text-sm sm:text-sm"}`}>
-        מק״ט:{" "}
-        <span dir="ltr" className={`font-mono mx-1 text-gray-800 group-hover/makat:text-[#004387] ${isCard ? "whitespace-nowrap text-[12px] tracking-tight" : "tracking-wide break-all"}`}>
+      <span className={`text-gray-600 group-hover/makat:text-[#0c2d57] transition-colors font-bold flex flex-wrap items-center justify-center text-center min-w-0 ${isCard ? "text-[10.5px] sm:text-[12px] leading-tight tracking-tight" : "text-xs sm:text-sm leading-snug"}`}>
+        <span className="shrink-0">מק״ט:</span>
+        <span dir="ltr" className={`font-mono mx-0.5 sm:mx-1 text-gray-800 group-hover/makat:text-[#004387] min-w-0 break-all ${isCard ? "text-[10.5px] sm:text-[12px] leading-tight tracking-tight" : "tracking-wide"}`}>
           {sku}
         </span>
       </span>
       <span className="text-gray-400 group-hover/makat:text-[#004387] transition-colors flex items-center justify-center p-0.5 shrink-0">
         {copied ? (
-          <Check size={isCard ? 13 : 18} className="text-green-500" />
+          <Check size={isCard ? 12 : 18} className="text-green-500" />
         ) : (
-          <Copy size={isCard ? 13 : 18} />
+          <Copy size={isCard ? 12 : 18} />
         )}
       </span>
     </button>
@@ -1235,7 +1235,7 @@ const CatalogCard: React.FC<CatalogCardProps> = ({
         }
       }}
       onClick={() => navigateToCatalog(catalog.name)}
-      className="group flex flex-col h-full rounded-none bg-white shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative"
+      className="group flex flex-col h-full min-w-0 rounded-none bg-white shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative"
     >
       {catalog.isComingSoon ? (
         <img
@@ -1318,7 +1318,7 @@ const SubcategoryCard: React.FC<SubcategoryCardProps> = ({
         onClick ||
         (() => navigateToSubcategory && navigateToSubcategory(sub.name))
       }
-      className="group flex flex-col h-full min-h-[10rem] sm:min-h-[16rem] rounded-none shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 relative border border-gray-100"
+      className="group flex flex-col h-full min-w-0 min-h-[10rem] sm:min-h-[16rem] rounded-none shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer bg-white transform hover:-translate-y-1 relative border border-gray-100"
     >
       {sub.isComingSoon ? (
         <img
@@ -1548,7 +1548,7 @@ const ProductCard = React.memo(
     return (
       <div
         onClick={() => navigateToProduct(product)}
-        className={`group flex flex-col h-full rounded-none bg-white shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}
+        className={`group flex flex-col h-full min-w-0 overflow-hidden rounded-none bg-white shadow-[0_5px_15px_rgba(0,0,0,0.05)] hover:shadow-[0_12px_25px_rgba(0,0,0,0.1)] transition-all cursor-pointer transform hover:-translate-y-1 border border-gray-100 relative`}
       >
         {product.isComingSoon ? (
           <img
@@ -1617,17 +1617,19 @@ const ProductCard = React.memo(
           </div>
         </div>
 
-        <div dir="rtl" className="flex items-center justify-between gap-2 px-2 py-1">
-          <span className="text-[11px] text-slate-400">תמונות להמחשה בלבד</span>
-          <div className="flex items-center gap-1.5">
+        <div dir="rtl" className="flex flex-col sm:flex-row items-center justify-between gap-1 sm:gap-2 px-2 py-1.5 border-b border-gray-50 sm:border-none">
+          <span className="text-[10px] sm:text-[11px] text-slate-400 whitespace-nowrap leading-none">
+            תמונות להמחשה בלבד
+          </span>
+          <div className="flex items-center justify-center gap-1.5 max-w-full">
             {onBulkSelectionChange && !isGuest && !product.isComingSoon && (
               <div
-                className="flex items-center justify-center p-0.5 cursor-pointer"
+                className="flex items-center justify-center p-0.5 cursor-pointer shrink-0"
                 onClick={handleCheckboxClick}
                 title={isSelectedForBulk ? "הסר מהוספה מרובה" : "סמן להוספה מרובה"}
               >
                 <div
-                  className={`w-9 h-9 sm:w-[28px] sm:h-[28px] rounded-md border-[2.5px] flex items-center justify-center transition-all duration-200 transform active:scale-95 ${
+                  className={`w-8 h-8 sm:w-[28px] sm:h-[28px] rounded-md border-[2.5px] flex items-center justify-center transition-all duration-200 transform active:scale-95 ${
                     isSelectedForBulk
                       ? "bg-gradient-to-b from-[#005fb8] via-[#004387] to-[#002f5e] border-[#001c3c] shadow-[0_3px_6px_rgba(0,67,135,0.35),_inset_0_1.5px_1px_rgba(255,255,255,0.6),_inset_0_-2.5px_0_rgba(0,0,0,0.3)]"
                       : "bg-gradient-to-b from-white via-slate-50 to-slate-100 border-slate-800 hover:border-[#004387] shadow-[0_3px_6px_rgba(0,0,0,0.2),_inset_0_-2px_0_rgba(0,0,0,0.15),_inset_0_1.5px_1px_rgba(255,255,255,0.95)]"
@@ -1653,10 +1655,10 @@ const ProductCard = React.memo(
                 toggleFavorite(product);
               }}
               aria-label="מועדפים"
-              className="w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform shrink-0"
+              className="w-8 h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform shrink-0"
             >
               <Heart
-                size={16}
+                size={15}
                 className={
                   favoriteIds.has(product.id)
                     ? "text-red-500 fill-red-500"
@@ -1672,14 +1674,14 @@ const ProductCard = React.memo(
               }}
               aria-label="השוואה"
               title="הוסף להשוואה"
-              className={`h-9 sm:h-8 rounded-full border shadow-sm flex items-center justify-center transition-all duration-300 group/compare shrink-0 ${
+              className={`h-8 rounded-full border shadow-sm flex items-center justify-center transition-all duration-300 group/compare shrink-0 ${
                 compareIds.has(product.id)
-                  ? "bg-[#004387] border-[#004387] text-white px-2.5 w-auto gap-1"
-                  : "bg-white/95 border-gray-200 text-gray-500 hover:text-[#004387] hover:border-[#004387] w-9 sm:w-8 hover:w-[86px] hover:px-2 gap-0 hover:gap-1"
+                  ? "bg-[#004387] border-[#004387] text-white px-2 w-auto gap-1"
+                  : "bg-white/95 border-gray-200 text-gray-500 hover:text-[#004387] hover:border-[#004387] w-8 sm:hover:w-[86px] sm:hover:px-2 gap-0 sm:hover:gap-1"
               }`}
             >
               <Scale
-                size={16}
+                size={15}
                 className={
                   compareIds.has(product.id)
                     ? "text-white"
@@ -1687,10 +1689,10 @@ const ProductCard = React.memo(
                 }
               />
               <span
-                className={`text-[11px] sm:text-[10px] font-bold whitespace-nowrap overflow-hidden transition-all duration-300 ${
+                className={`text-[10px] font-bold whitespace-nowrap overflow-hidden transition-all duration-300 ${
                   compareIds.has(product.id)
                     ? "w-auto opacity-100"
-                    : "w-0 group-hover/compare:w-auto opacity-0 group-hover/compare:opacity-100"
+                    : "w-0 sm:group-hover/compare:w-auto opacity-0 sm:group-hover/compare:opacity-100"
                 }`}
               >
                 {compareIds.has(product.id) ? "בהשוואה" : "השוואה"}
@@ -1705,16 +1707,16 @@ const ProductCard = React.memo(
                 e.preventDefault();
                 openShareForProduct(product);
               }}
-              className="w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform shrink-0 text-gray-600 hover:text-[#004387]"
+              className="w-8 h-8 rounded-full bg-white/90 border border-gray-200 shadow-sm flex items-center justify-center hover:scale-110 transition-transform shrink-0 text-gray-600 hover:text-[#004387]"
             >
-              <QrCode size={16} />
+              <QrCode size={15} />
             </button>
           </div>
         </div>
 
-        <div className="p-3 sm:p-4 flex flex-col flex-grow text-center relative">
-          <div className="mb-2.5 flex flex-row items-center justify-center w-full">
-            <MakatBadge sku={product.sku} className="whitespace-nowrap text-[12px] tracking-tight" />
+        <div className="p-2.5 sm:p-4 flex flex-col flex-grow text-center relative min-w-0">
+          <div className="mb-2.5 flex flex-row items-center justify-center w-full min-w-0">
+            <MakatBadge sku={product.sku} className="text-[12px] tracking-tight" />
           </div>
           <div className="min-h-[4.5rem] flex items-start justify-center mb-2">
             <h3 className="text-[#0c2d57] text-base sm:text-lg font-bold line-clamp-3 leading-snug text-center w-full">
@@ -1994,7 +1996,7 @@ const VirtualProductCard: React.FC<VirtualProductCardProps> = ({
   product,
   children,
 }) => {
-  return <div>{children}</div>;
+  return <div className="min-w-0 w-full">{children}</div>;
 };
 const _ignore_VirtualProductCard: React.FC<VirtualProductCardProps> = ({
   product,
@@ -9645,24 +9647,24 @@ export default function App() {
                     <>
                       <div
                         dir="rtl"
-                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2.5 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-4 transition-all grid grid-cols-[1fr_auto_1fr] items-center gap-2"
+                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-3 sm:px-4 transition-all flex items-center justify-between gap-1.5 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:gap-2"
                         style={{ top: `${headerHeight}px` }}
                       >
-                        <div className="justify-self-start">
+                        <div className="shrink-0 sm:justify-self-start">
                           {parentInfo && (
                             <button
                               type="button"
                               onClick={parentInfo.onClick}
-                              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0c2d57] min-h-11 px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
+                              className="inline-flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-semibold text-[#0c2d57] min-h-10 sm:min-h-11 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
                             >
-                              <ChevronRight size={18} className="flex-shrink-0 stroke-[2.5]" />
+                              <ChevronRight size={17} className="flex-shrink-0 stroke-[2.5]" />
                               <span className="hidden sm:inline">{parentInfo.name}</span>
                               <span className="sm:hidden">חזרה</span>
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center justify-center gap-2 sm:gap-3 min-w-0">
-                          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
+                        <div className="flex items-center justify-center gap-1.5 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
+                          <h2 className="text-base sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
                             {selectedCatalog || "בחר קטגוריה"}
                           </h2>
                           {activePresentationVideo && (
@@ -9673,10 +9675,10 @@ export default function App() {
                               }
                               aria-label="צפה בסרטון הצגה"
                               title="צפה בסרטון הצגה"
-                              className="inline-flex items-center gap-1.5 bg-[#fff7ed] hover:bg-[#ffedd5] border border-[#fed7aa] text-[#c2410c] font-bold rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0 text-xs sm:text-sm"
+                              className="inline-flex items-center gap-1.5 bg-[#fff7ed] hover:bg-[#ffedd5] border border-[#fed7aa] text-[#c2410c] font-bold rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0 text-xs sm:text-sm"
                             >
-                              <PlayCircle size={20} className="flex-shrink-0" />
-                              <span className="hidden xs:inline">סרטון הצגה</span>
+                              <PlayCircle size={18} className="flex-shrink-0 sm:w-5 sm:h-5" />
+                              <span className="hidden sm:inline">סרטון הצגה</span>
                             </button>
                           )}
                           <button
@@ -9684,13 +9686,13 @@ export default function App() {
                             onClick={handleOpenShare}
                             aria-label="שיתוף"
                             title="שיתוף"
-                            className="inline-flex items-center gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-3.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
+                            className="inline-flex items-center gap-1.5 sm:gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
                           >
-                            <Share2 size={22} className="flex-shrink-0" />
-                            <QrCode size={22} className="flex-shrink-0" />
+                            <Share2 size={18} className="flex-shrink-0 sm:w-[22px] sm:h-[22px]" />
+                            <QrCode size={18} className="flex-shrink-0 sm:w-[22px] sm:h-[22px]" />
                           </button>
                         </div>
-                        <div className="justify-self-end" />
+                        <div className="hidden sm:block sm:justify-self-end" />
                       </div>
 
                       {isProductsLoading ? (
@@ -9732,24 +9734,24 @@ export default function App() {
                     <>
                       <div
                         dir="rtl"
-                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2.5 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-4 transition-all grid grid-cols-[1fr_auto_1fr] items-center gap-2"
+                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-3 sm:px-4 transition-all flex items-center justify-between gap-1.5 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:gap-2"
                         style={{ top: `${headerHeight}px` }}
                       >
-                        <div className="justify-self-start">
+                        <div className="shrink-0 sm:justify-self-start">
                           {parentInfo && (
                             <button
                               type="button"
                               onClick={parentInfo.onClick}
-                              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0c2d57] min-h-11 px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
+                              className="inline-flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-semibold text-[#0c2d57] min-h-10 sm:min-h-11 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
                             >
-                              <ChevronRight size={18} className="flex-shrink-0 stroke-[2.5]" />
+                              <ChevronRight size={17} className="flex-shrink-0 stroke-[2.5]" />
                               <span className="hidden sm:inline">{parentInfo.name}</span>
                               <span className="sm:hidden">חזרה</span>
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center justify-center gap-2 sm:gap-3 min-w-0">
-                          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
+                        <div className="flex items-center justify-center gap-1.5 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
+                          <h2 className="text-base sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
                             {selectedSubcategory || "בחר תת-קטגוריה"}
                           </h2>
                           {activePresentationVideo && (
@@ -9760,10 +9762,10 @@ export default function App() {
                               }
                               aria-label="צפה בסרטון הצגה"
                               title="צפה בסרטון הצגה"
-                              className="inline-flex items-center gap-1.5 bg-[#fff7ed] hover:bg-[#ffedd5] border border-[#fed7aa] text-[#c2410c] font-bold rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0 text-xs sm:text-sm"
+                              className="inline-flex items-center gap-1.5 bg-[#fff7ed] hover:bg-[#ffedd5] border border-[#fed7aa] text-[#c2410c] font-bold rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0 text-xs sm:text-sm"
                             >
-                              <PlayCircle size={20} className="flex-shrink-0" />
-                              <span className="hidden xs:inline">סרטון הצגה</span>
+                              <PlayCircle size={18} className="flex-shrink-0 sm:w-5 sm:h-5" />
+                              <span className="hidden sm:inline">סרטון הצגה</span>
                             </button>
                           )}
                           <button
@@ -9771,13 +9773,13 @@ export default function App() {
                             onClick={handleOpenShare}
                             aria-label="שיתוף"
                             title="שיתוף"
-                            className="inline-flex items-center gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-3.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
+                            className="inline-flex items-center gap-1.5 sm:gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
                           >
-                            <Share2 size={22} className="flex-shrink-0" />
-                            <QrCode size={22} className="flex-shrink-0" />
+                            <Share2 size={18} className="flex-shrink-0 sm:w-[22px] sm:h-[22px]" />
+                            <QrCode size={18} className="flex-shrink-0 sm:w-[22px] sm:h-[22px]" />
                           </button>
                         </div>
-                        <div className="justify-self-end" />
+                        <div className="hidden sm:block sm:justify-self-end" />
                       </div>
 
                       {isProductsLoading ? (
@@ -9815,24 +9817,24 @@ export default function App() {
                     <>
                       <div
                         dir="rtl"
-                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2.5 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-4 transition-all grid grid-cols-[1fr_auto_1fr] items-center gap-2"
+                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-3 sm:px-4 transition-all flex items-center justify-between gap-1.5 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:gap-2"
                         style={{ top: `${headerHeight}px` }}
                       >
-                        <div className="justify-self-start">
+                        <div className="shrink-0 sm:justify-self-start">
                           {parentInfo && (
                             <button
                               type="button"
                               onClick={parentInfo.onClick}
-                              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0c2d57] min-h-11 px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
+                              className="inline-flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-semibold text-[#0c2d57] min-h-10 sm:min-h-11 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
                             >
-                              <ChevronRight size={18} className="flex-shrink-0 stroke-[2.5]" />
+                              <ChevronRight size={17} className="flex-shrink-0 stroke-[2.5]" />
                               <span className="hidden sm:inline">{parentInfo.name}</span>
                               <span className="sm:hidden">חזרה</span>
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center justify-center gap-2 sm:gap-3 min-w-0">
-                          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
+                        <div className="flex items-center justify-center gap-1.5 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
+                          <h2 className="text-base sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
                             {selectedNestedSubcategory || "קטגוריית משנה מורחבת"}
                           </h2>
                           {activePresentationVideo && (
@@ -9843,10 +9845,10 @@ export default function App() {
                               }
                               aria-label="צפה בסרטון הצגה"
                               title="צפה בסרטון הצגה"
-                              className="inline-flex items-center gap-1.5 bg-[#fff7ed] hover:bg-[#ffedd5] border border-[#fed7aa] text-[#c2410c] font-bold rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0 text-xs sm:text-sm"
+                              className="inline-flex items-center gap-1.5 bg-[#fff7ed] hover:bg-[#ffedd5] border border-[#fed7aa] text-[#c2410c] font-bold rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0 text-xs sm:text-sm"
                             >
-                              <PlayCircle size={20} className="flex-shrink-0" />
-                              <span className="hidden xs:inline">סרטון הצגה</span>
+                              <PlayCircle size={18} className="flex-shrink-0 sm:w-5 sm:h-5" />
+                              <span className="hidden sm:inline">סרטון הצגה</span>
                             </button>
                           )}
                           <button
@@ -9854,13 +9856,13 @@ export default function App() {
                             onClick={handleOpenShare}
                             aria-label="שיתוף"
                             title="שיתוף"
-                            className="inline-flex items-center gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-3.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
+                            className="inline-flex items-center gap-1.5 sm:gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
                           >
-                            <Share2 size={22} className="flex-shrink-0" />
-                            <QrCode size={22} className="flex-shrink-0" />
+                            <Share2 size={18} className="flex-shrink-0 sm:w-[22px] sm:h-[22px]" />
+                            <QrCode size={18} className="flex-shrink-0 sm:w-[22px] sm:h-[22px]" />
                           </button>
                         </div>
-                        <div className="justify-self-end" />
+                        <div className="hidden sm:block sm:justify-self-end" />
                       </div>
 
                       {isProductsLoading ? (
@@ -9895,25 +9897,25 @@ export default function App() {
                     // PRODUCTS VIEW
                     <>
                       <div
-                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2.5 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-4 transition-all"
+                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-3 sm:px-4 transition-all"
                         style={{ top: `${headerHeight}px` }}
                       >
-                        <div dir="rtl" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                          <div className="justify-self-start">
+                        <div dir="rtl" className="flex items-center justify-between gap-1.5 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:gap-2">
+                          <div className="shrink-0 sm:justify-self-start">
                             {parentInfo && (
                               <button
                                 type="button"
                                 onClick={parentInfo.onClick}
-                                className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0c2d57] min-h-11 px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
+                                className="inline-flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-semibold text-[#0c2d57] min-h-10 sm:min-h-11 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
                               >
-                                <ChevronRight size={18} className="flex-shrink-0 stroke-[2.5]" />
+                                <ChevronRight size={17} className="flex-shrink-0 stroke-[2.5]" />
                                 <span className="hidden sm:inline">{parentInfo.name}</span>
                                 <span className="sm:hidden">חזרה</span>
                               </button>
                             )}
                           </div>
-                          <div className="flex items-center justify-center gap-2 sm:gap-3 min-w-0">
-                            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
+                          <div className="flex items-center justify-center gap-1.5 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
+                            <h2 className="text-base sm:text-2xl md:text-3xl font-bold text-[#0c2d57] text-center px-1 truncate">
                               {selectedNicheCategory ||
                                 selectedNestedSubcategory ||
                                 selectedSubcategory}
@@ -9926,10 +9928,10 @@ export default function App() {
                                 }
                                 aria-label="צפה בסרטון הצגה"
                                 title="צפה בסרטון הצגה"
-                                className="inline-flex items-center gap-1.5 bg-[#fff7ed] hover:bg-[#ffedd5] border border-[#fed7aa] text-[#c2410c] font-bold rounded-full px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0 text-xs sm:text-sm"
+                                className="inline-flex items-center gap-1.5 bg-[#fff7ed] hover:bg-[#ffedd5] border border-[#fed7aa] text-[#c2410c] font-bold rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0 text-xs sm:text-sm"
                               >
-                                <PlayCircle size={20} className="flex-shrink-0" />
-                                <span className="hidden xs:inline">סרטון הצגה</span>
+                                <PlayCircle size={18} className="flex-shrink-0 sm:w-5 sm:h-5" />
+                                <span className="hidden sm:inline">סרטון הצגה</span>
                               </button>
                             )}
                             <button
@@ -9937,13 +9939,13 @@ export default function App() {
                               onClick={handleOpenShare}
                               aria-label="שיתוף"
                               title="שיתוף"
-                              className="inline-flex items-center gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-3.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
+                              className="inline-flex items-center gap-1.5 sm:gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
                             >
-                              <Share2 size={22} className="flex-shrink-0" />
-                              <QrCode size={22} className="flex-shrink-0" />
+                              <Share2 size={18} className="flex-shrink-0 sm:w-[22px] sm:h-[22px]" />
+                              <QrCode size={18} className="flex-shrink-0 sm:w-[22px] sm:h-[22px]" />
                             </button>
                           </div>
-                          <div className="justify-self-end" />
+                          <div className="hidden sm:block sm:justify-self-end" />
                         </div>
                         {!isProductsLoading && (
                           <div
@@ -10059,24 +10061,24 @@ export default function App() {
                     <>
                       <div
                         dir="rtl"
-                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2.5 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-4 transition-all grid grid-cols-[1fr_auto_1fr] items-center gap-2"
+                        className="sticky z-30 bg-slate-50/95 backdrop-blur-md py-2 sm:py-3 mb-4 sm:mb-6 border-b border-slate-200/80 shadow-xs -mx-4 px-3 sm:px-4 transition-all flex items-center justify-between gap-1.5 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:gap-2"
                         style={{ top: `${headerHeight}px` }}
                       >
-                        <div className="justify-self-start">
+                        <div className="shrink-0 sm:justify-self-start">
                           {parentInfo && (
                             <button
                               type="button"
                               onClick={parentInfo.onClick}
-                              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0c2d57] min-h-11 px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
+                              className="inline-flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-semibold text-[#0c2d57] min-h-10 sm:min-h-11 px-1.5 sm:px-2 py-1 rounded-lg hover:bg-slate-200/60 active:scale-95 transition-all cursor-pointer hover:underline"
                             >
-                              <ChevronRight size={18} className="flex-shrink-0 stroke-[2.5]" />
+                              <ChevronRight size={17} className="flex-shrink-0 stroke-[2.5]" />
                               <span className="hidden sm:inline">{parentInfo.name}</span>
                               <span className="sm:hidden">חזרה</span>
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center justify-center gap-3 min-w-0">
-                          <h1 className="text-base sm:text-xl md:text-2xl font-bold text-[#0c2d57] text-center px-1 truncate max-w-[200px] sm:max-w-md md:max-w-xl">
+                        <div className="flex items-center justify-center gap-1.5 sm:gap-3 min-w-0 flex-1 sm:flex-initial">
+                          <h1 className="text-sm sm:text-xl md:text-2xl font-bold text-[#0c2d57] text-center px-1 truncate max-w-full sm:max-w-md md:max-w-xl">
                             {selectedProduct.name}
                           </h1>
                           <button
@@ -10084,13 +10086,13 @@ export default function App() {
                             onClick={handleOpenShare}
                             aria-label="שיתוף"
                             title="שיתוף"
-                            className="inline-flex items-center gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-3.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
+                            className="inline-flex items-center gap-1.5 sm:gap-2.5 bg-[#e6f1fb] hover:bg-[#d4e8fa] border border-[#b5d4f4] text-[#004387] rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 cursor-pointer transition-all shadow-xs active:scale-95 flex-shrink-0"
                           >
-                            <Share2 size={22} className="flex-shrink-0" />
-                            <QrCode size={22} className="flex-shrink-0" />
+                            <Share2 size={18} className="flex-shrink-0 sm:w-[22px] sm:h-[22px]" />
+                            <QrCode size={18} className="flex-shrink-0 sm:w-[22px] sm:h-[22px]" />
                           </button>
                         </div>
-                        <div className="justify-self-end" />
+                        <div className="hidden sm:block sm:justify-self-end" />
                       </div>
 
                       {isProductsLoading ? (
