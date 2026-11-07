@@ -66,7 +66,7 @@ export default defineConfig(() => {
                 url.hostname.includes('script.google.com') ||
                 url.hostname.includes('opensheet') ||
                 url.hostname.includes('sheetdb.io') ||
-                url.pathname.startsWith('/api/'),
+                (url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/video')),
               handler: 'NetworkOnly',
               options: { cacheName: 'no-cache-dynamic' }
             },

@@ -259,12 +259,12 @@ interface SheetsCacheEntry {
   timestamp: number;
 }
 const sheetsCacheMap = new Map<string, SheetsCacheEntry>();
-const CACHE_TTL_SHEETS_MS = 60 * 1000; // 60 seconds for processed responses
+const CACHE_TTL_SHEETS_MS = 15 * 60 * 1000; // 15 minutes for processed responses
 
 // Raw sheet cache and in-flight request coalescing to eliminate Google Sheets API quota pressure
 const rawSheetsCache = new Map<string, { csv: string; timestamp: number }>();
 const rawInFlightFetches = new Map<string, Promise<string>>();
-const CACHE_TTL_RAW_SHEETS_MS = 3 * 60 * 1000; // 3 minutes for raw Google Sheets data
+const CACHE_TTL_RAW_SHEETS_MS = 15 * 60 * 1000; // 15 minutes for raw Google Sheets data
 
 async function getRawSheetData(gid: string, bypassCache: boolean): Promise<string> {
   const gidStr = String(gid);
@@ -306,21 +306,28 @@ async function getRawSheetData(gid: string, bypassCache: boolean): Promise<strin
 const SENSITIVE_COLS_SERVER = ["מחיר עלות", "מחיר סיטונאות", "מחיר סיטונאי", "needsReview", "notes"];
 const FIREBASE_JWKS_SERVER = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
 
-async function isAgentOrManagerServer(authHeader: string | undefined): Promise<boolean> {
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+async function isAgentOrManagerServer(reqHeaders: Record<string, any>): Promise<boolean> {
+  let token = "";
+  const idTokenHeader = reqHeaders["x-firebase-id-token"];
+  const authHeader = reqHeaders["authorization"];
+  if (typeof idTokenHeader === "string" && idTokenHeader.trim()) {
+    token = idTokenHeader.trim();
+  } else if (typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
+    token = authHeader.substring(7).trim();
+  }
+  if (!token) {
     return false;
   }
-  const token = authHeader.substring(7);
   try {
     const { payload } = await jwtVerify(token, FIREBASE_JWKS_SERVER, {
       issuer: "https://securetoken.google.com/rbs-b2b",
       audience: "rbs-b2b"
     });
     
-    const uid = payload.sub;
-    if (!uid) return false;
+    const email = typeof payload.email === "string" ? payload.email.toLowerCase() : "";
+    if (!email || payload.email_verified !== true) return false;
     
-    const url = `https://firestore.googleapis.com/v1/projects/rbs-b2b/databases/(default)/documents/approvedDistributors/${uid}`;
+    const url = `https://firestore.googleapis.com/v1/projects/rbs-b2b/databases/(default)/documents/approvedDistributors/${encodeURIComponent(email)}`;
     const res = await fetch(url, {
       headers: { "Authorization": `Bearer ${token}` }
     });
@@ -494,14 +501,25 @@ app.get("/api/sheets", async (req, res) => {
   }
 
   const bypassCache = req.query.bypass_cache === "true";
-  const authorized = await isAgentOrManagerServer(req.headers.authorization);
+  const authorized = await isAgentOrManagerServer(req.headers);
   const cacheKey = `${gid}_${limit || ""}_${offset || ""}_${authorized ? "auth" : "guest"}`;
+
+  const applyCacheHeaders = (isBypass: boolean) => {
+    res.setHeader("Vary", "X-Firebase-Id-Token");
+    if (isBypass) {
+      res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate, max-age=0");
+    } else if (authorized) {
+      res.setHeader("Cache-Control", "private, max-age=300, stale-while-revalidate=600");
+    } else {
+      res.setHeader("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=3600");
+    }
+  };
 
   // Serve from cache if valid and not bypassing
   if (!bypassCache) {
     const cached = sheetsCacheMap.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp < CACHE_TTL_SHEETS_MS)) {
-      res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
+      applyCacheHeaders(false);
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       return res.status(200).send(cached.text);
     }
@@ -524,15 +542,10 @@ app.get("/api/sheets", async (req, res) => {
       });
     } else {
       sheetsCacheMap.clear();
-      // Ensure catalogCache is cleared if it exists in scope
       try { catalogCache = null; } catch(e) {} 
     }
 
-    if (bypassCache) {
-      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
-    } else {
-      res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=60");
-    }
+    applyCacheHeaders(bypassCache);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     return res.status(200).send(csvString);
     
@@ -619,7 +632,10 @@ app.get("/api/video", async (req, res) => {
     res.status(upstreamRes.status);
     res.setHeader("Content-Type", contentType);
     res.setHeader("Accept-Ranges", upstreamRes.headers.get("accept-ranges") || "bytes");
-    res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+    res.setHeader(
+      "Cache-Control",
+      "public, max-age=604800, s-maxage=2592000, stale-while-revalidate=2592000, immutable",
+    );
     res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
 
     const contentLength = upstreamRes.headers.get("content-length");

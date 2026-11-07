@@ -6,6 +6,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  // Anti-hotlinking protection: prevent external sites/bots from draining Vercel bandwidth
+  const reqHost = String(req.headers.host || "").trim();
+  const sourceHeader = String(req.headers.referer || req.headers.origin || "").trim();
+  if (reqHost && sourceHeader) {
+    try {
+      const sourceHost = new URL(sourceHeader).host;
+      if (sourceHost && sourceHost !== reqHost) {
+        return res.status(403).json({ error: "Forbidden external hotlink" });
+      }
+    } catch {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+  }
+
   const fileId = typeof req.query.id === "string" ? req.query.id.trim() : "";
   if (!fileId || !/^[a-zA-Z0-9_-]{10,120}$/.test(fileId)) {
     return res.status(400).json({ error: "Invalid or missing Google Drive file ID" });
@@ -58,7 +72,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(upstreamRes.status);
     res.setHeader("Content-Type", contentType);
     res.setHeader("Accept-Ranges", upstreamRes.headers.get("accept-ranges") || "bytes");
-    res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+    // Cache 7 days in browser + 30 days in Vercel Edge CDN so loops & repeat views cost 0 serverless invocations
+    res.setHeader(
+      "Cache-Control",
+      "public, max-age=604800, s-maxage=2592000, stale-while-revalidate=2592000, immutable",
+    );
     res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
 
     const contentLength = upstreamRes.headers.get("content-length");

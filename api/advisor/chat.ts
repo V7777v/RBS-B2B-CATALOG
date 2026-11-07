@@ -93,7 +93,7 @@ interface CachedCatalog {
 }
 
 let catalogCache: CachedCatalog | null = null;
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes cache
 
 // Best-effort per-IP rate limit (per warm serverless instance). For robust limiting use a KV store.
 const rateMap = new Map<string, number[]>();
@@ -361,8 +361,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const isStrongMatch = relevantProducts.length > 0 && (maxScore >= 2 || (maxScore === 1 && tokenCount <= 3));
     if (!forceAI && isStrongMatch) {
-      return console.log("Sending response", { currentUsage, dailyLimit });
-    res.json({
+      return res.json({
         type: "direct_products",
         products: relevantProducts.slice(0, 5),
         text: "מצאתי את המוצרים הבאים בקטלוג שיכולים להתאים לשאלתך:",
@@ -399,11 +398,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const errorMsg = liteError.message || String(liteError);
         const isProviderQuota = errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("429");
         if (isProviderQuota) {
-           return console.log("Sending response", { currentUsage, dailyLimit });
-    res.json({ type: "ai_response", text: "🚦 **מכסת השימוש במפתח ה-Gemini API הסתיימה...**", sources: [] });
+          return res.json({ type: "ai_response", text: "🚦 **מכסת השימוש במפתח ה-Gemini API הסתיימה...**", sources: [] });
         }
-        return console.log("Sending response", { currentUsage, dailyLimit });
-    res.json({ type: "ai_response", text: "⚠️ **חיבור ה-AI נכשל בפנייה לשרתי Google.**", sources: [] });
+        return res.json({ type: "ai_response", text: "⚠️ **חיבור ה-AI נכשל בפנייה לשרתי Google.**", sources: [] });
       }
     }
 

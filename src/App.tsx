@@ -540,10 +540,20 @@ const fetchCSV = async (
   limit?: number,
   offset?: number,
   bypassCache?: boolean,
+  forceAgentAuth?: boolean,
 ): Promise<any[]> => {
+  const currentUserEmail = auth.currentUser?.email?.trim().toLowerCase() || "";
+  const isKnownAgentEmail =
+    !!currentUserEmail &&
+    SYSTEM_AGENTS.some((a) => a.email.toLowerCase() === currentUserEmail);
+  const shouldSendIdToken = Boolean(bypassCache || forceAgentAuth || isKnownAgentEmail);
+
   let url = `/api/sheets?gid=${gid}`;
   if (limit !== undefined && offset !== undefined) {
     url += `&limit=${limit}&offset=${offset}`;
+  }
+  if (shouldSendIdToken && !bypassCache) {
+    url += `&view=agent`;
   }
   if (bypassCache) {
     url += `&bypass_cache=true&_=${Date.now()}`;
@@ -564,7 +574,7 @@ const fetchCSV = async (
     "X-Firebase-AppCheck": appCheckTok,
   };
   try {
-    if (auth.currentUser) {
+    if (shouldSendIdToken && auth.currentUser) {
       const idTok = await auth.currentUser.getIdToken();
       if (idTok) reqHeaders["X-Firebase-Id-Token"] = idTok;
     }
@@ -6299,7 +6309,7 @@ export default function App() {
   // --- DATA FETCHING ---
   const lastFetchTimeRef = useRef(0);
   const [productsOffset, setProductsOffset] = useState(0);
-  const [hasMoreProducts, setHasMoreProducts] = useState(true);
+  const [hasMoreProducts, setHasMoreProducts] = useState(false);
   const loadMoreFailuresRef = useRef(0);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const loadMoreProducts = useCallback(async () => {
@@ -6314,7 +6324,6 @@ export default function App() {
 
       if (productsCsv.length > 0) {
         const parsedProducts = productsCsv.map(parseProductRow);
-        // Add without duplicate ids to keep data perfectly consistent and robust
         setCatalogData((prev) => {
           const ids = new Set(prev.map((p) => p.id));
           const uniqueNew = parsedProducts.filter((p) => {
@@ -6322,8 +6331,7 @@ export default function App() {
             ids.add(p.id);
             return true;
           });
-          const combined = [...prev, ...uniqueNew];
-          return combined;
+          return [...prev, ...uniqueNew];
         });
         setProductsOffset((prev) => prev + 50);
       } else {
@@ -6331,9 +6339,7 @@ export default function App() {
       }
     } catch (err) {
       loadMoreFailuresRef.current += 1;
-      console.warn(`Error fetching more products (attempt ${loadMoreFailuresRef.current}):`, err);
       if (loadMoreFailuresRef.current >= 3) {
-        console.warn("Disabling incremental chunk fetching after 3 consecutive failures; background full loader will synchronize catalog.");
         setHasMoreProducts(false);
       }
     } finally {
@@ -6347,14 +6353,66 @@ export default function App() {
     }
   }, [hasMoreProducts, isFetchingMore, loadMoreProducts]);
   const loadData = useCallback(
-    async (silent = false, forceBypassCache = false) => {
+    async (silent = false, forceBypassCache = false, forceAgentView = false) => {
       try {
         if (!silent) setIsLoading(true);
         setError(null);
-        // 1. Fetch metadata sheets (catalogs and subcategories are tiny, taking negligible time)
-        const [catalogsCsv, subcategoriesCsv] = await Promise.all([
-          fetchCSV(CATALOGS_GID, undefined, undefined, forceBypassCache),
-          fetchCSV(SUBCATEGORIES_GID, undefined, undefined, forceBypassCache),
+
+        const currentUserEmail = auth.currentUser?.email?.trim().toLowerCase() || "";
+        const isAgentFetch =
+          forceAgentView ||
+          userRole === "agent" ||
+          userRole === "sales_manager" ||
+          (!!currentUserEmail &&
+            SYSTEM_AGENTS.some((a) => a.email.toLowerCase() === currentUserEmail));
+        const sessionCacheKey = `rbs_catalog_cache_v3_${isAgentFetch ? "agent" : "public"}`;
+        const SESSION_CACHE_TTL_MS = 20 * 60 * 1000; // 20 minutes client session cache
+
+        const deduplicate = (arr: any[]) => {
+          const seen = new Set();
+          return arr.filter((p) => {
+            if (!p || seen.has(p.id)) return false;
+            seen.add(p.id);
+            return true;
+          });
+        };
+
+        // 0. Serve from sessionStorage cache if fresh (eliminates repeat fetches on page reload)
+        if (!forceBypassCache && typeof window !== "undefined") {
+          try {
+            const rawCached = sessionStorage.getItem(sessionCacheKey);
+            if (rawCached) {
+              const parsedCache = JSON.parse(rawCached);
+              if (
+                parsedCache &&
+                typeof parsedCache.ts === "number" &&
+                Date.now() - parsedCache.ts < SESSION_CACHE_TTL_MS &&
+                Array.isArray(parsedCache.catalogs) &&
+                Array.isArray(parsedCache.subcategories) &&
+                Array.isArray(parsedCache.products) &&
+                parsedCache.products.length > 0
+              ) {
+                setCatalogFolders(parsedCache.catalogs);
+                setSubcategoriesGlobalData(parsedCache.subcategories);
+                setCatalogData(parsedCache.products);
+                setHasMoreProducts(false);
+                setProductsOffset(parsedCache.products.length);
+                setIsProductsLoading(false);
+                if (!silent) setIsLoading(false);
+                lastFetchTimeRef.current = parsedCache.ts;
+                detectAndNavigateProductFromUrl(parsedCache.products);
+                return;
+              }
+            }
+          } catch {}
+        }
+
+        // 1. Fetch all 3 sheets in parallel ONCE (CDN cached at Vercel Edge) — eliminates 6-8 redundant chunk requests
+        if (!silent) setIsProductsLoading(true);
+        const [catalogsCsv, subcategoriesCsv, allProductsCsv] = await Promise.all([
+          fetchCSV(CATALOGS_GID, undefined, undefined, forceBypassCache, isAgentFetch),
+          fetchCSV(SUBCATEGORIES_GID, undefined, undefined, forceBypassCache, isAgentFetch),
+          fetchCSV(PRODUCTS_GID, undefined, undefined, forceBypassCache, isAgentFetch),
         ]);
         const parsedCatalogs = catalogsCsv
           .map((row: any) => {
@@ -6429,7 +6487,6 @@ export default function App() {
               ? categoryName.trim()
               : categoryName;
 
-          // Normalize parent subcategory matching the exact weird header the user added
           let parentSubcategory =
             row.parentSubcategory ||
             row["Parent  Subcategory"] ||
@@ -6462,7 +6519,6 @@ export default function App() {
               row[isNewColKey]?.toString()?.trim()?.toUpperCase() === "YES" ||
               row[isNewColKey]?.toString()?.trim() === "כן"
             : false;
-          // Normalize active to boolean robustly:
           let isActive = true;
           if (row.active !== undefined && row.active !== null) {
             const actVal = String(row.active).toUpperCase().trim();
@@ -6496,86 +6552,39 @@ export default function App() {
                 : String(brandValue).trim(),
           };
         });
-        setCatalogFolders(parsedCatalogs.filter((c) => c.active !== false));
+        const activeCatalogs = parsedCatalogs.filter((c) => c.active !== false);
+        const allParsed = (allProductsCsv || []).map(parseProductRow);
+        const dedupedAll = deduplicate(allParsed);
+
+        setCatalogFolders(activeCatalogs);
         setSubcategoriesGlobalData(parsedSubcategories);
-
-        // Stop the main block immediately, allowing the system to display the Home Page INSTANTLY!
+        setCatalogData(dedupedAll);
+        setHasMoreProducts(false);
+        setProductsOffset(dedupedAll.length);
+        setIsProductsLoading(false);
         if (!silent) setIsLoading(false);
+        detectAndNavigateProductFromUrl(dedupedAll);
 
-        const deduplicate = (arr: any[]) => {
-          const seen = new Set();
-          const res = arr.filter((p) => {
-            if (!p || seen.has(p.id)) return false;
-            seen.add(p.id);
-            return true;
-          });
-          return res;
-        };
+        const nowTs = Date.now();
+        lastFetchTimeRef.current = nowTs;
 
-        if (forceBypassCache) {
-          if (!silent) setIsProductsLoading(true);
-          const allProductsCsv = await fetchCSV(
-            PRODUCTS_GID,
-            undefined,
-            undefined,
-            true,
-          );
-          const allParsed = (allProductsCsv || []).map(parseProductRow);
-          setCatalogData(deduplicate(allParsed));
-          setHasMoreProducts(false);
-          setProductsOffset(allParsed.length);
-          setIsProductsLoading(false);
-        } else {
-          // 2. Fetch the FIRST 50 products from Google Sheets, so initial render is incredibly fast!
-          if (!silent) setIsProductsLoading(true);
-          setProductsOffset(0);
-          setHasMoreProducts(true);
-          const productsCsv = await fetchCSV(
-            PRODUCTS_GID,
-            50,
-            0,
-            false,
-          );
-          const parsedProducts = productsCsv.map(parseProductRow);
-          const dedupedInitial = deduplicate(parsedProducts);
-          setCatalogData(dedupedInitial);
-          setProductsOffset(50);
-          detectAndNavigateProductFromUrl(dedupedInitial);
-          if (productsCsv.length < 50) {
-            setHasMoreProducts(false);
-            setIsProductsLoading(false);
-          } else {
-            setIsProductsLoading(false);
-            const hasDeepLinkProduct = typeof window !== "undefined" && (
-              new URLSearchParams(window.location.search).has("p") ||
-              new URLSearchParams(window.location.search).has("product") ||
-              new URLSearchParams(window.location.search).has("sku") ||
-              new URLSearchParams(window.location.search).has("id")
+        if (typeof window !== "undefined") {
+          try {
+            if (forceBypassCache) {
+              sessionStorage.removeItem("rbs_catalog_cache_v3_public");
+              sessionStorage.removeItem("rbs_catalog_cache_v3_agent");
+            }
+            sessionStorage.setItem(
+              sessionCacheKey,
+              JSON.stringify({
+                ts: nowTs,
+                catalogs: activeCatalogs,
+                subcategories: parsedSubcategories,
+                products: dedupedAll,
+              }),
             );
-            const progressiveDelay = hasDeepLinkProduct ? 0 : 1800;
-            // Progressive background fetching with zero-delay for deep linked products
-            setTimeout(() => {
-              fetchCSV(PRODUCTS_GID, undefined, undefined, false)
-                .then((allProductsCsv) => {
-                  if (allProductsCsv && allProductsCsv.length > 0) {
-                    const allParsed = allProductsCsv.map(parseProductRow);
-                    const dedupedAll = deduplicate(allParsed);
-                    setCatalogData(dedupedAll);
-                    setHasMoreProducts(false);
-                    setProductsOffset(allParsed.length);
-                    detectAndNavigateProductFromUrl(dedupedAll);
-                  }
-                })
-                .catch((err) => {
-                  console.error(
-                    "Progressive background fetch of full products sheet failed:",
-                    err,
-                  );
-                });
-            }, progressiveDelay);
-          }
+          } catch {}
         }
-        lastFetchTimeRef.current = Date.now();
       } catch (err: any) {
         console.error("Error loading data:", err);
         setError("שגיאה בטעינת הנתונים מהמערכת. ודא שהחיבור תקין ונסה שוב.");
@@ -6587,7 +6596,7 @@ export default function App() {
         if (!silent) setIsLoading(false);
       }
     },
-    [],
+    [userRole],
   );
   // Initial load
   useEffect(() => {
@@ -6602,17 +6611,17 @@ export default function App() {
       !didAgentReloadRef.current
     ) {
       didAgentReloadRef.current = true;
-      loadData(true);
+      loadData(true, false, true);
     } else if (userRole === "user") {
       didAgentReloadRef.current = false;
     }
   }, [userRole, loadData]);
 
-  // Smart auto-refresh on focus, visibility change, and periodic timer
+  // Smart auto-refresh on focus, visibility change, and periodic timer (30-min threshold to conserve Vercel bandwidth)
   useEffect(() => {
+    const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
     const checkAndReload = () => {
-      // If data is older than 2 minutes, refresh it smartly in background
-      if (Date.now() - lastFetchTimeRef.current > 1000 * 120) {
+      if (Date.now() - lastFetchTimeRef.current > AUTO_REFRESH_INTERVAL_MS) {
         loadData(true);
       }
     };
@@ -6631,7 +6640,7 @@ export default function App() {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         checkAndReload();
       }
-    }, 5 * 60 * 1000);
+    }, AUTO_REFRESH_INTERVAL_MS);
 
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -8164,9 +8173,10 @@ export default function App() {
     setInlineVideoFailed(false);
   }, [activePresentationVideo?.key]);
 
-  // Ensure inline HTML5 video starts playing muted immediately when category loads or un-minimizes
+  // Ensure inline HTML5 video starts playing muted immediately when category loads or un-minimizes,
+  // and automatically pauses when scrolled out of viewport to save bandwidth & CPU
   useEffect(() => {
-    if (!activePresentationVideo?.videoUrl || isInlineVideoMinimized || inlineVideoFailed) return;
+    if (!activePresentationVideo?.videoUrl || isInlineVideoMinimized || inlineVideoFailed || !isDesktopViewport) return;
     const el = inlineVideoRef.current;
     if (!el) return;
     el.muted = isInlineVideoMuted;
@@ -8178,7 +8188,23 @@ export default function App() {
         el.play().catch(() => {});
       });
     }
-  }, [activePresentationVideo, isInlineVideoMinimized, inlineVideoFailed]);
+
+    if (typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        if (entry.isIntersecting) {
+          el.play().catch(() => {});
+        } else {
+          el.pause();
+        }
+      },
+      { threshold: 0.15 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [activePresentationVideo, isInlineVideoMinimized, inlineVideoFailed, isDesktopViewport]);
 
   // Ensure HTML5 video starts playing immediately when modal opens
   useEffect(() => {
@@ -8304,7 +8330,7 @@ export default function App() {
                   loop
                   muted={isInlineVideoMuted}
                   playsInline
-                  preload="auto"
+                  preload="metadata"
                   onClick={toggleInlineVideoSound}
                   onLoadedMetadata={(e) => {
                     const el = e.currentTarget;
@@ -15268,15 +15294,10 @@ export default function App() {
                 <div className="relative w-full flex-1 min-h-0 max-h-[70vh] bg-[#061830] flex items-center justify-center overflow-hidden">
                   {videoInfo.type === "video" && !presentationVideoFailed ? (
                     <>
-                      {/* Blurred ambient background to eliminate any black bars */}
-                      <video
-                        src={videoInfo.src}
-                        muted
-                        loop
-                        autoPlay
-                        playsInline
+                      {/* Pure CSS ambient backdrop to eliminate black bars without a duplicate video stream */}
+                      <div
                         aria-hidden="true"
-                        className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-45 pointer-events-none"
+                        className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(247,148,29,0.18)_0%,rgba(12,45,87,0.65)_55%,rgba(6,24,48,0.98)_100%)] pointer-events-none"
                       />
                       <video
                         key={videoInfo.src}
@@ -15285,7 +15306,7 @@ export default function App() {
                         controls
                         autoPlay
                         playsInline
-                        preload="auto"
+                        preload="metadata"
                         onLoadedMetadata={(e) => {
                           const el = e.currentTarget;
                           const playPromise = el.play();

@@ -212,8 +212,21 @@ const bypassHits = new Map<string, number[]>();
 const csvCache = new Map<string, { body: string; exp: number }>();
 const rawSheetCache = new Map<string, { csv: string; exp: number }>();
 const rawInFlightFetches = new Map<string, Promise<string>>();
-const CACHE_TTL_MS = 3 * 60 * 1000;
-const CACHE_TTL_RAW_MS = 2 * 60 * 1000;
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes (admin sync bypasses immediately)
+const CACHE_TTL_RAW_MS = 15 * 60 * 1000;
+
+function setSheetsCacheHeaders(res: VercelResponse, isAgentView: boolean, bypassCache: boolean) {
+  res.setHeader("Vary", "X-Firebase-Id-Token");
+  if (bypassCache) {
+    res.setHeader("Cache-Control", "private, no-cache, no-store, max-age=0, must-revalidate");
+  } else if (isAgentView) {
+    // Agent view contains sensitive wholesale/cost columns -> cache privately in browser only (5 min)
+    res.setHeader("Cache-Control", "private, max-age=300, stale-while-revalidate=600");
+  } else {
+    // Public/installer catalog has sensitive columns stripped -> cache in browser (5 min) AND Vercel Edge CDN (15 min + 1h SWR)
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=3600");
+  }
+}
 
 async function getRawSheetData(gid: string, bypassCache: boolean, requestId: string): Promise<string> {
   const gidStr = String(gid);
@@ -335,10 +348,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (hit && Date.now() < hit.exp) {
       if (bypassDenied) res.setHeader("X-Bypass-Denied", "1");
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Cache-Control", "private, max-age=0, no-store");
+      setSheetsCacheHeaders(res, isAgentView, false);
       res.setHeader("X-Cache", "HIT");
       return res.status(200).send(hit.body);
     }
+  } else {
+    csvCache.clear();
+    rawSheetCache.clear();
   }
 
   try {
@@ -355,7 +371,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (bypassDenied) res.setHeader("X-Bypass-Denied", "1");
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Cache-Control", "private, max-age=0, no-store");
+    setSheetsCacheHeaders(res, isAgentView, bypassCache);
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Cache", bypassCache ? "BYPASS" : "MISS");
     
@@ -370,7 +386,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.warn(`[${requestId}] [sheets] Serving STALE PROCESSED CACHE due to upstream error.`);
         if (bypassDenied) res.setHeader("X-Bypass-Denied", "1");
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
-        res.setHeader("Cache-Control", "private, max-age=0, no-store");
+        setSheetsCacheHeaders(res, isAgentView, false);
         res.setHeader("X-Data-Source", "stale-cache");
         return res.status(200).send(hit.body);
       }
@@ -386,7 +402,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         if (bypassDenied) res.setHeader("X-Bypass-Denied", "1");
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
-        res.setHeader("Cache-Control", "private, max-age=0, no-store");
+        setSheetsCacheHeaders(res, isAgentView, false);
         res.setHeader("X-Data-Source", "stale-raw-cache");
         return res.status(200).send(fallbackCsv);
       }
