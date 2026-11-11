@@ -5668,22 +5668,37 @@ export default function App() {
     [userUid],
   );
 
+  const clearAllFavorites = useCallback(() => {
+    setFavorites([]);
+    setSelectedFavIds(new Set());
+    setFavQuantities({});
+    setFavCableModes({});
+    setFavRollCounts({});
+    if (userUid) {
+      saveFavorites(userUid, []);
+    } else {
+      try {
+        localStorage.setItem("rbs_guest_favorites", JSON.stringify([]));
+      } catch {}
+    }
+  }, [userUid]);
+
   const getFavoriteItemMeta = (f: any) => {
     const p = catalogData.find((x: any) => x.id === f.id);
     const rollInfo = getCableRollInfo(p || f);
     const defaultQty = rollInfo ? rollInfo.rollLength : 1;
     const rawVal =
       favQuantities[f.id] !== undefined ? favQuantities[f.id] : defaultQty;
-    const effectiveQty = Math.max(1, Number(rawVal) || defaultQty);
+    const typedQty = Math.max(1, Number(rawVal) || defaultQty);
+    const effectiveQty = rollInfo
+      ? Math.max(1, Math.ceil(typedQty / rollInfo.rollLength)) *
+        rollInfo.rollLength
+      : typedQty;
 
     let whatsappQtyLabel = `${effectiveQty}`;
     if (rollInfo) {
-      if (effectiveQty % rollInfo.rollLength === 0) {
-        const numRolls = effectiveQty / rollInfo.rollLength;
-        whatsappQtyLabel = `${effectiveQty} מטר (${numRolls} ${numRolls === 1 ? rollInfo.unitSingular : rollInfo.unitPlural} של ${rollInfo.rollLength} מ')`;
-      } else {
-        whatsappQtyLabel = `${effectiveQty} מטר (מתוך ${rollInfo.unitSingular} ${rollInfo.rollLength} מ')`;
-      }
+      const numRolls = effectiveQty / rollInfo.rollLength;
+      whatsappQtyLabel = `${effectiveQty} מטר (${numRolls} ${numRolls === 1 ? rollInfo.unitSingular : rollInfo.unitPlural} של ${rollInfo.rollLength} מ')`;
     }
 
     return {
@@ -5691,6 +5706,7 @@ export default function App() {
       rollInfo,
       defaultQty,
       rawVal,
+      typedQty,
       effectiveQty,
       whatsappQtyLabel,
     };
@@ -5833,9 +5849,16 @@ export default function App() {
             <div className="flex items-center border border-blue-200 rounded bg-white">
               <button
                 type="button"
+                title={`הפחת ${rollInfo.rollLength} מטר (${rollInfo.unitSingular} 1)`}
                 onClick={() => {
-                  const nextVal = Math.max(1, effectiveQty - 1);
+                  const currentRolls = Math.max(
+                    1,
+                    Math.ceil(effectiveQty / rollInfo.rollLength),
+                  );
+                  const nextRolls = Math.max(1, currentRolls - 1);
+                  const nextVal = nextRolls * rollInfo.rollLength;
                   setFavQuantities((p) => ({ ...p, [f.id]: nextVal }));
+                  setFavRollCounts((r) => ({ ...r, [f.id]: nextRolls }));
                   setSelectedFavIds((prev) => new Set(prev).add(f.id));
                 }}
                 className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 font-bold cursor-pointer"
@@ -5851,36 +5874,55 @@ export default function App() {
                 onFocus={(e) => e.currentTarget.select()}
                 onChange={(e) => {
                   const digits = e.target.value.replace(/\D/g, "");
-                  const parsed =
-                    digits === "" ? "" : Math.max(1, parseInt(digits, 10));
+                  if (digits === "") {
+                    setFavQuantities((p) => ({ ...p, [f.id]: "" }));
+                    return;
+                  }
+                  const parsed = Math.max(1, parseInt(digits, 10));
                   setFavQuantities((p) => ({
                     ...p,
                     [f.id]: parsed,
                   }));
-                  if (typeof parsed === "number") {
-                    setFavRollCounts((r) => ({
-                      ...r,
-                      [f.id]: Math.max(
-                        1,
-                        Math.round(parsed / rollInfo.rollLength),
-                      ),
-                    }));
-                  }
+                  const calcRolls = Math.max(
+                    1,
+                    Math.ceil(parsed / rollInfo.rollLength),
+                  );
+                  setFavRollCounts((r) => ({
+                    ...r,
+                    [f.id]: calcRolls,
+                  }));
                   setSelectedFavIds((prev) => new Set(prev).add(f.id));
                 }}
                 onBlur={() => {
+                  const typed = Number(favQuantities[f.id]);
+                  const calcRolls =
+                    !typed || typed <= 0
+                      ? 1
+                      : Math.max(1, Math.ceil(typed / rollInfo.rollLength));
+                  const snappedMeters = calcRolls * rollInfo.rollLength;
                   setFavQuantities((p) => ({
                     ...p,
-                    [f.id]: Math.max(1, Number(p[f.id]) || defaultQty),
+                    [f.id]: snappedMeters,
+                  }));
+                  setFavRollCounts((r) => ({
+                    ...r,
+                    [f.id]: calcRolls,
                   }));
                 }}
                 className="w-16 text-center text-xs font-extrabold text-[#0c2d57] py-1 border-x border-blue-200 outline-none focus:bg-blue-50/40"
               />
               <button
                 type="button"
+                title={`הוסף ${rollInfo.rollLength} מטר (+${rollInfo.unitSingular} 1)`}
                 onClick={() => {
-                  const nextVal = effectiveQty + 1;
+                  const currentRolls = Math.max(
+                    1,
+                    Math.floor(effectiveQty / rollInfo.rollLength),
+                  );
+                  const nextRolls = currentRolls + 1;
+                  const nextVal = nextRolls * rollInfo.rollLength;
                   setFavQuantities((p) => ({ ...p, [f.id]: nextVal }));
+                  setFavRollCounts((r) => ({ ...r, [f.id]: nextRolls }));
                   setSelectedFavIds((prev) => new Set(prev).add(f.id));
                 }}
                 className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 font-bold cursor-pointer"
@@ -5889,10 +5931,19 @@ export default function App() {
               </button>
             </div>
             <span className="text-xs font-bold text-[#004387]">מטר</span>
-            <span className="text-[11px] text-gray-600 font-semibold">
-              {effectiveQty % rollInfo.rollLength === 0
-                ? `(${effectiveQty / rollInfo.rollLength} ${effectiveQty / rollInfo.rollLength === 1 ? rollInfo.unitSingular : rollInfo.unitPlural})`
-                : `(כ-${(effectiveQty / rollInfo.rollLength).toFixed(1)} ${rollInfo.unitPlural})`}
+            <span className="text-[11px] font-extrabold text-[#004387] bg-white px-2 py-0.5 rounded border border-blue-100">
+              {(() => {
+                const calcRolls = Math.max(
+                  1,
+                  Math.ceil(effectiveQty / rollInfo.rollLength),
+                );
+                const totalByRoll = calcRolls * rollInfo.rollLength;
+                const unitText =
+                  calcRolls === 1 ? rollInfo.unitSingular : rollInfo.unitPlural;
+                return effectiveQty === totalByRoll
+                  ? `= ${calcRolls} ${unitText} (${rollInfo.rollLength} מ׳ כ״א)`
+                  : `= ${calcRolls} ${unitText} (${totalByRoll} מ׳ סה״כ)`;
+              })()}
             </span>
           </div>
         ) : (
@@ -12793,9 +12844,38 @@ export default function App() {
                       </div>
                     ) : (
                       <>
-                        <h3 className="text-sm font-bold text-gray-600 mb-2">
-                          מועדפים ({favorites.length})
-                        </h3>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-sm font-bold text-gray-600">
+                            מועדפים ({favorites.length})
+                          </h3>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (selectedFavIds.size === favorites.length) {
+                                  setSelectedFavIds(new Set());
+                                } else {
+                                  setSelectedFavIds(
+                                    new Set(favorites.map((f: any) => f.id)),
+                                  );
+                                }
+                              }}
+                              className="text-xs font-bold text-[#004387] hover:underline cursor-pointer"
+                            >
+                              {selectedFavIds.size === favorites.length
+                                ? "בטל בחירה"
+                                : "בחר הכל"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={clearAllFavorites}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Trash2 size={13} />
+                              נקה הכל
+                            </button>
+                          </div>
+                        </div>
                         <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
                           {favorites.map((f) => (
                             <div
@@ -14957,9 +15037,38 @@ export default function App() {
                 )}
                 {favorites.length > 0 && (
                   <div id="sec-favorites" className="mt-5 scroll-mt-20">
-                    <h3 className="text-sm font-bold text-gray-600 mb-2">
-                      מועדפים ({favorites.length})
-                    </h3>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-bold text-gray-600">
+                        מועדפים ({favorites.length})
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (selectedFavIds.size === favorites.length) {
+                              setSelectedFavIds(new Set());
+                            } else {
+                              setSelectedFavIds(
+                                new Set(favorites.map((f: any) => f.id)),
+                              );
+                            }
+                          }}
+                          className="text-xs font-bold text-[#004387] hover:underline cursor-pointer"
+                        >
+                          {selectedFavIds.size === favorites.length
+                            ? "בטל בחירה"
+                            : "בחר הכל"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={clearAllFavorites}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={13} />
+                          נקה הכל
+                        </button>
+                      </div>
+                    </div>
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                       {favorites.map((f) => (
                         <div
