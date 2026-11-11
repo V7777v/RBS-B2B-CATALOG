@@ -540,20 +540,10 @@ const fetchCSV = async (
   limit?: number,
   offset?: number,
   bypassCache?: boolean,
-  forceAgentAuth?: boolean,
 ): Promise<any[]> => {
-  const currentUserEmail = auth.currentUser?.email?.trim().toLowerCase() || "";
-  const isKnownAgentEmail =
-    !!currentUserEmail &&
-    SYSTEM_AGENTS.some((a) => a.email.toLowerCase() === currentUserEmail);
-  const shouldSendIdToken = Boolean(bypassCache || forceAgentAuth || isKnownAgentEmail);
-
   let url = `/api/sheets?gid=${gid}`;
   if (limit !== undefined && offset !== undefined) {
     url += `&limit=${limit}&offset=${offset}`;
-  }
-  if (shouldSendIdToken && !bypassCache) {
-    url += `&view=agent`;
   }
   if (bypassCache) {
     url += `&bypass_cache=true&_=${Date.now()}`;
@@ -574,7 +564,7 @@ const fetchCSV = async (
     "X-Firebase-AppCheck": appCheckTok,
   };
   try {
-    if (shouldSendIdToken && auth.currentUser) {
+    if (auth.currentUser) {
       const idTok = await auth.currentUser.getIdToken();
       if (idTok) reqHeaders["X-Firebase-Id-Token"] = idTok;
     }
@@ -1494,6 +1484,118 @@ const isNetworkCableRoll = (product: any): boolean => {
           String(product.brand).toLowerCase().includes("hikvision"))))
   );
 };
+
+interface CableRollInfo {
+  isRoll: boolean;
+  rollLength: number;
+  unitSingular: string;
+  unitPlural: string;
+}
+
+const getCableRollInfo = (product: any): CableRollInfo | null => {
+  if (!product) return null;
+
+  if (product.rollLength && Number(product.rollLength) > 1) {
+    const len = Number(product.rollLength);
+    const rawName = (product.name || "").toLowerCase();
+    const isDrum = rawName.includes("תוף") || len >= 305;
+    return {
+      isRoll: true,
+      rollLength: len,
+      unitSingular: product.unitSingular || (isDrum ? "תוף" : "גליל"),
+      unitPlural: product.unitPlural || (isDrum ? "תופים" : "גלילים"),
+    };
+  }
+
+  const rawText = `${product.name || ""} ${product.subcategory || ""} ${product.description || ""}`;
+  const lowerName = (product.name || "").toLowerCase();
+  const lowerSub = (product.subcategory || "").toLowerCase();
+
+  // Check if it's a network cable roll or explicitly a cable drum/roll with meter length
+  const isNetRoll = isNetworkCableRoll(product);
+  const isExplicitCableDrum =
+    !lowerName.includes("מגשר") &&
+    !lowerName.includes("patch") &&
+    !lowerName.includes("פיגטייל") &&
+    (lowerName.includes("כבל") ||
+      lowerSub.includes("כבל") ||
+      lowerName.includes("cat6") ||
+      lowerName.includes("cat7") ||
+      lowerName.includes("cat5") ||
+      lowerName.includes("rg59") ||
+      lowerName.includes("rg6")) &&
+    (lowerName.includes("תוף") ||
+      lowerName.includes("גליל") ||
+      lowerSub.includes("גלילים") ||
+      lowerSub.includes("תופים"));
+
+  if (!isNetRoll && !isExplicitCableDrum) return null;
+
+  // Strip frequency/bandwidth numbers (e.g., 500MHz, 1000MHz, 250MHz, 600MHz, 10Gbps) so they aren't mistaken for roll length
+  const cleanedName = (product.name || "").replace(
+    /\b\d+\s*(?:mhz|ghz|mbps|gbps|AWG|awg)\b/gi,
+    " ",
+  );
+  const cleanedAll = rawText.replace(
+    /\b\d+\s*(?:mhz|ghz|mbps|gbps|AWG|awg)\b/gi,
+    " ",
+  );
+
+  let detectedLength: number | null = null;
+
+  // 1. Priority: explicit number + meter unit in product name
+  const nameMeterMatch = cleanedName.match(
+    /\b(1000|500|305|300|250|200|150|100)\s*(?:מטר|מטרים|מ'|מ״ר|מ׳|מ\b|m\b|meter|meters)/i,
+  );
+  if (nameMeterMatch) {
+    detectedLength = parseInt(nameMeterMatch[1], 10);
+  }
+
+  // 2. Next: explicit Roll/Drum + number in product name (e.g., "תוף 500", "גליל 100", "305 מ")
+  if (!detectedLength) {
+    const nameRollNumMatch = cleanedName.match(
+      /(?:תוף|גליל|אריזה|קרטון|box|drum|roll)\s*(?:של\s*)?\b(1000|500|305|300|250|200|150|100)\b/i,
+    );
+    if (nameRollNumMatch) {
+      detectedLength = parseInt(nameRollNumMatch[1], 10);
+    }
+  }
+
+  // 3. Next: standalone standard cable roll length in cleaned product name
+  if (!detectedLength) {
+    const standaloneNameMatch = cleanedName.match(
+      /\b(1000|500|305|300|250|200|100)\b/,
+    );
+    if (standaloneNameMatch) {
+      detectedLength = parseInt(standaloneNameMatch[1], 10);
+    }
+  }
+
+  // 4. Next: explicit number + meter unit in description/subcategory
+  if (!detectedLength) {
+    const descMeterMatch = cleanedAll.match(
+      /\b(1000|500|305|300|250|200|150|100)\s*(?:מטר|מטרים|מ'|מ״ר|מ׳|מ\b|m\b|meter|meters)/i,
+    );
+    if (descMeterMatch) {
+      detectedLength = parseInt(descMeterMatch[1], 10);
+    }
+  }
+
+  // Default fallback for network cable rolls if no number was written in title
+  const finalLength = detectedLength || 305;
+  const isDrum =
+    lowerName.includes("תוף") ||
+    lowerSub.includes("תוף") ||
+    (!lowerName.includes("גליל") && finalLength >= 305);
+
+  return {
+    isRoll: true,
+    rollLength: finalLength,
+    unitSingular: isDrum ? "תוף" : "גליל",
+    unitPlural: isDrum ? "תופים" : "גלילים",
+  };
+};
+
 const FavoritesContext = React.createContext<{
   favoriteIds: Set<string>;
   toggleFavorite: (p: any) => void;
@@ -1961,23 +2063,47 @@ const ProductCard = React.memo(
               </div>
             ) : isSelectedForBulk ? (
               <div
-                className="w-full flex items-center justify-between border-2 border-[#004387] bg-blue-50 py-1.5 px-2"
+                className="w-full flex items-center justify-between border-2 border-[#004387] bg-blue-50 py-1 px-2"
                 onClick={(e) => e.stopPropagation()}
               >
                 <button
+                  type="button"
                   onClick={(e) => updateBulkQuantity(e, -1)}
                   className="p-1 sm:p-1.5 text-[#004387] hover:bg-white rounded transition-colors"
                   title="הפחת כמות"
                 >
                   <Minus size={16} />
                 </button>
-                <span className="font-bold text-[#004387] text-xs sm:text-sm flex flex-col items-center leading-none">
-                  <span>{bulkQuantity}</span>
+                <div className="font-bold text-[#004387] text-xs sm:text-sm flex flex-col items-center leading-none">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    aria-label="כמות להוספה"
+                    value={bulkQuantity}
+                    onClick={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      if (!onBulkSelectionChange) return;
+                      const digits = e.target.value.replace(/\D/g, "");
+                      if (digits === "") {
+                        onBulkSelectionChange(product.id, product, 1);
+                        return;
+                      }
+                      const parsed = parseInt(digits, 10);
+                      if (!isNaN(parsed) && parsed > 0) {
+                        onBulkSelectionChange(product.id, product, parsed);
+                      }
+                    }}
+                    className="w-12 text-center font-extrabold text-sm text-[#004387] bg-white/90 border border-[#004387]/30 rounded py-0.5 outline-none focus:ring-1 focus:ring-[#004387]"
+                  />
                   <span className="text-[11px] sm:text-[10px] font-normal mt-0.5">
                     סומנו להוספה
                   </span>
-                </span>
+                </div>
                 <button
+                  type="button"
                   onClick={(e) => updateBulkQuantity(e, 1)}
                   className="p-1 sm:p-1.5 text-[#004387] hover:bg-white rounded transition-colors"
                   title="הוסף כמות"
@@ -3291,23 +3417,36 @@ const ProductDetailsView = (props: any) => {
                     <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                       <div className="flex items-center justify-between sm:justify-center bg-white border border-gray-300 shadow-sm h-[48px]">
                         <button
-                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                          type="button"
+                          onClick={() => setQuantity(Math.max(1, (Number(quantity) || 1) - 1))}
                           className="px-4 h-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors border-l border-gray-200"
                         >
                           <Minus size={16} />
                         </button>
                         <input
                           type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           value={quantity}
-                          onChange={(e) =>
-                            setQuantity(
-                              Math.max(1, parseInt(e.target.value) || 1),
-                            )
-                          }
-                          className="w-12 h-full text-center font-bold text-lg text-gray-800 outline-none p-0 focus:ring-0 select-all"
+                          onFocus={(e) => e.currentTarget.select()}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, "");
+                            if (digits === "") {
+                              setQuantity("" as any);
+                              return;
+                            }
+                            setQuantity(Math.max(1, parseInt(digits, 10) || 1));
+                          }}
+                          onBlur={() => {
+                            if (!quantity || Number(quantity) < 1) {
+                              setQuantity(1);
+                            }
+                          }}
+                          className="w-14 h-full text-center font-bold text-lg text-gray-800 outline-none p-0 focus:ring-0 select-all"
                         />
                         <button
-                          onClick={() => setQuantity(quantity + 1)}
+                          type="button"
+                          onClick={() => setQuantity((Number(quantity) || 1) + 1)}
                           className="px-4 h-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors border-r border-gray-200"
                         >
                           <Plus size={16} />
@@ -3315,7 +3454,7 @@ const ProductDetailsView = (props: any) => {
                       </div>
                       <button
                         onClick={() => {
-                          addToCart(selectedProduct, quantity, []);
+                          addToCart(selectedProduct, Math.max(1, Number(quantity) || 1), []);
                           setIsAdded(true);
                           setTimeout(() => {
                             setIsAdded(false);
@@ -4044,16 +4183,32 @@ const CheckoutView = (props: any) => {
                     <div className="flex items-center gap-2">
                       <div className="flex items-center bg-[#f2f2f2] border border-gray-200 overflow-hidden rounded-md">
                         <button
+                          type="button"
                           onClick={() => updateCartQuantity(item, -1)}
                           className="p-1 px-3 hover:bg-white text-gray-600 transition-colors"
                           aria-label="הפחת כמות"
                         >
                           <Minus size={14} />
                         </button>
-                        <span className="w-8 text-center text-sm font-bold">
-                          {item.quantity}
-                        </span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          aria-label="כמות"
+                          value={item.quantity}
+                          onFocus={(e) => e.currentTarget.select()}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, "");
+                            if (digits === "") return;
+                            const val = parseInt(digits, 10);
+                            if (!isNaN(val) && val > 0) {
+                              updateCartQuantity(item, val - (Number(item.quantity) || 1));
+                            }
+                          }}
+                          className="w-12 text-center text-sm font-bold bg-transparent outline-none border-none py-0.5"
+                        />
                         <button
+                          type="button"
                           onClick={() => updateCartQuantity(item, 1)}
                           className="p-1 px-3 hover:bg-white text-gray-600 transition-colors"
                           aria-label="הוסף כמות"
@@ -5444,9 +5599,15 @@ export default function App() {
   };
   const [favorites, setFavorites] = useState<any[]>([]);
   const [selectedFavIds, setSelectedFavIds] = useState<Set<string>>(new Set());
-  const [favQuantities, setFavQuantities] = useState<Record<string, number>>(
-    {},
-  );
+  const [favQuantities, setFavQuantities] = useState<
+    Record<string, number | string>
+  >({});
+  const [favCableModes, setFavCableModes] = useState<
+    Record<string, "meters" | "rolls">
+  >({});
+  const [favRollCounts, setFavRollCounts] = useState<
+    Record<string, number | string>
+  >({});
   const [guestPhoneDest, setGuestPhoneDest] = useState("");
   const [showGuestWhatsAppModal, setShowGuestWhatsAppModal] = useState(false);
   const [guestWhatsAppToast, setGuestWhatsAppToast] = useState("");
@@ -5456,13 +5617,28 @@ export default function App() {
   );
   const toggleFavorite = useCallback(
     (product: any) => {
+      const rollInfo = getCableRollInfo(product);
       setFavorites((prev: any[]) => {
         const exists = prev.some((f) => f.id === product.id);
-        if (!exists)
+        if (!exists) {
           trackEvent("add_to_favorites", {
             item_id: product.id,
             item_name: product.name,
           });
+          if (rollInfo) {
+            setFavQuantities((qPrev) => ({
+              ...qPrev,
+              [product.id]:
+                qPrev[product.id] !== undefined
+                  ? qPrev[product.id]
+                  : rollInfo.rollLength,
+            }));
+            setFavRollCounts((rPrev) => ({
+              ...rPrev,
+              [product.id]: 1,
+            }));
+          }
+        }
         const next = exists
           ? prev.filter((f) => f.id !== product.id)
           : [
@@ -5472,6 +5648,11 @@ export default function App() {
                 name: product.name,
                 sku: product.sku || "",
                 image: product.images?.[0] || "",
+                category: product.category || "",
+                subcategory: product.subcategory || "",
+                rollLength: rollInfo?.rollLength,
+                unitSingular: rollInfo?.unitSingular,
+                unitPlural: rollInfo?.unitPlural,
               },
             ];
         if (userUid) {
@@ -5486,6 +5667,316 @@ export default function App() {
     },
     [userUid],
   );
+
+  const getFavoriteItemMeta = (f: any) => {
+    const p = catalogData.find((x: any) => x.id === f.id);
+    const rollInfo = getCableRollInfo(p || f);
+    const defaultQty = rollInfo ? rollInfo.rollLength : 1;
+    const rawVal =
+      favQuantities[f.id] !== undefined ? favQuantities[f.id] : defaultQty;
+    const effectiveQty = Math.max(1, Number(rawVal) || defaultQty);
+
+    let whatsappQtyLabel = `${effectiveQty}`;
+    if (rollInfo) {
+      if (effectiveQty % rollInfo.rollLength === 0) {
+        const numRolls = effectiveQty / rollInfo.rollLength;
+        whatsappQtyLabel = `${effectiveQty} מטר (${numRolls} ${numRolls === 1 ? rollInfo.unitSingular : rollInfo.unitPlural} של ${rollInfo.rollLength} מ')`;
+      } else {
+        whatsappQtyLabel = `${effectiveQty} מטר (מתוך ${rollInfo.unitSingular} ${rollInfo.rollLength} מ')`;
+      }
+    }
+
+    return {
+      product: p,
+      rollInfo,
+      defaultQty,
+      rawVal,
+      effectiveQty,
+      whatsappQtyLabel,
+    };
+  };
+
+  const renderFavoriteQuantityControl = (f: any) => {
+    const { rollInfo, defaultQty, rawVal, effectiveQty } =
+      getFavoriteItemMeta(f);
+
+    if (!rollInfo) {
+      return (
+        <div className="flex items-center gap-2 mr-6">
+          <span className="text-xs text-gray-500 font-bold">כמות:</span>
+          <div className="flex items-center border border-gray-200 rounded bg-white">
+            <button
+              type="button"
+              onClick={() =>
+                setFavQuantities((p) => ({
+                  ...p,
+                  [f.id]: Math.max(1, (Number(p[f.id]) || 1) - 1),
+                }))
+              }
+              className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 font-bold cursor-pointer"
+            >
+              -
+            </button>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              aria-label="כמות"
+              value={rawVal}
+              onFocus={(e) => e.currentTarget.select()}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, "");
+                setFavQuantities((p) => ({
+                  ...p,
+                  [f.id]:
+                    digits === "" ? "" : Math.max(1, parseInt(digits, 10)),
+                }));
+                setSelectedFavIds((prev) => {
+                  const n = new Set(prev);
+                  n.add(f.id);
+                  return n;
+                });
+              }}
+              onBlur={() => {
+                setFavQuantities((p) => ({
+                  ...p,
+                  [f.id]: Math.max(1, Number(p[f.id]) || 1),
+                }));
+              }}
+              className="w-14 text-center text-xs font-extrabold text-[#0c2d57] py-1 border-x border-gray-200 outline-none focus:bg-blue-50/40"
+            />
+            <button
+              type="button"
+              onClick={() =>
+                setFavQuantities((p) => ({
+                  ...p,
+                  [f.id]: (Number(p[f.id]) || 1) + 1,
+                }))
+              }
+              className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 font-bold cursor-pointer"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Cable Roll / Drum Dual-Mode Selector ("לפי מטר" / "לפי תוף/גליל")
+    const mode = favCableModes[f.id] || "meters";
+    const computedRolls = Math.max(
+      1,
+      Math.round(effectiveQty / rollInfo.rollLength),
+    );
+    const currentRollInput =
+      favRollCounts[f.id] !== undefined ? favRollCounts[f.id] : computedRolls;
+
+    return (
+      <div className="mr-6 mt-0.5 bg-blue-50/60 border border-blue-100 rounded-lg p-2 flex flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-1.5">
+          <span className="text-[11px] font-extrabold text-[#004387] bg-white border border-blue-200 px-2 py-0.5 rounded">
+            אורך {rollInfo.unitSingular}: {rollInfo.rollLength} מטר (מתומחר למטר)
+          </span>
+          <div className="inline-flex rounded-md border border-blue-200 bg-white p-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                setFavCableModes((prev) => ({ ...prev, [f.id]: "meters" }));
+                if (favQuantities[f.id] === undefined) {
+                  setFavQuantities((p) => ({ ...p, [f.id]: defaultQty }));
+                }
+              }}
+              className={`px-2 py-0.5 text-[11px] font-bold rounded transition-colors cursor-pointer ${
+                mode === "meters"
+                  ? "bg-[#004387] text-white"
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              לפי מטרים
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const nextRolls = Math.max(
+                  1,
+                  Math.ceil(effectiveQty / rollInfo.rollLength),
+                );
+                const syncedMeters = nextRolls * rollInfo.rollLength;
+                setFavCableModes((prev) => ({ ...prev, [f.id]: "rolls" }));
+                setFavRollCounts((prev) => ({ ...prev, [f.id]: nextRolls }));
+                setFavQuantities((prev) => ({
+                  ...prev,
+                  [f.id]: syncedMeters,
+                }));
+                setSelectedFavIds((prev) => {
+                  const n = new Set(prev);
+                  n.add(f.id);
+                  return n;
+                });
+              }}
+              className={`px-2 py-0.5 text-[11px] font-bold rounded transition-colors cursor-pointer ${
+                mode === "rolls"
+                  ? "bg-[#004387] text-white"
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              לפי {rollInfo.unitSingular} ({rollInfo.rollLength} מ׳)
+            </button>
+          </div>
+        </div>
+
+        {mode === "meters" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-[#0c2d57] font-bold">
+              כמות במטרים:
+            </span>
+            <div className="flex items-center border border-blue-200 rounded bg-white">
+              <button
+                type="button"
+                onClick={() => {
+                  const nextVal = Math.max(1, effectiveQty - 1);
+                  setFavQuantities((p) => ({ ...p, [f.id]: nextVal }));
+                  setSelectedFavIds((prev) => new Set(prev).add(f.id));
+                }}
+                className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 font-bold cursor-pointer"
+              >
+                -
+              </button>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                aria-label="כמות מטרים"
+                value={rawVal}
+                onFocus={(e) => e.currentTarget.select()}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, "");
+                  const parsed =
+                    digits === "" ? "" : Math.max(1, parseInt(digits, 10));
+                  setFavQuantities((p) => ({
+                    ...p,
+                    [f.id]: parsed,
+                  }));
+                  if (typeof parsed === "number") {
+                    setFavRollCounts((r) => ({
+                      ...r,
+                      [f.id]: Math.max(
+                        1,
+                        Math.round(parsed / rollInfo.rollLength),
+                      ),
+                    }));
+                  }
+                  setSelectedFavIds((prev) => new Set(prev).add(f.id));
+                }}
+                onBlur={() => {
+                  setFavQuantities((p) => ({
+                    ...p,
+                    [f.id]: Math.max(1, Number(p[f.id]) || defaultQty),
+                  }));
+                }}
+                className="w-16 text-center text-xs font-extrabold text-[#0c2d57] py-1 border-x border-blue-200 outline-none focus:bg-blue-50/40"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const nextVal = effectiveQty + 1;
+                  setFavQuantities((p) => ({ ...p, [f.id]: nextVal }));
+                  setSelectedFavIds((prev) => new Set(prev).add(f.id));
+                }}
+                className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 font-bold cursor-pointer"
+              >
+                +
+              </button>
+            </div>
+            <span className="text-xs font-bold text-[#004387]">מטר</span>
+            <span className="text-[11px] text-gray-600 font-semibold">
+              {effectiveQty % rollInfo.rollLength === 0
+                ? `(${effectiveQty / rollInfo.rollLength} ${effectiveQty / rollInfo.rollLength === 1 ? rollInfo.unitSingular : rollInfo.unitPlural})`
+                : `(כ-${(effectiveQty / rollInfo.rollLength).toFixed(1)} ${rollInfo.unitPlural})`}
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-[#0c2d57] font-bold">
+              מספר {rollInfo.unitPlural}:
+            </span>
+            <div className="flex items-center border border-blue-200 rounded bg-white">
+              <button
+                type="button"
+                onClick={() => {
+                  const nextRolls = Math.max(
+                    1,
+                    (Number(currentRollInput) || 1) - 1,
+                  );
+                  setFavRollCounts((r) => ({ ...r, [f.id]: nextRolls }));
+                  setFavQuantities((p) => ({
+                    ...p,
+                    [f.id]: nextRolls * rollInfo.rollLength,
+                  }));
+                  setSelectedFavIds((prev) => new Set(prev).add(f.id));
+                }}
+                className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 font-bold cursor-pointer"
+              >
+                -
+              </button>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                aria-label={`מספר ${rollInfo.unitPlural}`}
+                value={currentRollInput}
+                onFocus={(e) => e.currentTarget.select()}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, "");
+                  if (digits === "") {
+                    setFavRollCounts((r) => ({ ...r, [f.id]: "" }));
+                    return;
+                  }
+                  const parsedRolls = Math.max(1, parseInt(digits, 10));
+                  setFavRollCounts((r) => ({ ...r, [f.id]: parsedRolls }));
+                  setFavQuantities((p) => ({
+                    ...p,
+                    [f.id]: parsedRolls * rollInfo.rollLength,
+                  }));
+                  setSelectedFavIds((prev) => new Set(prev).add(f.id));
+                }}
+                onBlur={() => {
+                  const validRolls = Math.max(
+                    1,
+                    Number(favRollCounts[f.id]) || 1,
+                  );
+                  setFavRollCounts((r) => ({ ...r, [f.id]: validRolls }));
+                  setFavQuantities((p) => ({
+                    ...p,
+                    [f.id]: validRolls * rollInfo.rollLength,
+                  }));
+                }}
+                className="w-14 text-center text-xs font-extrabold text-[#0c2d57] py-1 border-x border-blue-200 outline-none focus:bg-blue-50/40"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const nextRolls = (Number(currentRollInput) || 1) + 1;
+                  setFavRollCounts((r) => ({ ...r, [f.id]: nextRolls }));
+                  setFavQuantities((p) => ({
+                    ...p,
+                    [f.id]: nextRolls * rollInfo.rollLength,
+                  }));
+                  setSelectedFavIds((prev) => new Set(prev).add(f.id));
+                }}
+                className="px-2.5 py-1 text-gray-600 hover:bg-gray-100 font-bold cursor-pointer"
+              >
+                +
+              </button>
+            </div>
+            <span className="text-xs font-extrabold text-[#004387] bg-white px-2 py-0.5 rounded border border-blue-100">
+              = {effectiveQty} מטר סה״כ
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  };
   const [compareItems, setCompareItems] = useState<any[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
   const compareIds = useMemo(
@@ -6309,7 +6800,7 @@ export default function App() {
   // --- DATA FETCHING ---
   const lastFetchTimeRef = useRef(0);
   const [productsOffset, setProductsOffset] = useState(0);
-  const [hasMoreProducts, setHasMoreProducts] = useState(false);
+  const [hasMoreProducts, setHasMoreProducts] = useState(true);
   const loadMoreFailuresRef = useRef(0);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const loadMoreProducts = useCallback(async () => {
@@ -6324,6 +6815,7 @@ export default function App() {
 
       if (productsCsv.length > 0) {
         const parsedProducts = productsCsv.map(parseProductRow);
+        // Add without duplicate ids to keep data perfectly consistent and robust
         setCatalogData((prev) => {
           const ids = new Set(prev.map((p) => p.id));
           const uniqueNew = parsedProducts.filter((p) => {
@@ -6331,7 +6823,8 @@ export default function App() {
             ids.add(p.id);
             return true;
           });
-          return [...prev, ...uniqueNew];
+          const combined = [...prev, ...uniqueNew];
+          return combined;
         });
         setProductsOffset((prev) => prev + 50);
       } else {
@@ -6339,7 +6832,9 @@ export default function App() {
       }
     } catch (err) {
       loadMoreFailuresRef.current += 1;
+      console.warn(`Error fetching more products (attempt ${loadMoreFailuresRef.current}):`, err);
       if (loadMoreFailuresRef.current >= 3) {
+        console.warn("Disabling incremental chunk fetching after 3 consecutive failures; background full loader will synchronize catalog.");
         setHasMoreProducts(false);
       }
     } finally {
@@ -6353,66 +6848,14 @@ export default function App() {
     }
   }, [hasMoreProducts, isFetchingMore, loadMoreProducts]);
   const loadData = useCallback(
-    async (silent = false, forceBypassCache = false, forceAgentView = false) => {
+    async (silent = false, forceBypassCache = false) => {
       try {
         if (!silent) setIsLoading(true);
         setError(null);
-
-        const currentUserEmail = auth.currentUser?.email?.trim().toLowerCase() || "";
-        const isAgentFetch =
-          forceAgentView ||
-          userRole === "agent" ||
-          userRole === "sales_manager" ||
-          (!!currentUserEmail &&
-            SYSTEM_AGENTS.some((a) => a.email.toLowerCase() === currentUserEmail));
-        const sessionCacheKey = `rbs_catalog_cache_v3_${isAgentFetch ? "agent" : "public"}`;
-        const SESSION_CACHE_TTL_MS = 20 * 60 * 1000; // 20 minutes client session cache
-
-        const deduplicate = (arr: any[]) => {
-          const seen = new Set();
-          return arr.filter((p) => {
-            if (!p || seen.has(p.id)) return false;
-            seen.add(p.id);
-            return true;
-          });
-        };
-
-        // 0. Serve from sessionStorage cache if fresh (eliminates repeat fetches on page reload)
-        if (!forceBypassCache && typeof window !== "undefined") {
-          try {
-            const rawCached = sessionStorage.getItem(sessionCacheKey);
-            if (rawCached) {
-              const parsedCache = JSON.parse(rawCached);
-              if (
-                parsedCache &&
-                typeof parsedCache.ts === "number" &&
-                Date.now() - parsedCache.ts < SESSION_CACHE_TTL_MS &&
-                Array.isArray(parsedCache.catalogs) &&
-                Array.isArray(parsedCache.subcategories) &&
-                Array.isArray(parsedCache.products) &&
-                parsedCache.products.length > 0
-              ) {
-                setCatalogFolders(parsedCache.catalogs);
-                setSubcategoriesGlobalData(parsedCache.subcategories);
-                setCatalogData(parsedCache.products);
-                setHasMoreProducts(false);
-                setProductsOffset(parsedCache.products.length);
-                setIsProductsLoading(false);
-                if (!silent) setIsLoading(false);
-                lastFetchTimeRef.current = parsedCache.ts;
-                detectAndNavigateProductFromUrl(parsedCache.products);
-                return;
-              }
-            }
-          } catch {}
-        }
-
-        // 1. Fetch all 3 sheets in parallel ONCE (CDN cached at Vercel Edge) — eliminates 6-8 redundant chunk requests
-        if (!silent) setIsProductsLoading(true);
-        const [catalogsCsv, subcategoriesCsv, allProductsCsv] = await Promise.all([
-          fetchCSV(CATALOGS_GID, undefined, undefined, forceBypassCache, isAgentFetch),
-          fetchCSV(SUBCATEGORIES_GID, undefined, undefined, forceBypassCache, isAgentFetch),
-          fetchCSV(PRODUCTS_GID, undefined, undefined, forceBypassCache, isAgentFetch),
+        // 1. Fetch metadata sheets (catalogs and subcategories are tiny, taking negligible time)
+        const [catalogsCsv, subcategoriesCsv] = await Promise.all([
+          fetchCSV(CATALOGS_GID, undefined, undefined, forceBypassCache),
+          fetchCSV(SUBCATEGORIES_GID, undefined, undefined, forceBypassCache),
         ]);
         const parsedCatalogs = catalogsCsv
           .map((row: any) => {
@@ -6487,6 +6930,7 @@ export default function App() {
               ? categoryName.trim()
               : categoryName;
 
+          // Normalize parent subcategory matching the exact weird header the user added
           let parentSubcategory =
             row.parentSubcategory ||
             row["Parent  Subcategory"] ||
@@ -6519,6 +6963,7 @@ export default function App() {
               row[isNewColKey]?.toString()?.trim()?.toUpperCase() === "YES" ||
               row[isNewColKey]?.toString()?.trim() === "כן"
             : false;
+          // Normalize active to boolean robustly:
           let isActive = true;
           if (row.active !== undefined && row.active !== null) {
             const actVal = String(row.active).toUpperCase().trim();
@@ -6552,39 +6997,86 @@ export default function App() {
                 : String(brandValue).trim(),
           };
         });
-        const activeCatalogs = parsedCatalogs.filter((c) => c.active !== false);
-        const allParsed = (allProductsCsv || []).map(parseProductRow);
-        const dedupedAll = deduplicate(allParsed);
-
-        setCatalogFolders(activeCatalogs);
+        setCatalogFolders(parsedCatalogs.filter((c) => c.active !== false));
         setSubcategoriesGlobalData(parsedSubcategories);
-        setCatalogData(dedupedAll);
-        setHasMoreProducts(false);
-        setProductsOffset(dedupedAll.length);
-        setIsProductsLoading(false);
+
+        // Stop the main block immediately, allowing the system to display the Home Page INSTANTLY!
         if (!silent) setIsLoading(false);
-        detectAndNavigateProductFromUrl(dedupedAll);
 
-        const nowTs = Date.now();
-        lastFetchTimeRef.current = nowTs;
+        const deduplicate = (arr: any[]) => {
+          const seen = new Set();
+          const res = arr.filter((p) => {
+            if (!p || seen.has(p.id)) return false;
+            seen.add(p.id);
+            return true;
+          });
+          return res;
+        };
 
-        if (typeof window !== "undefined") {
-          try {
-            if (forceBypassCache) {
-              sessionStorage.removeItem("rbs_catalog_cache_v3_public");
-              sessionStorage.removeItem("rbs_catalog_cache_v3_agent");
-            }
-            sessionStorage.setItem(
-              sessionCacheKey,
-              JSON.stringify({
-                ts: nowTs,
-                catalogs: activeCatalogs,
-                subcategories: parsedSubcategories,
-                products: dedupedAll,
-              }),
+        if (forceBypassCache) {
+          if (!silent) setIsProductsLoading(true);
+          const allProductsCsv = await fetchCSV(
+            PRODUCTS_GID,
+            undefined,
+            undefined,
+            true,
+          );
+          const allParsed = (allProductsCsv || []).map(parseProductRow);
+          setCatalogData(deduplicate(allParsed));
+          setHasMoreProducts(false);
+          setProductsOffset(allParsed.length);
+          setIsProductsLoading(false);
+        } else {
+          // 2. Fetch the FIRST 50 products from Google Sheets, so initial render is incredibly fast!
+          if (!silent) setIsProductsLoading(true);
+          setProductsOffset(0);
+          setHasMoreProducts(true);
+          const productsCsv = await fetchCSV(
+            PRODUCTS_GID,
+            50,
+            0,
+            false,
+          );
+          const parsedProducts = productsCsv.map(parseProductRow);
+          const dedupedInitial = deduplicate(parsedProducts);
+          setCatalogData(dedupedInitial);
+          setProductsOffset(50);
+          detectAndNavigateProductFromUrl(dedupedInitial);
+          if (productsCsv.length < 50) {
+            setHasMoreProducts(false);
+            setIsProductsLoading(false);
+          } else {
+            setIsProductsLoading(false);
+            const hasDeepLinkProduct = typeof window !== "undefined" && (
+              new URLSearchParams(window.location.search).has("p") ||
+              new URLSearchParams(window.location.search).has("product") ||
+              new URLSearchParams(window.location.search).has("sku") ||
+              new URLSearchParams(window.location.search).has("id")
             );
-          } catch {}
+            const progressiveDelay = hasDeepLinkProduct ? 0 : 1800;
+            // Progressive background fetching with zero-delay for deep linked products
+            setTimeout(() => {
+              fetchCSV(PRODUCTS_GID, undefined, undefined, false)
+                .then((allProductsCsv) => {
+                  if (allProductsCsv && allProductsCsv.length > 0) {
+                    const allParsed = allProductsCsv.map(parseProductRow);
+                    const dedupedAll = deduplicate(allParsed);
+                    setCatalogData(dedupedAll);
+                    setHasMoreProducts(false);
+                    setProductsOffset(allParsed.length);
+                    detectAndNavigateProductFromUrl(dedupedAll);
+                  }
+                })
+                .catch((err) => {
+                  console.error(
+                    "Progressive background fetch of full products sheet failed:",
+                    err,
+                  );
+                });
+            }, progressiveDelay);
+          }
         }
+        lastFetchTimeRef.current = Date.now();
       } catch (err: any) {
         console.error("Error loading data:", err);
         setError("שגיאה בטעינת הנתונים מהמערכת. ודא שהחיבור תקין ונסה שוב.");
@@ -6596,7 +7088,7 @@ export default function App() {
         if (!silent) setIsLoading(false);
       }
     },
-    [userRole],
+    [],
   );
   // Initial load
   useEffect(() => {
@@ -6611,17 +7103,17 @@ export default function App() {
       !didAgentReloadRef.current
     ) {
       didAgentReloadRef.current = true;
-      loadData(true, false, true);
+      loadData(true);
     } else if (userRole === "user") {
       didAgentReloadRef.current = false;
     }
   }, [userRole, loadData]);
 
-  // Smart auto-refresh on focus, visibility change, and periodic timer (30-min threshold to conserve Vercel bandwidth)
+  // Smart auto-refresh on focus, visibility change, and periodic timer
   useEffect(() => {
-    const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
     const checkAndReload = () => {
-      if (Date.now() - lastFetchTimeRef.current > AUTO_REFRESH_INTERVAL_MS) {
+      // If data is older than 2 minutes, refresh it smartly in background
+      if (Date.now() - lastFetchTimeRef.current > 1000 * 120) {
         loadData(true);
       }
     };
@@ -6640,7 +7132,7 @@ export default function App() {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         checkAndReload();
       }
-    }, AUTO_REFRESH_INTERVAL_MS);
+    }, 5 * 60 * 1000);
 
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -8173,10 +8665,9 @@ export default function App() {
     setInlineVideoFailed(false);
   }, [activePresentationVideo?.key]);
 
-  // Ensure inline HTML5 video starts playing muted immediately when category loads or un-minimizes,
-  // and automatically pauses when scrolled out of viewport to save bandwidth & CPU
+  // Ensure inline HTML5 video starts playing muted immediately when category loads or un-minimizes
   useEffect(() => {
-    if (!activePresentationVideo?.videoUrl || isInlineVideoMinimized || inlineVideoFailed || !isDesktopViewport) return;
+    if (!activePresentationVideo?.videoUrl || isInlineVideoMinimized || inlineVideoFailed) return;
     const el = inlineVideoRef.current;
     if (!el) return;
     el.muted = isInlineVideoMuted;
@@ -8188,23 +8679,7 @@ export default function App() {
         el.play().catch(() => {});
       });
     }
-
-    if (typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (!entry) return;
-        if (entry.isIntersecting) {
-          el.play().catch(() => {});
-        } else {
-          el.pause();
-        }
-      },
-      { threshold: 0.15 },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [activePresentationVideo, isInlineVideoMinimized, inlineVideoFailed, isDesktopViewport]);
+  }, [activePresentationVideo, isInlineVideoMinimized, inlineVideoFailed]);
 
   // Ensure HTML5 video starts playing immediately when modal opens
   useEffect(() => {
@@ -8330,7 +8805,7 @@ export default function App() {
                   loop
                   muted={isInlineVideoMuted}
                   playsInline
-                  preload="metadata"
+                  preload="auto"
                   onClick={toggleInlineVideoSound}
                   onLoadedMetadata={(e) => {
                     const el = e.currentTarget;
@@ -10786,16 +11261,32 @@ export default function App() {
                               </div>
                               <div className="flex items-center bg-[#f2f2f2] border border-gray-200 overflow-hidden">
                                 <button
+                                  type="button"
                                   onClick={() => updateCartQuantity(item, -1)}
                                   className="p-1 px-2 hover:bg-white text-gray-600 transition-colors"
                                   aria-label="הפחת כמות"
                                 >
                                   <Minus size={14} />
                                 </button>
-                                <span className="w-6 text-center text-sm font-bold">
-                                  {item.quantity}
-                                </span>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  aria-label="כמות"
+                                  value={item.quantity}
+                                  onFocus={(e) => e.currentTarget.select()}
+                                  onChange={(e) => {
+                                    const digits = e.target.value.replace(/\D/g, "");
+                                    if (digits === "") return;
+                                    const val = parseInt(digits, 10);
+                                    if (!isNaN(val) && val > 0) {
+                                      updateCartQuantity(item, val - (Number(item.quantity) || 1));
+                                    }
+                                  }}
+                                  className="w-10 text-center text-sm font-bold bg-transparent outline-none border-none py-0.5"
+                                />
                                 <button
+                                  type="button"
                                   onClick={() => updateCartQuantity(item, 1)}
                                   className="p-1 px-2 hover:bg-white text-gray-600 transition-colors"
                                   aria-label="הוסף כמות"
@@ -11014,12 +11505,16 @@ export default function App() {
                             inputMode="numeric"
                             pattern="[0-9]*"
                             value={currentQty}
+                            onFocus={(e) => e.currentTarget.select()}
                             onChange={(e) => {
-                              const val =
-                                parseInt(e.target.value.replace(/D/g, "")) || 0;
-                              updateConfirmCartItemQuantity(val);
+                              const digits = e.target.value.replace(/\D/g, "");
+                              if (digits === "") return;
+                              const val = parseInt(digits, 10);
+                              if (!isNaN(val) && val > 0) {
+                                updateConfirmCartItemQuantity(val);
+                              }
                             }}
-                            className="w-10 text-center text-xs font-extrabold text-gray-800 focus:outline-none py-1 border-none bg-transparent"
+                            className="w-12 text-center text-xs font-extrabold text-gray-800 focus:outline-none py-1 border-none bg-transparent"
                           />
                           <button
                             type="button"
@@ -12152,12 +12647,13 @@ export default function App() {
                       const items = favorites
                         .filter((f: any) => selectedFavIds.has(f.id))
                         .map((f: any) => {
-                          const p = catalogData.find((x: any) => x.id === f.id);
+                          const { product: p, whatsappQtyLabel, rollInfo } =
+                            getFavoriteItemMeta(f);
                           let priceStr = "";
                           if (p) {
                             const price =
                               Number(p.price) > 0
-                                ? `₪${p.price.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                ? `₪${p.price.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${rollInfo ? " למטר" : ""}`
                                 : "צור קשר למחירים";
                             const retail = Number(p.retailPrice) > 0
                               ? ` (צרכן: ₪${p.retailPrice.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
@@ -12168,7 +12664,7 @@ export default function App() {
                           const favLink = favKey
                             ? `\n  ${window.location.origin}/?product=${encodeURIComponent(String(favKey))}`
                             : "";
-                          return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ""} - כמות: ${favQuantities[f.id] || 1}${priceStr}${favLink}`;
+                          return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ""} - כמות: ${whatsappQtyLabel}${priceStr}${favLink}`;
                         });
                       const text = encodeURIComponent(
                         `שלום רב,\nרשימת מועדפים:\n${items.join("\n")}`,
@@ -12195,12 +12691,13 @@ export default function App() {
                       const items = favorites
                         .filter((f: any) => selectedFavIds.has(f.id))
                         .map((f: any) => {
-                          const p = catalogData.find((x: any) => x.id === f.id);
+                          const { product: p, whatsappQtyLabel, rollInfo } =
+                            getFavoriteItemMeta(f);
                           let priceStr = "";
                           if (p) {
                             const price =
                               Number(p.price) > 0
-                                ? `₪${p.price.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                ? `₪${p.price.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${rollInfo ? " למטר" : ""}`
                                 : "צור קשר למחירים";
                             const retail = Number(p.retailPrice) > 0
                               ? ` (צרכן: ₪${p.retailPrice.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
@@ -12211,7 +12708,7 @@ export default function App() {
                           const favLink = favKey
                             ? `\n  ${window.location.origin}/?product=${encodeURIComponent(String(favKey))}`
                             : "";
-                          return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ""} - כמות: ${favQuantities[f.id] || 1}${priceStr}${favLink}`;
+                          return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ""} - כמות: ${whatsappQtyLabel}${priceStr}${favLink}`;
                         });
                       const text = encodeURIComponent(
                         `שלום רב,\nרשימת מועדפים:\n${items.join("\n")}`,
@@ -12345,38 +12842,7 @@ export default function App() {
                                   <Heart size={16} className="fill-red-500" />
                                 </button>
                               </div>
-                              <div className="flex items-center gap-2 mr-6">
-                                <span className="text-xs text-gray-500 font-bold">
-                                  כמות:
-                                </span>
-                                <div className="flex items-center border border-gray-200 rounded">
-                                  <button
-                                    onClick={() =>
-                                      setFavQuantities((p) => ({
-                                        ...p,
-                                        [f.id]: Math.max(1, (p[f.id] || 1) - 1),
-                                      }))
-                                    }
-                                    className="px-2 py-0.5 text-gray-500 hover:bg-gray-50"
-                                  >
-                                    -
-                                  </button>
-                                  <span className="px-2 text-xs font-bold w-6 text-center">
-                                    {favQuantities[f.id] || 1}
-                                  </span>
-                                  <button
-                                    onClick={() =>
-                                      setFavQuantities((p) => ({
-                                        ...p,
-                                        [f.id]: (p[f.id] || 1) + 1,
-                                      }))
-                                    }
-                                    className="px-2 py-0.5 text-gray-500 hover:bg-gray-50"
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              </div>
+                              {renderFavoriteQuantityControl(f)}
                             </div>
                           ))}
                         </div>
@@ -14494,7 +14960,7 @@ export default function App() {
                     <h3 className="text-sm font-bold text-gray-600 mb-2">
                       מועדפים ({favorites.length})
                     </h3>
-                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                       {favorites.map((f) => (
                         <div
                           key={f.id}
@@ -14540,6 +15006,7 @@ export default function App() {
                               <Heart size={16} className="fill-red-500" />
                             </button>
                           </div>
+                          {renderFavoriteQuantityControl(f)}
                         </div>
                       ))}
                     </div>
@@ -14551,14 +15018,16 @@ export default function App() {
                             const items = favorites
                               .filter((f: any) => selectedFavIds.has(f.id))
                               .map((f: any) => {
-                                const p = catalogData.find(
-                                  (x: any) => x.id === f.id,
-                                );
+                                const {
+                                  product: p,
+                                  whatsappQtyLabel,
+                                  rollInfo,
+                                } = getFavoriteItemMeta(f);
                                 let priceStr = "";
                                 if (p) {
                                   const price =
                                     Number(p.price) > 0
-                                      ? `₪${p.price.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                      ? `₪${p.price.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${rollInfo ? " למטר" : ""}`
                                       : "צור קשר למחירים";
                                   priceStr = ` | מחיר מתקין: ${price}`;
                                 }
@@ -14566,7 +15035,7 @@ export default function App() {
                                 const favLink = favKey
                                   ? `\n  ${window.location.origin}/?product=${encodeURIComponent(String(favKey))}`
                                   : "";
-                                return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ""} - כמות: ${favQuantities[f.id] || 1}${priceStr}${favLink}`;
+                                return `- ${f.name} ${f.sku ? `(מק"ט: ${f.sku})` : ""} - כמות: ${whatsappQtyLabel}${priceStr}${favLink}`;
                               });
                             const text = encodeURIComponent(
                               `שלום רב,\nרשימת מוצרים:\n${items.join("\n")}\nבברכה,\n${agentName}`,
@@ -14594,10 +15063,9 @@ export default function App() {
                           onClick={() => {
                             favorites.forEach((f: any) => {
                               if (selectedFavIds.has(f.id)) {
-                                const p = catalogData.find(
-                                  (x: any) => x.id === f.id,
-                                );
-                                if (p) addToCart(p, 1);
+                                const { product: p, effectiveQty } =
+                                  getFavoriteItemMeta(f);
+                                if (p) addToCart(p, effectiveQty);
                               }
                             });
                             setSelectedFavIds(new Set());
@@ -14612,10 +15080,9 @@ export default function App() {
                         <button
                           onClick={() => {
                             favorites.forEach((f: any) => {
-                              const p = catalogData.find(
-                                (x: any) => x.id === f.id,
-                              );
-                              if (p) addToCart(p, 1);
+                              const { product: p, effectiveQty } =
+                                getFavoriteItemMeta(f);
+                              if (p) addToCart(p, effectiveQty);
                             });
                             setSelectedFavIds(new Set());
                             setShowProfile(false);
@@ -14959,9 +15426,30 @@ export default function App() {
                                   >
                                     <Minus size={10} />
                                   </button>
-                                  <span className="w-5 font-black text-xs text-center text-slate-800">
-                                    {item.quantity}
-                                  </span>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    aria-label="כמות"
+                                    value={item.quantity}
+                                    onFocus={(e) => e.currentTarget.select()}
+                                    onChange={(e) => {
+                                      const digits = e.target.value.replace(
+                                        /\D/g,
+                                        "",
+                                      );
+                                      if (digits === "") return;
+                                      const parsed = parseInt(digits, 10);
+                                      if (!isNaN(parsed) && parsed > 0) {
+                                        handleBulkSelectionChange(
+                                          productId,
+                                          item.product,
+                                          parsed,
+                                        );
+                                      }
+                                    }}
+                                    className="w-10 font-black text-xs text-center text-slate-800 bg-transparent border-none outline-none p-0"
+                                  />
                                   <button
                                     onClick={() =>
                                       handleBulkSelectionChange(
@@ -15294,10 +15782,15 @@ export default function App() {
                 <div className="relative w-full flex-1 min-h-0 max-h-[70vh] bg-[#061830] flex items-center justify-center overflow-hidden">
                   {videoInfo.type === "video" && !presentationVideoFailed ? (
                     <>
-                      {/* Pure CSS ambient backdrop to eliminate black bars without a duplicate video stream */}
-                      <div
+                      {/* Blurred ambient background to eliminate any black bars */}
+                      <video
+                        src={videoInfo.src}
+                        muted
+                        loop
+                        autoPlay
+                        playsInline
                         aria-hidden="true"
-                        className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(247,148,29,0.18)_0%,rgba(12,45,87,0.65)_55%,rgba(6,24,48,0.98)_100%)] pointer-events-none"
+                        className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-45 pointer-events-none"
                       />
                       <video
                         key={videoInfo.src}
@@ -15306,7 +15799,7 @@ export default function App() {
                         controls
                         autoPlay
                         playsInline
-                        preload="metadata"
+                        preload="auto"
                         onLoadedMetadata={(e) => {
                           const el = e.currentTarget;
                           const playPromise = el.play();
