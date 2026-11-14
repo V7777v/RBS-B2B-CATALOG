@@ -2195,6 +2195,9 @@ const InfiniteScrollTrigger: React.FC<InfiniteScrollTriggerProps> = ({
     </div>
   );
 };
+/* ===== Flag to hide distributor login UI for guests without removing any functionality ===== */
+const HIDE_DISTRIBUTOR_LOGIN_UI = true;
+
 /* ===== Hoisted out of App() to give stable identity (prevents remount that wiped configurator state) ===== */
 const ProductDetailsView = (props: any) => {
   const {
@@ -2216,6 +2219,7 @@ const ProductDetailsView = (props: any) => {
     isGuest,
     copyShareLink,
   } = props;
+  const { favoriteIds, toggleFavorite } = React.useContext(FavoritesContext);
   const [mainImage, setMainImage] = useState(selectedProduct?.images?.[0]);
   const [failedGalleryVideoUrls, setFailedGalleryVideoUrls] = useState<Record<string, boolean>>({});
   const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
@@ -3353,15 +3357,44 @@ const ProductDetailsView = (props: any) => {
                     )}
                   </div>
                   {isGuest ? (
-                    <button
-                      onClick={() => {
-                        window.dispatchEvent(new Event("rbs_trigger_login"));
-                      }}
-                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold transition-all shadow-md text-sm sm:text-base h-[48px]"
-                    >
-                      <Lock size={18} className="sm:w-5 sm:h-5" />
-                      כניסת מפיצים להזמנה
-                    </button>
+                    HIDE_DISTRIBUTOR_LOGIN_UI ? (
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!favoriteIds.has(selectedProduct.id)) {
+                              toggleFavorite(selectedProduct);
+                            }
+                            window.dispatchEvent(
+                              new Event("rbs_open_favorites"),
+                            );
+                          }}
+                          className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold transition-all shadow-md text-sm sm:text-base h-[48px] cursor-pointer"
+                        >
+                          <Heart
+                            size={18}
+                            className={
+                              favoriteIds.has(selectedProduct.id)
+                                ? "fill-red-500 text-red-500"
+                                : "fill-current"
+                            }
+                          />
+                          {favoriteIds.has(selectedProduct.id)
+                            ? "במועדפים — פתח להצעת מחיר"
+                            : "הוסף למועדפים / להצעת מחיר"}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          window.dispatchEvent(new Event("rbs_trigger_login"));
+                        }}
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold transition-all shadow-md text-sm sm:text-base h-[48px]"
+                      >
+                        <Lock size={18} className="sm:w-5 sm:h-5" />
+                        כניסת מפיצים להזמנה
+                      </button>
+                    )
                   ) : selectedProduct.isComingSoon ? (
                     <div className="w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-3 px-6 sm:px-10 py-3 font-bold transition-all shadow-md text-sm sm:text-base bg-gray-200 text-gray-600 cursor-not-allowed">
                       <span className="animate-pulse">בקרוב!</span>
@@ -4599,7 +4632,16 @@ export default function App() {
   const [editItems, setEditItems] = useState<any[]>([]);
   const [userUid, setUserUid] = useState<string | null>(null);
   const [cartLoaded, setCartLoaded] = useState(false);
+  const [adminLoginRequested, setAdminLoginRequested] = useState(false);
   const [isGuest, setIsGuest] = useState(() => {
+    if (HIDE_DISTRIBUTOR_LOGIN_UI) {
+      try {
+        if (localStorage.getItem("rbs_b2b_auth") === "true") {
+          return false;
+        }
+      } catch {}
+      return true;
+    }
     try {
       return sessionStorage.getItem("rbs_guest") === "1";
     } catch {
@@ -4611,11 +4653,18 @@ export default function App() {
       try {
         sessionStorage.removeItem("rbs_guest");
       } catch {}
+      setAdminLoginRequested(true);
       setIsGuest(false);
     };
+    const handleOpenFavorites = () => {
+      setShowProfile(true);
+    };
     window.addEventListener("rbs_trigger_login", handleTriggerLogin);
-    return () =>
+    window.addEventListener("rbs_open_favorites", handleOpenFavorites);
+    return () => {
       window.removeEventListener("rbs_trigger_login", handleTriggerLogin);
+      window.removeEventListener("rbs_open_favorites", handleOpenFavorites);
+    };
   }, []);
 
   const [showGuestNotice, setShowGuestNotice] = useState(() => {
@@ -6123,6 +6172,12 @@ export default function App() {
       }
       setUserUid(ok && user ? user.uid : null);
       setIsAuthenticated(ok);
+      if (ok) {
+        setIsGuest(false);
+        setAdminLoginRequested(false);
+      } else if (HIDE_DISTRIBUTOR_LOGIN_UI) {
+        setIsGuest(true);
+      }
       try {
         if (ok) {
           localStorage.setItem("rbs_b2b_auth", "true");
@@ -6142,6 +6197,10 @@ export default function App() {
       sessionStorage.removeItem("rbs_unlocked");
     } catch {}
     setIsAuthenticated(false);
+    setAdminLoginRequested(false);
+    if (HIDE_DISTRIBUTOR_LOGIN_UI) {
+      setIsGuest(true);
+    }
   };
   // Biometric (WebAuthn) — device-local unlock over the persisted Firebase session
   useEffect(() => {
@@ -6411,13 +6470,7 @@ export default function App() {
   }, [isAuthenticated, isGuest, userUid]);
   const [isHumanVerified, setIsHumanVerified] = useState<boolean>(() => {
     try {
-      const stored = localStorage.getItem("rbs_human_verified_at");
-      if (stored) {
-        const verifiedAt = Number(stored);
-        if (!isNaN(verifiedAt) && Date.now() - verifiedAt < 24 * 60 * 60 * 1000) {
-          return true;
-        }
-      }
+      return sessionStorage.getItem("rbs_human_verified_session") === "1";
     } catch {
       /* ignore */
     }
@@ -6427,6 +6480,495 @@ export default function App() {
   useEffect(() => {
     if (isCartOpen) trackEvent("checkout_start", { cart_size: cart.length });
   }, [isCartOpen]);
+
+  // --- IN-CART PROJECT CALCULATOR STATE & LOGIC ---
+  const [isProjectCalcOpen, setIsProjectCalcOpen] = useState(false);
+  const [projectEndpointType, setProjectEndpointType] = useState<
+    "cameras" | "network" | "mixed"
+  >("cameras");
+  const [projectEndpointsInput, setProjectEndpointsInput] = useState<
+    number | string
+  >(10);
+  const [projectAvgDistance, setProjectAvgDistance] = useState<number>(30);
+  const [projectCableCat, setProjectCableCat] = useState<
+    "CAT6" | "CAT6A" | "CAT7"
+  >("CAT6");
+  const [projectCalcToast, setProjectCalcToast] = useState<string>("");
+
+  const projectCalculatorPlan = useMemo(() => {
+    const endpoints = Math.max(1, Number(projectEndpointsInput) || 10);
+    const validProducts = catalogData.filter(
+      (p: any) =>
+        p &&
+        p.name &&
+        p.name !== "מוצר הדגמה" &&
+        p.name !== "קטגוריית אם" &&
+        !p.isComingSoon,
+    );
+
+    // 1. PoE Switch Calculation (with ~20% port headroom for uplink/NVR/growth)
+    let switchPortTier: 4 | 8 | 16 | 24 = 16;
+    let switchQty = 1;
+    let recommendedWatts = 150;
+    if (endpoints <= 4) {
+      switchPortTier = 4;
+      switchQty = 1;
+      recommendedWatts = 60;
+    } else if (endpoints <= 8) {
+      switchPortTier = 8;
+      switchQty = 1;
+      recommendedWatts = 120;
+    } else if (endpoints <= 15) {
+      switchPortTier = 16;
+      switchQty = 1;
+      recommendedWatts = Math.max(150, endpoints * 15);
+    } else if (endpoints <= 22) {
+      switchPortTier = 24;
+      switchQty = 1;
+      recommendedWatts = Math.max(250, endpoints * 15);
+    } else {
+      switchPortTier = 24;
+      switchQty = Math.ceil(endpoints / 22);
+      recommendedWatts = endpoints * 15;
+    }
+
+    const matchedSwitch =
+      validProducts.find((p: any) => {
+        const txt = `${p.name || ""} ${p.subcategory || ""} ${p.category || ""}`.toLowerCase();
+        const isSwitch =
+          (txt.includes("מתג") || txt.includes("switch")) &&
+          !txt.includes("פנל") &&
+          !txt.includes("ארון");
+        const isPoe = txt.includes("poe");
+        const hasPortCount = new RegExp(
+          `(?:^|\\D)${switchPortTier}(?:\\s*(?:פורט|פורטים|port|ports|p\\b|fe|ge)|\\D|$)`,
+          "i",
+        ).test(p.name || "");
+        return isSwitch && isPoe && hasPortCount;
+      }) ||
+      validProducts.find((p: any) => {
+        const txt = `${p.name || ""} ${p.subcategory || ""}`.toLowerCase();
+        return (txt.includes("מתג") || txt.includes("switch")) && txt.includes("poe");
+      }) ||
+      null;
+
+    // 2. Cable Quantity Calculation (endpoints * avgDistance + 15% installation slack)
+    const rawRequiredMeters = Math.ceil(endpoints * projectAvgDistance * 1.15);
+    const matchedCable =
+      validProducts.find((p: any) => {
+        if (!isNetworkCableRoll(p)) return false;
+        const n = `${p.name || ""} ${p.subcategory || ""}`.toUpperCase();
+        if (projectCableCat === "CAT6A") return n.includes("CAT6A") || n.includes("6A");
+        if (projectCableCat === "CAT7") return n.includes("CAT7");
+        return (
+          (n.includes("CAT6") && !n.includes("CAT6A")) ||
+          n.includes("כבל רשת")
+        );
+      }) ||
+      validProducts.find((p: any) => isNetworkCableRoll(p)) ||
+      null;
+
+    const cableRollInfo = matchedCable ? getCableRollInfo(matchedCable) : null;
+    const rollLength = cableRollInfo?.rollLength || 305;
+    const rollUnitSingular = cableRollInfo?.unitSingular || "תוף";
+    const rollUnitPlural = cableRollInfo?.unitPlural || "תופים";
+    const recommendedRolls = Math.max(1, Math.ceil(rawRequiredMeters / rollLength));
+    const totalCableMetersToOrder = recommendedRolls * rollLength;
+
+    // 3. Accessories Calculation
+    const patchCordsQty = endpoints + 2; // 1 per endpoint at rack + 2 for uplink/NVR
+    const connectorsQty = endpoints * 2 + 4; // 2 ends per run + 4 spare
+    const patchPanelsQty = Math.max(1, Math.ceil(endpoints / 24));
+
+    const matchedPatchCord =
+      validProducts.find((p: any) => {
+        const n = `${p.name || ""} ${p.subcategory || ""}`.toLowerCase();
+        return (
+          (n.includes("מגשר") || n.includes("patch")) &&
+          !n.includes("אופטי") &&
+          !n.includes("פיגטייל") &&
+          !n.includes("פנל") &&
+          (n.includes("1 מטר") || n.includes("1m") || n.includes("0.5") || n.includes("cat6"))
+        );
+      }) ||
+      validProducts.find((p: any) => {
+        const n = `${p.name || ""} ${p.subcategory || ""}`.toLowerCase();
+        return (
+          n.includes("מגשר") && !n.includes("אופטי") && !n.includes("פנל")
+        );
+      }) ||
+      null;
+
+    const matchedPatchPanel =
+      validProducts.find((p: any) => {
+        const n = `${p.name || ""} ${p.subcategory || ""}`.toLowerCase();
+        return (
+          n.includes("פנל") &&
+          !n.includes("אופטי") &&
+          !n.includes("סולארי") &&
+          (n.includes("24") || n.includes("תקשורת") || n.includes("cat6"))
+        );
+      }) || null;
+
+    const matchedKeystoneOrPlug =
+      validProducts.find((p: any) => {
+        const n = `${p.name || ""} ${p.subcategory || ""}`.toLowerCase();
+        return (
+          (n.includes("קיסטון") ||
+            n.includes("keystone") ||
+            n.includes("שקע רשת") ||
+            n.includes("rj45") ||
+            n.includes("קונקטור")) &&
+          !n.includes("אופטי") &&
+          !n.includes("מגשר") &&
+          !n.includes("לוחץ")
+        );
+      }) || null;
+
+    // 4. Camera-specific accessories (Junction Boxes & NVR) if cameras or mixed
+    const cameraCount =
+      projectEndpointType === "cameras"
+        ? endpoints
+        : projectEndpointType === "mixed"
+          ? Math.max(1, Math.ceil(endpoints * 0.6))
+          : 0;
+    const nvrChannels: 4 | 8 | 16 | 32 =
+      cameraCount <= 4 ? 4 : cameraCount <= 8 ? 8 : cameraCount <= 16 ? 16 : 32;
+
+    const matchedJunctionBox =
+      cameraCount > 0
+        ? validProducts.find((p: any) => {
+            const n = `${p.name || ""} ${p.subcategory || ""}`.toLowerCase();
+            return (
+              n.includes("קופסת חיבורים") ||
+              n.includes("קופסאות חיבורים") ||
+              n.includes("בסיס חיבורים") ||
+              n.includes("ds-1280")
+            );
+          }) || null
+        : null;
+
+    const matchedNvr =
+      cameraCount > 0
+        ? validProducts.find((p: any) => {
+            const n = `${p.name || ""} ${p.subcategory || ""}`.toLowerCase();
+            const isNvr = n.includes("nvr") || n.includes("מערכת הקלטה");
+            const hasCh = new RegExp(`(?:^|\\D)${nvrChannels}(?:\\D|$)`).test(
+              p.name || "",
+            );
+            return isNvr && hasCh;
+          }) || null
+        : null;
+
+    const items = [
+      {
+        key: "poe_switch",
+        categoryLabel: "מתג PoE מומלץ",
+        calcTitle: `${switchQty > 1 ? `${switchQty} × ` : ""}מתג PoE עם ${switchPortTier} פורטים (+Uplink)`,
+        calcExplanation: `עבור ${endpoints} נקודות קצה מומלץ מתג ${switchPortTier} פורטים PoE בהספק של כ-${recommendedWatts}W (כולל מרווח ביטחון ופורטי Uplink).`,
+        recommendedQty: switchQty,
+        qtyUnitLabel: "יח׳",
+        matchedProduct: matchedSwitch,
+        cartQuantity: switchQty,
+      },
+      {
+        key: "network_cable",
+        categoryLabel: `כבל רשת (${projectCableCat})`,
+        calcTitle: `${recommendedRolls} ${recommendedRolls === 1 ? rollUnitSingular : rollUnitPlural} של ${rollLength} מ׳ (${totalCableMetersToOrder} מטר סה״כ)`,
+        calcExplanation: `${endpoints} נקודות × ${projectAvgDistance} מ׳ ממוצע + 15% רזרבת השחלה = כ-${rawRequiredMeters} מ׳ נדרשים (${recommendedRolls} ${recommendedRolls === 1 ? rollUnitSingular : rollUnitPlural} של ${rollLength} מ׳).`,
+        recommendedQty: totalCableMetersToOrder,
+        qtyUnitLabel: `מטר (${recommendedRolls} ${recommendedRolls === 1 ? rollUnitSingular : rollUnitPlural})`,
+        matchedProduct: matchedCable,
+        cartQuantity: totalCableMetersToOrder,
+      },
+      {
+        key: "patch_cords",
+        categoryLabel: "מגשרי רשת לארון תקשורת",
+        calcTitle: `${patchCordsQty} מגשרי רשת ${projectCableCat}`,
+        calcExplanation: `${endpoints} מגשרים לחיבור הנקודות בארון + 2 מגשרי גישור ל-NVR / ראוטר.`,
+        recommendedQty: patchCordsQty,
+        qtyUnitLabel: "יח׳",
+        matchedProduct: matchedPatchCord,
+        cartQuantity: patchCordsQty,
+      },
+      {
+        key: "keystones_connectors",
+        categoryLabel: "שקעי קיסטון / קונקטורים RJ45",
+        calcTitle: `${connectorsQty} שקעי קיסטון / ראשי RJ45`,
+        calcExplanation: `2 קצוות לכל נקודת קצה (${endpoints * 2}) + 4 יחידות רזרבה להתקנה.`,
+        recommendedQty: connectorsQty,
+        qtyUnitLabel: "יח׳",
+        matchedProduct: matchedKeystoneOrPlug,
+        cartQuantity: connectorsQty,
+      },
+      {
+        key: "patch_panel",
+        categoryLabel: "פנל תקשורת (Patch Panel)",
+        calcTitle: `${patchPanelsQty} × פנל תקשורת 24 פורטים`,
+        calcExplanation: `ריכוז מסודר של ${endpoints} קווי הרשת בארון התקשורת.`,
+        recommendedQty: patchPanelsQty,
+        qtyUnitLabel: "יח׳",
+        matchedProduct: matchedPatchPanel,
+        cartQuantity: patchPanelsQty,
+      },
+      ...(cameraCount > 0
+        ? [
+            {
+              key: "junction_boxes",
+              categoryLabel: "קופסאות חיבורים מוגנות מים למצלמות",
+              calcTitle: `${cameraCount} קופסאות חיבורים למצלמה`,
+              calcExplanation: `קופסת ביקורת ואטימה עבור כל אחת מ-${cameraCount} המצלמות להגנה על מחברי ה-RJ45.`,
+              recommendedQty: cameraCount,
+              qtyUnitLabel: "יח׳",
+              matchedProduct: matchedJunctionBox,
+              cartQuantity: cameraCount,
+            },
+            ...(matchedNvr
+              ? [
+                  {
+                    key: "nvr_recorder",
+                    categoryLabel: "מערכת הקלטה (NVR)",
+                    calcTitle: `NVR ${nvrChannels} ערוצים`,
+                    calcExplanation: `מותאם ל-${cameraCount} מצלמות IP עם מרווח להרחבה עתידית.`,
+                    recommendedQty: 1,
+                    qtyUnitLabel: "יח׳",
+                    matchedProduct: matchedNvr,
+                    cartQuantity: 1,
+                  },
+                ]
+              : []),
+          ]
+        : []),
+    ];
+
+    return {
+      endpoints,
+      rawRequiredMeters,
+      totalCableMetersToOrder,
+      recommendedRolls,
+      rollLength,
+      rollUnitSingular,
+      rollUnitPlural,
+      switchPortTier,
+      switchQty,
+      recommendedWatts,
+      items,
+    };
+  }, [
+    projectEndpointsInput,
+    projectEndpointType,
+    projectAvgDistance,
+    projectCableCat,
+    catalogData,
+  ]);
+
+  const addProjectCalcItemToCart = useCallback(
+    (product: any, quantity: number, label?: string) => {
+      if (!product || quantity <= 0) return;
+      if (isGuest) {
+        setGuestPrompt(true);
+        return;
+      }
+      if (userRole === "agent" || userRole === "sales_manager") return;
+      setCart((prev) => {
+        const existing = prev.find(
+          (item) =>
+            item.id === product.id &&
+            JSON.stringify(item.optionals || []) === JSON.stringify([]),
+        );
+        if (existing) {
+          return prev.map((item) =>
+            item === existing
+              ? { ...item, quantity: item.quantity + quantity }
+              : item,
+          );
+        }
+        return [...prev, { ...product, quantity, optionals: [] }];
+      });
+      setProjectCalcToast(
+        label ? `נוסף לעגלה: ${label}` : `נוסף לעגלה: ${product.name}`,
+      );
+      setTimeout(() => setProjectCalcToast(""), 2800);
+    },
+    [isGuest, userRole],
+  );
+
+  const addAllProjectCalcItemsToCart = useCallback(() => {
+    if (isGuest) {
+      setGuestPrompt(true);
+      return;
+    }
+    if (userRole === "agent" || userRole === "sales_manager") return;
+    let addedCount = 0;
+    projectCalculatorPlan.items.forEach((entry) => {
+      if (entry.matchedProduct && entry.cartQuantity > 0) {
+        addedCount++;
+        setCart((prev) => {
+          const existing = prev.find(
+            (item) =>
+              item.id === entry.matchedProduct.id &&
+              JSON.stringify(item.optionals || []) === JSON.stringify([]),
+          );
+          if (existing) {
+            return prev.map((item) =>
+              item === existing
+                ? { ...item, quantity: item.quantity + entry.cartQuantity }
+                : item,
+            );
+          }
+          return [
+            ...prev,
+            {
+              ...entry.matchedProduct,
+              quantity: entry.cartQuantity,
+              optionals: [],
+            },
+          ];
+        });
+      }
+    });
+    if (addedCount > 0) {
+      setProjectCalcToast(
+        `נוספו ${addedCount} סוגי רכיבים מהמחשבון ישירות לעגלה!`,
+      );
+      setTimeout(() => setProjectCalcToast(""), 3200);
+    }
+  }, [isGuest, userRole, projectCalculatorPlan]);
+
+  const addProjectCalcItemToFavorites = useCallback(
+    (product: any, quantity: number, label?: string) => {
+      if (!product || quantity <= 0) return;
+      const rollInfo = getCableRollInfo(product);
+      setFavorites((prev: any[]) => {
+        const exists = prev.some((f) => f.id === product.id);
+        const next = exists
+          ? prev
+          : [
+              ...prev,
+              {
+                id: product.id,
+                name: product.name,
+                sku: product.sku || "",
+                image: product.images?.[0] || "",
+                category: product.category || "",
+                subcategory: product.subcategory || "",
+                rollLength: rollInfo?.rollLength,
+                unitSingular: rollInfo?.unitSingular,
+                unitPlural: rollInfo?.unitPlural,
+              },
+            ];
+        if (userUid) {
+          saveFavorites(userUid, next);
+        } else {
+          try {
+            localStorage.setItem("rbs_guest_favorites", JSON.stringify(next));
+          } catch {}
+        }
+        return next;
+      });
+      setFavQuantities((prev) => ({
+        ...prev,
+        [product.id]: quantity,
+      }));
+      if (rollInfo) {
+        setFavRollCounts((prev) => ({
+          ...prev,
+          [product.id]: Math.max(1, Math.ceil(quantity / rollInfo.rollLength)),
+        }));
+      }
+      setSelectedFavIds((prev) => {
+        const n = new Set(prev);
+        n.add(product.id);
+        return n;
+      });
+      setProjectCalcToast(
+        label
+          ? `נוסף למועדפים להצעת מחיר: ${label}`
+          : `נוסף למועדפים להצעת מחיר: ${product.name}`,
+      );
+      setTimeout(() => setProjectCalcToast(""), 2800);
+    },
+    [userUid],
+  );
+
+  const addAllProjectCalcItemsToFavorites = useCallback(() => {
+    let addedCount = 0;
+    const itemsToAdd: any[] = [];
+    const newQuantities: Record<string, number> = {};
+    const newRollCounts: Record<string, number> = {};
+    const newSelectedIds: string[] = [];
+
+    projectCalculatorPlan.items.forEach((entry) => {
+      const prod = entry.matchedProduct;
+      if (prod && entry.cartQuantity > 0) {
+        addedCount++;
+        const rollInfo = getCableRollInfo(prod);
+        itemsToAdd.push({
+          id: prod.id,
+          name: prod.name,
+          sku: prod.sku || "",
+          image: prod.images?.[0] || "",
+          category: prod.category || "",
+          subcategory: prod.subcategory || "",
+          rollLength: rollInfo?.rollLength,
+          unitSingular: rollInfo?.unitSingular,
+          unitPlural: rollInfo?.unitPlural,
+        });
+        newQuantities[prod.id] = entry.cartQuantity;
+        if (rollInfo) {
+          newRollCounts[prod.id] = Math.max(
+            1,
+            Math.ceil(entry.cartQuantity / rollInfo.rollLength),
+          );
+        }
+        newSelectedIds.push(prod.id);
+      }
+    });
+
+    if (addedCount > 0) {
+      setFavorites((prev: any[]) => {
+        const existingIds = new Set(prev.map((f: any) => f.id));
+        const merged = [
+          ...prev,
+          ...itemsToAdd.filter((it) => !existingIds.has(it.id)),
+        ];
+        if (userUid) {
+          saveFavorites(userUid, merged);
+        } else {
+          try {
+            localStorage.setItem("rbs_guest_favorites", JSON.stringify(merged));
+          } catch {}
+        }
+        return merged;
+      });
+      setFavQuantities((prev) => ({ ...prev, ...newQuantities }));
+      setFavRollCounts((prev) => ({ ...prev, ...newRollCounts }));
+      setSelectedFavIds((prev) => {
+        const n = new Set(prev);
+        newSelectedIds.forEach((id) => n.add(id));
+        return n;
+      });
+      setProjectCalcToast(
+        `נוספו ${addedCount} סוגי רכיבים למועדפים להצעת מחיר!`,
+      );
+      setTimeout(() => setProjectCalcToast(""), 3200);
+    }
+  }, [projectCalculatorPlan, userUid]);
+
+  const handleSearchInputWithAdminSecret = useCallback((val: string) => {
+    if (val.trim() === "אדמין") {
+      setSearchQuery("");
+      setIsSearchFocused(false);
+      try {
+        sessionStorage.removeItem("rbs_guest");
+      } catch {}
+      setAdminLoginRequested(true);
+      setIsGuest(false);
+      return;
+    }
+    setSearchQuery(val);
+  }, []);
+
   const [bulkSelection, setBulkSelection] = useState<
     Record<string, { product: any; quantity: number }>
   >({});
@@ -9698,7 +10240,7 @@ export default function App() {
       </div>
     );
   }
-  if (showGuestNotice && !isAuthenticated) {
+  if (showGuestNotice && !isAuthenticated && !HIDE_DISTRIBUTOR_LOGIN_UI) {
     return (
       <>
         <GuestNoticeModal onDismiss={handleDismissGuestNotice} />
@@ -9708,20 +10250,23 @@ export default function App() {
             try {
               sessionStorage.setItem("rbs_guest", "1");
             } catch {}
+            setAdminLoginRequested(false);
             setIsGuest(true);
           }}
         />
       </>
     );
   }
-  if (!isAuthenticated && !isGuest) {
+  if (!isAuthenticated && (!isGuest || adminLoginRequested)) {
     return (
       <FirebaseAuthView
         setIsAuthenticated={setIsAuthenticated}
+        initialScreen={adminLoginRequested ? "form" : "landing"}
         onGuest={() => {
           try {
             sessionStorage.setItem("rbs_guest", "1");
           } catch {}
+          setAdminLoginRequested(false);
           setIsGuest(true);
         }}
       />
@@ -10081,7 +10626,7 @@ export default function App() {
                   className="bg-transparent border-none outline-none w-full min-w-0 text-base md:text-sm text-gray-700 shadow-none focus:ring-0 !p-0 !m-0 text-right pl-8"
                   value={searchQuery}
                   onChange={(e) => {
-                    setSearchQuery(e.target.value);
+                    handleSearchInputWithAdminSecret(e.target.value);
                   }}
                 />
                 {searchQuery && (
@@ -10161,19 +10706,21 @@ export default function App() {
               )}
               {isGuest && (
                 <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                  <button
-                    onClick={() => {
-                      try {
-                        sessionStorage.removeItem("rbs_guest");
-                      } catch {}
-                      setIsGuest(false);
-                    }}
-                    title="כניסה / רישום למפיצים מורשים בלבד"
-                    className="flex items-center justify-center gap-1 sm:gap-1.5 h-9 sm:h-11 px-2.5 sm:px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl active:scale-95 text-xs sm:text-sm whitespace-nowrap shadow-xs cursor-pointer"
-                  >
-                    <Lock size={15} className="flex-shrink-0 stroke-[2.25] sm:w-[18px] sm:h-[18px]" />
-                    <span>כניסת מפיצים</span>
-                  </button>
+                  {!HIDE_DISTRIBUTOR_LOGIN_UI && (
+                    <button
+                      onClick={() => {
+                        try {
+                          sessionStorage.removeItem("rbs_guest");
+                        } catch {}
+                        setIsGuest(false);
+                      }}
+                      title="כניסה / רישום למפיצים מורשים בלבד"
+                      className="flex items-center justify-center gap-1 sm:gap-1.5 h-9 sm:h-11 px-2.5 sm:px-4 bg-[#004387] hover:bg-[#0c2d57] text-white font-bold rounded-xl active:scale-95 text-xs sm:text-sm whitespace-nowrap shadow-xs cursor-pointer"
+                    >
+                      <Lock size={15} className="flex-shrink-0 stroke-[2.25] sm:w-[18px] sm:h-[18px]" />
+                      <span>כניסת מפיצים</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => setShowProfile(true)}
                     aria-label="מועדפים"
@@ -10229,7 +10776,7 @@ export default function App() {
                       setTimeout(() => setIsSearchFocused(false), 220);
                     }}
                     onChange={(e) => {
-                      setSearchQuery(e.target.value);
+                      handleSearchInputWithAdminSecret(e.target.value);
                     }}
                   />
                   {searchQuery && (
@@ -10370,7 +10917,7 @@ export default function App() {
                   </ul>
                   </div>
                   {/* Distributor login button in hamburger menu */}
-                  {isGuest && (
+                  {isGuest && !HIDE_DISTRIBUTOR_LOGIN_UI && (
                     <div className="p-4 border-t border-gray-100 bg-gray-50/60 flex-shrink-0">
                       <button
                         onClick={() => {
@@ -11196,7 +11743,7 @@ export default function App() {
                 onClick={() => setIsCartOpen(false)}
               ></div>
               <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col transform transition-transform duration-300">
-                <div className="p-5 border-b flex justify-between items-center bg-[#f2f2f2]">
+                <div className="p-4 sm:p-5 border-b flex justify-between items-center bg-[#f2f2f2]">
                   <h2 className="text-xl font-bold flex items-center gap-2 text-[#0c2d57]">
                     <ShoppingCart size={22} className="text-[#004387]" /> עגלת
                     הזמנה מסחרית
@@ -11209,13 +11756,386 @@ export default function App() {
                     <X size={20} />
                   </button>
                 </div>
-                <div className="flex-grow overflow-y-auto p-5">
+
+                {/* PROJECT CALCULATOR BAR & PANEL INSIDE CART */}
+                <div className="border-b border-blue-100 bg-gradient-to-l from-[#004387]/5 via-blue-50/70 to-white px-4 py-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsProjectCalcOpen((prev) => !prev)}
+                    className="w-full flex items-center justify-between gap-2 text-right cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-[#004387] text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+                        <Calculator size={17} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs sm:text-sm font-extrabold text-[#0c2d57] flex items-center gap-1.5">
+                          <span>מחשבון פרויקט חכם למתקין</span>
+                          <span className="text-[10px] font-bold bg-[#c2410c] text-white px-1.5 py-0.5 rounded">
+                            חדש
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-600 truncate">
+                          הזן נקודות קצה (למשל 10 מצלמות) לחישוב כבלים, PoE Switch ואביזרים
+                        </p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-[#004387] bg-white border border-blue-200 px-2.5 py-1 rounded-lg flex-shrink-0 shadow-2xs">
+                      {isProjectCalcOpen ? (
+                        <>
+                          סגור <ChevronUp size={14} />
+                        </>
+                      ) : (
+                        <>
+                          פתח מחשבון <ChevronDown size={14} />
+                        </>
+                      )}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="flex-grow overflow-y-auto p-4 sm:p-5">
+                  {isProjectCalcOpen && (
+                    <div
+                      className="mb-6 bg-slate-50 border-2 border-[#004387]/20 rounded-xl p-3.5 sm:p-4 shadow-sm"
+                      dir="rtl"
+                    >
+                      <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-200">
+                        <div>
+                          <h3 className="text-sm font-black text-[#0c2d57] flex items-center gap-1.5">
+                            <Calculator size={16} className="text-[#004387]" />
+                            חישוב אוטומטי של כתב כמויות לפרויקט
+                          </h3>
+                          <p className="text-[11px] text-gray-500 mt-0.5">
+                            הזן את כמות נקודות הקצה והמערכת תחשב מתג PoE, תופי כבל ואביזרי קצה מתאימים
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* 1. Endpoint Type Selector */}
+                      <div className="mb-3">
+                        <label className="block text-xs font-bold text-[#0c2d57] mb-1.5">
+                          סוג נקודות הקצה בפרויקט:
+                        </label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {[
+                            { id: "cameras", label: "מצלמות IP" },
+                            { id: "network", label: "נקודות רשת / AP" },
+                            { id: "mixed", label: "משולב" },
+                          ].map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() =>
+                                setProjectEndpointType(
+                                  t.id as "cameras" | "network" | "mixed",
+                                )
+                              }
+                              className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                                projectEndpointType === t.id
+                                  ? "bg-[#004387] text-white border-[#004387] shadow-2xs"
+                                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-100"
+                              }`}
+                            >
+                              {t.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 2. Number of Endpoints (e.g., 10 Cameras) */}
+                      <div className="mb-3 bg-white p-2.5 rounded-lg border border-slate-200">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <label className="text-xs font-extrabold text-[#0c2d57]">
+                            מספר נקודות קצה{" "}
+                            {projectEndpointType === "cameras"
+                              ? "(מצלמות)"
+                              : "(נקודות)"}
+                            :
+                          </label>
+                          <div className="flex items-center border border-[#004387]/30 rounded-lg bg-slate-50 overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setProjectEndpointsInput((prev) =>
+                                  Math.max(1, (Number(prev) || 10) - 1),
+                                )
+                              }
+                              className="px-2.5 py-1 text-[#004387] hover:bg-blue-100 font-black cursor-pointer"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              aria-label="מספר נקודות קצה"
+                              value={projectEndpointsInput}
+                              onFocus={(e) => e.currentTarget.select()}
+                              onChange={(e) => {
+                                const digits = e.target.value.replace(/\D/g, "");
+                                if (digits === "") {
+                                  setProjectEndpointsInput("");
+                                  return;
+                                }
+                                setProjectEndpointsInput(
+                                  Math.min(500, Math.max(1, parseInt(digits, 10))),
+                                );
+                              }}
+                              onBlur={() => {
+                                setProjectEndpointsInput((prev) =>
+                                  Math.max(1, Number(prev) || 10),
+                                );
+                              }}
+                              className="w-14 text-center text-sm font-black text-[#004387] bg-white py-1 border-x border-[#004387]/20 outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setProjectEndpointsInput(
+                                  (prev) => (Number(prev) || 10) + 1,
+                                )
+                              }
+                              className="px-2.5 py-1 text-[#004387] hover:bg-blue-100 font-black cursor-pointer"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="text-[11px] text-gray-500 ml-1">
+                            בחירה מהירה:
+                          </span>
+                          {[4, 8, 10, 16, 24, 32].map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => setProjectEndpointsInput(preset)}
+                              className={`px-2 py-0.5 text-[11px] font-bold rounded border transition-colors cursor-pointer ${
+                                Number(projectEndpointsInput) === preset
+                                  ? "bg-[#c2410c] text-white border-[#c2410c]"
+                                  : "bg-slate-100 text-gray-700 border-gray-200 hover:bg-slate-200"
+                              }`}
+                            >
+                              {preset}{" "}
+                              {projectEndpointType === "cameras"
+                                ? "מצלמות"
+                                : "נק׳"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 3. Cable Run Distance & Category */}
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <div className="bg-white p-2 rounded-lg border border-slate-200">
+                          <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                            מרחק כבל ממוצע לנקודה:
+                          </label>
+                          <div className="flex gap-1">
+                            {[
+                              { m: 20, label: "20 מ׳" },
+                              { m: 30, label: "30 מ׳" },
+                              { m: 50, label: "50 מ׳" },
+                            ].map((d) => (
+                              <button
+                                key={d.m}
+                                type="button"
+                                onClick={() => setProjectAvgDistance(d.m)}
+                                className={`flex-1 py-1 text-[11px] font-bold rounded border cursor-pointer ${
+                                  projectAvgDistance === d.m
+                                    ? "bg-[#004387] text-white border-[#004387]"
+                                    : "bg-slate-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                                }`}
+                              >
+                                {d.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="bg-white p-2 rounded-lg border border-slate-200">
+                          <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                            תקן כבל רשת:
+                          </label>
+                          <div className="flex gap-1">
+                            {(["CAT6", "CAT6A", "CAT7"] as const).map((cat) => (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => setProjectCableCat(cat)}
+                                className={`flex-1 py-1 text-[11px] font-bold rounded border cursor-pointer ${
+                                  projectCableCat === cat
+                                    ? "bg-[#004387] text-white border-[#004387]"
+                                    : "bg-slate-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                                }`}
+                              >
+                                {cat}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 4. Instant Engineering Summary Strip */}
+                      <div className="grid grid-cols-3 gap-1.5 mb-3 bg-[#0c2d57] text-white p-2.5 rounded-lg text-center">
+                        <div className="bg-white/10 rounded p-1.5">
+                          <div className="text-[10px] text-blue-200">
+                            PoE Switch נדרש
+                          </div>
+                          <div className="text-xs font-black mt-0.5">
+                            {projectCalculatorPlan.switchQty > 1
+                              ? `${projectCalculatorPlan.switchQty}×${projectCalculatorPlan.switchPortTier}`
+                              : `${projectCalculatorPlan.switchPortTier}`}{" "}
+                            פורטים
+                          </div>
+                        </div>
+                        <div className="bg-white/10 rounded p-1.5">
+                          <div className="text-[10px] text-blue-200">
+                            כמות כבל (+15% רזרבה)
+                          </div>
+                          <div className="text-xs font-black mt-0.5">
+                            {projectCalculatorPlan.recommendedRolls}{" "}
+                            {projectCalculatorPlan.recommendedRolls === 1
+                              ? projectCalculatorPlan.rollUnitSingular
+                              : projectCalculatorPlan.rollUnitPlural}{" "}
+                            ({projectCalculatorPlan.totalCableMetersToOrder} מ׳)
+                          </div>
+                        </div>
+                        <div className="bg-white/10 rounded p-1.5">
+                          <div className="text-[10px] text-blue-200">
+                            אביזרי קצה וארון
+                          </div>
+                          <div className="text-xs font-black mt-0.5">
+                            {projectCalculatorPlan.endpoints + 2} מגשרים /{" "}
+                            {projectCalculatorPlan.endpoints * 2 + 4} חיבורים
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 5. Detailed Recommended Items List */}
+                      <div className="space-y-2 mb-3">
+                        {projectCalculatorPlan.items.map((entry) => {
+                          const prod = entry.matchedProduct;
+                          return (
+                            <div
+                              key={entry.key}
+                              className="bg-white border border-slate-200 rounded-lg p-2.5 flex flex-col gap-1.5"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <span className="text-[10px] font-bold text-[#004387] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                    {entry.categoryLabel}
+                                  </span>
+                                  <div className="text-xs font-extrabold text-[#0c2d57] mt-1">
+                                    {entry.calcTitle}
+                                  </div>
+                                  <p className="text-[11px] text-gray-500 leading-snug mt-0.5">
+                                    {entry.calcExplanation}
+                                  </p>
+                                </div>
+                                <span className="text-xs font-black text-[#c2410c] bg-orange-50 border border-orange-200 px-2 py-0.5 rounded whitespace-nowrap flex-shrink-0">
+                                  {entry.recommendedQty} {entry.qtyUnitLabel}
+                                </span>
+                              </div>
+
+                              {prod && (
+                                <div className="mt-1 pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    {prod.images?.[0] && (
+                                      <img
+                                        src={transformImageLink(
+                                          prod.images[0],
+                                          80,
+                                        )}
+                                        alt={prod.name}
+                                        referrerPolicy="no-referrer"
+                                        onError={handleImageError}
+                                        className="w-8 h-8 object-contain bg-slate-50 border border-slate-200 rounded p-0.5 flex-shrink-0"
+                                      />
+                                    )}
+                                    <div className="min-w-0">
+                                      <div className="text-[11px] font-bold text-gray-800 truncate">
+                                        {prod.name}
+                                      </div>
+                                      <div className="text-[10px] text-gray-500 flex items-center gap-1.5">
+                                        {prod.sku && (
+                                          <span className="font-mono">
+                                            מק״ט: {prod.sku}
+                                          </span>
+                                        )}
+                                        {!isGuest && Number(prod.price) > 0 && (
+                                          <span className="font-bold text-[#004387]">
+                                            ₪
+                                            {Number(prod.price).toLocaleString(
+                                              "he-IL",
+                                              {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                              },
+                                            )}
+                                            {entry.key === "network_cable"
+                                              ? " למטר"
+                                              : " ליח׳"}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      addProjectCalcItemToCart(
+                                        prod,
+                                        entry.cartQuantity,
+                                        entry.calcTitle,
+                                      )
+                                    }
+                                    className="px-2.5 py-1 bg-[#004387] hover:bg-[#0c2d57] text-white text-[11px] font-bold rounded flex items-center gap-1 flex-shrink-0 transition-colors cursor-pointer"
+                                  >
+                                    <Plus size={12} /> הוסף
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {projectCalcToast && (
+                        <div className="mb-2.5 text-center text-xs font-bold text-green-700 bg-green-50 border border-green-200 py-1.5 px-2 rounded-lg">
+                          {projectCalcToast}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={addAllProjectCalcItemsToCart}
+                        className="w-full py-2.5 bg-[#c2410c] hover:bg-[#004387] text-white font-extrabold text-xs sm:text-sm rounded-lg shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <ShoppingCart size={16} />
+                        הוסף את כל רכיבי הפרויקט לעגלה ({projectCalculatorPlan.endpoints}{" "}
+                        {projectEndpointType === "cameras" ? "מצלמות" : "נקודות"})
+                      </button>
+                    </div>
+                  )}
+
                   {cart.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-300 space-y-4">
+                    <div className="flex flex-col items-center justify-center py-12 text-gray-300 space-y-4">
                       <ShoppingCart size={64} opacity={0.5} />
                       <p className="text-lg text-gray-500 font-medium">
                         העגלה ריקה כרגע
                       </p>
+                      {!isProjectCalcOpen && (
+                        <button
+                          type="button"
+                          onClick={() => setIsProjectCalcOpen(true)}
+                          className="mt-2 px-4 py-2 bg-[#004387] hover:bg-[#0c2d57] text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors cursor-pointer shadow-xs"
+                        >
+                          <Calculator size={15} />
+                          פתח מחשבון פרויקט להרכבת הזמנה אוטומטית
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-6">
@@ -11390,7 +12310,7 @@ export default function App() {
               onVerified={() => {
                 setIsHumanVerified(true);
                 try {
-                  localStorage.setItem("rbs_human_verified_at", String(Date.now()));
+                  sessionStorage.setItem("rbs_human_verified_session", "1");
                 } catch {
                   /* ignore */
                 }
@@ -12819,7 +13739,7 @@ export default function App() {
                     ) : (
                       <User className="w-5 h-5" />
                     )}{" "}
-                    {isGuest ? "המועדפים שלי" : "האזור האישי שלי"}
+                    {isGuest ? "המועדפים שלי / הצעת מחיר" : "האזור האישי שלי"}
                   </h2>
                   <button
                     onClick={() => setShowProfile(false)}
@@ -12832,6 +13752,353 @@ export default function App() {
               <div className="relative bg-white w-full max-w-2xl mx-auto p-5 sm:p-6 sm:rounded-2xl shadow-sm">
                 {isGuest ? (
                   <div id="sec-favorites" className="mt-1 scroll-mt-20">
+                    {/* PROJECT CALCULATOR INSIDE GUEST FAVORITES FOR QUOTE GENERATION */}
+                    <div className="mb-4 border border-blue-200 rounded-xl overflow-hidden bg-gradient-to-l from-[#004387]/5 via-blue-50/70 to-white">
+                      <button
+                        type="button"
+                        onClick={() => setIsProjectCalcOpen((prev) => !prev)}
+                        className="w-full flex items-center justify-between gap-2 p-3 text-right cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-[#004387] text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+                            <Calculator size={17} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs sm:text-sm font-extrabold text-[#0c2d57] flex items-center gap-1.5">
+                              <span>מחשבון פרויקט חכם להצעת מחיר</span>
+                              <span className="text-[10px] font-bold bg-[#c2410c] text-white px-1.5 py-0.5 rounded">
+                                חדש
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-600 truncate">
+                              הזן נקודות קצה (למשל 10 מצלמות) לחישוב כבלים, PoE Switch ואביזרים
+                            </p>
+                          </div>
+                        </div>
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-[#004387] bg-white border border-blue-200 px-2.5 py-1 rounded-lg flex-shrink-0 shadow-2xs">
+                          {isProjectCalcOpen ? (
+                            <>
+                              סגור <ChevronUp size={14} />
+                            </>
+                          ) : (
+                            <>
+                              פתח מחשבון <ChevronDown size={14} />
+                            </>
+                          )}
+                        </span>
+                      </button>
+
+                      {isProjectCalcOpen && (
+                        <div className="p-3.5 sm:p-4 border-t border-blue-100 bg-slate-50">
+                          {/* 1. Endpoint Type Selector */}
+                          <div className="mb-3">
+                            <label className="block text-xs font-bold text-[#0c2d57] mb-1.5">
+                              סוג נקודות הקצה בפרויקט:
+                            </label>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {[
+                                { id: "cameras", label: "מצלמות IP" },
+                                { id: "network", label: "נקודות רשת / AP" },
+                                { id: "mixed", label: "משולב" },
+                              ].map((t) => (
+                                <button
+                                  key={t.id}
+                                  type="button"
+                                  onClick={() =>
+                                    setProjectEndpointType(
+                                      t.id as "cameras" | "network" | "mixed",
+                                    )
+                                  }
+                                  className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                                    projectEndpointType === t.id
+                                      ? "bg-[#004387] text-white border-[#004387] shadow-2xs"
+                                      : "bg-white text-gray-700 border-gray-200 hover:bg-gray-100"
+                                  }`}
+                                >
+                                  {t.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* 2. Number of Endpoints */}
+                          <div className="mb-3 bg-white p-2.5 rounded-lg border border-slate-200">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <label className="text-xs font-extrabold text-[#0c2d57]">
+                                מספר נקודות קצה{" "}
+                                {projectEndpointType === "cameras"
+                                  ? "(מצלמות)"
+                                  : "(נקודות)"}
+                                :
+                              </label>
+                              <div className="flex items-center border border-[#004387]/30 rounded-lg bg-slate-50 overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setProjectEndpointsInput((prev) =>
+                                      Math.max(1, (Number(prev) || 10) - 1),
+                                    )
+                                  }
+                                  className="px-2.5 py-1 text-[#004387] hover:bg-blue-100 font-black cursor-pointer"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  aria-label="מספר נקודות קצה"
+                                  value={projectEndpointsInput}
+                                  onFocus={(e) => e.currentTarget.select()}
+                                  onChange={(e) => {
+                                    const digits = e.target.value.replace(
+                                      /\D/g,
+                                      "",
+                                    );
+                                    if (digits === "") {
+                                      setProjectEndpointsInput("");
+                                      return;
+                                    }
+                                    setProjectEndpointsInput(
+                                      Math.min(
+                                        500,
+                                        Math.max(1, parseInt(digits, 10)),
+                                      ),
+                                    );
+                                  }}
+                                  onBlur={() => {
+                                    setProjectEndpointsInput((prev) =>
+                                      Math.max(1, Number(prev) || 10),
+                                    );
+                                  }}
+                                  className="w-14 text-center text-sm font-black text-[#004387] bg-white py-1 border-x border-[#004387]/20 outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setProjectEndpointsInput(
+                                      (prev) => (Number(prev) || 10) + 1,
+                                    )
+                                  }
+                                  className="px-2.5 py-1 text-[#004387] hover:bg-blue-100 font-black cursor-pointer"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span className="text-[11px] text-gray-500 ml-1">
+                                בחירה מהירה:
+                              </span>
+                              {[4, 8, 10, 16, 24, 32].map((preset) => (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  onClick={() =>
+                                    setProjectEndpointsInput(preset)
+                                  }
+                                  className={`px-2 py-0.5 text-[11px] font-bold rounded border transition-colors cursor-pointer ${
+                                    Number(projectEndpointsInput) === preset
+                                      ? "bg-[#c2410c] text-white border-[#c2410c]"
+                                      : "bg-slate-100 text-gray-700 border-gray-200 hover:bg-slate-200"
+                                  }`}
+                                >
+                                  {preset}{" "}
+                                  {projectEndpointType === "cameras"
+                                    ? "מצלמות"
+                                    : "נק׳"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* 3. Cable Run Distance & Category */}
+                          <div className="grid grid-cols-2 gap-2 mb-3">
+                            <div className="bg-white p-2 rounded-lg border border-slate-200">
+                              <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                                מרחק כבל ממוצע לנקודה:
+                              </label>
+                              <div className="flex gap-1">
+                                {[
+                                  { m: 20, label: "20 מ׳" },
+                                  { m: 30, label: "30 מ׳" },
+                                  { m: 50, label: "50 מ׳" },
+                                ].map((d) => (
+                                  <button
+                                    key={d.m}
+                                    type="button"
+                                    onClick={() => setProjectAvgDistance(d.m)}
+                                    className={`flex-1 py-1 text-[11px] font-bold rounded border cursor-pointer ${
+                                      projectAvgDistance === d.m
+                                        ? "bg-[#004387] text-white border-[#004387]"
+                                        : "bg-slate-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                                    }`}
+                                  >
+                                    {d.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="bg-white p-2 rounded-lg border border-slate-200">
+                              <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                                תקן כבל רשת:
+                              </label>
+                              <div className="flex gap-1">
+                                {(["CAT6", "CAT6A", "CAT7"] as const).map(
+                                  (cat) => (
+                                    <button
+                                      key={cat}
+                                      type="button"
+                                      onClick={() => setProjectCableCat(cat)}
+                                      className={`flex-1 py-1 text-[11px] font-bold rounded border cursor-pointer ${
+                                        projectCableCat === cat
+                                          ? "bg-[#004387] text-white border-[#004387]"
+                                          : "bg-slate-50 text-gray-700 border-gray-200 hover:bg-gray-100"
+                                      }`}
+                                    >
+                                      {cat}
+                                    </button>
+                                  ),
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 4. Instant Engineering Summary Strip */}
+                          <div className="grid grid-cols-3 gap-1.5 mb-3 bg-[#0c2d57] text-white p-2.5 rounded-lg text-center">
+                            <div className="bg-white/10 rounded p-1.5">
+                              <div className="text-[10px] text-blue-200">
+                                PoE Switch נדרש
+                              </div>
+                              <div className="text-xs font-black mt-0.5">
+                                {projectCalculatorPlan.switchQty > 1
+                                  ? `${projectCalculatorPlan.switchQty}×${projectCalculatorPlan.switchPortTier}`
+                                  : `${projectCalculatorPlan.switchPortTier}`}{" "}
+                                פורטים
+                              </div>
+                            </div>
+                            <div className="bg-white/10 rounded p-1.5">
+                              <div className="text-[10px] text-blue-200">
+                                כמות כבל (+15% רזרבה)
+                              </div>
+                              <div className="text-xs font-black mt-0.5">
+                                {projectCalculatorPlan.recommendedRolls}{" "}
+                                {projectCalculatorPlan.recommendedRolls === 1
+                                  ? projectCalculatorPlan.rollUnitSingular
+                                  : projectCalculatorPlan.rollUnitPlural}{" "}
+                                ({projectCalculatorPlan.totalCableMetersToOrder}{" "}
+                                מ׳)
+                              </div>
+                            </div>
+                            <div className="bg-white/10 rounded p-1.5">
+                              <div className="text-[10px] text-blue-200">
+                                אביזרי קצה וארון
+                              </div>
+                              <div className="text-xs font-black mt-0.5">
+                                {projectCalculatorPlan.endpoints + 2} מגשרים /{" "}
+                                {projectCalculatorPlan.endpoints * 2 + 4}{" "}
+                                חיבורים
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 5. Detailed Recommended Items List */}
+                          <div className="space-y-2 mb-3">
+                            {projectCalculatorPlan.items.map((entry) => {
+                              const prod = entry.matchedProduct;
+                              return (
+                                <div
+                                  key={entry.key}
+                                  className="bg-white border border-slate-200 rounded-lg p-2.5 flex flex-col gap-1.5"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                      <span className="text-[10px] font-bold text-[#004387] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                        {entry.categoryLabel}
+                                      </span>
+                                      <div className="text-xs font-extrabold text-[#0c2d57] mt-1">
+                                        {entry.calcTitle}
+                                      </div>
+                                      <p className="text-[11px] text-gray-500 leading-snug mt-0.5">
+                                        {entry.calcExplanation}
+                                      </p>
+                                    </div>
+                                    <span className="text-xs font-black text-[#c2410c] bg-orange-50 border border-orange-200 px-2 py-0.5 rounded whitespace-nowrap flex-shrink-0">
+                                      {entry.recommendedQty}{" "}
+                                      {entry.qtyUnitLabel}
+                                    </span>
+                                  </div>
+
+                                  {prod && (
+                                    <div className="mt-1 pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        {prod.images?.[0] && (
+                                          <img
+                                            src={transformImageLink(
+                                              prod.images[0],
+                                              80,
+                                            )}
+                                            alt={prod.name}
+                                            referrerPolicy="no-referrer"
+                                            onError={handleImageError}
+                                            className="w-8 h-8 object-contain bg-slate-50 border border-slate-200 rounded p-0.5 flex-shrink-0"
+                                          />
+                                        )}
+                                        <div className="min-w-0">
+                                          <div className="text-[11px] font-bold text-gray-800 truncate">
+                                            {prod.name}
+                                          </div>
+                                          {prod.sku && (
+                                            <div className="text-[10px] text-gray-500 font-mono">
+                                              מק״ט: {prod.sku}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          addProjectCalcItemToFavorites(
+                                            prod,
+                                            entry.cartQuantity,
+                                            entry.calcTitle,
+                                          )
+                                        }
+                                        className="px-2.5 py-1 bg-[#004387] hover:bg-[#0c2d57] text-white text-[11px] font-bold rounded flex items-center gap-1 flex-shrink-0 transition-colors cursor-pointer"
+                                      >
+                                        <Plus size={12} /> הוסף להצעה
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {projectCalcToast && (
+                            <div className="mb-2.5 text-center text-xs font-bold text-green-700 bg-green-50 border border-green-200 py-1.5 px-2 rounded-lg">
+                              {projectCalcToast}
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={addAllProjectCalcItemsToFavorites}
+                            className="w-full py-2.5 bg-[#c2410c] hover:bg-[#004387] text-white font-extrabold text-xs sm:text-sm rounded-lg shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <FileText size={16} />
+                            הוסף את כל רכיבי הפרויקט לרשימת הצעת המחיר (
+                            {projectCalculatorPlan.endpoints}{" "}
+                            {projectEndpointType === "cameras"
+                              ? "מצלמות"
+                              : "נקודות"}
+                            )
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     {favorites.length === 0 ? (
                       <div className="text-center py-10">
                         <Heart className="w-12 h-12 text-gray-200 mx-auto mb-3" />
@@ -12839,14 +14106,14 @@ export default function App() {
                           אין מועדפים עדיין
                         </p>
                         <p className="text-sm text-gray-400 mt-1">
-                          לחץ על הלב ליד מוצרים כדי לשמור אותם כאן.
+                          לחץ על הלב ליד מוצרים או השתמש במחשבון הפרויקט למעלה כדי להרכיב הצעת מחיר.
                         </p>
                       </div>
                     ) : (
                       <>
                         <div className="flex items-center justify-between mb-2">
                           <h3 className="text-sm font-bold text-gray-600">
-                            מועדפים ({favorites.length})
+                            מועדפים להצעת מחיר ({favorites.length})
                           </h3>
                           <div className="flex items-center gap-2">
                             <button
@@ -12947,7 +14214,7 @@ export default function App() {
                             onClick={() => setShowGuestWhatsAppModal(true)}
                             className="w-full py-2.5 bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-lg flex items-center justify-center gap-2 text-sm"
                           >
-                            שלח נבחרים בוואטסאפ ({selectedFavIds.size})
+                            שלח נבחרים להצעת מחיר בוואטסאפ ({selectedFavIds.size})
                           </button>
                         </div>
                       </>
@@ -16055,19 +17322,21 @@ export default function App() {
 
           {/* 5. Distributor Login / Cart */}
           {isGuest ? (
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  sessionStorage.removeItem("rbs_guest");
-                } catch {}
-                setIsGuest(false);
-              }}
-              className="flex flex-col items-center justify-center flex-1 py-1.5 text-[#004387] font-bold transition-colors cursor-pointer"
-            >
-              <Lock size={20} className="stroke-[2.25]" />
-              <span className="text-[11px] mt-0.5">כניסת מפיצים</span>
-            </button>
+            !HIDE_DISTRIBUTOR_LOGIN_UI ? (
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    sessionStorage.removeItem("rbs_guest");
+                  } catch {}
+                  setIsGuest(false);
+                }}
+                className="flex flex-col items-center justify-center flex-1 py-1.5 text-[#004387] font-bold transition-colors cursor-pointer"
+              >
+                <Lock size={20} className="stroke-[2.25]" />
+                <span className="text-[11px] mt-0.5">כניסת מפיצים</span>
+              </button>
+            ) : null
           ) : (
             <button
               type="button"

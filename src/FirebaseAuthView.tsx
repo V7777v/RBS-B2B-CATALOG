@@ -68,9 +68,10 @@ const isApproved = async (email: string | null): Promise<boolean> => {
 interface Props {
   setIsAuthenticated: (val: boolean) => void;
   onGuest?: () => void;
+  initialScreen?: 'landing' | 'form';
 }
 
-export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest }) => {
+export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest, initialScreen }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -81,7 +82,7 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest 
   const [awaitingVerify, setAwaitingVerify] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState('');
-  const [screen, setScreen] = useState<'landing' | 'form'>(onGuest ? 'landing' : 'form');
+  const [screen, setScreen] = useState<'landing' | 'form'>(initialScreen || (onGuest ? 'landing' : 'form'));
   const [showDistributorPopup, setShowDistributorPopup] = useState(false);
 
   const resetMessages = () => { setError(''); setInfo(''); };
@@ -271,7 +272,21 @@ export const FirebaseAuthView: React.FC<Props> = ({ setIsAuthenticated, onGuest 
     <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#0c2d57] to-[#004387] p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
         {onGuest && (
-          <button type="button" onClick={() => { setScreen('landing'); resetMessages(); }} className="text-sm text-gray-500 hover:text-[#004387] font-semibold mb-4">‹ חזרה לבחירה</button>
+          <button
+            type="button"
+            onClick={() => {
+              if (initialScreen === 'form') {
+                resetMessages();
+                onGuest();
+              } else {
+                setScreen('landing');
+                resetMessages();
+              }
+            }}
+            className="text-sm text-gray-500 hover:text-[#004387] font-semibold mb-4"
+          >
+            {initialScreen === 'form' ? '‹ חזרה לקטלוג' : '‹ חזרה לבחירה'}
+          </button>
         )}
         <div className="flex flex-col items-center mb-6">
           <div className="w-14 h-14 rounded-full bg-[#004387] flex items-center justify-center mb-3">
